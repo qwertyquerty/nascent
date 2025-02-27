@@ -23,27 +23,26 @@ namespace nascent {
         std::string mapper;
         std::string difficulty_name;
         std::string audio_file;
-        uint32_t audio_lead_in;
-        uint32_t preview_time;
+        int32_t audio_lead_in;
+        int32_t preview_time;
         uint8_t hit_accuracy;
         uint8_t key_count;
         uint8_t damage;
     };
 
     void to_json(json& j, const ChartInfo& p);
-
     void from_json(const json& j, ChartInfo& p);
 
     struct ChartHit {
         uint8_t key;
-        HitType type;
-        uint32_t time;
-        uint32_t end_time;
+        HitType hit_type;
+        int32_t time;
+        int32_t end_time;
     };
 
     void to_json(json& j, const ChartHit& p);
-
     void from_json(const json& j, ChartHit& p);
+
     class Chart {
         public:
         boost::filesystem::path json_path;

@@ -15,11 +15,13 @@ find_library(dwmapi     dwmapi)
 find_library(user32     user32)
 find_library(Shlwapi    shlwapi)
 
-FIND_PACKAGE( Boost COMPONENTS filesystem REQUIRED )
+find_package(Boost COMPONENTS filesystem REQUIRED)
 
 add_subdirectory("src/libs")
 add_subdirectory("src/main")
 add_subdirectory("src/core")
+add_subdirectory("src/gse")
+add_subdirectory("src/game")
 
 set_target_properties(NascentMain PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG     ${CMAKE_BINARY_DIR})
 set_target_properties(NascentMain PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE   ${CMAKE_BINARY_DIR})

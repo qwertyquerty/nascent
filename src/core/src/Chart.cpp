@@ -38,7 +38,7 @@ namespace nascent {
 
     void from_json(const json& j, ChartHit& p) {
         j.at("key").get_to(p.key);
-        j.at("type").get_to(p.type);
+        j.at("hit_type").get_to(p.hit_type);
         j.at("time").get_to(p.time);
         j.at("end_time").get_to(p.end_time);
     }
@@ -46,7 +46,7 @@ namespace nascent {
     void to_json(json& j, const ChartHit& p) {
         j = json{
             {"key", p.key},
-            {"type", p.type},
+            {"hit_type", p.hit_type},
             {"time", p.time},
             {"end_time", p.end_time}
         };
@@ -55,15 +55,15 @@ namespace nascent {
     Chart::Chart(const std::string& path) {
         json_path = boost::filesystem::path(path);
 
-        std::cout << path << " " << json_path.string() << std::endl;
-
         std::ifstream ifs(json_path.string());
 
         json jdata = json::parse(ifs);
 
         info = jdata["info"].template get<ChartInfo>();
 
-        json jhits = jdata["hits"];
+        json jhits = jdata["hit_objects"];
+
+        hits = std::vector<ChartHit>();
 
         for (json::iterator it = jhits.begin(); it != jhits.end(); ++it) {
             ChartHit hit;
@@ -76,7 +76,7 @@ namespace nascent {
 
     uint32_t Chart::get_duration_ms() {
         return (
-            hits.back().type == HitType::HOLD ? hits.back().end_time : hits.back().time
+            hits.back().hit_type == HitType::HOLD ? hits.back().end_time : hits.back().time
         ) - hits[0].time;
     }
 }
