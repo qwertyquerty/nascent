@@ -37,7 +37,7 @@ for hit_object in osu_map.hit_objects:
         "key": hit_object.key,
         "time": hit_object.time,
         "hit_type": int(bool(hit_object.hit_type & osu_parser.HIT_TYPE_HOLD)),
-        "end_time": hit_object.end_time
+        "end_time": hit_object.end_time or 0
     })
 
 out_file = in_file + ".json"

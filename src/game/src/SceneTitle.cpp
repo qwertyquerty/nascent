@@ -6,7 +6,7 @@ namespace nascent {
     };
 
     void SceneTitle::init(Game* game) {
-        logo_chart = new Chart("assets/songs/logo/logo.json");
+        logo_chart = new Chart("assets/songs/Jack - v1/Various Artists - Dan ~ REFORM ~ JackMap Pack (DDMythical) [Last Chance ~ 7th ~ (Marathon)].osu.json");
         logo_field = new EntityField(logo_chart);
 
         logo_audio_id = game->get_audio().LoadSound(logo_chart->audio_path.string());

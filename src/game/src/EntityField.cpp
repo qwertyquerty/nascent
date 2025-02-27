@@ -21,7 +21,8 @@ namespace nascent {
             int32_t hit_y = (hit.time - song_position) * (FIELD_SCROLL_SPEED * window->ScreenHeight() / 100 / 1000);
             int32_t hit_x = (hit.key * FIELD_KEY_WIDTH);
             int32_t hit_width = FIELD_KEY_WIDTH;
-            int32_t hit_height = hit.hit_type == HitType::HOLD ? (hit.end_time - hit.time) * (FIELD_SCROLL_SPEED * window->ScreenHeight() / 100 / 1000) : FIELD_HIT_MIN_HEIGHT;
+            int32_t hit_height = hit.hit_type == HitType::HOLD ? 
+                (hit.end_time - hit.time) * (FIELD_SCROLL_SPEED * window->ScreenHeight() / 100 / 1000) + FIELD_HIT_MIN_HEIGHT : FIELD_HIT_MIN_HEIGHT;
             
             window->FillRect(hit_x, window->ScreenHeight()-hit_y-hit_height, hit_width, hit_height, olc::WHITE);
         }
