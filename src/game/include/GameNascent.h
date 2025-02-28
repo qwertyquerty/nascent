@@ -7,6 +7,7 @@ namespace nascent {
     class GameNascent : public Game {
         protected:
         Scene* scene_title;
+        float elapsed_time;
         
         public:
         GameNascent();
