@@ -1,4 +1,8 @@
 bin
 build
-assets
+assets/songs
+assets/sfx
 __pycache__
+.vscode
+!assets/svg
+!assets/skins/default

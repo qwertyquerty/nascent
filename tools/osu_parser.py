@@ -8,7 +8,7 @@ MODE_MANIA = 3
 
 @dataclass
 class Event():
-    event_type: int
+    event_type: str
     start_time: int
     event_params: tuple
 
@@ -56,8 +56,7 @@ class Map():
         self.events = []
         self.timing_points = []
         self.hit_objects = []
-
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             s = f.read()
         
         lines = s.splitlines()
@@ -86,7 +85,7 @@ class Map():
 
                     if state == Map.EVENTS:
                         self.events.append(Event(
-                            int(tokens.pop(0)),
+                            tokens.pop(0),
                             int(tokens.pop(0)),
                             tuple(tokens)
                         ))
