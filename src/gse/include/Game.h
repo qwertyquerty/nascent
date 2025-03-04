@@ -11,7 +11,9 @@ namespace nascent {
         olc::MiniAudio audio;
 
         public:
-        Game();
+        olc::PixelGameEngine* window;
+
+        Game(olc::PixelGameEngine* window);
         virtual void init() = 0;
         virtual void update(float) = 0;
         virtual void draw(olc::PixelGameEngine*) = 0;

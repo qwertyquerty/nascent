@@ -1,7 +1,9 @@
 #include "Game.h"
 
 namespace nascent {
-    Game::Game() {};
+    Game::Game(olc::PixelGameEngine* window) {
+        this->window = window;
+    };
 
     void Game::set_scene(Scene* scene) {
         scene->init(this);

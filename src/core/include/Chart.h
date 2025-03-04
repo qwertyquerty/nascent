@@ -43,6 +43,15 @@ namespace nascent {
     void to_json(json& j, const ChartHit& p);
     void from_json(const json& j, ChartHit& p);
 
+    struct ChartTimingPoint {
+        int32_t time;
+        float beat_length;
+        uint8_t meter;
+    };
+
+    void to_json(json& j, const ChartTimingPoint& p);
+    void from_json(const json& j, ChartTimingPoint& p);
+
     class Chart {
         public:
         boost::filesystem::path json_path;
@@ -51,6 +60,7 @@ namespace nascent {
         ChartInfo info;
 
         std::vector<ChartHit> hits;
+        std::vector<ChartTimingPoint> timing_points;
 
         Chart(const std::string& path);
 

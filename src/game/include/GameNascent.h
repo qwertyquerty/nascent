@@ -8,9 +8,10 @@ namespace nascent {
         protected:
         Scene* scene_title;
         float elapsed_time;
-        
+
         public:
-        GameNascent();
+        bool debug = false;
+        GameNascent(olc::PixelGameEngine* window);
         ~GameNascent();
         void init() override;
         void update(float) override;

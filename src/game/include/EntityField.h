@@ -27,6 +27,16 @@ namespace nascent {
         double note_x_spacing = 0;
 
         public:
+        bool debug = false;
+        bool draw_judge = true;
+        bool draw_notes_past_judge = true;
+        bool draw_judge_colors = false;
+        bool judge_auto_active = false;
+
+        uint8_t judge_alpha = 64;
+
+        uint16_t active_keys = 0;
+
         olc::vd2d pos = {0,0};
         olc::vd2d size = {0,0};
 
@@ -36,5 +46,15 @@ namespace nascent {
         void draw(olc::PixelGameEngine*) override;
 
         void update_song_position(int32_t, float);
+
+        ChartTimingPoint* get_current_timing_point();
+        uint16_t get_section_beat();
+        uint8_t get_meter_beat();
+
+        void set_key(uint8_t key);
+        void clear_key(uint8_t key);
+        void clear_keys();
+        bool get_key(uint8_t key);
+        uint8_t get_key_count();
     };
 }

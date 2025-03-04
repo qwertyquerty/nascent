@@ -20,7 +20,7 @@ class TimingPoint():
     sample_set: int
     sample_index: int
     volume: int
-    uninherited: bool
+    uninherited: int
     effects: int
 
 @dataclass
@@ -92,13 +92,13 @@ class Map():
 
                     elif state == Map.TIMING_POINTS:
                         self.timing_points.append(TimingPoint(
-                            int(tokens.pop(0)),
+                            int(float(tokens.pop(0))),
                             float(tokens.pop(0)),
                             int(tokens.pop(0)),
                             int(tokens.pop(0)),
                             int(tokens.pop(0)),
                             int(tokens.pop(0)),
-                            bool(tokens.pop(0)),
+                            int(tokens.pop(0)),
                             int(tokens.pop(0))
                         ))
                     

@@ -52,6 +52,20 @@ namespace nascent {
         };
     }
     
+    void from_json(const json& j, ChartTimingPoint& p) {
+        j.at("time").get_to(p.time);
+        j.at("beat_length").get_to(p.beat_length);
+        j.at("meter").get_to(p.meter);
+    }
+    
+    void to_json(json& j, const ChartTimingPoint& p) {
+        j = json{
+            {"time", p.time},
+            {"beat_length", p.beat_length},
+            {"meter", p.meter}
+        };
+    }
+
     Chart::Chart(const std::string& path) {
         json_path = boost::filesystem::path(path);
 
@@ -62,13 +76,21 @@ namespace nascent {
         info = jdata["info"].template get<ChartInfo>();
 
         json jhits = jdata["hit_objects"];
-
         hits = std::vector<ChartHit>();
 
         for (json::iterator it = jhits.begin(); it != jhits.end(); ++it) {
             ChartHit hit;
             hit = it->template get<ChartHit>();
             hits.push_back(hit);
+        }
+
+        json jtps = jdata["timing_points"];
+        timing_points = std::vector<ChartTimingPoint>();
+
+        for (json::iterator it = jtps.begin(); it != jtps.end(); ++it) {
+            ChartTimingPoint tp;
+            tp = it->template get<ChartTimingPoint>();
+            timing_points.push_back(tp);
         }
 
         audio_path = json_path.parent_path() /= info.audio_file;

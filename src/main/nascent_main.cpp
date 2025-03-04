@@ -13,7 +13,7 @@ class NascentMain : public olc::PixelGameEngine
 	GameNascent game;
     
 public:
-NascentMain()
+NascentMain() : game(this)
 	{
 		sAppName = "Nascent";
 	}

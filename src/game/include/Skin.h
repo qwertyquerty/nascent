@@ -16,8 +16,9 @@ namespace nascent {
         std::vector<olc::Sprite*> note_skin_sprites;
         std::vector<olc::Decal*> note_skin_decals;
         olc::Sprite* title_gradient;
+        uint8_t key_count;
 
-        Skin(std::string name);
+        Skin(std::string name, uint8_t key_count);
         ~Skin();
         void load_sprites();
 

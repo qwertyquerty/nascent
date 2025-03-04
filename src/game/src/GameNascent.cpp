@@ -3,7 +3,7 @@
 #include "olcPixelGameEngine.h"
 
 namespace nascent {
-    GameNascent::GameNascent() {
+    GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
         scene_title = new SceneTitle();
     };
 
@@ -23,6 +23,9 @@ namespace nascent {
     void GameNascent::draw(olc::PixelGameEngine* window) {
         window->Clear(olc::BLACK);
         scene->draw(window);
-        window->DrawString(window->GetWindowSize().x - 300, 10, std::format("FT {}", elapsed_time * 1000), olc::WHITE, 2);
+
+        if (debug) {
+            window->DrawString(window->GetWindowSize().x - 300, 10, std::format("FT {}", elapsed_time * 1000), olc::WHITE, 2);
+        }
     }
 }
