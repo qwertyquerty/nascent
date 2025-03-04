@@ -5,4 +5,4 @@ message(STATUS "Building Game Module")
 
 add_library(game ${GAME_SOURCES})
 target_include_directories(game PUBLIC ${GAME_HEADERS})
-target_link_libraries(game PUBLIC core gse olcPixelGameEngine ${Boost_LIBRARIES})
+target_link_libraries(game PUBLIC core gse olcPixelGameEngine kissfft ${Boost_LIBRARIES})

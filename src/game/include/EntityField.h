@@ -12,7 +12,7 @@
 #define FIELD_HIT_MIN_HEIGHT 50
 #define FIELD_DEFAULT_OFFSET_MS 0
 
-#define FIELD_AUDIO_SYNC_MAX_ERROR 20 // #ms
+#define FIELD_AUDIO_SYNC_MAX_ERROR 20 //ms
 
 namespace nascent {
     class EntityField : public Entity {

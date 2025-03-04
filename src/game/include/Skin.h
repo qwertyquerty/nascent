@@ -15,9 +15,12 @@ namespace nascent {
         std::string name;
         std::vector<olc::Sprite*> note_skin_sprites;
         std::vector<olc::Decal*> note_skin_decals;
+        olc::Sprite* title_gradient;
 
         Skin(std::string name);
         ~Skin();
         void load_sprites();
+
+        olc::Pixel title_gradient_at(double x, double y);
     };
 }

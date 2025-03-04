@@ -75,7 +75,8 @@ namespace nascent {
                         {(float)hit_x, (float)(screen_hit_y+(float)note_size)},
                         {(float)hit_x+(float)note_size, (float)(screen_hit_y+(float)note_size)},
                         {(float)hit_x+(float)note_size, (float)screen_hit_y}
-                    }
+                    },
+                    skin->title_gradient_at((double)hit_x/window->GetScreenSize().x, (double)screen_hit_y/window->GetScreenSize().y)
                 );
             }
         }

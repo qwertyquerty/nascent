@@ -1,3 +1,10 @@
+set(KISSFFT_TOOLS OFF)
+set(KISSFFT_TEST OFF)
+set(KISSFFT_STATIC ON)
+set(KISSFFT_OPENMP OFF)
+set(KISSFFT_PKGCONFIG OFF)
+add_subdirectory(kissfft)
+
 add_subdirectory(olcPixelGameEngine)
 add_subdirectory(miniaudio)
 add_subdirectory(json)

@@ -4,9 +4,10 @@
 #include "Chart.h"
 #include "Game.h"
 #include "EntityField.h"
+#include "EntityFFT.h"
 #include "Skin.h"
 
-#define SCENE_TITLE_FIELD_COUNT 11
+#define SCENE_TITLE_FIELD_COUNT 21
 #define SCENE_TITLE_SCROLL_RATE_PX_PER_S 250
 
 namespace nascent {
@@ -14,6 +15,8 @@ namespace nascent {
         protected:
         Chart* logo_chart;
         EntityField* logo_field[SCENE_TITLE_FIELD_COUNT];
+        EntityFFT* fft_l;
+        EntityFFT* fft_r;
         int logo_audio_id;
         Skin* title_skin;
 
