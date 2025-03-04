@@ -10,7 +10,7 @@
 #define SCENE_TITLE_FIELD_COUNT 13
 #define SCENE_TITLE_SCROLL_RATE_PX_PER_S 250
 
-#define LOGO_START_DELAY_S 5
+#define LOGO_START_DELAY_S 1
 
 namespace nascent {
     class SceneTitle : public Scene {
