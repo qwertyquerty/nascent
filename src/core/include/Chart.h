@@ -9,12 +9,9 @@ using json = nlohmann::json;
 #include <string>
 #include <cstdint>
 
-namespace nascent {
-    enum HitType {
-        HIT,
-        HOLD
-    };
+#include "Hit.h"
 
+namespace nascent {
     struct ChartInfo {
         std::string title;
         std::string title_unicode;
@@ -33,16 +30,6 @@ namespace nascent {
     void to_json(json& j, const ChartInfo& p);
     void from_json(const json& j, ChartInfo& p);
 
-    struct ChartHit {
-        uint8_t key;
-        HitType hit_type;
-        int32_t time;
-        int32_t end_time;
-    };
-
-    void to_json(json& j, const ChartHit& p);
-    void from_json(const json& j, ChartHit& p);
-
     struct ChartTimingPoint {
         int32_t time;
         float beat_length;
@@ -59,7 +46,7 @@ namespace nascent {
 
         ChartInfo info;
 
-        std::vector<ChartHit> hits;
+        std::vector<Hit> hits;
         std::vector<ChartTimingPoint> timing_points;
 
         Chart(const std::string& path);
@@ -68,5 +55,15 @@ namespace nascent {
          * Get the length of the Chart in ms from the start of the first hit to the end of the last hit
          */
         uint32_t get_duration_ms();
+
+        /**
+         * Get the start of the played part of the chart (hit time of first hit)
+         */
+        uint32_t get_chart_start_ms();
+
+        /**
+         * Get the end of the played part of the chart (release time of last hit)
+         */
+        uint32_t get_chart_end_ms();
     };
 }

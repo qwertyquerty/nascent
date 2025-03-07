@@ -7,7 +7,7 @@
 #include "EntityFFT.h"
 #include "Skin.h"
 
-#define SCENE_TITLE_FIELD_COUNT 13
+#define SCENE_TITLE_FIELD_COUNT 9
 #define SCENE_TITLE_SCROLL_RATE_PX_PER_S 250
 
 #define LOGO_START_DELAY_S 1

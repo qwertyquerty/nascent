@@ -37,7 +37,7 @@ namespace nascent {
         for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
             bg_field[i] = new EntityField(bg_chart, bg_skin, {(double)window_size.x/(SCENE_TITLE_FIELD_COUNT-1)*i, 0}, {(double)window_size.x/(SCENE_TITLE_FIELD_COUNT-1), (double)window_size.y});
             bg_field[i]->init(this);
-            bg_field[i]->debug = false;
+            bg_field[i]->debug = true;
             bg_field[i]->draw_judge = false;
         }
 

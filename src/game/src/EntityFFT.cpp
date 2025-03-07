@@ -24,14 +24,14 @@ namespace nascent {
     void EntityFFT::draw(olc::PixelGameEngine* window) {
         float w = size.x / ((double)FFT_BAR_COUNT + (double)FFT_BAR_COUNT * FFT_SPACING_RATIO - FFT_SPACING_RATIO);
 
-        for (int i = 0; i <= FFT_BAR_COUNT; i++) {
-            float x = (float)(i) * w * (1+FFT_SPACING_RATIO);
+        for (int i = (FFT_MIN_FREQ/FFT_BIN_SIZE); i <= FFT_BAR_COUNT; i++) {
+            float x = (float)(i-(FFT_MIN_FREQ/FFT_BIN_SIZE)) * w * (1+FFT_SPACING_RATIO);
             float h = std::min(bins[i] / 4 * size.y, size.y);
             olc::Pixel c = skin->title_gradient_at((x-pos.x)/size.x,0);
             c.a = FFT_BAR_ALPHA;
 
             if (flipped) {
-                window->FillRectDecal({pos.x+size.x-x, pos.y+size.y-h}, {w, h}, c);
+                window->FillRectDecal({pos.x+size.x-x-w, pos.y+size.y-h}, {w, h}, c);
             } else {
                 window->FillRectDecal({pos.x+x, pos.y}, {w, h}, c);
             }

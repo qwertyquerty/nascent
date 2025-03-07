@@ -1,4 +1,5 @@
 #include "Chart.h"
+#include "Hit.h"
 
 #include <fstream>
 #include <iostream>
@@ -36,14 +37,14 @@ namespace nascent {
         };
     }
 
-    void from_json(const json& j, ChartHit& p) {
+    void from_json(const json& j, Hit& p) {
         j.at("key").get_to(p.key);
         j.at("hit_type").get_to(p.hit_type);
         j.at("time").get_to(p.time);
         j.at("end_time").get_to(p.end_time);
     }
     
-    void to_json(json& j, const ChartHit& p) {
+    void to_json(json& j, const Hit& p) {
         j = json{
             {"key", p.key},
             {"hit_type", p.hit_type},
@@ -76,11 +77,11 @@ namespace nascent {
         info = jdata["info"].template get<ChartInfo>();
 
         json jhits = jdata["hit_objects"];
-        hits = std::vector<ChartHit>();
+        hits = std::vector<Hit>();
 
         for (json::iterator it = jhits.begin(); it != jhits.end(); ++it) {
-            ChartHit hit;
-            hit = it->template get<ChartHit>();
+            Hit hit;
+            hit = it->template get<Hit>();
             hits.push_back(hit);
         }
 
@@ -97,8 +98,14 @@ namespace nascent {
     }
 
     uint32_t Chart::get_duration_ms() {
-        return (
-            hits.back().hit_type == HitType::HOLD ? hits.back().end_time : hits.back().time
-        ) - hits[0].time;
+        return get_chart_start_ms() - get_chart_end_ms();
+    }
+
+    uint32_t Chart::get_chart_end_ms() {
+        return hits.back().hit_type == HitType::HOLD ? hits.back().end_time : hits.back().time;
+    }
+
+    uint32_t Chart::get_chart_start_ms() {
+        return hits[0].time;
     }
 }

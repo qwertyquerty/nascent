@@ -5,6 +5,7 @@
 #include "Entity.h"
 #include "Chart.h"
 #include "Skin.h"
+#include "Attempt.h"
 #include "olcPixelGameEngine.h"
 
 #define FIELD_KEY_SPACING_RATIO 0.15
@@ -18,6 +19,7 @@ namespace nascent {
     class EntityField : public Entity {
         protected:
         Chart* chart;
+        Attempt* attempt;
         Skin* skin;
         int32_t last_audio_engine_sound_position = 0;
         double precise_song_position = 0;
@@ -41,6 +43,7 @@ namespace nascent {
         olc::vd2d size = {0,0};
 
         EntityField(Chart*, Skin*, olc::vd2d, olc::vd2d);
+        ~EntityField();
         void init(Scene*) override;
         void update(Scene*, float) override;
         void draw(olc::PixelGameEngine*) override;

@@ -9,12 +9,18 @@ namespace nascent {
         this->skin = skin;
         this->pos = pos;
         this->size = size;
+        
+        attempt = new Attempt(this->chart);
 
         note_size = (size.x) / (chart->info.key_count + chart->info.key_count * FIELD_KEY_SPACING_RATIO - FIELD_KEY_SPACING_RATIO);
         note_x_spacing = note_size * FIELD_KEY_SPACING_RATIO;
 
         active_keys = 0;
     };
+
+    EntityField::~EntityField() {
+        delete attempt;
+    }
 
     void EntityField::init(Scene* scene) {
 
@@ -23,7 +29,7 @@ namespace nascent {
     void EntityField::update(Scene* game, float elapsed_time) {
         if (judge_auto_active) {
             clear_keys();
-            for (ChartHit hit : chart->hits) {
+            for (Hit hit : chart->hits) {
                 if (hit.hit_type == HitType::HOLD) {
                     if (hit.time <= offset_song_position && hit.end_time > offset_song_position) {
                         set_key(hit.key);
@@ -31,6 +37,8 @@ namespace nascent {
                 }
             }
         }
+
+        attempt->update((uint32_t)precise_song_position, 0);
     };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
@@ -45,7 +53,7 @@ namespace nascent {
             for (uint8_t key = 0; key < key_count; key++) {
                 int32_t jl_x = pos.x + (key * (note_size + note_x_spacing));
 
-                olc::Pixel color = draw_judge_colors ? skin->title_gradient_at((double)jl_x/screen_width, (double)jl_y/screen_height) : olc::Pixel(255, 255, 255);
+                olc::Pixel color = draw_judge_colors ? skin->title_gradient_at((double)(jl_x-pos.x)/size.x, (double)(jl_y-pos.y)/size.y) : olc::Pixel(255, 255, 255);
                 color.a = get_key(key) ? 255 : judge_alpha;
                 
                 window->DrawWarpedDecal(skin->note_skin_decals[key],
@@ -61,7 +69,7 @@ namespace nascent {
         }
 
         // Draw notes
-        for (ChartHit hit : chart->hits) {
+        for (Hit hit : chart->hits) {
             double scroll_rate_px_per_ms = (FIELD_SCROLL_SPEED * screen_height / 100 / 1000);
             
             int32_t hit_y = (hit.time - offset_song_position) * scroll_rate_px_per_ms;

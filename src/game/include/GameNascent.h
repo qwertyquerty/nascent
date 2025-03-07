@@ -10,7 +10,7 @@ namespace nascent {
         float elapsed_time;
 
         public:
-        bool debug = false;
+        bool debug = true;
         GameNascent(olc::PixelGameEngine* window);
         ~GameNascent();
         void init() override;
