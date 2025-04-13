@@ -80,6 +80,7 @@ namespace nascent {
 
                             if (score != HitScore::MISS) {
                                 chosen_hit = candidate;
+                                break;
                             }
                         }
 

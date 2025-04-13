@@ -16,7 +16,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin("default", 4);
-        chart = new Chart(R"(assets\songs\Jack - v1\dimtrip.json)");
+        chart = new Chart(R"(assets\songs\1737067 MisoilePunch - MarbleBlue\MisoilePunch - MarbleBlue. (Murumoo) [Denyi's BASIC].osu.json)");
 
         double lane_width = window_size.x/12;
 
