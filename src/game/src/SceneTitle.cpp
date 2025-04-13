@@ -17,6 +17,9 @@ namespace nascent {
 
         delete fft_l;
         delete fft_r;
+
+        delete logo_chart;
+        delete bg_chart;
     }
 
     void SceneTitle::init(Game* game) {
@@ -98,6 +101,8 @@ namespace nascent {
                 logo_field->set_key(bg_field[0]->get_section_beat() % logo_field->get_key_count());
             }
         }
+
+        window->FillRectDecal({0, 0}, window->GetScreenSize(), {0, 0, 0, 128});
 
         logo_field->draw(window);
 

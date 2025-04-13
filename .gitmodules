@@ -1,3 +1,6 @@
 [submodule "src/libs/kissfft"]
 	path = src/libs/kissfft
 	url = https://github.com/mborgerding/kissfft
+[submodule "src/libs/discord-presence"]
+	path = src/libs/discord-presence
+	url = https://github.com/EclipseMenu/discord-presence/

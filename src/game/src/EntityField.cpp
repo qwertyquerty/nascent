@@ -26,7 +26,7 @@ namespace nascent {
 
     };
 
-    void EntityField::update(Scene* game, float elapsed_time) {
+    void EntityField::update(Scene* scene, float elapsed_time) {
         if (judge_auto_active) {
             clear_keys();
             for (Hit hit : chart->hits) {
@@ -38,7 +38,7 @@ namespace nascent {
             }
         }
 
-        attempt->update((uint32_t)precise_song_position, 0);
+        attempt->update((uint32_t)precise_song_position, active_keys);
     };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
@@ -47,7 +47,7 @@ namespace nascent {
         const uint8_t key_count = chart->info.key_count;
 
         // Draw judge line
-        int32_t jl_y = pos.y + size.y - note_size;
+        int32_t jl_y = pos.y + size.y - note_size - judge_height;
 
         if (draw_judge) {
             for (uint8_t key = 0; key < key_count; key++) {
@@ -69,8 +69,10 @@ namespace nascent {
         }
 
         // Draw notes
-        for (Hit hit : chart->hits) {
-            double scroll_rate_px_per_ms = (FIELD_SCROLL_SPEED * screen_height / 100 / 1000);
+        for (JudgedHit* jhit : attempt->judged_hits) {
+            Hit hit = jhit->chart_hit;
+
+            double scroll_rate_px_per_ms = ((double)FIELD_SCROLL_SPEED * screen_height / 100.0 / 1000.0);
             
             int32_t hit_y = (hit.time - offset_song_position) * scroll_rate_px_per_ms;
             int32_t hit_x = pos.x + (hit.key * (note_size + note_x_spacing));
@@ -83,7 +85,7 @@ namespace nascent {
                     for (double y_offset = 0; y_offset < hit_height; y_offset += (note_size/4)) {
                         double hold_smear_y = screen_hit_y - hit_height + y_offset;
 
-                        if (!draw_notes_past_judge && hold_smear_y > jl_y) {
+                        if ((!draw_notes_past_judge || jhit->played) && hold_smear_y > jl_y) {
                             break;
                         }
 
@@ -99,7 +101,7 @@ namespace nascent {
                     }
                 }
 
-                if (draw_notes_past_judge || screen_hit_y <= jl_y) {
+                if ((draw_notes_past_judge && !jhit->played) || screen_hit_y <= jl_y) {
                     window->DrawWarpedDecal(skin->note_skin_decals[hit.key],
                         {
                             {(float)hit_x, (float)screen_hit_y},
@@ -150,6 +152,10 @@ namespace nascent {
     uint8_t EntityField::get_meter_beat() {
         ChartTimingPoint* tp = get_current_timing_point();
         return (tp != nullptr) ? (uint16_t)((precise_song_position - tp->time) / tp->beat_length) % tp->meter : 0;
+    }
+
+    void EntityField::set_keys(uint32_t keys) {
+        active_keys = keys;
     }
 
     void EntityField::set_key(uint8_t key) {

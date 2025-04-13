@@ -19,7 +19,7 @@ map_json["info"] = {
     "audio_file": osu_map.general["AudioFilename"],
     "audio_lead_in": int(osu_map.general["AudioLeadIn"]),
     "preview_time": int(osu_map.general["PreviewTime"]),
-    "hit_accuracy": int(round((float(osu_map.difficulty["OverallDifficulty"])), 0)),
+    "hit_accuracy": max(int(round((float(osu_map.difficulty["OverallDifficulty"])), 0)) - 4, 0),
     "key_count": int(osu_map.difficulty["CircleSize"]),
     "damage": int(round((float(osu_map.difficulty["HPDrainRate"])), 0))
 }
