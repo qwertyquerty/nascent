@@ -16,9 +16,6 @@ namespace nascent {
         note_x_spacing = note_size * FIELD_KEY_SPACING_RATIO;
 
         active_keys = 0;
-
-        audio_visual_offset = FIELD_AUDIO_VISUAL_OFFSET_MS;
-        audio_input_offset = FIELD_AUDIO_INPUT_OFFSET_MS;
     };
 
     EntityField::~EntityField() {
@@ -75,7 +72,7 @@ namespace nascent {
         for (JudgedHit* jhit : attempt->judged_hits) {
             Hit hit = jhit->chart_hit;
 
-            double scroll_rate_px_per_ms = ((double)FIELD_SCROLL_SPEED * screen_height / 100.0 / 1000.0);
+            double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
             
             int32_t hit_y = (hit.time - offset_song_position) * scroll_rate_px_per_ms;
             int32_t hit_x = pos.x + (hit.key * (note_size + note_x_spacing));

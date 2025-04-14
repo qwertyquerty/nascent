@@ -8,6 +8,8 @@
 #include "Skin.h"
 
 #define PLAY_START_DELAY_S 10
+#define FIELD_AUDIO_VISUAL_OFFSET_MS -30
+#define FIELD_AUDIO_INPUT_OFFSET_MS -40
 
 namespace nascent {
     class ScenePlay : public Scene {

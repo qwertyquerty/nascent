@@ -36,12 +36,14 @@ namespace nascent {
         logo_field->draw_judge_colors = true;
         logo_field->judge_alpha = 150;
         logo_field->judge_auto_active = true;
+        logo_field->scroll_speed = SCENE_TITLE_SCROLL_SPEED;
 
         for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
             bg_field[i] = new EntityField(bg_chart, bg_skin, {(double)window_size.x/(SCENE_TITLE_FIELD_COUNT-1)*i, 0}, {(double)window_size.x/(SCENE_TITLE_FIELD_COUNT-1), (double)window_size.y});
             bg_field[i]->init(this);
             bg_field[i]->debug = true;
             bg_field[i]->draw_judge = false;
+            bg_field[i]->scroll_speed = SCENE_TITLE_SCROLL_SPEED;
         }
 
         fft_l = new EntityFFT(bg_skin, {0,0}, {(double)window_size.x, (double)window_size.y*0.28}, 0);
@@ -71,12 +73,12 @@ namespace nascent {
         logo_field->update(this, elapsed_time);
 
         for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
-            bg_field[i]->pos.x -= elapsed_time * SCENE_TITLE_SCROLL_RATE_PX_PER_S;
+            bg_field[i]->pos.x -= elapsed_time * SCENE_TITLE_X_SCROLL_RATE_PX_PER_S;
             bg_field[i]->update_song_position(game->get_audio().GetCursorMilliseconds(bg_audio_id), elapsed_time);
             bg_field[i]->update(this, elapsed_time);
         }
 
-        if (bg_started) {
+        if (game->get_audio().IsPlaying(bg_audio_id)) {
             fft_l->update_song_buffer(game->get_audio().m_engine_buffer, elapsed_time);
             fft_r->update_song_buffer(game->get_audio().m_engine_buffer, elapsed_time);
         }
@@ -100,13 +102,12 @@ namespace nascent {
             if (bg_field[0]->get_current_timing_point() != nullptr) {
                 logo_field->set_key(bg_field[0]->get_section_beat() % logo_field->get_key_count());
             }
+            fft_l->draw(window);
+            fft_r->draw(window);
         }
 
         window->FillRectDecal({0, 0}, window->GetScreenSize(), {0, 0, 0, 128});
 
         logo_field->draw(window);
-
-        fft_l->draw(window);
-        fft_r->draw(window);
     };
 }

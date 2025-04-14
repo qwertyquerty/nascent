@@ -23,5 +23,5 @@ add_subdirectory("src/core")
 add_subdirectory("src/gse")
 add_subdirectory("src/game")
 
-set_target_properties(NascentMain PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG     ${CMAKE_BINARY_DIR})
-set_target_properties(NascentMain PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE   ${CMAKE_BINARY_DIR})
+set_target_properties(NascentMain PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG     ${CMAKE_BINARY_DIR}/debug)
+set_target_properties(NascentMain PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE   ${CMAKE_BINARY_DIR}/release)

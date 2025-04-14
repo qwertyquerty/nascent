@@ -24,10 +24,11 @@ namespace nascent {
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
         field->judge_height = lane_width/2;
+        field->audio_visual_offset = FIELD_AUDIO_VISUAL_OFFSET_MS;
+        field->audio_input_offset = FIELD_AUDIO_INPUT_OFFSET_MS;
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
         //game->get_audio().SetPitch(chart_audio_id, 0.8);
-        
     };
 
     void ScenePlay::update(Game* game, float elapsed_time) {

@@ -12,9 +12,9 @@ namespace nascent {
     };
 
     void EntityFFT::init(Scene* scene) {
-        input.resize(FFT_WINDOW_SIZE);
-        output.resize((FFT_WINDOW_SIZE / 2) + 1);
-        bins.resize(FFT_BAR_COUNT);
+        input.resize(FFT_WINDOW_SIZE, 0);
+        output.resize((FFT_WINDOW_SIZE / 2) + 1, (kiss_fft_cpx)0);
+        bins.resize(FFT_BAR_COUNT, 0);
     };
 
     void EntityFFT::update(Scene* game, float elapsed_time) {
@@ -26,7 +26,7 @@ namespace nascent {
 
         for (int i = (FFT_MIN_FREQ/FFT_BIN_SIZE); i <= FFT_BAR_COUNT; i++) {
             float x = (float)(i-(FFT_MIN_FREQ/FFT_BIN_SIZE)) * w * (1+FFT_SPACING_RATIO);
-            float h = std::min(bins[i] / 4 * size.y, size.y);
+            float h = std::min(bins[i-1] / 4 * size.y, size.y);
             olc::Pixel c = skin->title_gradient_at((x-pos.x)/size.x,0);
             c.a = FFT_BAR_ALPHA;
 
