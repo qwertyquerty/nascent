@@ -16,6 +16,9 @@ namespace nascent {
         note_x_spacing = note_size * FIELD_KEY_SPACING_RATIO;
 
         active_keys = 0;
+
+        audio_visual_offset = FIELD_AUDIO_VISUAL_OFFSET_MS;
+        audio_input_offset = FIELD_AUDIO_INPUT_OFFSET_MS;
     };
 
     EntityField::~EntityField() {
@@ -38,7 +41,7 @@ namespace nascent {
             }
         }
 
-        attempt->update((uint32_t)precise_song_position, active_keys);
+        attempt->update((uint32_t)(precise_song_position + audio_input_offset), active_keys);
     };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
@@ -131,7 +134,7 @@ namespace nascent {
             precise_song_position += elapsed_time * 1000;
         }
 
-        offset_song_position = precise_song_position + FIELD_DEFAULT_OFFSET_MS;
+        offset_song_position = precise_song_position + audio_visual_offset;
     }
 
     ChartTimingPoint* EntityField::get_current_timing_point() {

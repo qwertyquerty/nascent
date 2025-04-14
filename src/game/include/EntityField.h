@@ -9,9 +9,10 @@
 #include "olcPixelGameEngine.h"
 
 #define FIELD_KEY_SPACING_RATIO 0.15
-#define FIELD_SCROLL_SPEED 250 // screen % height per second
+#define FIELD_SCROLL_SPEED 240 // screen % height per second
 #define FIELD_HIT_MIN_HEIGHT 50
-#define FIELD_DEFAULT_OFFSET_MS 10
+#define FIELD_AUDIO_VISUAL_OFFSET_MS -30
+#define FIELD_AUDIO_INPUT_OFFSET_MS -40
 
 #define FIELD_AUDIO_SYNC_MAX_ERROR 20 //ms
 
@@ -40,6 +41,9 @@ namespace nascent {
         uint8_t judge_alpha = 64;
 
         uint32_t active_keys = 0;
+
+        int32_t audio_visual_offset = 0;
+        int32_t audio_input_offset = 0;
 
         olc::vd2d pos = {0,0};
         olc::vd2d size = {0,0};

@@ -2,11 +2,12 @@
 
 #include "olcPixelGameEngine.h"
 #include "ScenePlay.h"
+#include "SceneTitle.h"
 #include "discord-rpc.hpp"
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
-        scene_title = new ScenePlay();
+        scene_title = new SceneTitle();
     };
 
     GameNascent::~GameNascent() {
