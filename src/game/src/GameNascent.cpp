@@ -7,7 +7,7 @@
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
-        scene_title = new SceneTitle();
+        scene_title = new ScenePlay();
     };
 
     GameNascent::~GameNascent() {

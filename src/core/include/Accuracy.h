@@ -6,6 +6,8 @@
 #include <map>
 
 namespace nascent {
+    const double HOLD_RELEASE_WINDOW_MULTIPLIER = 2;
+
     enum HitScore {
         PERFECT,
         EXCELLENT,
@@ -58,10 +60,10 @@ namespace nascent {
     const uint8_t MIN_HIT_ACC_DIFFICULTY = 0;
     const uint8_t MAX_HIT_ACC_DIFFICULTY = 10;
 
-    uint8_t get_window_from_hit_acc_diff(HitScore score, uint8_t hit_acc_diff);
+    uint8_t get_window_from_hit_acc_diff(HitScore score, uint8_t hit_acc_diff, bool release = false);
 
     /**
      * Return HitScore from a hit error and an accuracy difficulty, returns HitScore::NONE if the note isn't hit at all (outside of miss range)
      */
-    HitScore get_score_from_hit_err(uint32_t error, uint8_t hit_acc_diff);
+    HitScore get_score_from_hit_err(uint32_t error, uint8_t hit_acc_diff, bool release = false);
 }

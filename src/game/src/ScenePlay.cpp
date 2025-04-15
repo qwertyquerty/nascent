@@ -16,7 +16,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin("default", 4);
-        chart = new Chart(R"(assets\songs\finixe\finixe_another.osu.json)");
+        chart = new Chart(R"(assets\songs\bubtea\bubtea.osu.json)");
 
         double lane_width = window_size.x/12;
 
@@ -64,12 +64,22 @@ namespace nascent {
         {
             if ((*it)->played) {
                 JudgedHit* jhit = *it;
-                window->DrawStringDecal({20.0, 120 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->score)), {3, 3});
-                window->DrawStringDecal({260.0, 120 + 30*l}, std::format("{:+}ms", jhit->err), olc::WHITE, {3,3});
+                window->DrawStringDecal({20.0, 120 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
+                window->DrawStringDecal({260.0, 120 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
+                
                 l += 1;
+                if (l >= 30) {
+                    break;
+                }
+
+                if (jhit->release_score != HitScore::NONE) {
+                    window->DrawStringDecal({20.0, 120 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->release_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->release_score)), {3, 3});
+                    window->DrawStringDecal({260.0, 120 + 30*l}, std::format("{:+}ms", jhit->release_err), olc::WHITE, {3,3});
+                    l += 1;
+                }
             }
 
-            if (l == 30) {
+            if (l >= 30) {
                 break;
             }
         }
