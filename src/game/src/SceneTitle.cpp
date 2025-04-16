@@ -25,10 +25,10 @@ namespace nascent {
     void SceneTitle::init(Game* game) {
         olc::vi2d window_size = game->window->GetWindowSize();
 
-        logo_skin = new Skin("logo", 7);
+        logo_skin = new Skin(game, "logo", 7);
         logo_chart = new Chart(R"(assets\songs\logo\logo.json)");
 
-        bg_skin = new Skin("default", 4);
+        bg_skin = new Skin(game, "default", 4);
         bg_chart = new Chart(R"(assets\songs\title_2\title2.osu.json)");
 
         logo_field = new EntityField(logo_chart, logo_skin, {(double)window_size.x/4,0}, {(double)window_size.x/2, (double)window_size.y/2 + ((double)window_size.x/28)});

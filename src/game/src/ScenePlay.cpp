@@ -15,7 +15,7 @@ namespace nascent {
     void ScenePlay::init(Game* game) {
         olc::vi2d window_size = game->window->GetWindowSize();
 
-        skin = new Skin("default", 4);
+        skin = new Skin(game, "default", 4);
         chart = new Chart(R"(assets\songs\bakunana\ARM feat. Nanahira - BakunanaTestroyer (Rinzler) [BEAST].osu.json)");
 
         double lane_width = window_size.x/12;
@@ -29,6 +29,8 @@ namespace nascent {
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
         //game->get_audio().SetPitch(chart_audio_id, 0.8);
+
+        game->get_audio().Play(skin->get_random_menu_pluck());
     };
 
     void ScenePlay::update(Game* game, float elapsed_time) {
@@ -48,7 +50,10 @@ namespace nascent {
         }
 
         field->update_song_position(position, elapsed_time);
-        field->set_keys(InputManager::get_lane_keys_pressed(game->window));
+
+        uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
+        field->set_keys(held_keys);
+
         field->update(this, elapsed_time);
 
         timer += elapsed_time;

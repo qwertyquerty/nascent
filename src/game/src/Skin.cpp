@@ -1,10 +1,12 @@
 #include "Skin.h"
+#include "Game.h"
 
 namespace nascent {
-    Skin::Skin(std::string name, uint8_t key_count) {
+    Skin::Skin(Game* game, std::string name, uint8_t key_count) {
         this->name = name;
         this->key_count = key_count;
-        load_sprites();
+        load_sprites(game);
+        load_sounds(game);
     }
 
     Skin::~Skin() {
@@ -16,7 +18,7 @@ namespace nascent {
         delete title_gradient;
     }
 
-    void Skin::load_sprites() {
+    void Skin::load_sprites(Game* game) {
         skin_path = boost::filesystem::path(skins_directory) /= name;
 
         // Load noteskins
@@ -28,9 +30,29 @@ namespace nascent {
         title_gradient = new olc::Sprite((skin_path / "title_gradient.png").string());
     }
 
+    void Skin::load_sounds(Game* game) {
+        skin_path = boost::filesystem::path(skins_directory) /= name;
+
+        for (uint8_t i = 0; i < 10; i++) {
+            if (boost::filesystem::exists(skin_path / std::format("menu_pluck_{}.mp3", i))) {
+                int32_t sound = game->get_audio().LoadSound((skin_path / std::format("menu_pluck_{}.mp3", i)).string());
+                menu_pluck_sfx.push_back(sound);
+            }
+        }
+
+        boost::filesystem::path path_click_sfx = skin_path / std::format("click.mp3");
+        if (boost::filesystem::exists(path_click_sfx)) {
+            click_sfx = game->get_audio().LoadSound(path_click_sfx.string());
+        }
+    }
+
     olc::Pixel Skin::title_gradient_at(double x, double y) {
         x = std::clamp(x, 0.0, 1.0);
         y = std::clamp(y, 0.0, 1.0);
         return title_gradient->GetPixel({(int32_t)(x * (title_gradient->width-1)), (int32_t)(y * (title_gradient->height-1))});
+    }
+
+    int32_t Skin::get_random_menu_pluck() {
+        return menu_pluck_sfx.at(std::rand() % menu_pluck_sfx.size());
     }
 }

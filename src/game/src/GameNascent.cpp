@@ -18,6 +18,7 @@ namespace nascent {
 
     void GameNascent::init() {
         start_time = time(nullptr);
+        std::srand(start_time);
         set_scene(scene_title);
         discord_init();
         discord_update();
