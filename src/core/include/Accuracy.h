@@ -48,8 +48,8 @@ namespace nascent {
 
     const std::map<HitScore, uint8_t> HIT_SCORE_BASE_WINDOW = { // +/- ms
         {PERFECT,   10},
-        {AMAZING,   20},
-        {GREAT,     40},
+        {AMAZING,   25},
+        {GREAT,     50},
         {GOOD,      80},
         {BAD,       160}
     };

@@ -111,7 +111,7 @@ namespace nascent {
                             uint32_t err = std::abs(current_time - candidate->chart_hit.time);
                             HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy);
 
-                            if (score != HitScore::MISS) {
+                            if (score != HitScore::BAD) {
                                 chosen_hit = candidate;
                                 break;
                             }
