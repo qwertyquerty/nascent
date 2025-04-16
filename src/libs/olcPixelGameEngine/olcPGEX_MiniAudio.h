@@ -110,43 +110,15 @@ namespace olc
             const std::string string();
         };
 
-        class Waveform
-        {
-        public:
-            Waveform();
-            Waveform(const double amplitude, const double frequency, const ma_waveform_type waveformType);
-            
-            void Start();
-            void Stop();
-            void Unload();
-
-            bool IsPlaying() const;
-            bool IsLoaded();
-        
-            ma_waveform* Get();
-
-        private:
-            bool m_is_playing = false;
-            bool m_is_loaded  = false;
-            
-            ma_waveform m_waveform;
-            ma_waveform_config m_waveform_config;
-        };
-
     public:
         MiniAudio();
         ~MiniAudio();
         virtual bool OnBeforeUserUpdate(float& fElapsedTime) override;
         static void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
-        static std::vector<MiniAudio::Waveform> m_waveforms;
 
     public: // static variables
         static bool m_background_playback;
         static std::vector<float> m_engine_buffer;
-        static std::vector<float> m_waveform_buffer;
-        static std::function<void(float& out_data_channel_left, float& out_data_channel_right, const float fElapsedTime)> m_noise_callback;
-        static float m_noise_left_channel;
-        static float m_noise_right_channel;
 
     public: // configuration
         void SetBackgroundPlay(const bool state);
@@ -195,55 +167,6 @@ namespace olc
         // get the current number of active "one off" sounds 
         int GetOneOffCount();
 
-    public: // waveforms
-        // creates a new waveform and returns the id of the waveform
-        const int CreateWaveform(const double amplitude, const double frequency, const ma_waveform_type waveformType);
-        // starts playing a waveform, continues producing sound until stopped
-        void PlayWaveform(const int id);
-        // change the amplitude of a waveform (loudness)
-        void SetWaveformAmplitude(const int id, const double amplitude);
-        // change the frequency of a waveform (pitch)
-        void SetWaveformFrequency(const int id, const double frequency);
-        // change the type of a waveform
-        void SetWaveformType(const int id, const ma_waveform_type waveformType);
-        // stop a waveform from playing
-        void StopWaveform(const int id);
-        // unload and free resources of a given waveform
-        void UnloadWaveform(const int id);
-
-        // whether or not a waveform is currently playing
-        const bool IsWaveformPlaying(const int id);
-        // returns waveform amplitude
-        const double& GetWaveformAmplitude(const int id);
-        // returns waveform frequency
-        const double& GetWaveformFrequency(const int id);
-        // returns waveform type
-        const ma_waveform_type& GetWaveformType(const int id);
-        // ADVANCED USAGE, retrieval of raw ma_waveform object
-        ma_waveform* GetWaveform(const int id);
-    
-    public: // noise generation
-        
-        /**
-         * set a noise callback function so your applicaiton
-         * can send sound update.
-         * 
-         * the callback provides two floating point values to
-         * override, one for the left channel and one for the
-         * right channel. fill them with raw audio data.
-         * 
-         * for periodic functions, you can reference the fElapsedTime
-         * variable to track how much time passed on the previous
-         * frame. Accumulate it somewhere to keep track of the total
-         * audio time.
-         * 
-         * if you do not change the output channels, the values
-         * previously used wil be played.
-         */
-        void SetNoiseCallback(std::function<void(float& noiseLeftChannel, float& noiseRightChannel, const float fElapsedTime)>callbackFunc);
-        // clears the noise callback and resets the channel values to 0.0
-        void ClearNoiseCallback();
-
     public: // advanced features
         ma_device* GetDevice();
         ma_engine* GetEngine();
@@ -278,6 +201,7 @@ static constexpr int            DEVICE_CHANNELS     = 2;
 static constexpr ma_format      DEVICE_FORMAT       = ma_format_f32;
 static constexpr int            DEVICE_SAMPLE_RATE  = 48000;
 static constexpr ma_device_type DEVICE_TYPE         = ma_device_type_playback;
+static ma_lpf lpf;
 
 void PGEX_MA_LOG(const std::string_view& message = "", std::source_location location = std::source_location::current())
 {
@@ -393,70 +317,10 @@ namespace olc
 
 #pragma endregion
 
-#pragma region Waveform
-    MiniAudio::Waveform::Waveform()
-    {
-    }
-
-    MiniAudio::Waveform::Waveform(const double amplitude, const double frequency, const ma_waveform_type waveformType)
-    {
-        m_waveform_config = ma_waveform_config_init(
-            DEVICE_FORMAT,
-            DEVICE_CHANNELS,
-            DEVICE_SAMPLE_RATE,
-            waveformType,
-            amplitude,
-            frequency
-        );
-        
-        if(ma_waveform_init(&m_waveform_config, &m_waveform) != MA_SUCCESS)
-            throw std::runtime_error{"failed to initialize a waveform"};
-        
-        m_is_loaded = true;
-    }
-
-    void MiniAudio::Waveform::Start()
-    {
-        m_is_playing = true;
-    }
-
-    void MiniAudio::Waveform::Stop()
-    {
-        m_is_playing = false;
-    }
-
-    void MiniAudio::Waveform::Unload()
-    {
-        m_is_loaded = false;
-    }
-
-    bool MiniAudio::Waveform::IsPlaying() const
-    {
-        return m_is_playing;
-    }
-
-    bool MiniAudio::Waveform::IsLoaded()
-    {
-        return m_is_loaded;
-    }
-
-    ma_waveform* MiniAudio::Waveform::Get()
-    {
-        return &m_waveform;
-    }
-
-#pragma endregion
-
 #pragma region MiniAudio
 
     bool MiniAudio::m_background_playback = false;
     std::vector<float> MiniAudio::m_engine_buffer;
-    std::vector<float> MiniAudio::m_waveform_buffer;
-
-    std::vector<MiniAudio::Waveform> MiniAudio::m_waveforms;
-    std::function<void(float& out_audio_data_left, float& out_audio_data_right, const float fElapsedTime)> MiniAudio::m_noise_callback;
-    float MiniAudio::m_noise_left_channel = 0.0f;
-    float MiniAudio::m_noise_right_channel = 0.0f;
 
     MiniAudio::MiniAudio() : olc::PGEX(true)
     {
@@ -492,6 +356,12 @@ namespace olc
             throw std::runtime_error{"PGEX_MiniAudio: failed to initialize engine"};
 
         m_initialized = true;
+
+        ma_lpf_config config = ma_lpf_config_init(DEVICE_FORMAT, DEVICE_CHANNELS, DEVICE_SAMPLE_RATE, 250, 3);
+        ma_result result = ma_lpf_init(&config, nullptr, &lpf);
+        if (result != MA_SUCCESS) {
+            printf("LPF init failure!\n");
+        }
     }
 
     MiniAudio::~MiniAudio()
@@ -580,7 +450,6 @@ namespace olc
         if(m_engine_buffer.size() != (frameCount * DEVICE_CHANNELS))
         {
             m_engine_buffer.resize(frameCount * DEVICE_CHANNELS, 0);
-            m_waveform_buffer.resize(frameCount * DEVICE_CHANNELS, 0);
             PGEX_MA_LOG(std::format("had to resize callback buffers to {} bytes", m_engine_buffer.size() * sizeof(float)));
         }
 
@@ -589,52 +458,7 @@ namespace olc
          */
         ma_engine_read_pcm_frames(&ma->m_engine, m_engine_buffer.data(), frameCount, NULL);
 
-        /**
-         * waveforms
-         */
-        for(Waveform& waveform : MiniAudio::m_waveforms)
-        {
-            if(!waveform.IsLoaded())
-                continue;
-
-            if(waveform.IsPlaying())
-            {
-                ma_uint64 framesRead;
-
-                /**
-                 * read pcm frames from the waveform to the buffer
-                 */
-                ma_result result = ma_waveform_read_pcm_frames(waveform.Get(), m_waveform_buffer.data(), frameCount, &framesRead);
-                
-                /**
-                 * if reading failed, or read 0 frames, skip
-                 */
-                if(result != MA_SUCCESS || framesRead == 0)
-                    continue;
-                
-                /**
-                 * mix waveform buffer into the engine buffer, simple add
-                 */
-                for(ma_uint64 i = 0; i < framesRead * DEVICE_CHANNELS; i++)
-                {
-                    m_engine_buffer[i] += m_waveform_buffer[i];
-                }
-            }
-        }
-        
-        /**
-         * noise generators
-         */
-        if(m_noise_callback)
-        {
-            for(ma_uint32 i = 0; i < frameCount; i++)
-            {
-                m_noise_callback(m_noise_left_channel, m_noise_right_channel, 1.0f / DEVICE_SAMPLE_RATE);
-
-                m_engine_buffer[(i * DEVICE_CHANNELS)] += m_noise_left_channel;
-                m_engine_buffer[(i * DEVICE_CHANNELS) + 1] += m_noise_right_channel;
-            }
-        }
+        //ma_lpf_process_pcm_frames(&lpf, m_engine_buffer.data(), m_engine_buffer.data(), frameCount);
         
         /**
          * clamp the output to a range of -1.0f to 1.0f
@@ -856,92 +680,6 @@ namespace olc
     int MiniAudio::GetOneOffCount()
     {
         return m_count_play_once_sounds;
-    }
-
-    const int MiniAudio::CreateWaveform(const double amplitude, const double frequency, const ma_waveform_type waveformType)
-    {
-        // attempt to re-use an empty slot
-        for(int i = 0; i < m_waveforms.size(); i++)
-        {
-            if(!m_waveforms.at(i).IsLoaded())
-            {
-                m_waveforms.at(i) = Waveform{amplitude, frequency, waveformType};
-                return i;
-            }
-        }
-
-        // no empty slots, make more room!
-        const int id = static_cast<int>(m_waveforms.size());
-        m_waveforms.emplace_back(amplitude, frequency, waveformType);
-        return id;
-    }
-
-    void MiniAudio::PlayWaveform(const int id)
-    {
-        m_waveforms.at(id).Start();
-    }
-
-    void MiniAudio::SetWaveformAmplitude(const int id, const double amplitude)
-    {
-        ma_waveform_set_amplitude(m_waveforms.at(id).Get(), amplitude);
-    }
-
-    void MiniAudio::SetWaveformFrequency(const int id, const double frequency)
-    {
-        ma_waveform_set_frequency(m_waveforms.at(id).Get(), frequency);
-    }
-
-    void MiniAudio::SetWaveformType(const int id, const ma_waveform_type waveformType)
-    {
-        ma_waveform_set_type(m_waveforms.at(id).Get(), waveformType);
-    }
-
-    void MiniAudio::StopWaveform(const int id)
-    {
-        m_waveforms.at(id).Stop();
-    }
-
-    void MiniAudio::UnloadWaveform(const int id)
-    {
-        ma_waveform_uninit(m_waveforms.at(id).Get());
-        m_waveforms.at(id).Unload();
-    }
-
-    ma_waveform* MiniAudio::GetWaveform(const int id)
-    {
-        return m_waveforms.at(id).Get();
-    }
-
-    const bool MiniAudio::IsWaveformPlaying(const int id)
-    {
-        return m_waveforms.at(id).IsPlaying();
-    }
-
-    const double& MiniAudio::GetWaveformAmplitude(const int id)
-    {
-        return m_waveforms.at(id).Get()->config.amplitude;
-    }
-
-    const double& MiniAudio::GetWaveformFrequency(const int id)
-    {
-        return m_waveforms.at(id).Get()->config.frequency;
-    }
-
-    const ma_waveform_type& MiniAudio::GetWaveformType(const int id)
-    {
-        return m_waveforms.at(id).Get()->config.type;
-    }
-
-    void MiniAudio::SetNoiseCallback(std::function<void(float& noiseLeftChannel, float& noiseRightChannel, const float fElapsedTime)>callbackFunc)
-    {
-        m_noise_callback = callbackFunc;
-    }
-
-    void MiniAudio::ClearNoiseCallback()
-    {
-        MiniAudio::m_noise_left_channel = 0.0f;
-        MiniAudio::m_noise_right_channel = 0.0f;
-        m_noise_callback = {};
     }
 
     ma_device* MiniAudio::GetDevice()

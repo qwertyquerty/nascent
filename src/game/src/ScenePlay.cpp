@@ -16,7 +16,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin("default", 4);
-        chart = new Chart(R"(assets\songs\bubtea\bubtea.osu.json)");
+        chart = new Chart(R"(assets\songs\bakunana\ARM feat. Nanahira - BakunanaTestroyer (Rinzler) [BEAST].osu.json)");
 
         double lane_width = window_size.x/12;
 
@@ -55,31 +55,62 @@ namespace nascent {
     };
 
     void ScenePlay::draw(olc::PixelGameEngine* window) {
+        olc::vi2d screensize = window->GetScreenSize();
+
         field->draw(window);
         window->DrawStringDecal({20, 20}, std::format("ACC: {:.2f}%", field->attempt->get_accuracy() * 100), olc::WHITE, {4,4});
         window->DrawStringDecal({20, 60}, std::format("ERR: {:.1f}ms", field->attempt->get_avg_err()), olc::WHITE, {4,4});
+        window->DrawStringDecal({20, 100}, std::format("COM: {}X", field->attempt->get_combo()), olc::WHITE, {4,4});
 
         uint8_t l = 0;
         for (auto it = field->attempt->judged_hits.rbegin(); it != field->attempt->judged_hits.rend(); ++it)
         {
-            if ((*it)->played) {
+            if ((*it)->hit) {
                 JudgedHit* jhit = *it;
-                window->DrawStringDecal({20.0, 120 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
-                window->DrawStringDecal({260.0, 120 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
+                window->DrawStringDecal({20.0, 160 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
+                window->DrawStringDecal({260.0, 160 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
                 
                 l += 1;
                 if (l >= 30) {
                     break;
                 }
 
-                if (jhit->release_score != HitScore::NONE) {
-                    window->DrawStringDecal({20.0, 120 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->release_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->release_score)), {3, 3});
-                    window->DrawStringDecal({260.0, 120 + 30*l}, std::format("{:+}ms", jhit->release_err), olc::WHITE, {3,3});
+                if (jhit->released) {
+                    window->DrawStringDecal({20.0, 160 + 30*l}, std::format("{}*", HIT_SCORE_NAME.at(jhit->release_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->release_score)), {3, 3});
+                    window->DrawStringDecal({260.0, 160 + 30*l}, std::format("{:+}ms", jhit->release_err), olc::WHITE, {3,3});
                     l += 1;
                 }
             }
 
             if (l >= 30) {
+                break;
+            }
+        }
+
+        l = 0;
+        
+        float hit_width = screensize.x / 400;
+        float hit_height = hit_width * 15;
+        float px_per_ms = ((double)screensize.x) / 3.0 / get_window_from_hit_acc_diff(HitScore::BAD, field->chart->info.hit_accuracy) / 2;
+        float y = screensize.y - hit_height;
+
+        for (HitScore h = HitScore::BAD; h >= HitScore::PERFECT; h = (HitScore)(h-1)) {
+            uint16_t hit_err_window = get_window_from_hit_acc_diff(h, field->chart->info.hit_accuracy);
+            float x = screensize.x / 2 - hit_err_window * px_per_ms;
+            olc::Pixel c = HIT_SCORE_COLOR.at(h);
+            c.a = 24;
+            window->FillRectDecal({x, y}, {hit_err_window * 2 * px_per_ms, hit_height}, c);
+        }
+
+        for (auto it = field->attempt->judged_hits.rbegin(); it != field->attempt->judged_hits.rend(); ++it) {
+            if ((*it)->hit_played && (*it)->hit_score != HitScore::MISS) {
+                JudgedHit* jhit = *it;
+                float x = screensize.x / 2 - hit_width-2 + jhit->hit_err * px_per_ms;
+                window->FillRectDecal({x, y}, {hit_width, hit_height}, olc::Pixel(200, 200, 255, 64));
+                l++;
+            }
+
+            if (l >= 100) {
                 break;
             }
         }

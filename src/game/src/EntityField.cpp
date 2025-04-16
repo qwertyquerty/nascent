@@ -85,7 +85,7 @@ namespace nascent {
                     for (double y_offset = 0; y_offset < hit_height; y_offset += (note_size/4)) {
                         double hold_smear_y = screen_hit_y - hit_height + y_offset;
 
-                        if ((!draw_notes_past_judge || jhit->played) && hold_smear_y > jl_y) {
+                        if ((!draw_notes_past_judge || jhit->hit_played) && hold_smear_y > jl_y) {
                             break;
                         }
 
@@ -101,7 +101,7 @@ namespace nascent {
                     }
                 }
 
-                if ((draw_notes_past_judge && !jhit->played) || screen_hit_y <= jl_y) {
+                if ((draw_notes_past_judge && !jhit->hit_played) || screen_hit_y <= jl_y) {
                     window->DrawWarpedDecal(skin->note_skin_decals[hit.key],
                         {
                             {(float)hit_x, (float)screen_hit_y},

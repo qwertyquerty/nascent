@@ -16,16 +16,26 @@ namespace nascent {
         }
     }
 
-    void Attempt::score_hit(JudgedHit* jhit, int32_t err, bool release) {
-        HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, release);
-        
+    void Attempt::score_hit(JudgedHit* jhit, int32_t err, bool release, bool played) {
+        HitScore score;
+
+        if (played) {
+            total_err += err;
+            score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, release);
+            score = score == HitScore::NONE ? HitScore::MISS : score;
+        }
+        else {
+            score = HitScore::MISS;
+        }
+
         if (!release) {
-            if (jhit->played) {
+            if (jhit->hit) {
                 return;
             }
 
+            jhit->hit = true;
+            jhit->hit_played = played;
             jhit->hit_score = score;
-            jhit->played = true;
             jhit->hit_err = err;
             
         } else {
@@ -33,16 +43,15 @@ namespace nascent {
                 return;
             }
 
-            jhit->release_score = score == HitScore::NONE ? HitScore::MISS : score;
             jhit->released = true;
+            jhit->release_played = played;
+            jhit->release_score = score;
             jhit->release_err = err;
         }
 
         total_score += HIT_SCORE_ACC.at(score);
         current_combo = score == HitScore::MISS ? 0 : current_combo + 1;
         max_combo = std::max(current_combo, max_combo);
-
-        total_err += err;
         n_scored_notes += 1;
     }
 
@@ -54,18 +63,22 @@ namespace nascent {
         return n_scored_notes ? (double)total_err / n_scored_notes : 0;
     }
 
+    uint32_t Attempt::get_combo() {
+        return current_combo;
+    }
+
     void Attempt::update(int32_t current_time, uint32_t current_keys) {
         uint32_t pressed_keys = ~held_keys & current_keys;
         uint32_t released_keys = held_keys & ~current_keys;
         held_keys = current_keys;
 
         for (JudgedHit* jhit : judged_hits) {
-            if (!jhit->played) {
+            if (!jhit->hit) {
                 int32_t err = current_time - jhit->chart_hit.time;
                 HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy);
 
-                if (err > 0 && (score == HitScore::MISS || score == HitScore::NONE)) {
-                    score_hit(jhit, get_window_from_hit_acc_diff(HitScore::MISS, chart->info.hit_accuracy));
+                if (err > 0 && score == HitScore::NONE) {
+                    score_hit(jhit, 0, false, false);
                 }
             }
         }
@@ -78,7 +91,7 @@ namespace nascent {
                 std::vector<JudgedHit*> candidates;
 
                 for (JudgedHit* jhit : judged_hits) {
-                    if (jhit->chart_hit.key == key && !jhit->played) {
+                    if (jhit->chart_hit.key == key && !jhit->hit) {
                         uint32_t err = std::abs(current_time - jhit->chart_hit.time);
                         HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy);
                         if (score != HitScore::NONE) {
@@ -110,8 +123,7 @@ namespace nascent {
                     }
 
                     current_holds[key].second = chosen_hit;
-                    int32_t err = current_time - chosen_hit->chart_hit.time;
-                    score_hit(chosen_hit, err);
+                    score_hit(chosen_hit, current_time - chosen_hit->chart_hit.time, false, true);
                 }
             }
 
@@ -121,7 +133,7 @@ namespace nascent {
                 JudgedHit* jhit = current_holds[key].second;
                 if (jhit != nullptr && jhit->chart_hit.hit_type == HitType::HOLD) {
                     if (!jhit->released) {
-                        score_hit(jhit, current_time - jhit->chart_hit.end_time, true);
+                        score_hit(jhit, current_time - jhit->chart_hit.end_time, true, true);
                     }
                     jhit->attempt_hit = current_holds[key].first;
                     current_holds[key].second = nullptr;
@@ -134,8 +146,8 @@ namespace nascent {
                     int32_t err = current_time - jhit->chart_hit.end_time;
                     HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, true);
 
-                    if (err > 0 && (score == HitScore::MISS || score == HitScore::NONE)) {
-                        score_hit(jhit, err, get_window_from_hit_acc_diff(HitScore::MISS, chart->info.hit_accuracy, true));
+                    if (err > 0 && score == HitScore::NONE) {
+                        score_hit(jhit, err, true, false);
                     }
                 }
             }

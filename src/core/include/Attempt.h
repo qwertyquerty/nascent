@@ -12,11 +12,13 @@ namespace nascent {
         Hit chart_hit;
         Hit attempt_hit;
 
-        bool played = false;
-        bool released = false;
-        
+        bool hit = false;
+        bool hit_played;
         int32_t hit_err = 0;
         HitScore hit_score = HitScore::NONE;
+
+        bool released = false;
+        bool release_played = false;
         int32_t release_err = 0;
         HitScore release_score = HitScore::NONE;
     };
@@ -43,8 +45,9 @@ namespace nascent {
         Attempt(Chart* chart);
 
         void update(int32_t current_time, uint32_t current_keys);
-        void score_hit(JudgedHit* jhit, int32_t err, bool release = false);
+        void score_hit(JudgedHit* jhit, int32_t err, bool release = false, bool played = true);
         double get_accuracy();
         double get_avg_err();
+        uint32_t get_combo();
     };
 }
