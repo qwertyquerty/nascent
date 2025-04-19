@@ -79,6 +79,10 @@ namespace nascent {
 
                 if (err > 0 && score == HitScore::NONE) {
                     score_hit(jhit, 0, false, false);
+
+                    if (jhit->chart_hit.hit_type == HitType::HOLD) {
+                        score_hit(jhit, 0, true, false);
+                    }
                 }
             }
         }

@@ -40,9 +40,9 @@ namespace nascent {
             }
         }
 
-        boost::filesystem::path path_click_sfx = skin_path / std::format("click.mp3");
-        if (boost::filesystem::exists(path_click_sfx)) {
-            click_sfx = game->get_audio().LoadSound(path_click_sfx.string());
+        boost::filesystem::path path_hitsound_sfx = skin_path / std::format("hitsound.mp3");
+        if (boost::filesystem::exists(path_hitsound_sfx)) {
+            hitsound_sfx = game->get_audio().LoadSound(path_hitsound_sfx.string());
         }
     }
 

@@ -20,7 +20,7 @@ namespace nascent {
         uint8_t key_count;
 
         std::vector<int32_t> menu_pluck_sfx;
-        int32_t click_sfx = -1;
+        int32_t hitsound_sfx = -1;
 
         Skin(Game* game, std::string name, uint8_t key_count);
         ~Skin();

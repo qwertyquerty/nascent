@@ -25,6 +25,8 @@ namespace nascent {
 
         bool chart_started = false;
 
+        uint64_t frame_pos = 0;
+
         public:
         ScenePlay();
         ~ScenePlay();

@@ -162,6 +162,8 @@ namespace olc
         bool IsPlaying(const int id);
         // gets the current position in the sound, in milliseconds
         ma_uint64 GetCursorMilliseconds(const int id);
+        // gets the current position in the sound, in frames
+        ma_uint64 GetCursorFrames(const int id);
         // gets the current position in the sound, as a float between 0.0f and 1.0f
         float GetCursorFloat(const int id);
         // get the current number of active "one off" sounds 
@@ -201,6 +203,7 @@ static constexpr int            DEVICE_CHANNELS     = 2;
 static constexpr ma_format      DEVICE_FORMAT       = ma_format_f32;
 static constexpr int            DEVICE_SAMPLE_RATE  = 48000;
 static constexpr ma_device_type DEVICE_TYPE         = ma_device_type_playback;
+static constexpr int            DEVICE_PERIOD_SIZE  = 48;
 static ma_lpf lpf;
 
 void PGEX_MA_LOG(const std::string_view& message = "", std::source_location location = std::source_location::current())
@@ -328,6 +331,7 @@ namespace olc
         m_device_config.playback.format = DEVICE_FORMAT;
         m_device_config.playback.channels = DEVICE_CHANNELS;
         m_device_config.sampleRate = DEVICE_SAMPLE_RATE;
+        m_device_config.periodSizeInFrames = DEVICE_PERIOD_SIZE;
         m_device_config.dataCallback = MiniAudio::data_callback;
         m_device_config.pUserData = this;
 
@@ -669,7 +673,14 @@ namespace olc
         ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
         return (cursor * 1000) / DEVICE_SAMPLE_RATE;
     }
-    
+
+    ma_uint64 MiniAudio::GetCursorFrames(const int id)
+    {
+        ma_uint64 cursor;
+        ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
+        return cursor;
+    }
+
     float MiniAudio::GetCursorFloat(const int id)
     {
         float cursor;

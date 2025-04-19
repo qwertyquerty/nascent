@@ -49,6 +49,8 @@ namespace nascent {
             position = game->get_audio().GetCursorMilliseconds(chart_audio_id);
         }
 
+        frame_pos = game->get_audio().GetCursorFrames(chart_audio_id);
+
         field->update_song_position(position, elapsed_time);
 
         uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
@@ -66,28 +68,34 @@ namespace nascent {
         window->DrawStringDecal({20, 20}, std::format("ACC: {:.2f}%", field->attempt->get_accuracy() * 100), olc::WHITE, {4,4});
         window->DrawStringDecal({20, 60}, std::format("ERR: {:.1f}ms", field->attempt->get_avg_err()), olc::WHITE, {4,4});
         window->DrawStringDecal({20, 100}, std::format("COM: {}X", field->attempt->get_combo()), olc::WHITE, {4,4});
+        window->DrawStringDecal({20, 140}, std::format("FT: {}", frame_pos), olc::WHITE, {4,4});
 
         uint8_t l = 0;
         for (auto it = field->attempt->judged_hits.rbegin(); it != field->attempt->judged_hits.rend(); ++it)
         {
             if ((*it)->hit) {
                 JudgedHit* jhit = *it;
-                window->DrawStringDecal({20.0, 160 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
-                window->DrawStringDecal({260.0, 160 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
+                window->DrawStringDecal({20.0, 200 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
+                window->DrawStringDecal({260.0, 200 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
                 
                 l += 1;
                 if (l >= 30) {
                     break;
                 }
 
-                if (jhit->released) {
-                    window->DrawStringDecal({20.0, 160 + 30*l}, std::format("{}*", HIT_SCORE_NAME.at(jhit->release_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->release_score)), {3, 3});
-                    window->DrawStringDecal({260.0, 160 + 30*l}, std::format("{:+}ms", jhit->release_err), olc::WHITE, {3,3});
+                if (jhit->chart_hit.hit_type == HitType::HOLD) {
+                    if (jhit->released) {
+                        window->DrawStringDecal({20.0, 200 + 30*l}, std::format("{}*", HIT_SCORE_NAME.at(jhit->release_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->release_score)), {3, 3});
+                        window->DrawStringDecal({260.0, 200 + 30*l}, std::format("{:+}ms", jhit->release_err), olc::WHITE, {3,3});
+                    }
+                    else {
+                        window->DrawStringDecal({20.0, 200 + 30*l}, "...", olc::WHITE, {3, 3});
+                    }
                     l += 1;
                 }
             }
 
-            if (l >= 30) {
+            if (l >= 28) {
                 break;
             }
         }
