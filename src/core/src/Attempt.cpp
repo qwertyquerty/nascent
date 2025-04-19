@@ -9,9 +9,12 @@ namespace nascent {
         
         current_holds.resize(chart->info.key_count);
 
+        uint32_t i = 0;
         for (Hit hit : chart->hits) {
             JudgedHit* judged_hit = new JudgedHit();
             judged_hit->chart_hit = hit;
+            judged_hit->index = i;
+            i++;
             judged_hits.push_back(judged_hit);
         }
     }
@@ -37,7 +40,7 @@ namespace nascent {
             jhit->hit_played = played;
             jhit->hit_score = score;
             jhit->hit_err = err;
-            
+            last_scored_hit_index = std::max(jhit->index, last_scored_hit_index);
         } else {
             if (jhit->released) {
                 return;
@@ -72,17 +75,23 @@ namespace nascent {
         uint32_t released_keys = held_keys & ~current_keys;
         held_keys = current_keys;
 
-        for (JudgedHit* jhit : judged_hits) {
+        for (uint32_t i = last_passed_hit_index; i < judged_hits.size(); i++) {
+            JudgedHit* jhit = judged_hits[i];
+
             if (!jhit->hit) {
                 int32_t err = current_time - jhit->chart_hit.time;
                 HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy);
 
                 if (err > 0 && score == HitScore::NONE) {
                     score_hit(jhit, 0, false, false);
+                    last_passed_hit_index = i;
 
                     if (jhit->chart_hit.hit_type == HitType::HOLD) {
                         score_hit(jhit, 0, true, false);
                     }
+                }
+                else if (err < 0) {
+                    break;
                 }
             }
         }
@@ -94,12 +103,17 @@ namespace nascent {
 
                 std::vector<JudgedHit*> candidates;
 
-                for (JudgedHit* jhit : judged_hits) {
+                for (uint32_t i = last_passed_hit_index; i < judged_hits.size(); i++) {
+                    JudgedHit* jhit = judged_hits[i];
+                    
                     if (jhit->chart_hit.key == key && !jhit->hit) {
                         uint32_t err = std::abs(current_time - jhit->chart_hit.time);
                         HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy);
                         if (score != HitScore::NONE) {
                             candidates.push_back(jhit);
+                        }
+                        else if (err > 0) {
+                            break;
                         }
                     }
                 }

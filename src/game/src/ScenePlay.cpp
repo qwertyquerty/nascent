@@ -16,7 +16,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin(game, "default", 4);
-        chart = new Chart(R"(assets\songs\bakunana\ARM feat. Nanahira - BakunanaTestroyer (Rinzler) [BEAST].osu.json)");
+        chart = new Chart(R"(assets\songs\djn\djn.osu.json)");
 
         double lane_width = window_size.x/12;
 
@@ -71,10 +71,11 @@ namespace nascent {
         window->DrawStringDecal({20, 140}, std::format("FT: {}", frame_pos), olc::WHITE, {4,4});
 
         uint8_t l = 0;
-        for (auto it = field->attempt->judged_hits.rbegin(); it != field->attempt->judged_hits.rend(); ++it)
+        for (int32_t i = field->attempt->last_scored_hit_index; i >= 0; i--)
         {
-            if ((*it)->hit) {
-                JudgedHit* jhit = *it;
+            JudgedHit* jhit = field->attempt->judged_hits[i];
+
+            if (jhit->hit) {
                 window->DrawStringDecal({20.0, 200 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
                 window->DrawStringDecal({260.0, 200 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
                 
@@ -123,7 +124,7 @@ namespace nascent {
                 l++;
             }
 
-            if (l >= 100) {
+            if (l >= 200) {
                 break;
             }
         }

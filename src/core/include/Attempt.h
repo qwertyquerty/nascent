@@ -21,6 +21,8 @@ namespace nascent {
         bool release_played = false;
         int32_t release_err = 0;
         HitScore release_score = HitScore::NONE;
+
+        uint32_t index = 0;
     };
 
     class Attempt {
@@ -29,6 +31,8 @@ namespace nascent {
 
         std::vector<Hit> attempt_hits;
         std::vector<JudgedHit*> judged_hits;
+        uint32_t last_passed_hit_index = 0;
+        uint32_t last_scored_hit_index = 0;
 
         std::vector<std::pair<Hit, JudgedHit*>> current_holds;
 

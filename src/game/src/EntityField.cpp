@@ -68,8 +68,12 @@ namespace nascent {
             }
         }
 
+        bool evoi_assigned = false;
+
         // Draw notes
-        for (JudgedHit* jhit : attempt->judged_hits) {
+        for (uint32_t i = earliest_visible_object_index; i < attempt->judged_hits.size(); i++) {
+            JudgedHit* jhit = attempt->judged_hits[i];
+
             Hit hit = jhit->chart_hit;
 
             double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
@@ -80,12 +84,22 @@ namespace nascent {
             
             int32_t screen_hit_y = jl_y-hit_y;
 
-            if ((screen_hit_y-hit_height) < pos.y+size.y && (screen_hit_y+note_size) > pos.y) {
+            bool visible = false;
+
+            if ((screen_hit_y+note_size) < pos.y) {
+                break;
+            }
+
+            if ((screen_hit_y-hit_height) < pos.y+size.y) {
                 if (hit.hit_type == HitType::HOLD) {
                     for (double y_offset = 0; y_offset < hit_height; y_offset += (note_size/4)) {
                         double hold_smear_y = screen_hit_y - hit_height + y_offset;
 
-                        if ((!draw_notes_past_judge || jhit->hit_played) && hold_smear_y > jl_y) {
+                        if ((
+                            (!draw_notes_past_judge || jhit->hit_played) && hold_smear_y > jl_y)
+                            ||
+                            (hold_smear_y >= pos.y+size.y)
+                        ) {
                             break;
                         }
 
@@ -98,10 +112,11 @@ namespace nascent {
                             },
                             olc::Pixel(255, 255, 255, 32)
                         );
+                        visible = true;
                     }
                 }
 
-                if ((draw_notes_past_judge && !jhit->hit_played) || screen_hit_y <= jl_y) {
+                if (((draw_notes_past_judge && !jhit->hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y+size.y) {
                     window->DrawWarpedDecal(skin->note_skin_decals[hit.key],
                         {
                             {(float)hit_x, (float)screen_hit_y},
@@ -111,7 +126,14 @@ namespace nascent {
                         },
                         skin->title_gradient_at((double)hit_x/window->GetScreenSize().x, (double)screen_hit_y/window->GetScreenSize().y)
                     );
+                    visible = true;
                 }
+            }
+
+            if (visible && !evoi_assigned) {
+                earliest_visible_object_index = jhit->index;
+                //printf("%d\n", earliest_visible_object_index);
+                evoi_assigned = true;
             }
         }
 

@@ -40,6 +40,8 @@ for hit_object in osu_map.hit_objects:
         "end_time": hit_object.end_time or 0
     })
 
+map_json["hit_objects"] = sorted(map_json["hit_objects"], key=lambda l: (l["time"], l["key"]))
+
 out_file = in_file + ".json"
 
 with open(out_file, "w") as f:
