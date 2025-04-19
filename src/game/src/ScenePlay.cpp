@@ -79,7 +79,7 @@ namespace nascent {
                 window->DrawStringDecal({260.0, 200 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
                 
                 l += 1;
-                if (l >= 30) {
+                if (l >= 28) {
                     break;
                 }
 
