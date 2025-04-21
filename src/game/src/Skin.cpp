@@ -1,5 +1,6 @@
 #include "Skin.h"
 #include "Game.h"
+#include "Accuracy.h"
 
 namespace nascent {
     Skin::Skin(Game* game, std::string name, uint8_t key_count) {
@@ -15,6 +16,10 @@ namespace nascent {
             delete note_skin_decals[i];
         }
 
+        for (HitScore h = HitScore::PERFECT; h <= HitScore::NONE; h = (HitScore)(h + 1)) {
+            delete hit_score_decals[h];
+        }
+
         delete title_gradient;
     }
 
@@ -28,6 +33,16 @@ namespace nascent {
         }
 
         title_gradient = new olc::Sprite((skin_path / "title_gradient.png").string());
+
+        display_font_small = {(skin_path / "display_font.ttf").string(), display_font_small_size};
+        display_font_medium = {(skin_path / "display_font.ttf").string(), display_font_medium_size};
+        display_font_large = {(skin_path / "display_font.ttf").string(), display_font_large_size};
+
+        for (HitScore h = HitScore::PERFECT; h <= HitScore::NONE; h = (HitScore)(h + 1)) {
+            hit_score_decals[h] = display_font_medium.RenderStringToDecal(HIT_SCORE_NAME.at(h), HIT_SCORE_COLOR.at(h));
+        }
+
+        game_paused_decal = display_font_large.RenderStringToDecal("Game Paused", olc::WHITE);
     }
 
     void Skin::load_sounds(Game* game) {
@@ -43,6 +58,11 @@ namespace nascent {
         boost::filesystem::path path_hitsound_sfx = skin_path / std::format("hitsound.mp3");
         if (boost::filesystem::exists(path_hitsound_sfx)) {
             hitsound_sfx = game->get_audio().LoadSound(path_hitsound_sfx.string());
+        }
+
+        boost::filesystem::path path_idle_loop_sfx = skin_path / std::format("idle_loop.wav");
+        if (boost::filesystem::exists(path_idle_loop_sfx)) {
+            idle_loop_sfx = game->get_audio().LoadSound(path_idle_loop_sfx.string());
         }
     }
 

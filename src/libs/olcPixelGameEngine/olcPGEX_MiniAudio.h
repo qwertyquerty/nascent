@@ -322,7 +322,7 @@ namespace olc
 
 #pragma region MiniAudio
 
-    bool MiniAudio::m_background_playback = false;
+    bool MiniAudio::m_background_playback = true;
     std::vector<float> MiniAudio::m_engine_buffer;
 
     MiniAudio::MiniAudio() : olc::PGEX(true)

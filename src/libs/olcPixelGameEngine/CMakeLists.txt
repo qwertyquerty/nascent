@@ -1,7 +1,7 @@
 message(STATUS "Building olcPixelGameEngine")
-add_library(olcPixelGameEngine olcPixelGameEngine.h olcPGEX_MiniAudio.h)
+add_library(olcPixelGameEngine olcPixelGameEngine.h olcPGEX_MiniAudio.h olcPGEX_TTF.h)
 
-target_link_libraries(olcPixelGameEngine miniaudio)
+target_link_libraries(olcPixelGameEngine miniaudio freetype)
 
 set_target_properties(olcPixelGameEngine PROPERTIES LINKER_LANGUAGE CXX)
 

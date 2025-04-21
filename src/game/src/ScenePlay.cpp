@@ -1,5 +1,6 @@
 #include "ScenePlay.h"
 #include "InputManager.h"
+#include "Util.h"
 
 namespace nascent {
     ScenePlay::ScenePlay() {
@@ -16,7 +17,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin(game, "default", 4);
-        chart = new Chart(R"(assets\songs\djn\djn.osu.json)");
+        chart = new Chart(R"(assets\songs\take\take.osu.json)");
 
         double lane_width = window_size.x/12;
 
@@ -26,6 +27,8 @@ namespace nascent {
         field->judge_height = lane_width/2;
         field->audio_visual_offset = FIELD_AUDIO_VISUAL_OFFSET_MS;
         field->audio_input_offset = FIELD_AUDIO_INPUT_OFFSET_MS;
+
+        timer = 0;
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
         //game->get_audio().SetPitch(chart_audio_id, 0.8);
@@ -43,7 +46,6 @@ namespace nascent {
             }
 
             position = ((float)(-PLAY_START_DELAY_S) + timer) * 1000;
-            timer += elapsed_time;
         }
         else {
             position = game->get_audio().GetCursorMilliseconds(chart_audio_id);
@@ -51,52 +53,76 @@ namespace nascent {
 
         frame_pos = game->get_audio().GetCursorFrames(chart_audio_id);
 
-        field->update_song_position(position, elapsed_time);
+        if (game->window->IsFocused()) {
+            field->update_song_position(position, elapsed_time);
+            if (paused) {
+                if (chart_started) {
+                    game->get_audio().Play(chart_audio_id);
+                }
+                game->get_audio().Stop(skin->idle_loop_sfx);
+            }
+            paused = false;
+        }
+        else {
+            if (!paused) {
+                game->get_audio().Pause(chart_audio_id);
+                game->get_audio().Play(skin->idle_loop_sfx, true);
+            }
+            paused = true;
+        }
 
         uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
         field->set_keys(held_keys);
 
         field->update(this, elapsed_time);
 
-        timer += elapsed_time;
+        if (!paused) {
+            timer += elapsed_time;
+        }
     };
 
     void ScenePlay::draw(olc::PixelGameEngine* window) {
+        window->SetDrawTarget(1);
         olc::vi2d screensize = window->GetScreenSize();
 
         field->draw(window);
-        window->DrawStringDecal({20, 20}, std::format("ACC: {:.2f}%", field->attempt->get_accuracy() * 100), olc::WHITE, {4,4});
-        window->DrawStringDecal({20, 60}, std::format("ERR: {:.1f}ms", field->attempt->get_avg_err()), olc::WHITE, {4,4});
-        window->DrawStringDecal({20, 100}, std::format("COM: {}X", field->attempt->get_combo()), olc::WHITE, {4,4});
-        window->DrawStringDecal({20, 140}, std::format("FT: {}", frame_pos), olc::WHITE, {4,4});
+        skin->display_font_medium.DrawString(std::format("ACC: {:.2f}%", field->attempt->get_accuracy() * 100), 20, 40, olc::WHITE);
+        skin->display_font_medium.DrawString(std::format("ERR: {:.1f}ms", field->attempt->get_avg_err()), 20, 80, olc::WHITE);
+        skin->display_font_medium.DrawString(std::format("COM: {}X", field->attempt->get_combo()), 20, 120, olc::WHITE);
+
+        std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
+        uint16_t w = skin->display_font_medium.GetStringBounds(now_playing_string).size.x;
+        skin->display_font_medium.DrawString(now_playing_string, {screensize.x/2 - w/2, (int)smoothstep(-screensize.x / 24, screensize.x / 24, (timer-PLAY_START_DELAY_S+2)*2)}, olc::WHITE);
 
         uint8_t l = 0;
+        const uint8_t vspacing = 34;
+        const uint8_t vlen = 27;
         for (int32_t i = field->attempt->last_scored_hit_index; i >= 0; i--)
         {
             JudgedHit* jhit = field->attempt->judged_hits[i];
 
             if (jhit->hit) {
-                window->DrawStringDecal({20.0, 200 + 30*l}, std::format("{}", HIT_SCORE_NAME.at(jhit->hit_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->hit_score)), {3, 3});
-                window->DrawStringDecal({260.0, 200 + 30*l}, std::format("{:+}ms", jhit->hit_err), olc::WHITE, {3,3});
+                window->DrawDecal({20.0, 160 + vspacing*l}, skin->hit_score_decals[jhit->hit_score]);
+                window->DrawStringDecal({200.0, 160 + 10 + vspacing*l}, std::format("H {:+}ms", jhit->hit_err), olc::WHITE, {2,2});
                 
                 l += 1;
-                if (l >= 28) {
+                if (l >= vlen) {
                     break;
                 }
 
                 if (jhit->chart_hit.hit_type == HitType::HOLD) {
                     if (jhit->released) {
-                        window->DrawStringDecal({20.0, 200 + 30*l}, std::format("{}*", HIT_SCORE_NAME.at(jhit->release_score)), olc::Pixel(HIT_SCORE_COLOR.at(jhit->release_score)), {3, 3});
-                        window->DrawStringDecal({260.0, 200 + 30*l}, std::format("{:+}ms", jhit->release_err), olc::WHITE, {3,3});
+                        window->DrawDecal({20.0, 160 + vspacing*l}, skin->hit_score_decals[jhit->release_score]);
+                        window->DrawStringDecal({200.0, 160 + 10 + vspacing*l}, std::format("R {:+}ms", jhit->release_err), olc::WHITE, {2,2});
                     }
                     else {
-                        window->DrawStringDecal({20.0, 200 + 30*l}, "...", olc::WHITE, {3, 3});
+                        window->DrawStringDecal({20.0, 160 + 10 + vspacing*l}, ".....", olc::GREY, {2, 2});
                     }
                     l += 1;
                 }
             }
 
-            if (l >= 28) {
+            if (l >= vlen) {
                 break;
             }
         }
@@ -127,6 +153,11 @@ namespace nascent {
             if (l >= 200) {
                 break;
             }
+        }
+
+        if (paused) {
+            window->FillRectDecal({0, 0}, screensize, olc::Pixel(0, 0, 0, 200));
+            window->DrawDecal({screensize.x/2 - skin->game_paused_decal->sprite->width/2, screensize.y/2 - skin->game_paused_decal->sprite->height/2}, skin->game_paused_decal);
         }
     };
 }

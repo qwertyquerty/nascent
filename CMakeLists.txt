@@ -8,12 +8,12 @@ set(CMAKE_BINARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
 project(Nascent CXX)
 
-find_library(GDIP       gdiplus)
-find_library(GDI32      gdi32)
-find_library(OpenGL32   opengl32)
+find_library(gdiplus    gdiplus)
+find_library(gdi32      gdi32)
+find_library(opengl32   opengl32)
 find_library(dwmapi     dwmapi)
 find_library(user32     user32)
-find_library(Shlwapi    shlwapi)
+find_library(shlwapi    shlwapi)
 
 find_package(Boost COMPONENTS filesystem REQUIRED)
 

@@ -9,7 +9,7 @@
 
 #define PLAY_START_DELAY_S 8
 #define FIELD_AUDIO_VISUAL_OFFSET_MS -20
-#define FIELD_AUDIO_INPUT_OFFSET_MS -20
+#define FIELD_AUDIO_INPUT_OFFSET_MS 0
 
 namespace nascent {
     class ScenePlay : public Scene {
@@ -21,9 +21,10 @@ namespace nascent {
 
         Skin* skin;
 
-        double timer;
+        double timer = 0;
 
         bool chart_started = false;
+        bool paused = false;
 
         uint64_t frame_pos = 0;
 

@@ -17,11 +17,16 @@ namespace nascent {
     };
 
     void GameNascent::init() {
+        olc::Font::init();
+
         start_time = time(nullptr);
         std::srand(start_time);
+        
         set_scene(scene_title);
         discord_init();
         discord_update();
+
+        skin = new Skin(this, "default", 4);
     }
 
     void GameNascent::update(float elapsed_time) {
@@ -34,7 +39,7 @@ namespace nascent {
         scene->draw(window);
 
         if (debug) {
-            window->DrawString(window->GetWindowSize().x - 300, 10, std::format("FT {}", elapsed_time * 1000), olc::WHITE, 2);
+            skin->display_font_small.DrawString(std::format("FPS: {}", (uint16_t)(1/elapsed_time)), window->GetWindowSize().x - 100, 30, olc::WHITE);
         }
     }
 

@@ -9,7 +9,7 @@
 #include "olcPixelGameEngine.h"
 
 #define FIELD_KEY_SPACING_RATIO 0.15
-#define FIELD_SCROLL_SPEED 240 // screen % height per second
+#define FIELD_SCROLL_SPEED 210 // screen % height per second
 #define FIELD_HIT_MIN_HEIGHT 50
 
 #define FIELD_AUDIO_SYNC_MAX_ERROR 20 //ms

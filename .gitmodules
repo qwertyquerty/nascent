@@ -4,3 +4,6 @@
 [submodule "src/libs/discord-presence"]
 	path = src/libs/discord-presence
 	url = https://github.com/EclipseMenu/discord-presence/
+[submodule "src/libs/freetype"]
+	path = src/libs/freetype
+	url = https://github.com/freetype/freetype
