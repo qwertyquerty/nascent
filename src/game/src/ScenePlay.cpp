@@ -17,7 +17,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin(game, "default", 4);
-        chart = new Chart(R"(assets\songs\take\take.osu.json)");
+        chart = new Chart(R"(assets\songs\people\people.osu.json)");
 
         double lane_width = window_size.x/12;
 
@@ -53,22 +53,23 @@ namespace nascent {
 
         frame_pos = game->get_audio().GetCursorFrames(chart_audio_id);
 
-        if (game->window->IsFocused()) {
-            field->update_song_position(position, elapsed_time);
-            if (paused) {
+        if(paused) {
+            if (game->window->GetKey(InputManager::pause_key).bPressed) {
+                paused = false;
                 if (chart_started) {
                     game->get_audio().Play(chart_audio_id);
                 }
                 game->get_audio().Stop(skin->idle_loop_sfx);
             }
-            paused = false;
         }
         else {
-            if (!paused) {
+            field->update_song_position(position, elapsed_time);
+
+            if (!game->window->IsFocused() || game->window->GetKey(InputManager::pause_key).bPressed) {
+                paused = true;
                 game->get_audio().Pause(chart_audio_id);
                 game->get_audio().Play(skin->idle_loop_sfx, true);
             }
-            paused = true;
         }
 
         uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
