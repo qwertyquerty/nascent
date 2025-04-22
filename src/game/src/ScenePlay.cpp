@@ -72,12 +72,12 @@ namespace nascent {
             }
         }
 
-        uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
-        field->set_keys(held_keys);
-
-        field->update(this, elapsed_time);
-
-        if (!paused) {
+        if(!paused){
+            // Make sure arrow keys cant be registered in pause
+            uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
+            field->set_keys(held_keys);
+            field->update(this, elapsed_time);
+            
             timer += elapsed_time;
         }
     };
