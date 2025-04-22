@@ -17,7 +17,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin(game, "default", 4);
-        chart = new Chart(R"(assets\songs\laufey\laufey.osu.json)");
+        chart = new Chart(R"(assets\songs\people\people.osu.json)");
 
         double lane_width = window_size.x/12;
 
