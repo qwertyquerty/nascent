@@ -35,6 +35,8 @@ namespace nascent {
         olc::Sprite* title_gradient;
         uint8_t key_count;
 
+        uint8_t hold_alpha = 64;
+
         olc::Decal* game_paused_decal;
 
         std::vector<int32_t> menu_pluck_sfx;

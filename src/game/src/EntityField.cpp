@@ -38,7 +38,7 @@ namespace nascent {
             }
         }
 
-        attempt->update((uint32_t)(precise_song_position + audio_input_offset), active_keys);
+        attempt->update((uint32_t)(precise_song_position - audio_input_offset), active_keys);
     };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
@@ -94,6 +94,8 @@ namespace nascent {
                 if (hit.hit_type == HitType::HOLD) {
                     for (double y_offset = 0; y_offset < hit_height; y_offset += (note_size/4)) {
                         double hold_smear_y = screen_hit_y - hit_height + y_offset;
+                        olc::Pixel hold_color = skin->title_gradient_at((double)hit_x/window->GetScreenSize().x, (double)hold_smear_y/window->GetScreenSize().y);
+                        hold_color.a = skin->hold_alpha;
 
                         if ((
                             (!draw_notes_past_judge || jhit->hit_played) && hold_smear_y > jl_y)
@@ -110,7 +112,7 @@ namespace nascent {
                                 {(float)hit_x+(float)note_size, (float)(hold_smear_y+(float)note_size)},
                                 {(float)hit_x+(float)note_size, (float)hold_smear_y}
                             },
-                            olc::Pixel(255, 255, 255, 32)
+                            hold_color
                         );
                         visible = true;
                     }
@@ -153,7 +155,7 @@ namespace nascent {
             precise_song_position += elapsed_time * 1000;
         }
 
-        offset_song_position = precise_song_position + audio_visual_offset;
+        offset_song_position = precise_song_position - (audio_input_offset - visual_input_offset);
     }
 
     ChartTimingPoint* EntityField::get_current_timing_point() {

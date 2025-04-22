@@ -42,7 +42,7 @@ namespace nascent {
 
         uint32_t active_keys = 0;
 
-        int32_t audio_visual_offset = 0;
+        int32_t visual_input_offset = 0;
         int32_t audio_input_offset = 0;
         uint32_t scroll_speed = FIELD_SCROLL_SPEED;
 

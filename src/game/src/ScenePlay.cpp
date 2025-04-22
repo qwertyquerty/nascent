@@ -17,7 +17,7 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         skin = new Skin(game, "default", 4);
-        chart = new Chart(R"(assets\songs\people\people.osu.json)");
+        chart = new Chart(R"(assets\songs\fts\fts.osu.json)");
 
         double lane_width = window_size.x/12;
 
@@ -25,7 +25,7 @@ namespace nascent {
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
         field->judge_height = lane_width/2;
-        field->audio_visual_offset = FIELD_AUDIO_VISUAL_OFFSET_MS;
+        field->visual_input_offset = FIELD_VISUAL_INPUT_OFFSET_MS;
         field->audio_input_offset = FIELD_AUDIO_INPUT_OFFSET_MS;
 
         timer = 0;
