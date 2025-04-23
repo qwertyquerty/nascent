@@ -87,24 +87,24 @@ namespace nascent {
         olc::vi2d screensize = window->GetScreenSize();
 
         field->draw(window);
-        skin->display_font_medium.DrawString(std::format("ACC: {:.2f}%", field->attempt->get_accuracy() * 100), 20, 40, olc::WHITE);
-        skin->display_font_medium.DrawString(std::format("ERR: {:.1f}ms", field->attempt->get_avg_err()), 20, 80, olc::WHITE);
-        skin->display_font_medium.DrawString(std::format("COM: {}X", field->attempt->get_combo()), 20, 120, olc::WHITE);
+        skin->display_font_medium.DrawString(std::format("{:.2f}%", field->attempt->get_accuracy() * 100), 20, 40, olc::WHITE);
+        skin->display_font_medium.DrawString(std::format("{:.1f}ms", field->attempt->get_avg_err()), 20, 80, olc::WHITE);
+        skin->display_font_medium.DrawString(std::format("{}X", field->attempt->get_combo()), 20, 120, olc::WHITE);
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = skin->display_font_medium.GetStringBounds(now_playing_string).size.x;
         skin->display_font_medium.DrawString(now_playing_string, {screensize.x/2 - w/2, (int)smoothstep(-screensize.x / 24, screensize.x / 24, (timer-PLAY_START_DELAY_S+2)*2)}, olc::WHITE);
 
         uint8_t l = 0;
-        const uint8_t vspacing = 34;
-        const uint8_t vlen = 27;
-        for (int32_t i = field->attempt->last_scored_hit_index; i >= 0; i--)
+        const uint8_t vspacing = 26;
+        const uint8_t vlen = 35;
+        for (int32_t i = field->attempt->soonest_scored_hit_index; i >= 0; i--)
         {
             JudgedHit* jhit = field->attempt->judged_hits[i];
 
             if (jhit->hit) {
-                window->DrawDecal({20.0, 160 + vspacing*l}, skin->hit_score_decals[jhit->hit_score]);
-                window->DrawStringDecal({200.0, 160 + 10 + vspacing*l}, std::format("H {:+}ms", jhit->hit_err), olc::WHITE, {2,2});
+                window->DrawStringDecal({20.0, 160 + vspacing*l}, std::format("{}", HIT_SCORE_ACC.at(jhit->hit_score)), HIT_SCORE_COLOR.at(jhit->hit_score), {2,2});
+                window->DrawStringDecal({80.0, 160 + vspacing*l}, std::format("  {:+}ms", jhit->hit_err), olc::WHITE, {2,2});
                 
                 l += 1;
                 if (l >= vlen) {
@@ -113,11 +113,11 @@ namespace nascent {
 
                 if (jhit->chart_hit.hit_type == HitType::HOLD) {
                     if (jhit->released) {
-                        window->DrawDecal({20.0, 160 + vspacing*l}, skin->hit_score_decals[jhit->release_score]);
-                        window->DrawStringDecal({200.0, 160 + 10 + vspacing*l}, std::format("R {:+}ms", jhit->release_err), olc::WHITE, {2,2});
+                        window->DrawStringDecal({20.0, 160 + vspacing*l}, std::format("{}", HIT_SCORE_ACC.at(jhit->release_score)), HIT_SCORE_COLOR.at(jhit->release_score), {2,2});
+                        window->DrawStringDecal({80.0, 160 + vspacing*l}, std::format("R {:+}ms", jhit->release_err), olc::WHITE, {2,2});
                     }
                     else {
-                        window->DrawStringDecal({20.0, 160 + 10 + vspacing*l}, ".....", olc::GREY, {2, 2});
+                        window->DrawStringDecal({20.0, 160 + vspacing*l}, "...", olc::GREY, {2, 2});
                     }
                     l += 1;
                 }

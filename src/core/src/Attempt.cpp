@@ -40,7 +40,7 @@ namespace nascent {
             jhit->hit_played = played;
             jhit->hit_score = score;
             jhit->hit_err = err;
-            last_scored_hit_index = std::max(jhit->index, last_scored_hit_index);
+            soonest_scored_hit_index = std::max(jhit->index, soonest_scored_hit_index);
         } else {
             if (jhit->released) {
                 return;
@@ -55,6 +55,7 @@ namespace nascent {
         total_score += HIT_SCORE_ACC.at(score);
         current_combo = score == HitScore::MISS ? 0 : current_combo + 1;
         max_combo = std::max(current_combo, max_combo);
+        last_scored_object = jhit;
         n_scored_notes += 1;
     }
 
@@ -75,7 +76,7 @@ namespace nascent {
         uint32_t released_keys = held_keys & ~current_keys;
         held_keys = current_keys;
 
-        for (uint32_t i = last_passed_hit_index; i < judged_hits.size(); i++) {
+        for (uint32_t i = soonest_passed_hit_index; i < judged_hits.size(); i++) {
             JudgedHit* jhit = judged_hits[i];
 
             if (!jhit->hit) {
@@ -84,7 +85,7 @@ namespace nascent {
 
                 if (err > 0 && score == HitScore::NONE) {
                     score_hit(jhit, 0, false, false);
-                    last_passed_hit_index = i;
+                    soonest_passed_hit_index = i;
 
                     if (jhit->chart_hit.hit_type == HitType::HOLD) {
                         score_hit(jhit, 0, true, false);
@@ -103,7 +104,7 @@ namespace nascent {
 
                 std::vector<JudgedHit*> candidates;
 
-                for (uint32_t i = last_passed_hit_index; i < judged_hits.size(); i++) {
+                for (uint32_t i = soonest_passed_hit_index; i < judged_hits.size(); i++) {
                     JudgedHit* jhit = judged_hits[i];
                     
                     if (jhit->chart_hit.key == key && !jhit->hit) {
@@ -141,6 +142,7 @@ namespace nascent {
                     }
 
                     current_holds[key].second = chosen_hit;
+                    chosen_hit->attempt_hit = hit;
                     score_hit(chosen_hit, current_time - chosen_hit->chart_hit.time, false, true);
                 }
             }
@@ -149,10 +151,11 @@ namespace nascent {
                 current_holds[key].first.end_time = current_time;
                 attempt_hits.push_back(current_holds[key].first);
                 JudgedHit* jhit = current_holds[key].second;
-                if (jhit != nullptr && jhit->chart_hit.hit_type == HitType::HOLD) {
-                    if (!jhit->released) {
-                        score_hit(jhit, current_time - jhit->chart_hit.end_time, true, true);
+                if (jhit != nullptr) {
+                    if (jhit->chart_hit.hit_type == HitType::HOLD && !jhit->released) {
+                        score_hit(jhit, current_time - jhit->chart_hit.end_time, true, true);                        
                     }
+
                     jhit->attempt_hit = current_holds[key].first;
                     current_holds[key].second = nullptr;
                 }

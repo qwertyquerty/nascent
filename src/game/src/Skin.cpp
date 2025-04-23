@@ -39,7 +39,7 @@ namespace nascent {
         display_font_large = {(skin_path / "display_font.ttf").string(), display_font_large_size};
 
         for (HitScore h = HitScore::PERFECT; h <= HitScore::NONE; h = (HitScore)(h + 1)) {
-            hit_score_decals[h] = display_font_medium.RenderStringToDecal(HIT_SCORE_NAME.at(h), HIT_SCORE_COLOR.at(h));
+            hit_score_decals[h] = display_font_large.RenderStringToDecal(HIT_SCORE_NAME.at(h), HIT_SCORE_COLOR.at(h));
         }
 
         game_paused_decal = display_font_large.RenderStringToDecal("Game Paused", olc::WHITE);

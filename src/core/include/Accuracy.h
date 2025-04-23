@@ -17,13 +17,13 @@ namespace nascent {
     };
 
     const std::map<HitScore, std::string> HIT_SCORE_NAME = {
-        {PERFECT,   "Perfect"},
-        {AMAZING,   "Amazing"},
-        {GREAT,     "Great"},
-        {GOOD,      "Good"},
-        {BAD,       "Bad"},
-        {MISS,      "Miss"},
-        {NONE,      "None"}
+        {PERFECT,   "PERFECT"},
+        {AMAZING,   "AMAZING"},
+        {GREAT,     "GREAT"},
+        {GOOD,      "GOOD"},
+        {BAD,       "BAD"},
+        {MISS,      "MISS"},
+        {NONE,      "NONE"}
     };
 
     const std::map<HitScore, uint32_t> HIT_SCORE_COLOR = {
@@ -39,9 +39,9 @@ namespace nascent {
     const std::map<HitScore, uint8_t> HIT_SCORE_ACC = { // %
         {PERFECT,   100},
         {AMAZING,   95},
-        {GREAT,     75},
-        {GOOD,      50},
-        {BAD,       20},
+        {GREAT,     70},
+        {GOOD,      40},
+        {BAD,       10},
         {MISS,      0},
         {NONE,      0}
     };

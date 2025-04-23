@@ -31,8 +31,10 @@ namespace nascent {
 
         std::vector<Hit> attempt_hits;
         std::vector<JudgedHit*> judged_hits;
-        uint32_t last_passed_hit_index = 0;
-        uint32_t last_scored_hit_index = 0;
+        uint32_t soonest_passed_hit_index = 0;
+        uint32_t soonest_scored_hit_index = 0;
+
+        JudgedHit* last_scored_object = nullptr;
 
         std::vector<std::pair<Hit, JudgedHit*>> current_holds;
 

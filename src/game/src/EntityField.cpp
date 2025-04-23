@@ -1,5 +1,6 @@
 #include "EntityField.h"
 #include "Chart.h"
+#include "Util.h"
 
 #include "olcPixelGameEngine.h"
 
@@ -38,7 +39,7 @@ namespace nascent {
             }
         }
 
-        attempt->update((uint32_t)(precise_song_position - audio_input_offset), active_keys);
+        attempt->update((uint32_t)(precise_song_position + audio_input_offset), active_keys);
     };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
@@ -139,11 +140,31 @@ namespace nascent {
             }
         }
 
+        if (attempt->last_scored_object != nullptr) {
+            JudgedHit* jhit = attempt->last_scored_object;
+            HitScore hs = jhit->released ? jhit->release_score : jhit->hit_score;
+            olc::Decal* hs_skin = skin->hit_score_decals[hs];
+
+            double t = (precise_song_position - (
+                jhit->hit_played ?
+                    (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) :
+                    jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, chart->info.hit_accuracy) 
+            )) / 1000;
+            double scale = smoothstep(1.0, 0.75, t*4);
+
+            window->DrawDecal(
+                {pos.x+size.x/2 - hs_skin->sprite->width*scale/2, pos.y+size.y/2 - hs_skin->sprite->height*scale/2},
+                hs_skin,
+                {scale, scale},
+                olc::Pixel(255, 255, 255, smoothstep(255, 0, (t-1)*2))
+            );
+        }
+
         if (debug) {
-            window->DrawString(window->GetWindowSize().x - 300, 30, std::format("MA POS {}", last_audio_engine_sound_position), olc::WHITE, 2);
-            window->DrawString(window->GetWindowSize().x - 300, 50, std::format("EF POS {}", precise_song_position), olc::WHITE, 2);
-            window->DrawString(window->GetWindowSize().x - 300, 70, std::format("MB {}", get_meter_beat()), olc::WHITE, 2);
-            window->DrawString(window->GetWindowSize().x - 300, 90, std::format("SB {}", get_section_beat()), olc::WHITE, 2);
+            window->DrawString(pos.x+20, pos.y+20, std::format("MA POS {}", last_audio_engine_sound_position), olc::WHITE, 2);
+            window->DrawString(pos.x+20, pos.y+40, std::format("EF POS {}", precise_song_position), olc::WHITE, 2);
+            window->DrawString(pos.x+20, pos.y+60, std::format("MB {}", get_meter_beat()), olc::WHITE, 2);
+            window->DrawString(pos.x+20, pos.y+80, std::format("SB {}", get_section_beat()), olc::WHITE, 2);
         }
     };
 
@@ -155,7 +176,7 @@ namespace nascent {
             precise_song_position += elapsed_time * 1000;
         }
 
-        offset_song_position = precise_song_position - (audio_input_offset - visual_input_offset);
+        offset_song_position = precise_song_position + audio_input_offset + visual_input_offset;
     }
 
     ChartTimingPoint* EntityField::get_current_timing_point() {
