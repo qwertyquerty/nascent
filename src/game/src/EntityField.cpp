@@ -176,7 +176,7 @@ namespace nascent {
             precise_song_position += elapsed_time * 1000;
         }
 
-        offset_song_position = precise_song_position + audio_input_offset + visual_input_offset;
+        offset_song_position = precise_song_position + audio_visual_offset;
     }
 
     ChartTimingPoint* EntityField::get_current_timing_point() {
