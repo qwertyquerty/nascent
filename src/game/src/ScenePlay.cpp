@@ -36,7 +36,7 @@ namespace nascent {
         game->get_audio().Play(skin->get_random_menu_pluck());
     };
 
-    void ScenePlay::update(Game* game, float elapsed_time) {
+    void ScenePlay::update(float elapsed_time) {
         int32_t position = 0;
         
         if (!chart_started) {
@@ -83,7 +83,6 @@ namespace nascent {
     };
 
     void ScenePlay::draw(olc::PixelGameEngine* window) {
-        window->SetDrawTarget(1);
         olc::vi2d screensize = window->GetScreenSize();
 
         field->draw(window);

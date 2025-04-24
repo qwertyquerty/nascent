@@ -3,16 +3,16 @@
 #include "olcPixelGameEngine.h"
 #include "ScenePlay.h"
 #include "SceneTitle.h"
+#include "SceneList.h"
 #include "discord-rpc.hpp"
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
-        scene_title = new ScenePlay();
+        scene_title = new SceneList();
     };
 
     GameNascent::~GameNascent() {
         discord::RPCManager::get().shutdown();
-
         delete scene_title;
     };
 
@@ -21,8 +21,9 @@ namespace nascent {
 
         start_time = time(nullptr);
         std::srand(start_time);
-        
+
         set_scene(scene_title);
+        
         discord_init();
         discord_update();
 
@@ -31,7 +32,7 @@ namespace nascent {
 
     void GameNascent::update(float elapsed_time) {
         this->elapsed_time = elapsed_time;
-        scene->update(this, elapsed_time);
+        scene->update(elapsed_time);
     }
 
     void GameNascent::draw(olc::PixelGameEngine* window) {

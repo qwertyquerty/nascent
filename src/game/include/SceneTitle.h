@@ -40,7 +40,7 @@ namespace nascent {
         SceneTitle();
         ~SceneTitle();
         void init(Game*) override;
-        void update(Game*, float) override;
+        void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };
 }

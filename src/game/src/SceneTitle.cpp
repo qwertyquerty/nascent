@@ -57,7 +57,7 @@ namespace nascent {
         bg_audio_id = game->get_audio().LoadSound(bg_chart->audio_path.string());
     };
 
-    void SceneTitle::update(Game* game, float elapsed_time) {
+    void SceneTitle::update(float elapsed_time) {
         if (timer > LOGO_START_DELAY_S && !logo_started) {
             logo_started = true;
             game->get_audio().Play(logo_audio_id);

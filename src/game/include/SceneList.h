@@ -7,30 +7,29 @@
 #include "EntityFFT.h"
 #include "Skin.h"
 
-#define PLAY_START_DELAY_S 8
-#define FIELD_AUDIO_VISUAL_OFFSET_MS -20
-#define FIELD_AUDIO_INPUT_OFFSET_MS 0
+#define LIST_SONG_DIRECTORY "assets/songs"
 
 namespace nascent {
-    class ScenePlay : public Scene {
+    class SceneList : public Scene {
         protected:
-        Chart* chart;
+        std::vector<Chart*> charts;
+        Chart* selected_chart = nullptr;
+        int32_t selected_chart_position = 0;
+
         EntityField* field;
 
-        int chart_audio_id;
+        int selected_chart_audio_id = -1;
 
         Skin* skin;
 
         double timer = 0;
 
-        bool chart_started = false;
-        bool paused = false;
-
-        uint64_t frame_pos = 0;
+        void load_charts();
+        void select_chart(Chart*);
 
         public:
-        ScenePlay();
-        ~ScenePlay();
+        SceneList();
+        ~SceneList();
         void init(Game*) override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;

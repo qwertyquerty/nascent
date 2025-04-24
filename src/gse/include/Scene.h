@@ -11,11 +11,14 @@ namespace nascent {
     class Scene {
         protected:
         std::vector<Entity> entities;
+        Game* game;
 
         public:
         Scene();
         virtual void init(Game*) = 0;
-        virtual void update(Game*, float) = 0;
+        virtual void update(float) = 0;
         virtual void draw(olc::PixelGameEngine*) = 0;
+
+        void set_game(Game*);
     };
 }

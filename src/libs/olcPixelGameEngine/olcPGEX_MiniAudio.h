@@ -142,8 +142,6 @@ namespace olc
     public: // seeking controls
         // seek to the provided position in the sound, by milliseconds
         void Seek(const int id, const ma_uint64 milliseconds);
-        // seek to the provided position in the sound, by float 0.f is beginning, 1.0f is end
-        void Seek(const int id, const float& location);
         // seek forward from current position by the provided time
         void Forward(const int id, const ma_uint64 milliseconds);
         // seek forward from current position by the provided time
@@ -607,12 +605,6 @@ namespace olc
     void MiniAudio::Seek(const int id, const ma_uint64 milliseconds)
     {
         ma_uint64 frame_to_seek_to = (milliseconds * DEVICE_SAMPLE_RATE) / 1000;
-        ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, frame_to_seek_to);
-    }
-
-    void MiniAudio::Seek(const int id, const float& location)
-    {
-        ma_uint64 frame_to_seek_to = static_cast<ma_uint64>(m_sounds.at(id)->m_length_in_pcm_frames * location);
         ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, frame_to_seek_to);
     }
 

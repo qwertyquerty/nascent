@@ -6,6 +6,7 @@ namespace nascent {
     };
 
     void Game::set_scene(Scene* scene) {
+        scene->set_game(this);
         scene->init(this);
         this->scene = scene;
     }
