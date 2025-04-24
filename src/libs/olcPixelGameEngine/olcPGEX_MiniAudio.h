@@ -56,10 +56,6 @@
 
 #include "olcPixelGameEngine.h"
 
-#ifdef OLC_PGEX_MINIAUDIO
-#define MINIAUDIO_IMPLEMENTATION
-#endif
-
 #include "miniaudio.h"
 
 #include <exception>

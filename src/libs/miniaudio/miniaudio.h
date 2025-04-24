@@ -63576,6 +63576,7 @@ static ma_result ma_decoder_init_mp3_from_memory__internal(const void* pData, si
 #endif  /* ma_dr_mp3_h */
 
 /* Vorbis */
+#define STB_VORBIS_INCLUDE_STB_VORBIS_H
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 #define MA_HAS_VORBIS
 
