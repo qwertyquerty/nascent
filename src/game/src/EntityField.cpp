@@ -135,7 +135,6 @@ namespace nascent {
 
             if (visible && !evoi_assigned) {
                 earliest_visible_object_index = jhit->index;
-                //printf("%d\n", earliest_visible_object_index);
                 evoi_assigned = true;
             }
         }
@@ -170,6 +169,10 @@ namespace nascent {
 
     void EntityField::update_song_position(int32_t song_position, float elapsed_time) {
         if (song_position != last_audio_engine_sound_position || std::abs(precise_song_position - song_position) > FIELD_AUDIO_SYNC_MAX_ERROR) {
+            if (song_position < last_audio_engine_sound_position) {
+                earliest_visible_object_index = 0;
+            }
+            
             last_audio_engine_sound_position = song_position;
             precise_song_position = song_position;
         } else {

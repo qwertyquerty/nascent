@@ -14,6 +14,7 @@ namespace nascent {
         protected:
         std::vector<Chart*> charts;
         Chart* selected_chart = nullptr;
+        uint16_t selected_chart_index = 0;
         int32_t selected_chart_position = 0;
 
         EntityField* field;
@@ -25,7 +26,7 @@ namespace nascent {
         double timer = 0;
 
         void load_charts();
-        void select_chart(Chart*);
+        void select_chart(uint16_t);
 
         public:
         SceneList();

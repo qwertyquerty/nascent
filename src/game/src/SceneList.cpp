@@ -30,7 +30,7 @@ namespace nascent {
         load_charts();
 
         if (charts.size()) {
-            select_chart(charts.front());
+            select_chart(0);
         }
 
         timer = 0;
@@ -38,7 +38,15 @@ namespace nascent {
 
     void SceneList::update(float elapsed_time) {
         if (game->window->GetKey(InputManager::random_chart_key).bPressed) {
-            select_chart(charts[rand() % charts.size()]);
+            select_chart(rand() % charts.size());
+        }
+
+        if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
+            select_chart((selected_chart_index + 1) % charts.size());
+        }
+        
+        if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
+            select_chart((selected_chart_index - 1) % charts.size());
         }
 
         selected_chart_position = game->get_audio().GetCursorMilliseconds(selected_chart_audio_id);
@@ -46,18 +54,20 @@ namespace nascent {
         timer += elapsed_time;
     };
 
-    void SceneList::select_chart(Chart* chart) {
-        printf("Loading chart %s\n", chart->info.title.c_str());
+    void SceneList::select_chart(uint16_t index) {
+        selected_chart = charts[index];
+        selected_chart_index = index;
+        
         if (selected_chart_audio_id != -1) {
             game->get_audio().UnloadSound(selected_chart_audio_id);
         }
 
-        selected_chart = chart;
         selected_chart_audio_id = game->get_audio().LoadSound(selected_chart->audio_path.string());
 
         delete field;
         olc::vi2d window_size = game->window->GetWindowSize();
-        field = new EntityField(selected_chart, skin, {0, 0}, {(double)(window_size.x/4), (double)window_size.y});
+        field = new EntityField(selected_chart, skin, {window_size.x/4*3 - window_size.x/48, 0}, {(double)(window_size.x/4), (double)window_size.y});
+        field->draw_judge = false;
         field->update_song_position(selected_chart->info.preview_time, 0);
 
         game->get_audio().Play(selected_chart_audio_id, true);
@@ -82,6 +92,28 @@ namespace nascent {
     void SceneList::draw(olc::PixelGameEngine* window) {
         olc::vi2d screensize = window->GetScreenSize();
 
+        const uint8_t list_chart_height = 100;
+        const uint8_t charts_per_screen = screensize.y/list_chart_height;
+
         field->draw(window);
+
+        for (int16_t index = selected_chart_index - (charts_per_screen/2 + 1); index < selected_chart_index + (charts_per_screen/2 + 1); index++) {
+            Chart* chart = charts[index % charts.size()];
+
+            int32_t x = screensize.x/48;
+            int32_t y = screensize.y/2 + (index - selected_chart_index) * list_chart_height;
+
+            skin->display_font_medium.DrawString(
+                std::format("{} - {}", chart->info.artist, chart->info.title, chart->info.difficulty_name),
+                {x, y},
+                index == selected_chart_index ? olc::WHITE : olc::GREY
+            );
+
+            skin->display_font_small.DrawString(
+                std::format("{} // [{}]", chart->info.mapper, chart->info.difficulty_name),
+                {x, y + 36},
+                index == selected_chart_index ? olc::WHITE : olc::GREY
+            );
+        } 
     }
 }

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_BINARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
-project(Nascent CXX)
+project(Nascent CXX C)
 
 find_library(gdiplus    gdiplus)
 find_library(gdi32      gdi32)
