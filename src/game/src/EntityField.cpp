@@ -151,10 +151,11 @@ namespace nascent {
                     (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) :
                     jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, chart->info.hit_accuracy) 
             )) / 1000;
-            double scale = smoothstep(1.0, 0.75, t*4);
+            
+            float scale = smoothstep(1.0, 0.75, t*4);
 
             window->DrawDecal(
-                {pos.x+size.x/2 - hs_skin->sprite->width*scale/2, pos.y+size.y/2 - hs_skin->sprite->height*scale/2},
+                {(double)pos.x+size.x/2 - (double)hs_skin->sprite->width*scale/2, (double)pos.y+size.y/2 - (double)hs_skin->sprite->height*scale/2},
                 hs_skin,
                 {scale, scale},
                 olc::Pixel(255, 255, 255, smoothstep(255, 0, (t-1)*2))

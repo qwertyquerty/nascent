@@ -44,11 +44,11 @@ namespace nascent {
         }
 
         if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
-            select_chart((selected_chart_index + 1) % charts.size());
+            select_chart(positive_modulo((selected_chart_index + 1), charts.size()));
         }
         
         if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
-            select_chart(((int32_t)selected_chart_index - 1) % charts.size());
+            select_chart(positive_modulo((selected_chart_index - 1), charts.size()));
         }
 
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
@@ -64,7 +64,7 @@ namespace nascent {
         timer += elapsed_time;
     };
 
-    void SceneList::select_chart(uint16_t index) {
+    void SceneList::select_chart(int32_t index) {
         selected_chart = charts[index];
         selected_chart_index = index;
         
@@ -114,7 +114,7 @@ namespace nascent {
         field->draw(window);
 
         for (int16_t index = selected_chart_index - (charts_per_screen/2 + 1); index < selected_chart_index + (charts_per_screen/2 + 1); index++) {
-            Chart* chart = charts[index % charts.size()];
+            Chart* chart = charts[positive_modulo(index, charts.size())];
 
             int32_t x = screensize.x/48;
             int32_t y = screensize.y/2 + (index - selected_chart_index) * list_chart_height;
