@@ -7,8 +7,6 @@
 #include "EntityFFT.h"
 #include "Skin.h"
 
-#define LIST_SONG_DIRECTORY "assets/songs"
-
 namespace nascent {
     class SceneList : public Scene {
         protected:

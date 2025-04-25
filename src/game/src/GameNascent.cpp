@@ -5,6 +5,7 @@
 #include "SceneTitle.h"
 #include "SceneList.h"
 #include "discord-rpc.hpp"
+#include "SettingsManager.h"
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
@@ -46,7 +47,7 @@ namespace nascent {
 
     void GameNascent::discord_init() {
         discord::RPCManager::get()
-            .setClientID(DISCORD_APPLICATION_ID)
+            .setClientID(SettingsManager::settings.discord_application_id)
             .onReady([](discord::User const& user) {
                 printf("Discord ready with user %s!\n", user.username.c_str());
             });

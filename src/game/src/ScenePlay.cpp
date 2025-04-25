@@ -23,13 +23,12 @@ namespace nascent {
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
         field->judge_height = lane_width/2;
-        field->audio_visual_offset = FIELD_AUDIO_VISUAL_OFFSET_MS;
-        field->audio_input_offset = FIELD_AUDIO_INPUT_OFFSET_MS;
+        field->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
+        field->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
 
         timer = 0;
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
-        //game->get_audio().SetPitch(chart_audio_id, 0.8);
 
         game->get_audio().Play(skin->get_random_menu_pluck());
     };
@@ -38,12 +37,12 @@ namespace nascent {
         int32_t position = 0;
         
         if (!chart_started) {
-            if (timer >= PLAY_START_DELAY_S) {
+            if (timer >= SettingsManager::settings.play_start_delay) {
                 chart_started = true;
                 game->get_audio().Play(chart_audio_id);
             }
 
-            position = ((float)(-PLAY_START_DELAY_S) + timer) * 1000;
+            position = ((float)(-SettingsManager::settings.play_start_delay) + timer) * 1000;
         }
         else {
             position = game->get_audio().GetCursorMilliseconds(chart_audio_id);
@@ -90,18 +89,18 @@ namespace nascent {
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = skin->display_font_medium.GetStringBounds(now_playing_string).size.x;
-        skin->display_font_medium.DrawString(now_playing_string, {screensize.x/2 - w/2, (int)smoothstep(-screensize.x / 24, screensize.x / 24, (timer-PLAY_START_DELAY_S+2)*2)}, olc::WHITE);
+        skin->display_font_medium.DrawString(now_playing_string, {screensize.x/2 - w/2, (int)smoothstep(-screensize.x / 24, screensize.x / 24, (timer-SettingsManager::settings.play_start_delay+2)*2)}, olc::WHITE);
 
         uint8_t l = 0;
-        const uint8_t vspacing = 26;
+        const double vspacing = 26;
         const uint8_t vlen = 35;
         for (int32_t i = field->attempt->soonest_scored_hit_index; i >= 0; i--)
         {
             JudgedHit* jhit = field->attempt->judged_hits[i];
 
             if (jhit->hit) {
-                window->DrawStringDecal({20.0, 160 + vspacing*l}, std::format("{}", HIT_SCORE_ACC.at(jhit->hit_score)), HIT_SCORE_COLOR.at(jhit->hit_score), {2,2});
-                window->DrawStringDecal({80.0, 160 + vspacing*l}, std::format("  {:+}ms", jhit->hit_err), olc::WHITE, {2,2});
+                window->DrawStringDecal({20.0, 160.0 + vspacing*l}, std::format("{}", HIT_SCORE_ACC.at(jhit->hit_score)), HIT_SCORE_COLOR.at(jhit->hit_score), {2,2});
+                window->DrawStringDecal({80.0, 160.0 + vspacing*l}, std::format("  {:+}ms", jhit->hit_err), olc::WHITE, {2,2});
                 
                 l += 1;
                 if (l >= vlen) {
@@ -110,11 +109,11 @@ namespace nascent {
 
                 if (jhit->chart_hit.hit_type == HitType::HOLD) {
                     if (jhit->released) {
-                        window->DrawStringDecal({20.0, 160 + vspacing*l}, std::format("{}", HIT_SCORE_ACC.at(jhit->release_score)), HIT_SCORE_COLOR.at(jhit->release_score), {2,2});
-                        window->DrawStringDecal({80.0, 160 + vspacing*l}, std::format("R {:+}ms", jhit->release_err), olc::WHITE, {2,2});
+                        window->DrawStringDecal({20.0, 160.0 + vspacing*l}, std::format("{}", HIT_SCORE_ACC.at(jhit->release_score)), HIT_SCORE_COLOR.at(jhit->release_score), {2,2});
+                        window->DrawStringDecal({80.0, 160.0 + vspacing*l}, std::format("R {:+}ms", jhit->release_err), olc::WHITE, {2,2});
                     }
                     else {
-                        window->DrawStringDecal({20.0, 160 + vspacing*l}, "...", olc::GREY, {2, 2});
+                        window->DrawStringDecal({20.0, 160.0 + vspacing*l}, "...", olc::GREY, {2, 2});
                     }
                     l += 1;
                 }
@@ -155,7 +154,10 @@ namespace nascent {
 
         if (paused) {
             window->FillRectDecal({0, 0}, screensize, olc::Pixel(0, 0, 0, 200));
-            window->DrawDecal({screensize.x/2 - skin->game_paused_decal->sprite->width/2, screensize.y/2 - skin->game_paused_decal->sprite->height/2}, skin->game_paused_decal);
+            window->DrawDecal({
+                (double)screensize.x/2 - (double)skin->game_paused_decal->sprite->width/2,
+                (double)screensize.y/2 - (double)skin->game_paused_decal->sprite->height/2
+            }, skin->game_paused_decal);
         }
     };
 }

@@ -3,6 +3,7 @@
 #include "InputManager.h"
 #include "Util.h"
 #include "ScenePlay.h"
+#include "SettingsManager.h"
 
 #include <iostream>
 
@@ -47,7 +48,7 @@ namespace nascent {
         }
         
         if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
-            select_chart((selected_chart_index - 1) % charts.size());
+            select_chart(((int32_t)selected_chart_index - 1) % charts.size());
         }
 
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
@@ -78,7 +79,10 @@ namespace nascent {
 
         delete field;
         olc::vi2d window_size = game->window->GetWindowSize();
-        field = new EntityField(selected_chart, skin, {window_size.x/4*3 - window_size.x/48, 0}, {(double)(window_size.x/4), (double)window_size.y});
+        field = new EntityField(selected_chart, skin, {
+            (double)window_size.x/4*3 - (double)window_size.x/48, 0.0}, 
+            {(double)(window_size.x/4), (double)window_size.y}
+        );
         field->draw_judge = false;
         field->update_song_position(selected_chart->info.preview_time, 0);
 
@@ -87,8 +91,8 @@ namespace nascent {
     }
 
     void SceneList::load_charts() {
-        if (is_directory(LIST_SONG_DIRECTORY)) {
-            for (auto& chart_folder : boost::make_iterator_range(directory_iterator(LIST_SONG_DIRECTORY), {})) {
+        if (is_directory(SettingsManager::settings.list_song_directory)) {
+            for (auto& chart_folder : boost::make_iterator_range(directory_iterator(SettingsManager::settings.list_song_directory), {})) {
                 if (is_directory(chart_folder)) {
                     for (auto& chart_file : boost::make_iterator_range(directory_iterator(chart_folder), {})) {
                         std::string chart_file_ext = chart_file.path().extension().string();

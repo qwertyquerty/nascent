@@ -7,10 +7,6 @@
 #include "EntityFFT.h"
 #include "Skin.h"
 
-#define PLAY_START_DELAY_S 2
-#define FIELD_AUDIO_VISUAL_OFFSET_MS -20
-#define FIELD_AUDIO_INPUT_OFFSET_MS 0
-
 namespace nascent {
     class ScenePlay : public Scene {
         protected:

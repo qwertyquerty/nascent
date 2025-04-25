@@ -11,7 +11,7 @@ namespace nascent {
 
         delete logo_field;
 
-        for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i ++) {
+        for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i ++) {
             delete bg_field[i];
         }
 
@@ -36,14 +36,14 @@ namespace nascent {
         logo_field->draw_judge_colors = true;
         logo_field->judge_alpha = 150;
         logo_field->judge_auto_active = true;
-        logo_field->scroll_speed = SCENE_TITLE_SCROLL_SPEED;
+        logo_field->scroll_speed = SettingsManager::settings.field_scroll_speed;
 
-        for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
-            bg_field[i] = new EntityField(bg_chart, bg_skin, {(double)window_size.x/(SCENE_TITLE_FIELD_COUNT-1)*i, 0}, {(double)window_size.x/(SCENE_TITLE_FIELD_COUNT-1), (double)window_size.y});
+        for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i++) {
+            bg_field[i] = new EntityField(bg_chart, bg_skin, {(double)window_size.x/(SettingsManager::settings.title_field_count-1)*i, 0}, {(double)window_size.x/(SettingsManager::settings.title_field_count-1), (double)window_size.y});
             bg_field[i]->init(this);
             bg_field[i]->debug = true;
             bg_field[i]->draw_judge = false;
-            bg_field[i]->scroll_speed = SCENE_TITLE_SCROLL_SPEED;
+            bg_field[i]->scroll_speed = SettingsManager::settings.field_scroll_speed;
         }
 
         fft_l = new EntityFFT(bg_skin, {0,0}, {(double)window_size.x, (double)window_size.y*0.28}, 0);
@@ -58,7 +58,7 @@ namespace nascent {
     };
 
     void SceneTitle::update(float elapsed_time) {
-        if (timer > LOGO_START_DELAY_S && !logo_started) {
+        if (timer > SettingsManager::settings.title_logo_start_delay && !logo_started) {
             logo_started = true;
             game->get_audio().Play(logo_audio_id);
         }
@@ -72,8 +72,8 @@ namespace nascent {
         logo_field->update_song_position(game->get_audio().GetCursorMilliseconds(logo_audio_id), elapsed_time);
         logo_field->update(this, elapsed_time);
 
-        for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
-            bg_field[i]->pos.x -= elapsed_time * SCENE_TITLE_X_SCROLL_RATE_PX_PER_S;
+        for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i++) {
+            bg_field[i]->pos.x -= elapsed_time * SettingsManager::settings.title_h_scroll_rate;
             bg_field[i]->update_song_position(game->get_audio().GetCursorMilliseconds(bg_audio_id), elapsed_time);
             bg_field[i]->update(this, elapsed_time);
         }
@@ -84,8 +84,8 @@ namespace nascent {
         }
 
         if (bg_field[1]->pos.x <= 0) {
-            for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
-                bg_field[i]->pos.x = 1920/(SCENE_TITLE_FIELD_COUNT-1)*i;
+            for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i++) {
+                bg_field[i]->pos.x = 1920/(SettingsManager::settings.title_field_count-1)*i;
             }
         }
 
@@ -93,7 +93,7 @@ namespace nascent {
     };
 
     void SceneTitle::draw(olc::PixelGameEngine* window) {
-        for (uint8_t i = 0; i < SCENE_TITLE_FIELD_COUNT; i++) {
+        for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i++) {
             bg_field[i]->draw(window);
         }
 

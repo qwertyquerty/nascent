@@ -10,11 +10,13 @@ namespace nascent {
         this->skin = skin;
         this->pos = pos;
         this->size = size;
+
+        scroll_speed = SettingsManager::settings.field_scroll_speed;
         
         attempt = new Attempt(this->chart);
 
-        note_size = (size.x) / (chart->info.key_count + chart->info.key_count * FIELD_KEY_SPACING_RATIO - FIELD_KEY_SPACING_RATIO);
-        note_x_spacing = note_size * FIELD_KEY_SPACING_RATIO;
+        note_size = (size.x) / (chart->info.key_count + chart->info.key_count * skin->field_key_spacing_ratio - skin->field_key_spacing_ratio);
+        note_x_spacing = note_size * skin->field_key_spacing_ratio;
 
         active_keys = 0;
     };
@@ -168,7 +170,7 @@ namespace nascent {
     };
 
     void EntityField::update_song_position(int32_t song_position, float elapsed_time) {
-        if (song_position != last_audio_engine_sound_position || std::abs(precise_song_position - song_position) > FIELD_AUDIO_SYNC_MAX_ERROR) {
+        if (song_position != last_audio_engine_sound_position || std::abs(precise_song_position - song_position) > SettingsManager::settings.field_audio_sync_max_error) {
             if (song_position < last_audio_engine_sound_position) {
                 earliest_visible_object_index = 0;
             }

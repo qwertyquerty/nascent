@@ -4,8 +4,6 @@
 #include "SceneTitle.h"
 #include "ScenePlay.h"
 
-#define DISCORD_APPLICATION_ID "1360933253070061718"
-
 namespace nascent {
     class GameNascent : public Game {
         protected:

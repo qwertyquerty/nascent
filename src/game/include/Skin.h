@@ -35,6 +35,8 @@ namespace nascent {
         olc::Sprite* title_gradient;
         uint8_t key_count;
 
+        double field_key_spacing_ratio = 0.15;
+
         uint8_t hold_alpha = 64;
 
         olc::Decal* game_paused_decal;
