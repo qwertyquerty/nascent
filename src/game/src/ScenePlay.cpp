@@ -3,8 +3,9 @@
 #include "Util.h"
 
 namespace nascent {
-    ScenePlay::ScenePlay() {
-        
+    ScenePlay::ScenePlay(Chart* chart, Skin* skin) {
+        this->chart = chart;
+        this->skin = skin;
     };
 
     ScenePlay::~ScenePlay() {
@@ -15,9 +16,6 @@ namespace nascent {
 
     void ScenePlay::init(Game* game) {
         olc::vi2d window_size = game->window->GetWindowSize();
-
-        skin = new Skin(game, "default", 4);
-        chart = new Chart(R"(assets\songs\fontana\fontana.osu.json)");
 
         double lane_width = window_size.x/12;
 

@@ -8,12 +8,12 @@
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
-        scene_title = new SceneList();
+        scene_list = new SceneList();
     };
 
     GameNascent::~GameNascent() {
         discord::RPCManager::get().shutdown();
-        delete scene_title;
+        delete scene_list;
     };
 
     void GameNascent::init() {
@@ -22,7 +22,7 @@ namespace nascent {
         start_time = time(nullptr);
         std::srand(start_time);
 
-        set_scene(scene_title);
+        set_scene(scene_list);
         
         discord_init();
         discord_update();

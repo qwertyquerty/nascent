@@ -47,6 +47,7 @@ class Map():
         "[TimingPoints]": TIMING_POINTS,
         "[HitObjects]": HIT_OBJECTS,
         "[Editor]": NO_SECTION,
+        "[Colours]": NO_SECTION
     }
 
     def __init__(self, filename):

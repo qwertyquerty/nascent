@@ -7,7 +7,7 @@
 #include "EntityFFT.h"
 #include "Skin.h"
 
-#define PLAY_START_DELAY_S 8
+#define PLAY_START_DELAY_S 2
 #define FIELD_AUDIO_VISUAL_OFFSET_MS -20
 #define FIELD_AUDIO_INPUT_OFFSET_MS 0
 
@@ -29,7 +29,7 @@ namespace nascent {
         uint64_t frame_pos = 0;
 
         public:
-        ScenePlay();
+        ScenePlay(Chart* chart, Skin* skin);
         ~ScenePlay();
         void init(Game*) override;
         void update(float) override;

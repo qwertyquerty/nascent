@@ -2,6 +2,7 @@
 #include "SceneList.h"
 #include "InputManager.h"
 #include "Util.h"
+#include "ScenePlay.h"
 
 #include <iostream>
 
@@ -49,6 +50,14 @@ namespace nascent {
             select_chart((selected_chart_index - 1) % charts.size());
         }
 
+        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            ScenePlay* scene_play = new ScenePlay(selected_chart, skin);
+            game->get_audio().Stop(selected_chart_audio_id);
+            game->get_audio().UnloadSound(selected_chart_audio_id);
+
+            game->set_scene(scene_play);
+        }
+
         selected_chart_position = game->get_audio().GetCursorMilliseconds(selected_chart_audio_id);
         field->update_song_position(selected_chart_position, elapsed_time);
         timer += elapsed_time;
@@ -59,8 +68,11 @@ namespace nascent {
         selected_chart_index = index;
         
         if (selected_chart_audio_id != -1) {
+            game->get_audio().Stop(selected_chart_audio_id);
             game->get_audio().UnloadSound(selected_chart_audio_id);
         }
+
+        game->get_audio().Play(skin->hitsound_sfx);
 
         selected_chart_audio_id = game->get_audio().LoadSound(selected_chart->audio_path.string());
 
