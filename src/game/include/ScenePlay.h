@@ -24,6 +24,8 @@ namespace nascent {
 
         uint64_t frame_pos = 0;
 
+        float chart_pitch = 1;
+
         public:
         ScenePlay(Chart* chart, Skin* skin);
         ~ScenePlay();

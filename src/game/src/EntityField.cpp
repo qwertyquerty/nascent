@@ -79,7 +79,7 @@ namespace nascent {
 
             Hit hit = jhit->chart_hit;
 
-            double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
+            double scroll_rate_px_per_ms = ((double)scroll_speed / chart_pitch * screen_height / 100.0 / 1000.0);
             
             int32_t hit_y = (hit.time - offset_song_position) * scroll_rate_px_per_ms;
             int32_t hit_x = pos.x + (hit.key * (note_size + note_x_spacing));

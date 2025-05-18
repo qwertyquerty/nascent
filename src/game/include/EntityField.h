@@ -33,6 +33,8 @@ namespace nascent {
         bool judge_auto_active = false;
         double judge_height = 0;
 
+        float chart_pitch = 1;
+
         uint8_t judge_alpha = 64;
 
         uint32_t active_keys = 0;

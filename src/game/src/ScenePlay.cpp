@@ -25,12 +25,16 @@ namespace nascent {
         field->judge_height = lane_width/2;
         field->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         field->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
+        
+        field->chart_pitch = chart_pitch;
 
         timer = 0;
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
 
         game->get_audio().Play(skin->get_random_menu_pluck());
+
+        game->get_audio().SetPitch(chart_audio_id, chart_pitch);
     };
 
     void ScenePlay::update(float elapsed_time) {
