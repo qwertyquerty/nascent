@@ -15,7 +15,7 @@ namespace nascent {
         int32_t selected_chart_index = 0;
         int32_t selected_chart_position = 0;
 
-        EntityField* field;
+        EntityField* field = nullptr;
 
         int selected_chart_audio_id = -1;
 

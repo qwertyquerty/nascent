@@ -77,7 +77,10 @@ namespace nascent {
 
         selected_chart_audio_id = game->get_audio().LoadSound(selected_chart->audio_path.string());
 
-        delete field;
+        if (field != nullptr) {
+            delete field;
+        }
+        
         olc::vi2d window_size = game->window->GetWindowSize();
         field = new EntityField(selected_chart, skin, {
             (double)window_size.x/4*3 - (double)window_size.x/48, 0.0}, 
