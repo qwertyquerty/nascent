@@ -67,7 +67,9 @@ namespace nascent {
         };
     }
 
-    Chart::Chart(const std::string& path) {
+    Chart::Chart(const std::string& path, float pitch) {
+        this->pitch = pitch;
+
         json_path = boost::filesystem::path(path);
 
         std::ifstream ifs(json_path.string());
@@ -75,6 +77,7 @@ namespace nascent {
         json jdata = json::parse(ifs);
 
         info = jdata["info"].template get<ChartInfo>();
+        info.audio_lead_in /= pitch;
 
         json jhits = jdata["hit_objects"];
         hits = std::vector<Hit>();
@@ -82,6 +85,8 @@ namespace nascent {
         for (json::iterator it = jhits.begin(); it != jhits.end(); ++it) {
             Hit hit;
             hit = it->template get<Hit>();
+            hit.time /= pitch;
+            hit.end_time /= pitch;
             hits.push_back(hit);
         }
 
@@ -91,6 +96,8 @@ namespace nascent {
         for (json::iterator it = jtps.begin(); it != jtps.end(); ++it) {
             ChartTimingPoint tp;
             tp = it->template get<ChartTimingPoint>();
+            tp.time /= pitch;
+            tp.beat_length /= pitch;
             timing_points.push_back(tp);
         }
 

@@ -26,14 +26,12 @@ namespace nascent {
         Attempt* attempt;
         Skin* skin;
 
-        bool debug = false;
+        bool debug = true;
         bool draw_judge = true;
         bool draw_notes_past_judge = true;
         bool draw_judge_colors = false;
         bool judge_auto_active = false;
         double judge_height = 0;
-
-        float chart_pitch = 1;
 
         uint8_t judge_alpha = 64;
 

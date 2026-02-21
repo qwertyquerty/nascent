@@ -46,10 +46,12 @@ namespace nascent {
 
         ChartInfo info;
 
+        float pitch;
+
         std::vector<Hit> hits;
         std::vector<ChartTimingPoint> timing_points;
 
-        Chart(const std::string& path);
+        Chart(const std::string& path, float pitch);
 
         /**
          * Get the length of the Chart in ms from the start of the first hit to the end of the last hit

@@ -26,10 +26,10 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetWindowSize();
 
         logo_skin = new Skin(game, "logo", 7);
-        logo_chart = new Chart(R"(assets\songs\logo\logo.json)");
+        logo_chart = new Chart(R"(assets\songs\logo\logo.json)", 1.0);
 
         bg_skin = new Skin(game, "default", 4);
-        bg_chart = new Chart(R"(assets\songs\title_2\title2.osu.json)");
+        bg_chart = new Chart(R"(assets\songs\title_2\title2.osu.json)", 1.0);
 
         logo_field = new EntityField(logo_chart, logo_skin, {(double)window_size.x/4,0}, {(double)window_size.x/2, (double)window_size.y/2 + ((double)window_size.x/28)});
         logo_field->draw_notes_past_judge = false;

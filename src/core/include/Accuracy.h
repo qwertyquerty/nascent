@@ -64,5 +64,5 @@ namespace nascent {
     /**
      * Return HitScore from a hit error and an accuracy difficulty, returns HitScore::NONE if the note isn't hit at all (outside of miss range)
      */
-    HitScore get_score_from_hit_err(uint32_t error, uint8_t hit_acc_diff, bool release = false);
+    HitScore get_score_from_hit_err(uint32_t error, uint8_t hit_acc_diff, bool release);
 }

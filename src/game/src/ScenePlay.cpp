@@ -25,16 +25,13 @@ namespace nascent {
         field->judge_height = lane_width/2;
         field->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         field->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
-        
-        field->chart_pitch = chart_pitch;
-
         timer = 0;
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
 
         game->get_audio().Play(skin->get_random_menu_pluck());
 
-        game->get_audio().SetPitch(chart_audio_id, chart_pitch);
+        game->get_audio().SetPitch(chart_audio_id, chart->pitch);
     };
 
     void ScenePlay::update(float elapsed_time) {
@@ -143,15 +140,16 @@ namespace nascent {
             window->FillRectDecal({x, y}, {hit_err_window * 2 * px_per_ms, hit_height}, c);
         }
 
+        const uint8_t max_hit_lines = 100;
         for (auto it = field->attempt->judged_hits.rbegin(); it != field->attempt->judged_hits.rend(); ++it) {
             if ((*it)->hit_played && (*it)->hit_score != HitScore::MISS) {
                 JudgedHit* jhit = *it;
                 float x = screensize.x / 2 - hit_width-2 + jhit->hit_err * px_per_ms;
-                window->FillRectDecal({x, y}, {hit_width, hit_height}, olc::Pixel(200, 200, 255, 64));
+                window->FillRectDecal({x, y}, {hit_width, hit_height}, olc::Pixel(200, 255-l, 255-l, max_hit_lines-l));
                 l++;
             }
 
-            if (l >= 200) {
+            if (l >= max_hit_lines) {
                 break;
             }
         }

@@ -81,7 +81,7 @@ namespace nascent {
 
             if (!jhit->hit) {
                 int32_t err = current_time - jhit->chart_hit.time;
-                HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy);
+                HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, false);
 
                 if (err > 0 && score == HitScore::NONE) {
                     score_hit(jhit, 0, false, false);
@@ -109,7 +109,7 @@ namespace nascent {
                     
                     if (jhit->chart_hit.key == key && !jhit->hit) {
                         uint32_t err = std::abs(current_time - jhit->chart_hit.time);
-                        HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy);
+                        HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy, false);
                         if (score != HitScore::NONE) {
                             candidates.push_back(jhit);
                         }
@@ -128,7 +128,7 @@ namespace nascent {
                     else {
                         for (JudgedHit* candidate : candidates) {
                             uint32_t err = std::abs(current_time - candidate->chart_hit.time);
-                            HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy);
+                            HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy, false);
 
                             if (score != HitScore::BAD) {
                                 chosen_hit = candidate;

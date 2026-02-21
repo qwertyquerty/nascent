@@ -91,6 +91,7 @@ namespace nascent {
 
         game->get_audio().Play(selected_chart_audio_id, true);
         game->get_audio().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
+        game->get_audio().SetPitch(selected_chart_audio_id, selected_chart->pitch);
     }
 
     void SceneList::load_charts() {
@@ -100,7 +101,7 @@ namespace nascent {
                     for (auto& chart_file : boost::make_iterator_range(directory_iterator(chart_folder), {})) {
                         std::string chart_file_ext = chart_file.path().extension().string();
                         if (chart_file_ext == CHART_FILE_EXTENSION) {
-                            charts.push_back(new Chart(chart_file.path().string()));
+                            charts.push_back(new Chart(chart_file.path().string(), 1));
                         }
                     }
                 }
