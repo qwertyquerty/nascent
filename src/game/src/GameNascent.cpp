@@ -1,5 +1,6 @@
 #include "GameNascent.h"
 
+#include "InputManager.h"
 #include "olcPixelGameEngine.h"
 #include "ScenePlay.h"
 #include "SceneTitle.h"
@@ -28,10 +29,18 @@ namespace nascent {
         discord_init();
         discord_update();
 
-        skin = new Skin(this, "default", 4);
+        skin = new Skin(this, "default", 7);
     }
 
     void GameNascent::update(float elapsed_time) {
+        if (window->GetKey(InputManager::exit_key).bPressed) {
+            exit(0);
+        }
+
+        if (window->GetKey(InputManager::back_key).bPressed) {
+            set_scene(scene_list);
+        }
+
         this->elapsed_time = elapsed_time;
         scene->update(elapsed_time);
     }

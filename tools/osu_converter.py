@@ -4,7 +4,14 @@ import json
 import os
 
 if os.path.isdir(sys.argv[1]):
-    files = [os.path.join(sys.argv[1], fn) for fn in os.listdir(sys.argv[1])]
+    files = []
+
+    for root, dirs, fs in os.walk(sys.argv[1]):
+        for file in fs:
+            if file.endswith(".osu"):
+                full_path = os.path.join(root, file)
+                files.append(full_path)
+
 else:
     files = [sys.argv[1]]
 
@@ -15,6 +22,13 @@ for in_file in files:
     osu_map = osu_parser.Map(in_file)
 
     map_json = {"info": {}, "timing_points": [], "hit_objects": []}
+
+    png = ""
+
+    for event in osu_map.events:
+        if event.event_type == "0":
+            png = event.event_params[0]
+            break
 
     map_json["info"] = {
         "title": osu_map.metadata["Title"],
@@ -28,7 +42,8 @@ for in_file in files:
         "preview_time": int(osu_map.general["PreviewTime"]),
         "hit_accuracy": max(int(round((float(osu_map.difficulty["OverallDifficulty"])), 0)) - 4, 0),
         "key_count": int(osu_map.difficulty["CircleSize"]),
-        "damage": int(round((float(osu_map.difficulty["HPDrainRate"])), 0))
+        "damage": int(round((float(osu_map.difficulty["HPDrainRate"])), 0)),
+        "image_file": png
     }
 
     for timing_point in osu_map.timing_points:

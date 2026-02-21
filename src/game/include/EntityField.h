@@ -26,10 +26,11 @@ namespace nascent {
         Attempt* attempt;
         Skin* skin;
 
-        bool debug = true;
+        bool debug = false;
         bool draw_judge = true;
         bool draw_notes_past_judge = true;
         bool draw_judge_colors = false;
+        bool draw_combo = false;
         bool judge_auto_active = false;
         double judge_height = 0;
 
@@ -41,8 +42,12 @@ namespace nascent {
         int32_t audio_input_offset = 0;
         uint32_t scroll_speed = 0;
 
+        uint32_t last_rendered_combo = 0;
+
         olc::vd2d pos = {0,0};
         olc::vd2d size = {0,0};
+
+        olc::Decal* combo_decal = nullptr;
 
         EntityField(Chart*, Skin*, olc::vd2d, olc::vd2d);
         ~EntityField();
@@ -55,6 +60,7 @@ namespace nascent {
         ChartTimingPoint* get_current_timing_point();
         uint16_t get_section_beat();
         uint8_t get_meter_beat();
+        float get_beat_progress();
 
         void set_keys(uint32_t keys);
         void set_key(uint8_t key);

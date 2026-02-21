@@ -29,7 +29,7 @@ namespace nascent {
         // Load noteskins
         for (uint8_t i = 0; i < key_count; i++) {
             note_skin_sprites.push_back(new olc::Sprite((skin_path / std::format("note_{}.png", i+1)).string()));
-            note_skin_decals.push_back(new olc::Decal(note_skin_sprites.back()));
+            note_skin_decals.push_back(new olc::Decal(note_skin_sprites.back(), true));
         }
 
         title_gradient = new olc::Sprite((skin_path / "title_gradient.png").string());

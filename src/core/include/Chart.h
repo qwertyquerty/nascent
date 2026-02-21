@@ -20,6 +20,7 @@ namespace nascent {
         std::string mapper;
         std::string difficulty_name;
         std::string audio_file;
+        std::string image_file;
         int32_t audio_lead_in;
         int32_t preview_time;
         uint8_t hit_accuracy;
@@ -40,18 +41,28 @@ namespace nascent {
     void from_json(const json& j, ChartTimingPoint& p);
 
     class Chart {
+        private:
+        ChartInfo unpitched_info;
+        std::vector<Hit> unpitched_hits;
+        std::vector<ChartTimingPoint> unpitched_timing_points;
+
         public:
         boost::filesystem::path json_path;
         boost::filesystem::path audio_path;
+        boost::filesystem::path image_path;
 
         ChartInfo info;
-
-        float pitch;
-
         std::vector<Hit> hits;
         std::vector<ChartTimingPoint> timing_points;
 
+        float pitch = 1.0;
+
         Chart(const std::string& path, float pitch);
+
+        /**
+         * Set the pitch of the chart and recaculate the time of all the notes
+         */
+        void set_pitch(float);
 
         /**
          * Get the length of the Chart in ms from the start of the first hit to the end of the last hit

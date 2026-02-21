@@ -17,14 +17,17 @@ namespace nascent {
     void ScenePlay::init(Game* game) {
         olc::vi2d window_size = game->window->GetWindowSize();
 
-        double lane_width = window_size.x/12;
+        const uint8_t max_lanes_per_screen = 15;
 
-        field = new EntityField(chart, skin, {lane_width * chart->info.key_count, 0}, {(double)window_size.x/3, (double)window_size.y});
+        double lane_width = (double)window_size.x/((double)max_lanes_per_screen);
+
+        field = new EntityField(chart, skin, {lane_width * (max_lanes_per_screen-chart->info.key_count) / 2, 0}, {lane_width * chart->info.key_count, (double)window_size.y});
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
         field->judge_height = lane_width/2;
         field->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         field->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
+        field->draw_combo = true;
         timer = 0;
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
@@ -72,7 +75,7 @@ namespace nascent {
 
         if(!paused){
             // Make sure arrow keys cant be registered in pause
-            uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window);
+            uint32_t held_keys = InputManager::get_lane_keys_pressed(game->window, chart->info.key_count);
             field->set_keys(held_keys);
             field->update(this, elapsed_time);
             
@@ -86,11 +89,26 @@ namespace nascent {
         field->draw(window);
         skin->display_font_medium.DrawString(std::format("{:.2f}%", field->attempt->get_accuracy() * 100), 20, 40, olc::WHITE);
         skin->display_font_medium.DrawString(std::format("{:.1f}ms", field->attempt->get_avg_err()), 20, 80, olc::WHITE);
-        skin->display_font_medium.DrawString(std::format("{}X", field->attempt->get_combo()), 20, 120, olc::WHITE);
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = skin->display_font_medium.GetStringBounds(now_playing_string).size.x;
-        skin->display_font_medium.DrawString(now_playing_string, {screensize.x/2 - w/2, (int)smoothstep(-screensize.x / 24, screensize.x / 24, (timer-SettingsManager::settings.play_start_delay+2)*2)}, olc::WHITE);
+        skin->display_font_medium.DrawString(
+            now_playing_string, 
+            {
+                screensize.x/2 - w/2, 
+                (int)smoothstep(
+                    -(float)screensize.x / 24,
+                    (float)screensize.x / 24,
+                    (timer-SettingsManager::settings.play_start_delay+2)*2
+                ) +
+                (int)smoothstep(
+                    0,
+                    -(float)screensize.x / 12,
+                    (timer-SettingsManager::settings.play_start_delay-1)*2
+                )
+            },
+            olc::WHITE
+        );
 
         uint8_t l = 0;
         const double vspacing = 26;

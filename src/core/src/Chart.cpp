@@ -13,6 +13,7 @@ namespace nascent {
         j.at("mapper").get_to(p.mapper);
         j.at("difficulty_name").get_to(p.difficulty_name);
         j.at("audio_file").get_to(p.audio_file);
+        j.at("image_file").get_to(p.image_file);
         j.at("audio_lead_in").get_to(p.audio_lead_in);
         j.at("preview_time").get_to(p.preview_time);
         j.at("hit_accuracy").get_to(p.hit_accuracy);
@@ -29,6 +30,7 @@ namespace nascent {
             {"mapper", p.mapper},
             {"difficulty_name", p.difficulty_name},
             {"audio_file", p.audio_file},
+            {"image_file", p.image_file},
             {"audio_lead_in", p.audio_lead_in},
             {"preview_time", p.preview_time},
             {"hit_accuracy", p.hit_accuracy},
@@ -68,16 +70,13 @@ namespace nascent {
     }
 
     Chart::Chart(const std::string& path, float pitch) {
-        this->pitch = pitch;
-
         json_path = boost::filesystem::path(path);
 
         std::ifstream ifs(json_path.string());
 
         json jdata = json::parse(ifs);
 
-        info = jdata["info"].template get<ChartInfo>();
-        info.audio_lead_in /= pitch;
+        unpitched_info = jdata["info"].template get<ChartInfo>();
 
         json jhits = jdata["hit_objects"];
         hits = std::vector<Hit>();
@@ -85,23 +84,42 @@ namespace nascent {
         for (json::iterator it = jhits.begin(); it != jhits.end(); ++it) {
             Hit hit;
             hit = it->template get<Hit>();
-            hit.time /= pitch;
-            hit.end_time /= pitch;
-            hits.push_back(hit);
+            unpitched_hits.push_back(hit);
         }
 
         json jtps = jdata["timing_points"];
-        timing_points = std::vector<ChartTimingPoint>();
+        unpitched_timing_points = std::vector<ChartTimingPoint>();
 
         for (json::iterator it = jtps.begin(); it != jtps.end(); ++it) {
             ChartTimingPoint tp;
             tp = it->template get<ChartTimingPoint>();
-            tp.time /= pitch;
-            tp.beat_length /= pitch;
-            timing_points.push_back(tp);
+            unpitched_timing_points.push_back(tp);
         }
 
-        audio_path = json_path.parent_path() /= info.audio_file;
+        set_pitch(pitch);
+
+        audio_path = json_path.parent_path() / info.audio_file;
+        image_path = json_path.parent_path() / info.image_file;
+    }
+
+    void Chart::set_pitch(float pitch) {
+        this->pitch = pitch;
+
+        info.audio_lead_in = unpitched_info.audio_lead_in / pitch;
+
+        hits = unpitched_hits;
+        timing_points = unpitched_timing_points;
+        info = unpitched_info;
+
+        for (Hit& hit : hits) {
+            hit.time /= pitch;
+            hit.end_time /= pitch;
+        }
+
+        for (ChartTimingPoint& tp : timing_points) {
+            tp.beat_length /= pitch;
+            tp.time /= pitch;
+        }
     }
 
     uint32_t Chart::get_duration_ms() {

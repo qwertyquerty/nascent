@@ -1,5 +1,6 @@
 #include "EntityField.h"
 #include "Chart.h"
+#include "Entity.h"
 #include "Util.h"
 
 #include "olcPixelGameEngine.h"
@@ -41,7 +42,7 @@ namespace nascent {
             }
         }
 
-        attempt->update((uint32_t)(precise_song_position + audio_input_offset), active_keys);
+        attempt->update((int32_t)(precise_song_position + audio_input_offset), active_keys);
     };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
@@ -152,14 +153,45 @@ namespace nascent {
                     jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, chart->info.hit_accuracy) 
             )) / 1000;
             
-            float scale = smoothstep(1.0, 0.75, t*4);
+            float scale = smoothstep(0.8, 0.6, t*4);
 
             window->DrawDecal(
-                {(double)pos.x+size.x/2 - (double)hs_skin->sprite->width*scale/2, (double)pos.y+size.y/2 - (double)hs_skin->sprite->height*scale/2},
+                {
+                    (float)pos.x+size.x/2 - (float)hs_skin->sprite->width*scale/2,
+                    (float)pos.y+size.y*0.55 - (float)hs_skin->sprite->height*scale/2
+                },
                 hs_skin,
                 {scale, scale},
                 olc::Pixel(255, 255, 255, smoothstep(255, 0, (t-1)*2))
             );
+
+            if (draw_combo) {
+                if (attempt->get_combo() != last_rendered_combo) {
+                    std::string combo_string = std::format("{}", attempt->get_combo());
+
+                    if (combo_decal != nullptr) {
+                        delete combo_decal;
+                    }
+                    combo_decal = skin->display_font_large.RenderStringToDecal(
+                        combo_string,
+                        olc::WHITE
+                    );
+                }
+
+                if (combo_decal != nullptr) {
+                    scale = smoothstep(0.6, 0.5, t*6);
+
+                    window->DrawDecal(
+                        {
+                            pos.x+size.x/2 - combo_decal->sprite->Size().x*scale/2,
+                            pos.y+size.y*0.59 - combo_decal->sprite->Size().y*scale/2
+                        },
+                        combo_decal,
+                        {scale, scale},
+                        olc::WHITE
+                    );
+                }
+            }
         }
 
         if (debug) {
@@ -184,7 +216,7 @@ namespace nascent {
             precise_song_position += elapsed_time * 1000;
         }
 
-        offset_song_position = precise_song_position + audio_visual_offset;
+        offset_song_position = precise_song_position - audio_visual_offset;
     }
 
     ChartTimingPoint* EntityField::get_current_timing_point() {
@@ -206,6 +238,15 @@ namespace nascent {
         ChartTimingPoint* tp = get_current_timing_point();
         return (tp != nullptr) ? (uint16_t)((precise_song_position - tp->time) / tp->beat_length) % tp->meter : 0;
     }
+
+    float EntityField::get_beat_progress() {
+        ChartTimingPoint* tp = get_current_timing_point();
+        return (tp != nullptr) ? (
+            ((float)(precise_song_position - (float)tp->time) / (float)tp->beat_length) - 
+            (uint16_t)((precise_song_position - tp->time) / tp->beat_length)
+        ) : 0.0;
+    }
+
 
     void EntityField::set_keys(uint32_t keys) {
         active_keys = keys;
