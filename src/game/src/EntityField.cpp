@@ -171,6 +171,7 @@ namespace nascent {
 
                     if (combo_decal != nullptr) {
                         delete combo_decal;
+                        combo_decal = nullptr;
                     }
                     combo_decal = skin->display_font_large.RenderStringToDecal(
                         combo_string,

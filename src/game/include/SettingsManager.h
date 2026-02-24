@@ -7,8 +7,8 @@ namespace nascent {
     struct Settings {
         uint16_t field_scroll_speed = 210; // vh / s
         uint8_t field_audio_sync_max_error = 20; // ms
-        int8_t field_audio_visual_offset = -35; //ms
-        int8_t field_audio_input_offset = 35; // ms
+        int8_t field_audio_visual_offset = 0; //ms
+        int8_t field_audio_input_offset = 10; // ms
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;
