@@ -1,4 +1,6 @@
 #include "SceneTitle.h"
+#include "SceneList.h"
+#include "InputManager.h"
 
 namespace nascent {
     SceneTitle::SceneTitle() {
@@ -6,6 +8,9 @@ namespace nascent {
     };
 
     SceneTitle::~SceneTitle() {
+        game->get_audio().UnloadSound(logo_audio_id);
+        game->get_audio().UnloadSound(bg_audio_id);
+
         delete bg_skin;
         delete logo_skin;
 
@@ -37,12 +42,15 @@ namespace nascent {
         logo_field->judge_alpha = 150;
         logo_field->judge_auto_active = true;
         logo_field->scroll_speed = SettingsManager::settings.field_scroll_speed;
+        logo_field->draw_hit_score = false;
 
         for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i++) {
-            bg_field[i] = new EntityField(bg_chart, bg_skin, {(double)window_size.x/(SettingsManager::settings.title_field_count-1)*i, 0}, {(double)window_size.x/(SettingsManager::settings.title_field_count-1), (double)window_size.y});
+            bg_field.emplace_back(new EntityField(bg_chart, bg_skin, {(double)window_size.x/(SettingsManager::settings.title_field_count-1)*i, 0}, {(double)window_size.x/(SettingsManager::settings.title_field_count-1), (double)window_size.y}));
             bg_field[i]->init(this);
-            bg_field[i]->debug = true;
+            bg_field[i]->debug = false;
             bg_field[i]->draw_judge = false;
+            bg_field[i]->draw_hit_score = false;
+            bg_field[i]->draw_note_colors = false;
             bg_field[i]->scroll_speed = SettingsManager::settings.field_scroll_speed;
         }
 
@@ -58,6 +66,13 @@ namespace nascent {
     };
 
     void SceneTitle::update(float elapsed_time) {
+        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            game->get_audio().Stop(logo_audio_id);
+            game->get_audio().Stop(bg_audio_id);
+
+            game->set_scene(new SceneList());
+        }
+
         if (timer > SettingsManager::settings.title_logo_start_delay && !logo_started) {
             logo_started = true;
             game->get_audio().Play(logo_audio_id);
@@ -85,7 +100,7 @@ namespace nascent {
 
         if (bg_field[1]->pos.x <= 0) {
             for (uint8_t i = 0; i < SettingsManager::settings.title_field_count; i++) {
-                bg_field[i]->pos.x = 1920/(SettingsManager::settings.title_field_count-1)*i;
+                bg_field[i]->pos.x = game->window->GetScreenSize().x/(SettingsManager::settings.title_field_count-1)*i;
             }
         }
 

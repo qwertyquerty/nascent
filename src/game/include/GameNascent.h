@@ -8,6 +8,7 @@ namespace nascent {
     class GameNascent : public Game {
         protected:
         Scene* scene_list;
+        Scene* scene_title;
         float elapsed_time;
         int64_t start_time;
         Skin* skin;

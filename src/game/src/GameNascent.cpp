@@ -7,10 +7,11 @@
 #include "SceneList.h"
 #include "discord-rpc.hpp"
 #include "SettingsManager.h"
+#include "InputManager.h"
 
 namespace nascent {
-    GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
-        scene_list = new SceneList();
+    GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window, nullptr) {
+
     };
 
     GameNascent::~GameNascent() {
@@ -21,10 +22,12 @@ namespace nascent {
     void GameNascent::init() {
         olc::Font::init();
 
+        scene_list = new SceneList();
+        set_scene(scene_list);
+        try_scene_swap();
+
         start_time = time(nullptr);
         std::srand(start_time);
-
-        set_scene(scene_list);
         
         discord_init();
         discord_update();
@@ -33,16 +36,19 @@ namespace nascent {
     }
 
     void GameNascent::update(float elapsed_time) {
-        if (window->GetKey(InputManager::exit_key).bPressed) {
-            exit(0);
-        }
-
         if (window->GetKey(InputManager::back_key).bPressed) {
             set_scene(scene_list);
         }
 
         this->elapsed_time = elapsed_time;
         scene->update(elapsed_time);
+
+        if (window->GetKey(olc::Key::CTRL).bHeld) {
+            if (window->GetKey(InputManager::ctrl_exit_key).bPressed) {
+                delete this;
+                exit(0);
+            }
+        }
     }
 
     void GameNascent::draw(olc::PixelGameEngine* window) {

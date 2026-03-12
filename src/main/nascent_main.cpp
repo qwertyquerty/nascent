@@ -34,6 +34,8 @@ public:
 	{
 		game.update(elapsed_time);
 		game.draw(this);
+		game.try_scene_swap();
+		
 		return true;
 	}
 };

@@ -11,6 +11,10 @@ namespace nascent {
         fft_cfg = kiss_fftr_alloc(FFT_WINDOW_SIZE, 0, 0, 0);
     };
 
+    EntityFFT::~EntityFFT() {
+        free(fft_cfg);
+    }
+
     void EntityFFT::init(Scene* scene) {
         input.resize(FFT_WINDOW_SIZE, 0);
         output.resize((FFT_WINDOW_SIZE / 2) + 1, (kiss_fft_cpx)0);

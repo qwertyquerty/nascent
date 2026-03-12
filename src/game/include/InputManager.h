@@ -16,7 +16,7 @@ namespace nascent {
 
         static const olc::Key menu_start_key = olc::Key::ENTER;
 
-        static const olc::Key exit_key = olc::Key::PAUSE;
+        static const olc::Key ctrl_exit_key = olc::Key::Q;
 
         static const olc::Key back_key = olc::Key::ESCAPE;
 

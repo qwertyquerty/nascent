@@ -34,6 +34,7 @@ namespace nascent {
         bool flipped = false;
 
         EntityFFT(Skin*, olc::vd2d, olc::vd2d, uint8_t);
+        ~EntityFFT();
         void init(Scene*) override;
         void update(Scene*, float) override;
         void draw(olc::PixelGameEngine*) override;
