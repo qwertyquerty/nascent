@@ -18,4 +18,5 @@ server/*.db
 server/deploy/ansible/inventory.yml
 server/deploy/data
 server/deploy/.env
+server/deploy/nginx/cloudflare.conf
 .ruff_cache

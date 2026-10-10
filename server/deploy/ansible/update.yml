@@ -1,0 +1,9 @@
+- name: Pull and redeploy Nascent
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Deploy the latest {{ nascent_ref }}
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: release

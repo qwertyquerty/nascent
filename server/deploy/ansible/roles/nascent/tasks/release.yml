@@ -1,0 +1,125 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that: nascent_domain | length == 0 or nascent_letsencrypt_email | length > 0
+    fail_msg: set nascent_letsencrypt_email to get a certificate for {{ nascent_domain }}
+
+- name: Read the database password
+  ansible.builtin.slurp:
+    src: /opt/nascent/postgres-password
+  register: postgres_password
+
+- name: Check out {{ nascent_ref }}
+  ansible.builtin.git:
+    repo: "{{ nascent_repo }}"
+    dest: /opt/nascent/src
+    version: "{{ nascent_ref }}"
+    recursive: false
+    force: true
+  register: checkout
+
+- name: Write the compose settings
+  vars:
+    nascent_release: "{{ checkout.after[:12] }}"
+    nascent_postgres_password: "{{ postgres_password.content | b64decode | trim }}"
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ nascent_compose_dir }}/.env"
+    mode: "0600"
+
+- name: Fetch Cloudflare's address ranges
+  when: nascent_cloudflare | bool
+  ansible.builtin.uri:
+    url: https://www.cloudflare.com/ips-{{ item }}
+    return_content: true
+  loop: [v4, v6]
+  register: cloudflare_ranges
+
+- name: Trust client addresses from Cloudflare
+  when: nascent_cloudflare | bool
+  ansible.builtin.template:
+    src: cloudflare.conf.j2
+    dest: "{{ nascent_compose_dir }}/nginx/cloudflare.conf"
+    mode: "0644"
+  register: cloudflare_conf
+
+- name: Stop trusting Cloudflare
+  when: not nascent_cloudflare | bool
+  ansible.builtin.file:
+    path: "{{ nascent_compose_dir }}/nginx/cloudflare.conf"
+    state: absent
+  register: cloudflare_removed
+
+- name: Build and start release {{ checkout.after[:12] }}
+  block:
+    - name: Build the image
+      ansible.builtin.command: docker compose build api
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      changed_when: true
+
+    - name: Start the stack and wait for it to be healthy
+      ansible.builtin.command: docker compose up -d --remove-orphans --wait --wait-timeout 300
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      changed_when: true
+
+    - name: Apply the Cloudflare settings to nginx
+      when: cloudflare_conf is changed or cloudflare_removed is changed
+      ansible.builtin.command: docker compose restart nginx
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      changed_when: true
+  rescue:
+    - name: Collect the logs
+      ansible.builtin.command: docker compose logs --tail 50 api nginx
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      register: logs
+      changed_when: false
+      failed_when: false
+
+    - name: Fail with the logs
+      ansible.builtin.fail:
+        msg: "{{ logs.stdout }}"
+
+- name: Read which certificate is installed
+  ansible.builtin.slurp:
+    src: /opt/nascent/data/letsencrypt/nascent-domain
+  register: certificate_marker
+  failed_when: false
+
+- name: Get a certificate for {{ nascent_domain }}
+  vars:
+    certificate_wanted: "{{ nascent_domain }} staging={{ nascent_letsencrypt_staging | bool }}"
+  when: nascent_domain | length > 0 and (certificate_marker.content | default('') | b64decode) != certificate_wanted
+  block:
+    - name: Request the certificate
+      ansible.builtin.command: >-
+        docker compose run --rm --no-deps --entrypoint certbot certbot certonly --webroot -w /var/www/certbot --cert-name nascent
+        -d {{ nascent_domain }} --email {{ nascent_letsencrypt_email }} --agree-tos --no-eff-email --non-interactive --force-renewal
+        {{ '--staging' if nascent_letsencrypt_staging | bool else '' }}
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      changed_when: true
+
+    - name: Remember the certificate
+      ansible.builtin.copy:
+        content: "{{ certificate_wanted }}"
+        dest: /opt/nascent/data/letsencrypt/nascent-domain
+        mode: "0644"
+
+    - name: Switch nginx to https
+      ansible.builtin.command: docker compose restart nginx
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      changed_when: true
+  rescue:
+    - name: Explain the missing certificate
+      ansible.builtin.debug:
+        msg: no certificate yet, check that {{ nascent_domain }} points at this server; serving http until the next run
+
+- name: Remove images from older releases
+  ansible.builtin.shell: |
+    docker images nascent-server --format '{% raw %}{{.Tag}}{% endraw %}' | grep -vx "{{ checkout.after[:12] }}" | xargs -r -I tag docker image rm nascent-server:tag
+    docker image prune -f
+  changed_when: false
