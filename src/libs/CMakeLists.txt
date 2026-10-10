@@ -22,6 +22,7 @@ add_subdirectory(picosha2)
 
 include(discord-presence/cmake/CPM.cmake)
 CPMAddPackage("gh:fmtlib/fmt#11.2.0")
+set(DISCORD_RPC_NO_GLAZE ON)
 add_subdirectory(discord-presence)
 
 add_library(stb INTERFACE)
