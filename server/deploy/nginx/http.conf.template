@@ -1,0 +1,7 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    include /etc/nginx/nascent/acme.conf;
+    include /etc/nginx/nascent/locations.conf;
+}

@@ -1,0 +1,5 @@
+- name: Deploy Nascent
+  hosts: nascent
+  become: true
+  roles:
+    - nascent

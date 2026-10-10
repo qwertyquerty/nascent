@@ -7,3 +7,9 @@
 [submodule "src/libs/freetype"]
 	path = src/libs/freetype
 	url = https://github.com/freetype/freetype
+[submodule "src/libs/stb"]
+	path = src/libs/stb
+	url = https://github.com/nothings/stb
+[submodule "src/libs/olcPixelGameEngine"]
+	path = src/libs/olcPixelGameEngine
+	url = https://github.com/OneLoneCoder/olcPixelGameEngine

@@ -1,0 +1,13 @@
+nascent_repo: https://github.com/qwertyquerty/nascent.git
+nascent_ref: main
+
+nascent_domain: ""
+nascent_letsencrypt_email: ""
+nascent_letsencrypt_staging: false
+nascent_cors_origins: ""
+
+nascent_workers: 2
+nascent_uwsgi_processes: 4
+nascent_uwsgi_threads: 4
+nascent_backup_keep_days: 14
+nascent_configure_firewall: true

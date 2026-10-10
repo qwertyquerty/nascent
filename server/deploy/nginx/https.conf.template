@@ -1,0 +1,28 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    include /etc/nginx/nascent/acme.conf;
+
+    location / {
+        return 301 https://${NASCENT_DOMAIN}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name ${NASCENT_DOMAIN};
+
+    ssl_certificate /etc/letsencrypt/live/nascent/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/nascent/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    include /etc/nginx/nascent/locations.conf;
+}

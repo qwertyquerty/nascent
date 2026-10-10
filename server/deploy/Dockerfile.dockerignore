@@ -1,0 +1,11 @@
+*
+!src/core
+!src/libs/json
+!server/native
+!server/pyproject.toml
+!server/nascent_server
+!server/migrations
+!server/wsgi.py
+!server/deploy/uwsgi.ini
+**/__pycache__
+**/*.egg-info

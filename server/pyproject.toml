@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nascent-server"
+version = "0.1.0"
+description = "Nascent game server API"
+requires-python = ">=3.11"
+dependencies = [
+    "Flask>=3.1,<4",
+    "Flask-SQLAlchemy>=3.1,<4",
+    "Flask-Migrate>=4.0,<5",
+    "SQLAlchemy>=2.0.30,<3",
+    "pydantic[email]>=2.7,<3",
+    "argon2-cffi>=23.1",
+    "redis>=5.0",
+    "rq>=2.0",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2"]
+production = ["uWSGI>=2.0.28,<2.1", "psycopg[binary]>=3.2"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+include = ["nascent_server*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 160
+target-version = "py311"
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint.per-file-ignores]
+"nascent_server/config.py" = ["RUF012"]
+"nascent_server/models.py" = ["RUF012"]

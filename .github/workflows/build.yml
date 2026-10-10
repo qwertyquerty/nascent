@@ -1,0 +1,103 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows MSVC
+            os: windows-latest
+            shell: pwsh
+            cc: cl
+            cxx: cl
+          - name: Windows Clang
+            os: windows-latest
+            shell: pwsh
+            cc: clang-cl
+            cxx: clang-cl
+          - name: Windows MinGW GCC
+            os: windows-latest
+            shell: msys2 {0}
+            msys2: true
+            cc: gcc
+            cxx: g++
+          - name: Linux GCC
+            os: ubuntu-24.04
+            shell: bash
+            cc: gcc
+            cxx: g++
+          - name: Linux Clang
+            os: ubuntu-24.04
+            shell: bash
+            cc: clang
+            cxx: clang++
+          - name: macOS Clang
+            os: macos-15
+            shell: bash
+            cc: clang
+            cxx: clang++
+          - name: macOS GCC
+            os: macos-15
+            shell: bash
+            cc: gcc-14
+            cxx: g++-14
+
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libx11-dev libgl-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja
+          if [[ "${{ matrix.cc }}" == gcc-* ]]; then brew install gcc@14; fi
+
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows' && !matrix.msys2
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up MSYS2
+        if: matrix.msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

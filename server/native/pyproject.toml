@@ -1,0 +1,14 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "nascent-core"
+version = "0.1.0"
+description = "Python bindings for the Nascent judge, chart and difficulty code"
+requires-python = ">=3.11"
+
+[tool.scikit-build]
+cmake.version = ">=3.22"
+cmake.build-type = "Release"
+wheel.packages = []

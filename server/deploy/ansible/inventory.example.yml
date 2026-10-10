@@ -1,0 +1,9 @@
+nascent:
+  hosts:
+    production:
+      ansible_host: 203.0.113.10
+      ansible_user: root
+  vars:
+    nascent_domain: api.example.com
+    nascent_letsencrypt_email: you@example.com
+    nascent_letsencrypt_staging: true
