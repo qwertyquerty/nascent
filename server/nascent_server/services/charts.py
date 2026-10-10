@@ -1,4 +1,6 @@
+import hashlib
 import json
+import re
 from collections import OrderedDict
 from collections.abc import Iterable
 from threading import Lock
@@ -11,13 +13,18 @@ from sqlalchemy.exc import IntegrityError
 from .. import timeutil
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Chart, ChartDifficulty, ChartStatus, User
+from ..models import Chart, ChartDifficulty, ChartSource, ChartStatus, User
 from ..storage import get_json_gz, put_json_gz, sharded_key
 from .calculator import DEFAULT_RATE_KEY, calculator_version, rate_for_key
 
 MAX_NOTES = 200_000
 MAX_DURATION_MS = 3 * 60 * 60 * 1000
 NATIVE_CACHE_SIZE = 64
+OSU_SOURCE = "osu"
+OSU_ID_PATTERNS = {
+    "source_id": re.compile(r"^\s*BeatmapID\s*:\s*(\d+)\s*$", re.MULTILINE),
+    "source_set_id": re.compile(r"^\s*BeatmapSetID\s*:\s*(\d+)\s*$", re.MULTILINE),
+}
 
 _native_cache: OrderedDict[str, nc.Chart] = OrderedDict()
 _native_lock = Lock()
@@ -122,6 +129,30 @@ def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[
         return existing, False
 
     return chart, True
+
+
+def read_osu_file(raw: bytes) -> tuple[dict, dict]:
+    text = raw.decode("utf-8", errors="replace")
+    source = {"source": OSU_SOURCE, "checksum": hashlib.md5(raw).hexdigest()}
+
+    for field, pattern in OSU_ID_PATTERNS.items():
+        match = pattern.search(text)
+        source[field] = int(match.group(1)) if match and int(match.group(1)) > 0 else None
+
+    return json.loads(nc.convert_osu(text)), source
+
+
+def add_chart_source(chart: Chart, source: str, checksum: str, source_id: int | None = None, source_set_id: int | None = None) -> ChartSource:
+    existing = db.session.scalar(select(ChartSource).where(ChartSource.source == source, ChartSource.checksum == checksum))
+
+    if existing is None:
+        existing = ChartSource(chart=chart, source=source, checksum=checksum)
+        db.session.add(existing)
+
+    existing.chart = chart
+    existing.source_id = source_id if source_id is not None else existing.source_id
+    existing.source_set_id = source_set_id if source_set_id is not None else existing.source_set_id
+    return existing
 
 
 def chart_difficulty(chart: Chart, rate_key: int) -> float:

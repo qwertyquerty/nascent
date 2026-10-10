@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 
 import click
-import nascent_core as nc
 from flask import current_app
 from flask.cli import AppGroup
 from sqlalchemy import delete, select
@@ -15,7 +14,7 @@ from .models import AuthSession, Chart, ChartStatus, PlayTicket, Role, User
 from .security import hash_password
 from .services import ranking
 from .services.calculator import calculator_version
-from .services.charts import get_chart, parse_chart, register_chart, set_chart_status
+from .services.charts import add_chart_source, get_chart, parse_chart, read_osu_file, register_chart, set_chart_status
 
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
 
@@ -58,11 +57,11 @@ def set_role(username: str, role: str):
     click.echo(f"{username} is now {role}")
 
 
-def _read_chart_file(file: Path) -> dict:
+def _read_chart_file(file: Path) -> tuple[dict, dict | None]:
     if file.suffix.lower() == ".osu":
-        return json.loads(nc.convert_osu(file.read_text(encoding="utf-8", errors="replace")))
+        return read_osu_file(file.read_bytes())
 
-    return json.loads(file.read_text(encoding="utf-8"))
+    return json.loads(file.read_text(encoding="utf-8")), None
 
 
 @nascent_cli.command("import-charts")
@@ -74,8 +73,13 @@ def import_charts(path: Path, rank: bool):
 
     for file in files:
         try:
-            native = parse_chart(_read_chart_file(file))
+            data, source = _read_chart_file(file)
+            native = parse_chart(data)
             chart, created = register_chart(native, None)
+
+            if source is not None:
+                add_chart_source(chart, **source)
+
             changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank else False
         except (ApiError, ValueError) as error:
             db.session.rollback()

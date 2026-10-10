@@ -1,7 +1,22 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, SmallInteger, String, TypeDecorator, false, text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    TypeDecorator,
+    UniqueConstraint,
+    false,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import timeutil
@@ -151,6 +166,7 @@ class Chart(db.Model):
     ranked_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     difficulties: Mapped[list["ChartDifficulty"]] = relationship(back_populates="chart", cascade="all, delete-orphan", order_by="ChartDifficulty.rate_key")
+    sources: Mapped[list["ChartSource"]] = relationship(back_populates="chart", cascade="all, delete-orphan", order_by="ChartSource.id")
 
     __table_args__ = (
         Index("ix_charts_status_difficulty", "status", "difficulty"),
@@ -167,6 +183,22 @@ class ChartDifficulty(db.Model):
     calculator_version: Mapped[str] = mapped_column(String(16))
 
     chart: Mapped[Chart] = relationship(back_populates="difficulties")
+
+
+class ChartSource(db.Model):
+    __tablename__ = "chart_sources"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    chart_id: Mapped[int] = mapped_column(ForeignKey("charts.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(16))
+    checksum: Mapped[str] = mapped_column(String(64))
+    source_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    source_set_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
+
+    chart: Mapped[Chart] = relationship(back_populates="sources")
+
+    __table_args__ = (UniqueConstraint("source", "checksum", name="uq_chart_sources_source_checksum"),)
 
 
 class PlayTicket(db.Model):

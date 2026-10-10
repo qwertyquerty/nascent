@@ -1,6 +1,6 @@
 from typing import Any
 
-from .models import Chart, Play, User, UserKeyStats
+from .models import Chart, ChartSource, Play, User, UserKeyStats
 from .timeutil import isoformat
 
 
@@ -59,6 +59,15 @@ def chart_summary(chart: Chart) -> dict[str, Any]:
     }
 
 
+def chart_source_out(source: ChartSource) -> dict[str, Any]:
+    body: dict[str, Any] = {"source": source.source, "checksum": source.checksum, "id": source.source_id, "set_id": source.source_set_id, "url": None}
+
+    if source.source == "osu" and source.source_set_id is not None:
+        body["url"] = f"https://osu.ppy.sh/beatmapsets/{source.source_set_id}" + (f"#mania/{source.source_id}" if source.source_id is not None else "")
+
+    return body
+
+
 def chart_detail(chart: Chart) -> dict[str, Any]:
     return {
         **chart_summary(chart),
@@ -67,6 +76,7 @@ def chart_detail(chart: Chart) -> dict[str, Any]:
         "ranked_at": isoformat(chart.ranked_at),
         "calculator_version": chart.calculator_version,
         "difficulties": [{"rate": entry.rate_key / 100, "difficulty": entry.difficulty} for entry in chart.difficulties],
+        "sources": [chart_source_out(source) for source in chart.sources],
     }
 
 
