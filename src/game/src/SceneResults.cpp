@@ -69,7 +69,7 @@ namespace nascent {
             }
         }
 
-        double range = get_window_from_hit_acc_diff(HitScore::BAD, chart->info.hit_accuracy);
+        double range = get_window_from_hit_acc_diff(HitScore::BAD, summary.hit_accuracy);
         double half = size.y / 2.0 - 2;
 
         auto error_to_y = [&](double error) {
@@ -78,7 +78,7 @@ namespace nascent {
         };
 
         for (auto it = TIMED_HIT_SCORES.rbegin(); it != TIMED_HIT_SCORES.rend(); ++it) {
-            double window = get_window_from_hit_acc_diff(*it, chart->info.hit_accuracy);
+            double window = get_window_from_hit_acc_diff(*it, summary.hit_accuracy);
             olc::Pixel band = olc::Pixel(hit_score_color(*it));
             band.a = 28;
 

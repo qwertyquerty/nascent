@@ -35,6 +35,7 @@ namespace nascent {
     class Attempt {
         public:
         const Chart* chart;
+        uint8_t hit_accuracy = RANKED_HIT_ACC_DIFFICULTY;
 
         std::vector<Hit> attempt_hits;
         std::vector<JudgedHit> judged_hits;
@@ -59,7 +60,7 @@ namespace nascent {
         std::vector<AttemptInput> inputs;
         std::optional<int32_t> latest_time;
 
-        Attempt(const Chart* chart);
+        Attempt(const Chart* chart, uint8_t hit_accuracy = RANKED_HIT_ACC_DIFFICULTY);
 
         void press(uint8_t key, int32_t time);
         void release(uint8_t key, int32_t time);

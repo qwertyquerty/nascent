@@ -127,7 +127,7 @@ namespace nascent {
     }
 
     double DifficultyCalculator::calculate(const Chart& chart, const DifficultyParameters& parameters) {
-        return calculate(chart.hits, chart.info.key_count, chart.timing_points, chart.info.hit_accuracy, parameters);
+        return calculate(chart.hits, chart.info.key_count, chart.timing_points, RANKED_HIT_ACC_DIFFICULTY, parameters);
     }
 
     double DifficultyCalculator::strictness_factor(uint8_t hit_accuracy, const DifficultyParameters& p) {

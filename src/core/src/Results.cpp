@@ -66,6 +66,7 @@ namespace nascent {
         summary.grade = grade_for_accuracy(summary.accuracy);
         summary.max_combo = attempt.max_combo;
         summary.average_error = attempt.get_avg_err();
+        summary.hit_accuracy = attempt.hit_accuracy;
         summary.difficulty = difficulty;
         summary.performance = performance_for(difficulty, summary.accuracy);
         summary.chart_start = attempt.chart->get_chart_start_ms();

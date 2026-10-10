@@ -82,7 +82,7 @@ static void test_judging() {
     CHECK(get_score_from_hit_err(11, 10, false) == HitScore::AMAZING);
     CHECK(get_score_from_hit_err(161, 10, false) == HitScore::NONE);
 
-    std::unique_ptr<Chart> chart = make_chart({tap(0, 1000), tap(1, 2000), tap(2, 3000), tap(3, 3500), tap(3, 3600), hold(0, 5000, 6000), hold(1, 7000, 8000)});
+    std::unique_ptr<Chart> chart = make_chart({tap(0, 1000), tap(1, 2000), tap(2, 3000), tap(3, 3450), tap(3, 3600), hold(0, 5000, 6000), hold(1, 7000, 8000)});
     Attempt attempt(chart.get());
 
     attempt.press(0, 500);
@@ -98,7 +98,7 @@ static void test_judging() {
     CHECK(attempt.judged_hits[1].hit_score == HitScore::MISS);
     CHECK(attempt.get_combo() == 0);
 
-    attempt.press(2, 2970);
+    attempt.press(2, 2950);
     CHECK(attempt.judged_hits[2].hit_score == HitScore::GREAT);
 
     attempt.press(3, 3595);
@@ -130,7 +130,7 @@ static void test_gameplay_hash() {
     std::vector<Hit> moved = hits;
     moved[2].time = 2001;
     CHECK(make_chart(moved)->gameplay_hash() != hash);
-    CHECK(Chart::parse(chart_json(hits, 9), 1.0f, error)->gameplay_hash() != hash);
+    CHECK(Chart::parse(chart_json(hits, 9), 1.0f, error)->gameplay_hash() == hash);
 
     std::unique_ptr<Chart> chart = make_chart(hits);
     CHECK(Chart::parse(chart->serialize(), 1.0f, error)->gameplay_hash() == hash);

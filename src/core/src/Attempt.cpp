@@ -6,8 +6,9 @@
 #include <cstdlib>
 
 namespace nascent {
-    Attempt::Attempt(const Chart* chart) {
+    Attempt::Attempt(const Chart* chart, uint8_t hit_accuracy) {
         this->chart = chart;
+        this->hit_accuracy = hit_accuracy;
 
         current_holds.resize(chart->info.key_count);
         current_hold_targets.resize(chart->info.key_count);
@@ -30,7 +31,7 @@ namespace nascent {
         HitScore score = HitScore::MISS;
 
         if (played) {
-            score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, release);
+            score = get_score_from_hit_err(std::abs(err), hit_accuracy, release);
             score = score == HitScore::NONE ? HitScore::MISS : score;
         }
 
@@ -93,7 +94,7 @@ namespace nascent {
             }
 
             int32_t err = time - jhit.chart_hit.time;
-            HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, false);
+            HitScore score = get_score_from_hit_err(std::abs(err), hit_accuracy, false);
 
             if (err > 0 && score == HitScore::NONE) {
                 score_hit(jhit, 0, false, false);
@@ -120,7 +121,7 @@ namespace nascent {
 
             if (jhit.chart_hit.hit_type == HitType::HOLD) {
                 int32_t err = time - jhit.chart_hit.end_time;
-                HitScore score = get_score_from_hit_err(std::abs(err), chart->info.hit_accuracy, true);
+                HitScore score = get_score_from_hit_err(std::abs(err), hit_accuracy, true);
 
                 if (err > 0 && score == HitScore::NONE) {
                     score_hit(jhit, err, true, false);
@@ -161,7 +162,7 @@ namespace nascent {
             }
 
             uint32_t err = std::abs(time - jhit.chart_hit.time);
-            HitScore score = get_score_from_hit_err(err, chart->info.hit_accuracy, false);
+            HitScore score = get_score_from_hit_err(err, hit_accuracy, false);
 
             if (score == HitScore::NONE) {
                 break;

@@ -110,7 +110,7 @@ namespace nascent {
             HitScore hs = jhit->released ? jhit->release_score : jhit->hit_score;
             olc::Decal* hs_skin = skin->hit_score_decal(hs);
 
-            double t = (position - (jhit->hit_played ? (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) : jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, chart->info.hit_accuracy))) / 1000;
+            double t = (position - (jhit->hit_played ? (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) : jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, attempt->hit_accuracy))) / 1000;
 
             float scale = smoothstep(0.8, 0.6, t * 4);
 

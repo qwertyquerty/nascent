@@ -37,6 +37,7 @@ namespace nascent {
         uint32_t max_combo = 0;
         std::array<uint32_t, HIT_SCORE_COUNT> score_counts = {};
         double average_error = 0.0;
+        uint8_t hit_accuracy = RANKED_HIT_ACC_DIFFICULTY;
         double difficulty = 0.0;
         double performance = 0.0;
         int32_t chart_start = 0;

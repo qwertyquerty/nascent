@@ -61,7 +61,7 @@ namespace nascent {
 
         float pitch = 1.0;
 
-        static constexpr std::string_view CHART_HASH_FORMAT = "nascent-chart-v1";
+        static constexpr std::string_view CHART_HASH_FORMAT = "nascent-chart-v2";
 
         static std::unique_ptr<Chart> load(const std::filesystem::path& path, float pitch, std::string& error);
         static std::unique_ptr<Chart> parse(const nlohmann::json& data, float pitch, std::string& error);

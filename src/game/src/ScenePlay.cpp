@@ -259,11 +259,11 @@ namespace nascent {
 
         float hit_width = screensize.x / 400;
         float hit_height = hit_width * 15;
-        float px_per_ms = ((double)screensize.x) / 3.0 / get_window_from_hit_acc_diff(HitScore::BAD, chart->info.hit_accuracy) / 2;
+        float px_per_ms = ((double)screensize.x) / 3.0 / get_window_from_hit_acc_diff(HitScore::BAD, attempt.hit_accuracy) / 2;
         float y = screensize.y - hit_height;
 
         for (auto it = TIMED_HIT_SCORES.rbegin(); it != TIMED_HIT_SCORES.rend(); ++it) {
-            uint16_t hit_err_window = get_window_from_hit_acc_diff(*it, chart->info.hit_accuracy);
+            uint16_t hit_err_window = get_window_from_hit_acc_diff(*it, attempt.hit_accuracy);
             float x = screensize.x / 2 - hit_err_window * px_per_ms;
             olc::Pixel c = olc::Pixel(hit_score_color(*it));
             c.a = 24;

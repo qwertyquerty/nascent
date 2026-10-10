@@ -138,11 +138,9 @@ namespace nascent {
         });
 
         std::string canonical = std::format(
-            "{}\nkeys {}\naccuracy {}\ndamage {}\nhits {}\n",
+            "{}\nkeys {}\nhits {}\n",
             CHART_HASH_FORMAT,
             unpitched_info.key_count,
-            unpitched_info.hit_accuracy,
-            unpitched_info.damage,
             sorted_hits.size()
         );
 
@@ -153,12 +151,6 @@ namespace nascent {
             else {
                 canonical += std::format("{} {} tap\n", hit.time, hit.key);
             }
-        }
-
-        canonical += std::format("timing {}\n", unpitched_timing_points.size());
-
-        for (const ChartTimingPoint& tp : unpitched_timing_points) {
-            canonical += std::format("{} {} {}\n", tp.time, tp.beat_length, tp.meter);
         }
 
         return sha256_hex(canonical);

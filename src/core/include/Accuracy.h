@@ -56,6 +56,7 @@ namespace nascent {
 
     inline constexpr uint8_t MIN_HIT_ACC_DIFFICULTY = 0;
     inline constexpr uint8_t MAX_HIT_ACC_DIFFICULTY = 10;
+    inline constexpr uint8_t RANKED_HIT_ACC_DIFFICULTY = 5;
     inline constexpr double HOLD_RELEASE_WINDOW_MULTIPLIER = 2;
     inline constexpr uint8_t MAX_BAD_WINDOW_SIZE = 200;
 
