@@ -50,11 +50,6 @@ jobs:
             shell: bash
             cc: clang
             cxx: clang++
-          - name: macOS GCC
-            os: macos-15
-            shell: bash
-            cc: gcc-14
-            cxx: g++-14
 
     defaults:
       run:
@@ -74,9 +69,7 @@ jobs:
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: |
-          brew install ninja
-          if [[ "${{ matrix.cc }}" == gcc-* ]]; then brew install gcc@14; fi
+        run: brew install ninja
 
       - name: Set up MSVC environment
         if: runner.os == 'Windows' && !matrix.msys2
