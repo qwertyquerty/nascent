@@ -12,5 +12,3 @@ nascent_uwsgi_threads: 4
 nascent_backup_keep_days: 14
 nascent_configure_firewall: true
 nascent_cloudflare: false
-nascent_osz_mirror: https://catboy.best/d/{id}
-nascent_osu_requests_per_minute: 900
