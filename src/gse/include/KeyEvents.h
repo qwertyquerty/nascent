@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace nascent {
@@ -24,11 +25,14 @@ namespace nascent {
         std::mutex mutex;
         std::vector<KeyEvent> events;
         std::array<bool, KEY_COUNT> held = {};
+        std::string text;
 
         public:
         void push(olc::Key key, bool pressed, double time);
+        void push_text(char32_t code_point);
         void release_all(double time);
         std::vector<KeyEvent> drain();
+        std::string drain_text();
     };
 
 }

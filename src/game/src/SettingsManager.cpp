@@ -22,6 +22,7 @@ namespace nascent {
         list_preview_fade_in_time,
         list_song_directory,
         discord_application_id,
+        server_url,
         lane_keymaps
     )
 

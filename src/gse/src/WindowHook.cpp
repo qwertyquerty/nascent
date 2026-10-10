@@ -121,6 +121,7 @@ namespace nascent {
     static std::atomic<WNDPROC> original_window_proc = nullptr;
     static HWND hooked_window = nullptr;
     static std::wstring window_title;
+    static wchar_t pending_surrogate = 0;
 
     static std::wstring utf8_to_wide(const std::string& text) {
         int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
@@ -143,6 +144,25 @@ namespace nascent {
                 case WM_KEYUP:
                 case WM_SYSKEYUP: {
                     queue->push(key_from_virtual_key(wparam), msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN, now_ms());
+                    break;
+                }
+                case WM_CHAR: {
+                    wchar_t unit = (wchar_t)wparam;
+
+                    if (unit >= 0xd800 && unit <= 0xdbff) {
+                        pending_surrogate = unit;
+                    }
+                    else if (unit >= 0xdc00 && unit <= 0xdfff) {
+                        if (pending_surrogate != 0) {
+                            queue->push_text(0x10000 + (((char32_t)pending_surrogate - 0xd800) << 10) + ((char32_t)unit - 0xdc00));
+                        }
+
+                        pending_surrogate = 0;
+                    }
+                    else if (unit >= 0x20 && unit != 0x7f) {
+                        queue->push_text((char32_t)unit);
+                    }
+
                     break;
                 }
                 case WM_KILLFOCUS:

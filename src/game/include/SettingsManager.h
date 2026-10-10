@@ -28,6 +28,8 @@ namespace nascent {
 
         std::string discord_application_id = "1360933253070061718";
 
+        std::string server_url = "https://dev-ns.madeline.sh";
+
         std::map<std::string, std::vector<std::string>> lane_keymaps = {
             {"4", {"Z", "X", "PERIOD", "OEM_2"}},
             {"7", {"Z", "X", "C", "SPACE", "COMMA", "PERIOD", "OEM_2"}}

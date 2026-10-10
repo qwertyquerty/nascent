@@ -6,9 +6,11 @@
 #include "Game.h"
 #include "InputManager.h"
 #include "KeyEvents.h"
+#include "ProgressBar.h"
 #include "Scene.h"
 #include "Skin.h"
 #include "Util.h"
+#include "SceneAccount.h"
 #include "SceneCalibration.h"
 #include "ScenePlay.h"
 #include "SettingsManager.h"
@@ -57,6 +59,7 @@ namespace nascent {
         }
 
         timer = 0;
+        status_bar.refresh();
     }
 
     void SceneList::on_exit() {
@@ -65,8 +68,15 @@ namespace nascent {
     }
 
     void SceneList::update(float elapsed_time) {
+        status_bar.update(elapsed_time);
+
         if (game->window->GetKey(InputManager::calibration_key).bPressed) {
             game->set_scene(std::make_unique<SceneCalibration>(skin, this));
+            return;
+        }
+
+        if (game->window->GetKey(InputManager::account_key).bPressed) {
+            game->set_scene(std::make_unique<SceneAccount>(skin, this));
             return;
         }
 
@@ -151,6 +161,7 @@ namespace nascent {
 
     void SceneList::select_chart(int32_t index) {
         selected_chart = charts[index].get();
+        status_bar.set_key_count(selected_chart->info.key_count);
 
         selected_chart->set_pitch(this->pitch);
 
@@ -337,6 +348,11 @@ namespace nascent {
     }
 
     void SceneList::draw(olc::PixelGameEngine* window) {
+        draw_list(window);
+        status_bar.draw(window, skin);
+    }
+
+    void SceneList::draw_list(olc::PixelGameEngine* window) {
         olc::vi2d screensize = window->GetScreenSize();
 
         if (charts.empty()) {
@@ -376,6 +392,7 @@ namespace nascent {
         }
 
         const uint8_t charts_per_screen = screensize.y / list_chart_height;
+        const ProgressBar difficulty_bar({DIFFICULTY_BAR_WIDTH, DIFFICULTY_BAR_HEIGHT});
         int32_t difficulty_budget = DIFFICULTY_CALCULATIONS_PER_FRAME;
 
         field->draw(window);
@@ -399,15 +416,12 @@ namespace nascent {
             );
 
             std::optional<float> rating = get_difficulty(positive_modulo(index, charts.size()), difficulty_budget);
-
-            window->FillRectDecal({x, y + 50}, {DIFFICULTY_BAR_WIDTH, DIFFICULTY_BAR_HEIGHT}, olc::Pixel(255, 255, 255, 32));
+            float fill = rating ? std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f) : 0.0f;
+            olc::Pixel bar_color = skin->title_gradient_at(fill, 0.5);
+            bar_color.a = index == selected_chart_index ? 255 : 140;
+            difficulty_bar.draw(window, {x, y + 50}, fill, bar_color);
 
             if (rating) {
-                float fill = std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f);
-                olc::Pixel bar_color = skin->title_gradient_at(fill, 0.5);
-                bar_color.a = index == selected_chart_index ? 255 : 140;
-
-                window->FillRectDecal({x, y + 50}, {DIFFICULTY_BAR_WIDTH * fill, DIFFICULTY_BAR_HEIGHT}, bar_color);
 
                 skin->display_font_small.DrawString(
                     std::format("{:.2f}", *rating),

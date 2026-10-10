@@ -40,4 +40,32 @@ namespace nascent {
         std::lock_guard<std::mutex> lock(mutex);
         return std::exchange(events, {});
     }
+
+    void KeyEventQueue::push_text(char32_t code_point) {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        if (code_point < 0x80) {
+            text.push_back((char)code_point);
+        }
+        else if (code_point < 0x800) {
+            text.push_back((char)(0xc0 | (code_point >> 6)));
+            text.push_back((char)(0x80 | (code_point & 0x3f)));
+        }
+        else if (code_point < 0x10000) {
+            text.push_back((char)(0xe0 | (code_point >> 12)));
+            text.push_back((char)(0x80 | ((code_point >> 6) & 0x3f)));
+            text.push_back((char)(0x80 | (code_point & 0x3f)));
+        }
+        else {
+            text.push_back((char)(0xf0 | (code_point >> 18)));
+            text.push_back((char)(0x80 | ((code_point >> 12) & 0x3f)));
+            text.push_back((char)(0x80 | ((code_point >> 6) & 0x3f)));
+            text.push_back((char)(0x80 | (code_point & 0x3f)));
+        }
+    }
+
+    std::string KeyEventQueue::drain_text() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return std::exchange(text, {});
+    }
 }

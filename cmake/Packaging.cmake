@@ -53,6 +53,10 @@ foreach(nascent_cpm_package fmt glaze)
     endif()
 endforeach()
 
+if(EXISTS "${CPM_PACKAGE_curl_SOURCE_DIR}/COPYING")
+    list(APPEND nascent_license_files "${CPM_PACKAGE_curl_SOURCE_DIR}/COPYING|curl")
+endif()
+
 set(nascent_copy_commands)
 
 foreach(nascent_entry IN LISTS nascent_license_files)

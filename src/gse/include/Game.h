@@ -6,6 +6,7 @@
 #include "olcPGEX_MiniAudio.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace nascent {
@@ -22,6 +23,7 @@ namespace nascent {
         int32_t transition_layer = -1;
         KeyEventQueue key_event_queue;
         std::vector<KeyEvent> frame_key_events;
+        std::string frame_text;
         bool key_event_hook_active = false;
         bool quit_requested = false;
 
@@ -51,6 +53,7 @@ namespace nascent {
         void stop_sound(int id);
 
         const std::vector<KeyEvent>& get_frame_key_events();
+        const std::string& get_frame_text();
 
         void quit();
         bool should_quit();

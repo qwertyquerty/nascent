@@ -14,6 +14,8 @@ namespace nascent {
 
         static const olc::Key random_chart_key = olc::Key::F2;
         static const olc::Key calibration_key = olc::Key::F3;
+        static const olc::Key account_key = olc::Key::F4;
+        static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key calibration_reset_key = olc::Key::R;
 
         static const olc::Key menu_up_key = olc::Key::UP;

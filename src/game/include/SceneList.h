@@ -2,6 +2,7 @@
 
 #include "Scene.h"
 #include "SongClock.h"
+#include "StatusBar.h"
 #include "Util.h"
 
 #include <condition_variable>
@@ -48,6 +49,8 @@ namespace nascent {
 
         Skin* skin;
 
+        StatusBar status_bar;
+
         SpriteDecal background_image;
         SpriteDecal old_background_image;
 
@@ -77,6 +80,7 @@ namespace nascent {
         void apply_background_load(std::unique_ptr<olc::Sprite> sprite);
         void background_load_loop();
         void stop_preview_audio();
+        void draw_list(olc::PixelGameEngine* window);
 
         public:
         SceneList(Skin* skin);

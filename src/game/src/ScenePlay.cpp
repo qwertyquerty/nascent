@@ -6,6 +6,7 @@
 #include "InputManager.h"
 #include "KeyEvents.h"
 #include "PlaySession.h"
+#include "ProgressBar.h"
 #include "DifficultyCalculator.h"
 #include "Platform.h"
 #include "Replay.h"
@@ -16,6 +17,7 @@
 #include "Skin.h"
 #include "Util.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <iostream>
@@ -23,6 +25,10 @@
 
 namespace nascent {
     static constexpr int32_t RESULTS_DELAY_MS = 2000;
+    static constexpr float SONG_PROGRESS_WIDTH = 80.0f;
+    static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
+    static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
+    static constexpr float SONG_PROGRESS_TOP = 40.0f;
 
     ScenePlay::ScenePlay(Chart* chart, Skin* skin, Scene* return_scene) {
         this->chart = chart;
@@ -189,6 +195,13 @@ namespace nascent {
         const Attempt& attempt = session->get_attempt();
 
         field->draw(window);
+
+        double position = paused ? paused_position : session->song_position(now_ms());
+        int32_t chart_start = chart->get_chart_start_ms();
+        int32_t chart_length = std::max(1, chart->get_chart_end_ms() - chart_start);
+        float progress = (float)((position - chart_start) / chart_length);
+        ProgressBar({SONG_PROGRESS_WIDTH, SONG_PROGRESS_HEIGHT}).draw(window, {screensize.x - SONG_PROGRESS_RIGHT, SONG_PROGRESS_TOP}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+
         skin->display_font_medium.DrawString(std::format("{:.2f}%", attempt.get_accuracy() * 100), 20, 40, olc::WHITE);
         skin->display_font_medium.DrawString(std::format("{:.1f}ms", attempt.get_avg_err()), 20, 80, olc::WHITE);
 

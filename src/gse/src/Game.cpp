@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "TextInput.h"
 #include "WindowHook.h"
 
 #include <algorithm>
@@ -34,6 +35,7 @@ namespace nascent {
         }
 
         frame_key_events = key_event_queue.drain();
+        frame_text = key_event_hook_active ? key_event_queue.drain_text() : us_layout_text(window);
         update_transition(elapsed_time);
         apply_pending_scene();
     }
@@ -166,6 +168,10 @@ namespace nascent {
         if (id != -1) {
             audio.Stop(id);
         }
+    }
+
+    const std::string& Game::get_frame_text() {
+        return frame_text;
     }
 
     const std::vector<KeyEvent>& Game::get_frame_key_events() {

@@ -25,6 +25,38 @@ CPMAddPackage("gh:fmtlib/fmt#11.2.0")
 set(DISCORD_RPC_NO_GLAZE ON)
 add_subdirectory(discord-presence)
 
+if(WIN32)
+    CPMAddPackage(
+        NAME curl
+        GITHUB_REPOSITORY curl/curl
+        GIT_TAG curl-8_21_0
+        OPTIONS
+            "BUILD_CURL_EXE OFF"
+            "BUILD_STATIC_LIBS ON"
+            "BUILD_TESTING OFF"
+            "BUILD_EXAMPLES OFF"
+            "BUILD_LIBCURL_DOCS OFF"
+            "BUILD_MISC_DOCS OFF"
+            "ENABLE_CURL_MANUAL OFF"
+            "CURL_DISABLE_INSTALL ON"
+            "CURL_USE_SCHANNEL ON"
+            "CURL_USE_OPENSSL OFF"
+            "CURL_USE_LIBPSL OFF"
+            "CURL_USE_LIBSSH2 OFF"
+            "CURL_USE_LIBSSH OFF"
+            "USE_LIBIDN2 OFF"
+            "USE_WIN32_IDN OFF"
+            "USE_NGHTTP2 OFF"
+            "CURL_ZLIB OFF"
+            "CURL_BROTLI OFF"
+            "CURL_ZSTD OFF"
+            "CURL_DISABLE_LDAP ON"
+            "HTTP_ONLY ON"
+    )
+else()
+    find_package(CURL REQUIRED)
+endif()
+
 add_library(stb INTERFACE)
 target_include_directories(stb SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/stb)
 

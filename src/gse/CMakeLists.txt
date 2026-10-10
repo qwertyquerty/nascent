@@ -4,6 +4,7 @@ add_library(gse
     src/Entity.cpp
     src/Game.cpp
     src/KeyEvents.cpp
+    src/TextInput.cpp
     src/Platform.cpp
     src/Scene.cpp
     src/WindowHook.cpp

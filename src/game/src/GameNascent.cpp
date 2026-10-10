@@ -1,7 +1,9 @@
 #include "GameNascent.h"
 
+#include "Account.h"
 #include "InputManager.h"
 #include "olcPixelGameEngine.h"
+#include "SceneAccount.h"
 #include "SceneList.h"
 #include "discord-rpc.hpp"
 #include "SettingsManager.h"
@@ -25,6 +27,7 @@ namespace nascent {
 
     void GameNascent::init() {
         SettingsManager::load();
+        Account::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
 
         olc::Font::init();
@@ -37,7 +40,12 @@ namespace nascent {
         skin = std::make_unique<Skin>(this, "default", 7);
         scene_list = std::make_unique<SceneList>(skin.get());
 
-        set_scene(scene_list.get());
+        if (Account::signed_in()) {
+            set_scene(scene_list.get());
+        }
+        else {
+            set_scene(std::make_unique<SceneAccount>(skin.get(), scene_list.get()));
+        }
 
         discord_init();
         discord_update();
