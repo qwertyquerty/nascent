@@ -19,34 +19,49 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows MSVC
+          - name: Windows MSVC x86_64
             os: windows-latest
             shell: pwsh
             cc: cl
             cxx: cl
-          - name: Windows Clang
+          - name: Windows Clang x86_64
             os: windows-latest
             shell: pwsh
             cc: clang-cl
             cxx: clang-cl
-          - name: Windows MinGW GCC
+          - name: Windows MinGW GCC x86_64
             os: windows-latest
             shell: msys2 {0}
             msys2: true
             cc: gcc
             cxx: g++
-          - name: Linux GCC
+          - name: Linux GCC x86_64
             os: ubuntu-24.04
             shell: bash
             cc: gcc
             cxx: g++
-          - name: Linux Clang
+          - name: Linux Clang x86_64
             os: ubuntu-24.04
             shell: bash
             cc: clang
             cxx: clang++
-          - name: macOS Clang
+          - name: Linux GCC arm64
+            os: ubuntu-24.04-arm
+            shell: bash
+            cc: gcc
+            cxx: g++
+          - name: Linux Clang arm64
+            os: ubuntu-24.04-arm
+            shell: bash
+            cc: clang
+            cxx: clang++
+          - name: macOS Clang arm64
             os: macos-15
+            shell: bash
+            cc: clang
+            cxx: clang++
+          - name: macOS Clang x86_64
+            os: macos-15-intel
             shell: bash
             cc: clang
             cxx: clang++

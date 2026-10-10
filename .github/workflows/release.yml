@@ -43,14 +43,13 @@ jobs:
             cc: clang
             cxx: clang++
             osx_arch: arm64
-          - os: macos-15
+          - os: macos-15-intel
             os_name: mac
             arch: x86_64
             shell: bash
             cc: clang
             cxx: clang++
             osx_arch: x86_64
-            cross: true
 
     defaults:
       run:
@@ -92,7 +91,6 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Test
-        if: ${{ !matrix.cross }}
         run: ctest --test-dir build --output-on-failure
 
       - name: Package
