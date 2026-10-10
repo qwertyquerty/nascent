@@ -1,0 +1,9 @@
+- name: Import an osu!mania map as ranked charts
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Import {{ url | default('') }}
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: import_osu
