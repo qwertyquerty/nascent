@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import click
+import nascent_core as nc
 from flask import current_app
 from flask.cli import AppGroup
 from sqlalchemy import delete, select
@@ -17,6 +18,8 @@ from .services.calculator import calculator_version
 from .services.charts import get_chart, parse_chart, register_chart, set_chart_status
 
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
+
+CHART_SUFFIXES = (".osu", ".json")
 
 
 def _report(job: str | None, done: str) -> None:
@@ -55,16 +58,23 @@ def set_role(username: str, role: str):
     click.echo(f"{username} is now {role}")
 
 
+def _read_chart_file(file: Path) -> dict:
+    if file.suffix.lower() == ".osu":
+        return json.loads(nc.convert_osu(file.read_text(encoding="utf-8", errors="replace")))
+
+    return json.loads(file.read_text(encoding="utf-8"))
+
+
 @nascent_cli.command("import-charts")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--rank", is_flag=True, help="Rank every imported chart")
 def import_charts(path: Path, rank: bool):
-    files = [path] if path.is_file() else sorted(path.rglob("*.json"))
+    files = [path] if path.is_file() else sorted(file for file in path.rglob("*") if file.suffix.lower() in CHART_SUFFIXES)
     imported = 0
 
     for file in files:
         try:
-            native = parse_chart(json.loads(file.read_text(encoding="utf-8")))
+            native = parse_chart(_read_chart_file(file))
             chart, created = register_chart(native, None)
             changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank else False
         except (ApiError, ValueError) as error:

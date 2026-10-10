@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <unordered_set>
 #include <utility>
 
 namespace nascent {
@@ -294,6 +295,12 @@ namespace nascent {
         };
 
         std::vector<LoadedChart> loaded;
+        std::unordered_set<std::string> loaded_hashes;
+
+        auto extension_rank = [](const std::filesystem::path& path) {
+            auto found = std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), path.extension().string());
+            return (size_t)(found - CHART_FILE_EXTENSIONS.begin());
+        };
 
         for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
             if (!chart_folder.is_directory(ec)) {
@@ -308,16 +315,28 @@ namespace nascent {
                 }
             }
 
+            std::vector<std::filesystem::path> chart_files;
+
             for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder.path(), ec)) {
-                if (chart_file.path().extension() != CHART_FILE_EXTENSION) {
+                if (extension_rank(chart_file.path()) < CHART_FILE_EXTENSIONS.size()) {
+                    chart_files.push_back(chart_file.path());
+                }
+            }
+
+            std::sort(chart_files.begin(), chart_files.end(), [&](const std::filesystem::path& a, const std::filesystem::path& b) {
+                return std::make_pair(extension_rank(a), a) < std::make_pair(extension_rank(b), b);
+            });
+
+            for (const std::filesystem::path& chart_path : chart_files) {
+                std::string error;
+                std::unique_ptr<Chart> chart = Chart::load(chart_path, pitch, error);
+
+                if (chart == nullptr) {
+                    std::cerr << "Skipping chart " << chart_path.string() << ": " << error << std::endl;
                     continue;
                 }
 
-                std::string error;
-                std::unique_ptr<Chart> chart = Chart::load(chart_file.path(), pitch, error);
-
-                if (chart == nullptr) {
-                    std::cerr << "Skipping chart " << chart_file.path().string() << ": " << error << std::endl;
+                if (!loaded_hashes.insert(chart->gameplay_hash()).second) {
                     continue;
                 }
 

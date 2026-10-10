@@ -2,12 +2,14 @@
 #include "Hit.h"
 #include "Accuracy.h"
 #include "Const.h"
+#include "OsuFormat.h"
 #include "Sha256.h"
 
 #include <algorithm>
 #include <cmath>
 #include <format>
 #include <fstream>
+#include <iterator>
 #include <tuple>
 
 namespace nascent {
@@ -60,21 +62,33 @@ namespace nascent {
     }
 
     std::unique_ptr<Chart> Chart::load(const std::filesystem::path& path, float pitch, std::string& error) {
-        std::ifstream ifs(path);
+        std::ifstream ifs(path, std::ios::binary);
 
         if (!ifs) {
             error = "could not open file";
             return nullptr;
         }
 
+        std::string text((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
         nlohmann::json jdata;
 
-        try {
-            jdata = nlohmann::json::parse(ifs);
+        if (path.extension() == OSU_FILE_EXTENSION) {
+            std::optional<nlohmann::json> converted = osu_to_chart_json(text, error);
+
+            if (!converted) {
+                return nullptr;
+            }
+
+            jdata = std::move(*converted);
         }
-        catch (const nlohmann::json::exception& e) {
-            error = e.what();
-            return nullptr;
+        else {
+            try {
+                jdata = nlohmann::json::parse(text);
+            }
+            catch (const nlohmann::json::exception& e) {
+                error = e.what();
+                return nullptr;
+            }
         }
 
         std::unique_ptr<Chart> chart = parse(jdata, pitch, error);
@@ -84,7 +98,7 @@ namespace nascent {
         }
 
         try {
-            chart->json_path = path;
+            chart->file_path = path;
             chart->audio_path = path.parent_path() / chart->unpitched_info.audio_file;
             chart->image_path = path.parent_path() / chart->unpitched_info.image_file;
             (void)chart->audio_path.string();

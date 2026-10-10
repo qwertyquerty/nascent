@@ -1,12 +1,13 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string_view>
 
 namespace nascent {
-    inline constexpr std::string_view CHART_FILE_EXTENSION = ".json";
+    inline constexpr std::array<std::string_view, 2> CHART_FILE_EXTENSIONS = {".osu", ".json"};
 
     inline constexpr int32_t PITCH_STEPS_PER_UNIT = 20;
     inline constexpr float PITCH_INTERVAL = 1.0f / PITCH_STEPS_PER_UNIT;

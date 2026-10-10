@@ -2,6 +2,7 @@
 #include "Chart.h"
 #include "Const.h"
 #include "DifficultyCalculator.h"
+#include "OsuFormat.h"
 #include "Replay.h"
 #include "Results.h"
 #include "SettingsStore.h"
@@ -15,6 +16,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -134,6 +136,37 @@ static void test_gameplay_hash() {
 
     std::unique_ptr<Chart> chart = make_chart(hits);
     CHECK(Chart::parse(chart->serialize(), 1.0f, error)->gameplay_hash() == hash);
+}
+
+static void test_osu_conversion() {
+    std::string text =
+        "osu file format v14\n\n[General]\nAudioFilename: audio.mp3\nMode: 3\n\n[Metadata]\nTitle:Song\nArtist:Someone\nCreator:Mapper\nVersion:Hard\n\n"
+        "[Difficulty]\nCircleSize:4\nOverallDifficulty:8\n\n[Events]\n0,0,\"bg, one.jpg\",0,0\n\n"
+        "[TimingPoints]\n0,500,4,1,0,100,1,0\n1000,-100,4,1,0,100,0,0\n\n[HitObjects]\n448,192,2000,1,0,0:0:0:0:\n64,192,1000,128,0,1500:0:0:0:0:\n";
+    std::string error;
+    std::optional<nlohmann::json> converted = osu_to_chart_json(text, error);
+    CHECK(converted.has_value());
+
+    if (!converted) {
+        return;
+    }
+
+    std::unique_ptr<Chart> chart = Chart::parse(*converted, 1.0f, error);
+    CHECK(chart != nullptr);
+
+    if (chart == nullptr) {
+        return;
+    }
+
+    CHECK(chart->info.key_count == 4);
+    CHECK(chart->info.image_file == "bg, one.jpg");
+    CHECK(chart->timing_points.size() == 1);
+    CHECK(chart->hits[0].key == 0 && chart->hits[0].hit_type == HitType::HOLD && chart->hits[0].end_time == 1500);
+    CHECK(chart->hits[1].key == 3 && chart->hits[1].time == 2000);
+
+    std::string mode_error;
+    CHECK(!osu_to_chart_json("osu file format v14\n[General]\nMode: 0\n", mode_error).has_value());
+    CHECK(mode_error == "not an osu!mania beatmap");
 }
 
 static void test_replays() {
@@ -284,6 +317,7 @@ int main() {
         {"chart_loading", test_chart_loading},
         {"judging", test_judging},
         {"gameplay_hash", test_gameplay_hash},
+        {"osu_conversion", test_osu_conversion},
         {"replays", test_replays},
         {"settings", test_settings},
         {"difficulty", test_difficulty},

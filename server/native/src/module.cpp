@@ -3,6 +3,7 @@
 #include "Chart.h"
 #include "Const.h"
 #include "DifficultyCalculator.h"
+#include "OsuFormat.h"
 #include "Replay.h"
 #include "Results.h"
 
@@ -11,6 +12,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -274,4 +276,18 @@ PYBIND11_MODULE(nascent_core, m) {
     m.def("performance", &performance_for, py::arg("difficulty"), py::arg("accuracy"));
     m.def("grade", [](double accuracy) { return std::string(grade_name(grade_for_accuracy(accuracy))); }, py::arg("accuracy"));
     m.def("difficulty_parameters", []() { return nlohmann::json(DifficultyParameters{}).dump(); });
+    m.def(
+        "convert_osu",
+        [](const std::string& text) {
+            std::string error;
+            std::optional<nlohmann::json> chart = osu_to_chart_json(text, error);
+
+            if (!chart) {
+                throw py::value_error(error);
+            }
+
+            return chart->dump();
+        },
+        py::arg("text")
+    );
 }

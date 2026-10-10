@@ -6,6 +6,7 @@ add_library(core
     src/Chart.cpp
     src/DifficultyCalculator.cpp
     src/Hit.cpp
+    src/OsuFormat.cpp
     src/PlaySession.cpp
     src/Replay.cpp
     src/Results.cpp

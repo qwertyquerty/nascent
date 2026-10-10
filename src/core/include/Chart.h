@@ -51,7 +51,7 @@ namespace nascent {
         bool validate_and_prepare(std::string& error);
 
         public:
-        std::filesystem::path json_path;
+        std::filesystem::path file_path;
         std::filesystem::path audio_path;
         std::filesystem::path image_path;
 

@@ -43,11 +43,11 @@ namespace nascent {
         AttemptSummary summary = summarize_attempt(attempt, DifficultyCalculator::calculate(*chart));
 
         std::error_code ec;
-        std::filesystem::path relative = std::filesystem::relative(chart->json_path, SettingsManager::settings.list_song_directory, ec);
+        std::filesystem::path relative = std::filesystem::relative(chart->file_path, SettingsManager::settings.list_song_directory, ec);
 
         ReplayChart replay_chart;
-        replay_chart.path = (ec || relative.empty() ? chart->json_path : relative).generic_string();
-        replay_chart.sha256 = sha256_file_hex(chart->json_path).value_or("");
+        replay_chart.path = (ec || relative.empty() ? chart->file_path : relative).generic_string();
+        replay_chart.sha256 = sha256_file_hex(chart->file_path).value_or("");
         replay_chart.title = chart->info.title;
         replay_chart.artist = chart->info.artist;
         replay_chart.difficulty_name = chart->info.difficulty_name;
