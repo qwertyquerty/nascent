@@ -176,12 +176,15 @@ namespace nascent {
                 break;
         }
 
-        std::string hint = username.empty() ? "F4  sign in" : "F4  account";
+        std::string account_hint = username.empty() ? "F4  sign in" : "F4  account";
+        std::string calibration_hint = "F3  calibration";
         int32_t right = screen.x - PADDING;
-        int32_t hint_x = right - width(hint);
-        int32_t status_x = hint_x - SEGMENT_GAP - width(status);
+        int32_t account_hint_x = right - width(account_hint);
+        int32_t calibration_hint_x = account_hint_x - SEGMENT_GAP - width(calibration_hint);
+        int32_t status_x = calibration_hint_x - SEGMENT_GAP - width(status);
 
-        font.DrawString(hint, {hint_x, baseline}, olc::GREY);
+        font.DrawString(account_hint, {account_hint_x, baseline}, olc::GREY);
+        font.DrawString(calibration_hint, {calibration_hint_x, baseline}, olc::GREY);
         font.DrawString(status, {status_x, baseline}, olc::WHITE);
         window->FillCircle({status_x - LABEL_GAP - DOT_RADIUS * 2, top + HEIGHT / 2}, DOT_RADIUS, status_color);
     }
