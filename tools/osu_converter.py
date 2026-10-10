@@ -1,70 +1,104 @@
-import osu_parser
-import sys
+import csv
 import json
 import os
+import sys
 
-if os.path.isdir(sys.argv[1]):
-    files = []
+HOLD = 1 << 7
+MANIA = 3
 
-    for root, dirs, fs in os.walk(sys.argv[1]):
-        for file in fs:
-            if file.endswith(".osu"):
-                full_path = os.path.join(root, file)
-                files.append(full_path)
 
-else:
-    files = [sys.argv[1]]
+def read_sections(path: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current = None
 
-for in_file in files:
-    if not in_file.endswith(".osu"):
-        continue
+    with open(path, encoding="utf-8") as file:
+        for line in file.read().splitlines():
+            if not line or line.startswith("//"):
+                continue
 
-    osu_map = osu_parser.Map(in_file)
+            if line.startswith("[") and line.endswith("]"):
+                current = sections.setdefault(line[1:-1], [])
+            elif current is not None:
+                current.append(line)
 
-    map_json = {"info": {}, "timing_points": [], "hit_objects": []}
+    return sections
 
-    png = ""
 
-    for event in osu_map.events:
-        if event.event_type == "0":
-            png = event.event_params[0]
-            break
+def key_values(lines: list[str]) -> dict[str, str]:
+    return {key.strip(): value.strip() for key, _, value in (line.partition(":") for line in lines)}
 
-    map_json["info"] = {
-        "title": osu_map.metadata["Title"],
-        "title_unicode": osu_map.metadata["TitleUnicode"],
-        "artist": osu_map.metadata["Artist"],
-        "artist_unicode": osu_map.metadata["ArtistUnicode"],
-        "mapper": osu_map.metadata["Creator"],
-        "difficulty_name": osu_map.metadata["Version"],
-        "audio_file": osu_map.general["AudioFilename"],
-        "audio_lead_in": int(osu_map.general["AudioLeadIn"]),
-        "preview_time": int(osu_map.general["PreviewTime"]),
-        "hit_accuracy": max(int(round((float(osu_map.difficulty["OverallDifficulty"])), 0)) - 4, 0),
-        "key_count": int(osu_map.difficulty["CircleSize"]),
-        "damage": int(round((float(osu_map.difficulty["HPDrainRate"])), 0)),
-        "image_file": png
+
+def rows(lines: list[str]) -> list[list[str]]:
+    return list(csv.reader(lines))
+
+
+def convert(path: str) -> dict | None:
+    sections = read_sections(path)
+    general = key_values(sections.get("General", []))
+
+    if int(general.get("Mode", 0)) != MANIA:
+        return None
+
+    metadata = key_values(sections.get("Metadata", []))
+    difficulty = key_values(sections.get("Difficulty", []))
+    key_count = int(difficulty["CircleSize"])
+    background = next((row[2] for row in rows(sections.get("Events", [])) if row[0] == "0"), "")
+
+    hit_objects = []
+
+    for row in rows(sections.get("HitObjects", [])):
+        hold = int(row[3]) & HOLD
+        hit_objects.append(
+            {
+                "key": int(row[0]) * key_count // 512,
+                "time": int(row[2]),
+                "hit_type": 1 if hold else 0,
+                "end_time": int(row[5].split(":")[0]) if hold else 0,
+            }
+        )
+
+    return {
+        "info": {
+            "title": metadata["Title"],
+            "title_unicode": metadata["TitleUnicode"],
+            "artist": metadata["Artist"],
+            "artist_unicode": metadata["ArtistUnicode"],
+            "mapper": metadata["Creator"],
+            "difficulty_name": metadata["Version"],
+            "audio_file": general["AudioFilename"],
+            "audio_lead_in": int(general["AudioLeadIn"]),
+            "preview_time": int(general["PreviewTime"]),
+            "hit_accuracy": max(int(round(float(difficulty["OverallDifficulty"]), 0)) - 4, 0),
+            "key_count": key_count,
+            "damage": int(round(float(difficulty["HPDrainRate"]), 0)),
+            "image_file": background,
+        },
+        "timing_points": [
+            {"time": int(float(row[0])), "beat_length": float(row[1]), "meter": int(row[2])}
+            for row in rows(sections.get("TimingPoints", []))
+            if len(row) <= 6 or int(row[6])
+        ],
+        "hit_objects": sorted(hit_objects, key=lambda hit: (hit["time"], hit["key"])),
     }
 
-    for timing_point in osu_map.timing_points:
-        if timing_point.uninherited:
-            map_json["timing_points"].append({
-                "time": timing_point.time,
-                "beat_length": timing_point.beat_length,
-                "meter": timing_point.meter
-            })
 
-    for hit_object in osu_map.hit_objects:
-        map_json["hit_objects"].append({
-            "key": hit_object.key,
-            "time": hit_object.time,
-            "hit_type": int(bool(hit_object.hit_type & osu_parser.HIT_TYPE_HOLD)),
-            "end_time": hit_object.end_time or 0
-        })
+def main() -> None:
+    target = sys.argv[1]
+    paths = [os.path.join(base, name) for base, _, names in os.walk(target) for name in names] if os.path.isdir(target) else [target]
 
-    map_json["hit_objects"] = sorted(map_json["hit_objects"], key=lambda l: (l["time"], l["key"]))
+    for path in paths:
+        if not path.endswith(".osu"):
+            continue
 
-    out_file = in_file + ".json"
+        chart = convert(path)
 
-    with open(out_file, "w") as f:
-        json.dump(map_json, f, indent=2)
+        if chart is None:
+            print(f"skipped {path}: not an osu!mania beatmap")
+            continue
+
+        with open(path + ".json", "w") as file:
+            json.dump(chart, file, indent=2)
+
+
+if __name__ == "__main__":
+    main()
