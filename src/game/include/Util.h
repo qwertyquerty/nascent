@@ -1,71 +1,30 @@
-#include <atomic>
-#include <mutex>
-#include <condition_variable>
-
 #pragma once
+
+#include "olcPixelGameEngine.h"
+
+#include <memory>
 
 namespace nascent {
     float smoothstep(double begin, double end, double t);
-    
+
     inline int positive_modulo(int i, int n) {
         return (i % n + n) % n;
     }
 
-    class LatestWinsMutex {
-    public:
-        // Latest-wins lock: invalidates older waiters
-        bool lock_latest() {
-            std::unique_lock<std::mutex> lk(mutex_);
+    class SpriteDecal {
+        protected:
+        std::unique_ptr<olc::Sprite> sprite;
+        std::unique_ptr<olc::Decal> decal;
 
-            // If a greedy holder exists, wait normally (no invalidation allowed)
-            while (locked_ && greedy_) {
-                cv_.wait(lk);
-            }
+        public:
+        SpriteDecal() = default;
+        explicit SpriteDecal(std::unique_ptr<olc::Sprite> sprite, bool filter = false);
 
-            // Invalidate prior waiters
-            size_t my_generation = ++generation_;
+        static SpriteDecal adopt(olc::Decal* decal);
 
-            while (true) {
-                if (my_generation != generation_) {
-                    return false; // invalidated by newer waiter
-                }
-
-                if (!locked_) {
-                    locked_ = true;
-                    greedy_ = false;
-                    return true;
-                }
-
-                cv_.wait(lk);
-            }
-        }
-
-        // Try to acquire greedy lock without blocking
-        bool try_lock_greedy() {
-            std::lock_guard<std::mutex> lk(mutex_);
-
-            if (locked_) {
-                return false;
-            }
-
-            locked_ = true;
-            greedy_ = true;
-            return true;
-        }
-
-        void unlock() {
-            std::lock_guard<std::mutex> lk(mutex_);
-            locked_ = false;
-            greedy_ = false;
-            cv_.notify_all();
-        }
-
-    private:
-        std::mutex mutex_;
-        std::condition_variable cv_;
-
-        size_t generation_ = 0;  // protected by mutex_
-        bool locked_ = false;
-        bool greedy_ = false;
+        olc::Decal* get() const;
+        olc::Sprite* get_sprite() const;
+        explicit operator bool() const;
+        void reset();
     };
 }

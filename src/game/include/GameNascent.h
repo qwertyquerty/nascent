@@ -1,19 +1,20 @@
 #pragma once
 
 #include "Game.h"
-#include "SceneTitle.h"
-#include "ScenePlay.h"
+
+#include <cstdint>
+#include <memory>
 
 namespace nascent {
+    class SceneList;
+    class Skin;
+
     class GameNascent : public Game {
         protected:
-        Scene* scene_list;
-        float elapsed_time;
+        std::unique_ptr<Skin> skin;
+        std::unique_ptr<SceneList> scene_list;
+        float elapsed_time = 0;
         int64_t start_time;
-        Skin* skin;
-
-        int foreground_layer = 0;
-        int background_layer;
 
         public:
         bool debug = true;

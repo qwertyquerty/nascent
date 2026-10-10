@@ -63,6 +63,7 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <source_location>
 #include <string>
 #include <unordered_map>
@@ -114,7 +115,14 @@ namespace olc
 
     public: // static variables
         static bool m_background_playback;
+
+    private:
         static std::vector<float> m_engine_buffer;
+        static std::vector<float> m_capture_buffer;
+        static std::mutex m_capture_mutex;
+
+    public:
+        void CopyEngineBuffer(std::vector<float>& out);
 
     public: // configuration
         void SetBackgroundPlay(const bool state);
@@ -318,6 +326,8 @@ namespace olc
 
     bool MiniAudio::m_background_playback = true;
     std::vector<float> MiniAudio::m_engine_buffer;
+    std::vector<float> MiniAudio::m_capture_buffer;
+    std::mutex MiniAudio::m_capture_mutex;
 
     MiniAudio::MiniAudio() : olc::PGEX(true)
     {
@@ -466,10 +476,22 @@ namespace olc
             sample = std::clamp(sample, -1.0f, 1.0f);
         }
 
+        {
+            std::unique_lock<std::mutex> lock(m_capture_mutex, std::try_to_lock);
+            if(lock.owns_lock())
+                m_capture_buffer.assign(m_engine_buffer.begin(), m_engine_buffer.end());
+        }
+
         /**
          * Copy the results to the output buffer
          */
         memcpy(pOutput, m_engine_buffer.data(), m_engine_buffer.size() * sizeof(float));
+    }
+
+    void MiniAudio::CopyEngineBuffer(std::vector<float>& out)
+    {
+        std::lock_guard<std::mutex> lock(m_capture_mutex);
+        out.assign(m_capture_buffer.begin(), m_capture_buffer.end());
     }
 
     void MiniAudio::SetBackgroundPlay(bool state)

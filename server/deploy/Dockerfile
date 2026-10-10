@@ -11,6 +11,7 @@ RUN python -c "import tomllib; project = tomllib.load(open('server/pyproject.tom
 
 COPY src/core src/core
 COPY src/libs/json src/libs/json
+COPY src/libs/picosha2 src/libs/picosha2
 COPY server/native server/native
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels ./server/native
 

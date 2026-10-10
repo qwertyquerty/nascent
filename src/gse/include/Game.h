@@ -1,25 +1,58 @@
 #pragma once
 
+#include "KeyEvents.h"
 #include "Scene.h"
 #include "olcPixelGameEngine.h"
 #include "olcPGEX_MiniAudio.h"
 
+#include <memory>
+#include <vector>
+
 namespace nascent {
     class Game {
         protected:
-        Scene* scene;
+        Scene* scene = nullptr;
+        Scene* pending_scene = nullptr;
         olc::MiniAudio audio;
+        std::unique_ptr<Scene> owned_scene;
+        std::unique_ptr<Scene> pending_owned_scene;
+        Scene* outgoing_scene = nullptr;
+        std::unique_ptr<Scene> outgoing_owned_scene;
+        float transition_time = 0;
+        int32_t transition_layer = -1;
+        KeyEventQueue key_event_queue;
+        std::vector<KeyEvent> frame_key_events;
+        bool key_event_hook_active = false;
+        bool quit_requested = false;
+
+        void init_input();
+        void poll_key_events();
+        void begin_frame(float elapsed_time);
+        void apply_pending_scene();
+        void update_transition(float elapsed_time);
+        void draw_scenes(olc::PixelGameEngine* window);
+        void release_scenes();
 
         public:
         olc::PixelGameEngine* window;
+        float scene_transition_time = 0.35f;
 
         Game(olc::PixelGameEngine* window);
+        virtual ~Game();
         virtual void init() = 0;
         virtual void update(float) = 0;
         virtual void draw(olc::PixelGameEngine*) = 0;
 
         void set_scene(Scene* scene);
-        Scene* get_scene();
+        void set_scene(std::unique_ptr<Scene> scene);
         olc::MiniAudio& get_audio();
+
+        void play_sound(int id, bool looping = false);
+        void stop_sound(int id);
+
+        const std::vector<KeyEvent>& get_frame_key_events();
+
+        void quit();
+        bool should_quit();
     };
 }

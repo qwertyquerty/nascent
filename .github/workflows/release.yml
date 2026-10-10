@@ -96,13 +96,13 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
       - name: Package
-        run: cpack --config build/CPackConfig.cmake -B dist
+        run: cmake --build build --target portable_zip
 
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
           name: nascent-${{ matrix.os_name }}-${{ matrix.arch }}
-          path: dist/*.zip
+          path: build/dist/*.zip
           if-no-files-found: error
 
   release:

@@ -1,0 +1,39 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug launch target (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "Debug launch target (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "Debug launch target (LLDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: build"
+        }
+    ]
+}

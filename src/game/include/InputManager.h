@@ -2,12 +2,19 @@
 
 #include "olcPixelGameEngine.h"
 
+#include <cstdint>
+#include <optional>
+#include <string_view>
+#include <vector>
+
 namespace nascent {
     class InputManager {
         public:
         static const olc::Key pause_key = olc::Key::TAB;
-        
+
         static const olc::Key random_chart_key = olc::Key::F2;
+        static const olc::Key calibration_key = olc::Key::F3;
+        static const olc::Key calibration_reset_key = olc::Key::R;
 
         static const olc::Key menu_up_key = olc::Key::UP;
         static const olc::Key menu_down_key = olc::Key::DOWN;
@@ -22,6 +29,10 @@ namespace nascent {
 
         static const olc::Key keybind_mod1 = olc::Key::SHIFT;
 
-        static uint32_t get_lane_keys_pressed(olc::PixelGameEngine* window, uint8_t key_count);
+        static std::optional<olc::Key> key_from_name(std::string_view name);
+        static std::vector<olc::Key> default_lane_keys(uint8_t key_count);
+        static std::vector<olc::Key> get_lane_keys(uint8_t key_count);
+        static std::optional<uint8_t> get_lane(const std::vector<olc::Key>& lane_keys, olc::Key key);
+        static uint32_t get_lane_keys_held(olc::PixelGameEngine* window, const std::vector<olc::Key>& lane_keys);
     };
 }

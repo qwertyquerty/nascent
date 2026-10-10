@@ -1,6 +1,7 @@
 *
 !src/core
 !src/libs/json
+!src/libs/picosha2
 !server/native
 !server/pyproject.toml
 !server/nascent_server

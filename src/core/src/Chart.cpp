@@ -1,11 +1,17 @@
 #include "Chart.h"
 #include "Hit.h"
+#include "Accuracy.h"
+#include "Const.h"
+#include "Sha256.h"
 
+#include <algorithm>
+#include <cmath>
+#include <format>
 #include <fstream>
-#include <iostream>
+#include <tuple>
 
 namespace nascent {
-    void from_json(const json& j, ChartInfo& p) {
+    void from_json(const nlohmann::json& j, ChartInfo& p) {
         j.at("title").get_to(p.title);
         j.at("title_unicode").get_to(p.title_unicode);
         j.at("artist").get_to(p.artist);
@@ -21,8 +27,8 @@ namespace nascent {
         j.at("damage").get_to(p.damage);
     }
 
-    void to_json(json& j, const ChartInfo& p) {
-        j = json{
+    void to_json(nlohmann::json& j, const ChartInfo& p) {
+        j = nlohmann::json{
             {"title", p.title},
             {"title_unicode", p.title_unicode},
             {"artist", p.artist},
@@ -39,98 +45,265 @@ namespace nascent {
         };
     }
 
-    void from_json(const json& j, Hit& p) {
-        j.at("key").get_to(p.key);
-        j.at("hit_type").get_to(p.hit_type);
-        j.at("time").get_to(p.time);
-        j.at("end_time").get_to(p.end_time);
-    }
-    
-    void to_json(json& j, const Hit& p) {
-        j = json{
-            {"key", p.key},
-            {"hit_type", p.hit_type},
-            {"time", p.time},
-            {"end_time", p.end_time}
-        };
-    }
-    
-    void from_json(const json& j, ChartTimingPoint& p) {
+    void from_json(const nlohmann::json& j, ChartTimingPoint& p) {
         j.at("time").get_to(p.time);
         j.at("beat_length").get_to(p.beat_length);
         j.at("meter").get_to(p.meter);
     }
-    
-    void to_json(json& j, const ChartTimingPoint& p) {
-        j = json{
+
+    void to_json(nlohmann::json& j, const ChartTimingPoint& p) {
+        j = nlohmann::json{
             {"time", p.time},
             {"beat_length", p.beat_length},
             {"meter", p.meter}
         };
     }
 
-    Chart::Chart(const std::string& path, float pitch) {
-        json_path = boost::filesystem::path(path);
+    std::unique_ptr<Chart> Chart::load(const std::filesystem::path& path, float pitch, std::string& error) {
+        std::ifstream ifs(path);
 
-        std::ifstream ifs(json_path.string());
-
-        json jdata = json::parse(ifs);
-
-        unpitched_info = jdata["info"].template get<ChartInfo>();
-
-        json jhits = jdata["hit_objects"];
-        hits = std::vector<Hit>();
-
-        for (json::iterator it = jhits.begin(); it != jhits.end(); ++it) {
-            Hit hit;
-            hit = it->template get<Hit>();
-            unpitched_hits.push_back(hit);
+        if (!ifs) {
+            error = "could not open file";
+            return nullptr;
         }
 
-        json jtps = jdata["timing_points"];
-        unpitched_timing_points = std::vector<ChartTimingPoint>();
+        nlohmann::json jdata;
 
-        for (json::iterator it = jtps.begin(); it != jtps.end(); ++it) {
-            ChartTimingPoint tp;
-            tp = it->template get<ChartTimingPoint>();
-            unpitched_timing_points.push_back(tp);
+        try {
+            jdata = nlohmann::json::parse(ifs);
+        }
+        catch (const nlohmann::json::exception& e) {
+            error = e.what();
+            return nullptr;
         }
 
-        set_pitch(pitch);
+        std::unique_ptr<Chart> chart = parse(jdata, pitch, error);
 
-        audio_path = json_path.parent_path() / info.audio_file;
-        image_path = json_path.parent_path() / info.image_file;
+        if (chart == nullptr) {
+            return nullptr;
+        }
+
+        try {
+            chart->json_path = path;
+            chart->audio_path = path.parent_path() / chart->unpitched_info.audio_file;
+            chart->image_path = path.parent_path() / chart->unpitched_info.image_file;
+            (void)chart->audio_path.string();
+            (void)chart->image_path.string();
+        }
+        catch (const std::exception& e) {
+            error = std::format("invalid audio or image path: {}", e.what());
+            return nullptr;
+        }
+
+        return chart;
+    }
+
+    std::unique_ptr<Chart> Chart::parse(const nlohmann::json& data, float pitch, std::string& error) {
+        std::unique_ptr<Chart> chart(new Chart());
+
+        try {
+            data.at("info").get_to(chart->unpitched_info);
+            data.at("hit_objects").get_to(chart->unpitched_hits);
+            data.at("timing_points").get_to(chart->unpitched_timing_points);
+        }
+        catch (const nlohmann::json::exception& e) {
+            error = e.what();
+            return nullptr;
+        }
+
+        if (!chart->validate_and_prepare(error)) {
+            return nullptr;
+        }
+
+        chart->set_pitch(pitch);
+
+        return chart;
+    }
+
+    nlohmann::json Chart::serialize() const {
+        return nlohmann::json{
+            {"info", unpitched_info},
+            {"hit_objects", unpitched_hits},
+            {"timing_points", unpitched_timing_points}
+        };
+    }
+
+    std::string Chart::gameplay_hash() const {
+        std::vector<Hit> sorted_hits = unpitched_hits;
+
+        std::sort(sorted_hits.begin(), sorted_hits.end(), [](const Hit& a, const Hit& b) {
+            int32_t a_end = a.hit_type == HitType::HOLD ? a.end_time : a.time;
+            int32_t b_end = b.hit_type == HitType::HOLD ? b.end_time : b.time;
+            return std::tie(a.time, a.key, a.hit_type, a_end) < std::tie(b.time, b.key, b.hit_type, b_end);
+        });
+
+        std::string canonical = std::format(
+            "{}\nkeys {}\naccuracy {}\ndamage {}\nhits {}\n",
+            CHART_HASH_FORMAT,
+            unpitched_info.key_count,
+            unpitched_info.hit_accuracy,
+            unpitched_info.damage,
+            sorted_hits.size()
+        );
+
+        for (const Hit& hit : sorted_hits) {
+            if (hit.hit_type == HitType::HOLD) {
+                canonical += std::format("{} {} hold {}\n", hit.time, hit.key, hit.end_time);
+            }
+            else {
+                canonical += std::format("{} {} tap\n", hit.time, hit.key);
+            }
+        }
+
+        canonical += std::format("timing {}\n", unpitched_timing_points.size());
+
+        for (const ChartTimingPoint& tp : unpitched_timing_points) {
+            canonical += std::format("{} {} {}\n", tp.time, tp.beat_length, tp.meter);
+        }
+
+        return sha256_hex(canonical);
+    }
+
+    std::unique_ptr<Chart> Chart::create(const ChartInfo& info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string& error) {
+        std::unique_ptr<Chart> chart(new Chart());
+        chart->unpitched_info = info;
+        chart->unpitched_hits = std::move(hits);
+        chart->unpitched_timing_points = std::move(timing_points);
+
+        if (!chart->validate_and_prepare(error)) {
+            return nullptr;
+        }
+
+        chart->set_pitch(1.0f);
+
+        return chart;
+    }
+
+    bool Chart::validate_and_prepare(std::string& error) {
+        ChartInfo& info = unpitched_info;
+
+        if (info.key_count == 0 || info.key_count > MAX_LANES) {
+            error = std::format("key_count {} is outside 1-{}", info.key_count, MAX_LANES);
+            return false;
+        }
+
+        if (unpitched_hits.empty()) {
+            error = "chart has no hit objects";
+            return false;
+        }
+
+        for (const Hit& hit : unpitched_hits) {
+            if (hit.key >= info.key_count) {
+                error = std::format("hit at {}ms is in lane {} but key_count is {}", hit.time, hit.key, info.key_count);
+                return false;
+            }
+
+            if (hit.hit_type == HitType::HOLD && hit.end_time < hit.time) {
+                error = std::format("hold at {}ms ends before it starts", hit.time);
+                return false;
+            }
+        }
+
+        for (const ChartTimingPoint& tp : unpitched_timing_points) {
+            if (!(tp.beat_length > 0) || tp.meter == 0) {
+                error = std::format("timing point at {}ms has an invalid beat_length or meter", tp.time);
+                return false;
+            }
+        }
+
+        info.hit_accuracy = std::min(info.hit_accuracy, MAX_HIT_ACC_DIFFICULTY);
+
+        std::stable_sort(unpitched_hits.begin(), unpitched_hits.end(), [](const Hit& a, const Hit& b) {
+            return a.time < b.time;
+        });
+
+        std::stable_sort(unpitched_timing_points.begin(), unpitched_timing_points.end(), [](const ChartTimingPoint& a, const ChartTimingPoint& b) {
+            return a.time < b.time;
+        });
+
+        return true;
     }
 
     void Chart::set_pitch(float pitch) {
         this->pitch = pitch;
 
-        info.audio_lead_in = unpitched_info.audio_lead_in / pitch;
-
+        info = unpitched_info;
         hits = unpitched_hits;
         timing_points = unpitched_timing_points;
-        info = unpitched_info;
+
+        info.audio_lead_in = (int32_t)(unpitched_info.audio_lead_in / pitch);
 
         for (Hit& hit : hits) {
-            hit.time /= pitch;
-            hit.end_time /= pitch;
+            hit.time = (int32_t)(hit.time / pitch);
+            hit.end_time = (int32_t)(hit.end_time / pitch);
         }
 
         for (ChartTimingPoint& tp : timing_points) {
             tp.beat_length /= pitch;
-            tp.time /= pitch;
+            tp.time = (int32_t)(tp.time / pitch);
         }
     }
 
-    uint32_t Chart::get_duration_ms() {
-        return get_chart_start_ms() - get_chart_end_ms();
+    int32_t Chart::get_duration_ms() const {
+        return get_chart_end_ms() - get_chart_start_ms();
     }
 
-    uint32_t Chart::get_chart_end_ms() {
-        return hits.back().hit_type == HitType::HOLD ? hits.back().end_time : hits.back().time;
+    int32_t Chart::get_chart_end_ms() const {
+        int32_t end = 0;
+
+        for (const Hit& hit : hits) {
+            end = std::max(end, hit.hit_type == HitType::HOLD ? hit.end_time : hit.time);
+        }
+
+        return end;
     }
 
-    uint32_t Chart::get_chart_start_ms() {
-        return hits[0].time;
+    int32_t Chart::get_chart_start_ms() const {
+        return hits.empty() ? 0 : hits.front().time;
+    }
+
+    const ChartTimingPoint* Chart::timing_point_at(double time) const {
+        auto it = std::upper_bound(timing_points.begin(), timing_points.end(), time, [](double t, const ChartTimingPoint& tp) {
+            return t < tp.time;
+        });
+
+        return it == timing_points.begin() ? nullptr : &*(it - 1);
+    }
+
+    uint32_t Chart::section_beat_at(double time) const {
+        const ChartTimingPoint* tp = timing_point_at(time);
+        return tp != nullptr ? (uint32_t)((time - tp->time) / tp->beat_length) : 0;
+    }
+
+    uint8_t Chart::meter_beat_at(double time) const {
+        const ChartTimingPoint* tp = timing_point_at(time);
+        return tp != nullptr ? (uint8_t)(section_beat_at(time) % tp->meter) : 0;
+    }
+
+    float Chart::beat_progress_at(double time) const {
+        const ChartTimingPoint* tp = timing_point_at(time);
+
+        if (tp == nullptr) {
+            return 0.0f;
+        }
+
+        double beats = (time - tp->time) / tp->beat_length;
+        return (float)(beats - std::floor(beats));
+    }
+
+    uint32_t Chart::held_lanes_at(double time) const {
+        uint32_t lanes = 0;
+
+        for (const Hit& hit : hits) {
+            if (hit.time > time) {
+                break;
+            }
+
+            if (hit.hit_type == HitType::HOLD && hit.end_time > time) {
+                lanes |= (1u << hit.key);
+            }
+        }
+
+        return lanes;
     }
 }

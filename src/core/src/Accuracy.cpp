@@ -1,20 +1,22 @@
 #include "Accuracy.h"
 
-namespace nascent{
+#include <algorithm>
+
+namespace nascent {
     uint16_t get_window_from_hit_acc_diff(HitScore score, uint8_t hit_acc_diff, bool release) {
-        return std::min(
-            (uint16_t) (HIT_SCORE_BASE_WINDOW.at(score)
-                * (MAX_HIT_ACC_DIFFICULTY + (MAX_HIT_ACC_DIFFICULTY - hit_acc_diff))
-                / MAX_HIT_ACC_DIFFICULTY),
-            (uint16_t) MAX_BAD_WINDOW_SIZE
-        ) * (release ? HOLD_RELEASE_WINDOW_MULTIPLIER : 1);
+        int32_t difficulty = std::clamp<int32_t>(hit_acc_diff, MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY);
+        int32_t base_window = HIT_SCORE_BASE_WINDOWS.at((size_t)score);
+
+        int32_t window = std::min<int32_t>(
+            base_window * (MAX_HIT_ACC_DIFFICULTY + (MAX_HIT_ACC_DIFFICULTY - difficulty)) / MAX_HIT_ACC_DIFFICULTY,
+            MAX_BAD_WINDOW_SIZE
+        );
+
+        return (uint16_t)(window * (release ? HOLD_RELEASE_WINDOW_MULTIPLIER : 1));
     }
 
-    /**
-     * Return HitScore from a hit error and an accuracy difficulty, returns HitScore::NONE if the note isn't hit at all (outside of miss range)
-     */
     HitScore get_score_from_hit_err(uint32_t error, uint8_t hit_acc_diff, bool release) {
-        for (HitScore score = HitScore::PERFECT; score <= HitScore::BAD; score = (HitScore)(score+1)) {
+        for (HitScore score : TIMED_HIT_SCORES) {
             if (error <= get_window_from_hit_acc_diff(score, hit_acc_diff, release)) {
                 return score;
             }

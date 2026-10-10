@@ -1,33 +1,46 @@
 #pragma once
 
 #include "Scene.h"
-#include "Chart.h"
-#include "Game.h"
-#include "EntityField.h"
-#include "EntityFFT.h"
-#include "Skin.h"
+#include "olcPixelGameEngine.h"
+
+#include <memory>
+#include <vector>
 
 namespace nascent {
+    class Chart;
+    class EntityField;
+    class PlaySession;
+    class Skin;
+
     class ScenePlay : public Scene {
         protected:
         Chart* chart;
-        EntityField* field;
+        std::unique_ptr<PlaySession> session;
+        std::unique_ptr<EntityField> field;
+        std::vector<olc::Key> lane_keys;
 
-        int chart_audio_id;
+        int chart_audio_id = -1;
 
         Skin* skin;
+        Scene* return_scene;
 
         double timer = 0;
+        double paused_position = 0;
 
         bool chart_started = false;
         bool paused = false;
+        bool finished = false;
+        bool audio_finished = false;
 
-        uint64_t frame_pos = 0;
+        void pause(double now);
+        void resume(double now);
+        void finish();
 
         public:
-        ScenePlay(Chart* chart, Skin* skin);
+        ScenePlay(Chart* chart, Skin* skin, Scene* return_scene);
         ~ScenePlay();
         void init(Game*) override;
+        void on_exit() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };

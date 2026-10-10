@@ -1,50 +1,46 @@
-#define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
 
-#define OLC_PGEX_MINIAUDIO
-#include "olcPGEX_MiniAudio.h"
-
-#define OLC_PGEX_TTF
-#include "olcPGEX_TTF.h"
-
 #include "GameNascent.h"
+#include "Platform.h"
 
 using namespace nascent;
 
-class NascentMain : public olc::PixelGameEngine
-{
-	GameNascent game;
-    
-public:
-NascentMain() : game(this)
-	{
-		sAppName = "Nascent";
-	}
+class NascentMain : public olc::PixelGameEngine {
+    GameNascent game;
 
-public:
-	bool OnUserCreate() override
-	{
-		
-		game.init();
+    public:
+    NascentMain() : game(this) {
+        sAppName = "Nascent";
+    }
 
-		return true;
-	}
+    public:
+    bool OnUserCreate() override {
 
-	bool OnUserUpdate(float elapsed_time) override
-	{
-		game.update(elapsed_time);
-		game.draw(this);
-		return true;
-	}
+        game.init();
+
+        return true;
+    }
+
+    bool OnUserUpdate(float elapsed_time) override {
+        game.update(elapsed_time);
+
+        if (game.should_quit()) {
+            return false;
+        }
+
+        game.draw(this);
+        return true;
+    }
 };
 
-int main()
-{
-	NascentMain ns_main;
-	
+int main() {
+    use_executable_directory_for_assets();
+
+    NascentMain ns_main;
+
     if (ns_main.Construct(1920, 1080, 1, 1, true, false, false, true)) {
         ns_main.Start();
     }
 
-	return 0;
+    return 0;
 }

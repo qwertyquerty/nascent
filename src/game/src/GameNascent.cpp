@@ -2,55 +2,69 @@
 
 #include "InputManager.h"
 #include "olcPixelGameEngine.h"
-#include "ScenePlay.h"
-#include "SceneTitle.h"
 #include "SceneList.h"
 #include "discord-rpc.hpp"
 #include "SettingsManager.h"
+#include "Skin.h"
+
+#include <algorithm>
+#include <ctime>
+#include <format>
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
-        scene_list = new SceneList();
-    };
+
+                                                             };
 
     GameNascent::~GameNascent() {
         discord::RPCManager::get().shutdown();
-        delete scene_list;
+        release_scenes();
+        scene_list.reset();
+        skin.reset();
     };
 
     void GameNascent::init() {
+        SettingsManager::load();
+        scene_transition_time = SettingsManager::settings.scene_transition_time;
+
         olc::Font::init();
+
+        init_input();
 
         start_time = time(nullptr);
         std::srand(start_time);
 
-        set_scene(scene_list);
-        
+        skin = std::make_unique<Skin>(this, "default", 7);
+        scene_list = std::make_unique<SceneList>(skin.get());
+
+        set_scene(scene_list.get());
+
         discord_init();
         discord_update();
-
-        skin = new Skin(this, "default", 7);
     }
 
     void GameNascent::update(float elapsed_time) {
         if (window->GetKey(InputManager::exit_key).bPressed) {
-            exit(0);
+            quit();
+            return;
         }
 
         if (window->GetKey(InputManager::back_key).bPressed) {
-            set_scene(scene_list);
+            set_scene(scene_list.get());
         }
+
+        begin_frame(elapsed_time);
 
         this->elapsed_time = elapsed_time;
         scene->update(elapsed_time);
     }
 
     void GameNascent::draw(olc::PixelGameEngine* window) {
-        window->Clear(olc::BLACK);
-        scene->draw(window);
+        draw_scenes(window);
 
         if (debug) {
-            skin->display_font_small.DrawString(std::format("FPS: {}", (uint16_t)(1/elapsed_time)), window->GetWindowSize().x - 100, 30, olc::WHITE);
+            uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
+            skin->display_font_small.DrawString(std::format("FPS: {}", fps), window->GetWindowSize().x - 100, 30, olc::WHITE);
         }
     }
 
@@ -60,15 +74,11 @@ namespace nascent {
             .onReady([](discord::User const& user) {
                 printf("Discord ready with user %s!\n", user.username.c_str());
             });
-        
+
         discord::RPCManager::get().initialize();
     }
 
     void GameNascent::discord_update() {
-        discord::RPCManager::get().getPresence()
-            .setState("Training Rhythm")
-            .setDetails("Offline play")
-            .setStartTimestamp(start_time)
-            .refresh();
+        discord::RPCManager::get().getPresence().setState("Training Rhythm").setDetails("Offline play").setStartTimestamp(start_time).refresh();
     }
 }

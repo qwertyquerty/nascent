@@ -3,12 +3,7 @@
 
 #include "olcPixelGameEngine.h"
 
-#ifdef WIN32
 #include <ft2build.h>
-#pragma comment(lib, "freetype.lib")
-#else
-#include <freetype2/ft2build.h>
-#endif
 
 #include <iostream>
 #include <limits>
@@ -80,7 +75,7 @@ namespace olc {
 
         void DrawString(std::string string, int x, int y,
                         olc::Pixel color = olc::BLACK, float angle = 0.0f) {
-            std::u32string string32(string.begin(), string.end());
+            std::u32string string32 = Utf8ToUtf32(string);
             FT_Matrix rotMat;
             rotMat.xx = (FT_Fixed)(std::cos(angle) * 0x10000L);
             rotMat.xy = (FT_Fixed)(-std::sin(angle) * 0x10000L);
@@ -155,7 +150,7 @@ namespace olc {
         }
 
         FontRect GetStringBounds(std::string string, float angle = 0.0f) {
-            std::u32string string32(string.begin(), string.end());
+            std::u32string string32 = Utf8ToUtf32(string);
             FT_Matrix rotMat;
             rotMat.xx = (FT_Fixed)(std::cos(angle) * 0x10000L);
             rotMat.xy = (FT_Fixed)(-std::sin(angle) * 0x10000L);
@@ -253,7 +248,7 @@ namespace olc {
 
         olc::Sprite *RenderStringToSprite(std::string string,
                                           olc::Pixel color) {
-            std::u32string string32(string.begin(), string.end());
+            std::u32string string32 = Utf8ToUtf32(string);
             olc::FontRect rect = GetStringBounds(string);
             olc::Sprite *sprite = new olc::Sprite{rect.size.x, rect.size.y};
 
@@ -471,6 +466,56 @@ namespace olc {
 
         FT_UInt GetCharIndex(char32_t charCode) {
             return FT_Get_Char_Index(fontFace, charCode);
+        }
+
+        static std::u32string Utf8ToUtf32(const std::string &string) {
+            std::u32string result;
+            result.reserve(string.size());
+
+            size_t i = 0;
+            while (i < string.size()) {
+                unsigned char lead = (unsigned char)string[i];
+                char32_t codePoint = 0;
+                size_t length = 0;
+
+                if (lead < 0x80) {
+                    codePoint = lead;
+                    length = 1;
+                } else if ((lead & 0xE0) == 0xC0) {
+                    codePoint = lead & 0x1F;
+                    length = 2;
+                } else if ((lead & 0xF0) == 0xE0) {
+                    codePoint = lead & 0x0F;
+                    length = 3;
+                } else if ((lead & 0xF8) == 0xF0) {
+                    codePoint = lead & 0x07;
+                    length = 4;
+                } else {
+                    result.push_back(U'�');
+                    i++;
+                    continue;
+                }
+
+                size_t j = 1;
+                for (; j < length && i + j < string.size(); j++) {
+                    unsigned char continuation = (unsigned char)string[i + j];
+                    if ((continuation & 0xC0) != 0x80) {
+                        break;
+                    }
+                    codePoint = (codePoint << 6) | (continuation & 0x3F);
+                }
+
+                if (j < length) {
+                    result.push_back(U'�');
+                    i += j;
+                    continue;
+                }
+
+                result.push_back(codePoint);
+                i += length;
+            }
+
+            return result;
         }
 
         FT_Face fontFace = nullptr;

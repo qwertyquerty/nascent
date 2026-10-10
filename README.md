@@ -18,7 +18,33 @@ Currently you can message me @qwertyquerty on Discord if you're interested in he
 
 ### Build instructions
 
-I'll write up a more detailed build tutorial later on but I'm compiling everything just with msys2 mingw stuff right now.
+```sh
+git clone --recurse-submodules https://github.com/qwertyquerty/nascent
+cd nascent
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+```
+
+#### Tests
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+#### Formatting
+
+Code style is defined in `.clang-format`. Format everything with `scripts/format.sh`
+
+### Project layout
+
+- `src/core` - engine independent gameplay logic including charts, hit judgement, scoring, the song clock
+- `src/gse` - a small scene/entity layer on top of olcPixelGameEngine
+- `src/game` - Nascent's scenes, rendering entities, skins, settings and input bindings
+- `src/main` - the executable entry point
+- `src/libs` - third party libraries, mostly git submodules (see `src/libs/README.md`)
+- `tests` - unit tests for `src/core`
+- `tools` - chart conversion and difficulty tuning scripts
+- `server` - the game server API
 
 ### Credits
 
@@ -28,6 +54,12 @@ I'll write up a more detailed build tutorial later on but I'm compiling everythi
 
 - olcPixelGameEngine
   - olcPGEX_MiniAudio
-- nlohmann/json
+  - olcPGEX_TTF
 - miniaudio
-- boost (not included)
+- nlohmann/json
+- FreeType
+- KISS FFT
+- discord-presence
+- stb_image
+- Open Arrow font
+- picosha2

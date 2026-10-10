@@ -23,6 +23,7 @@ endfunction()
 get_filename_component(NASCENT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 
 add_subdirectory(${NASCENT_ROOT}/src/libs/json ${CMAKE_CURRENT_BINARY_DIR}/json)
+add_subdirectory(${NASCENT_ROOT}/src/libs/picosha2 ${CMAKE_CURRENT_BINARY_DIR}/picosha2)
 add_subdirectory(${NASCENT_ROOT}/src/core ${CMAKE_CURRENT_BINARY_DIR}/core)
 
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)

@@ -1,2 +1,9 @@
 add_executable(NascentMain nascent_main.cpp)
-target_link_libraries(NascentMain core game olcPixelGameEngine gdiplus gdi32 opengl32 dwmapi user32 shlwapi)
+target_link_libraries(NascentMain PRIVATE game)
+nascent_target_warnings(NascentMain)
+nascent_target_runtime(NascentMain)
+
+set_target_properties(NascentMain PROPERTIES
+    OUTPUT_NAME Nascent
+    RUNTIME_OUTPUT_DIRECTORY ${NASCENT_OUTPUT_DIRECTORY}/$<LOWER_CASE:$<CONFIG>>
+)

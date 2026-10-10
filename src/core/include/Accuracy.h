@@ -1,12 +1,12 @@
 #pragma once
 
-#include <vector>
-#include <string>
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <map>
+#include <string_view>
 
 namespace nascent {
-    enum HitScore {
+    enum class HitScore : uint8_t {
         PERFECT,
         AMAZING,
         GREAT,
@@ -16,49 +16,49 @@ namespace nascent {
         NONE
     };
 
-    const std::map<HitScore, std::string> HIT_SCORE_NAME = {
-        {PERFECT,   "PERFECT"},
-        {AMAZING,   "AMAZING"},
-        {GREAT,     "GREAT"},
-        {GOOD,      "GOOD"},
-        {BAD,       "BAD"},
-        {MISS,      "MISS"},
-        {NONE,      "NONE"}
+    inline constexpr size_t HIT_SCORE_COUNT = 7;
+
+    inline constexpr std::array<HitScore, HIT_SCORE_COUNT> ALL_HIT_SCORES = {
+        HitScore::PERFECT, HitScore::AMAZING, HitScore::GREAT, HitScore::GOOD, HitScore::BAD, HitScore::MISS, HitScore::NONE
     };
 
-    const std::map<HitScore, uint32_t> HIT_SCORE_COLOR = {
-        {PERFECT,   0xff44ddff},
-        {AMAZING,   0xff0099cc},
-        {GREAT,     0xff33cc33},
-        {GOOD,      0xffff6600},
-        {BAD,       0xffcccccc},
-        {MISS,      0xff0000ff},
-        {NONE,      0x00000000}
+    inline constexpr std::array<HitScore, 5> TIMED_HIT_SCORES = {
+        HitScore::PERFECT, HitScore::AMAZING, HitScore::GREAT, HitScore::GOOD, HitScore::BAD
     };
 
-    const std::map<HitScore, uint8_t> HIT_SCORE_ACC = { // %
-        {PERFECT,   100},
-        {AMAZING,   95},
-        {GREAT,     70},
-        {GOOD,      40},
-        {BAD,       10},
-        {MISS,      0},
-        {NONE,      0}
+    inline constexpr std::array<std::string_view, HIT_SCORE_COUNT> HIT_SCORE_NAMES = {
+        "PERFECT", "AMAZING", "GREAT", "GOOD", "BAD", "MISS", "NONE"
     };
 
-    const std::map<HitScore, uint8_t> HIT_SCORE_BASE_WINDOW = { // +/- ms
-        {PERFECT,   10},
-        {AMAZING,   25},
-        {GREAT,     50},
-        {GOOD,      80},
-        {BAD,       160}
+    inline constexpr std::array<uint32_t, HIT_SCORE_COUNT> HIT_SCORE_COLORS = {
+        0xff44ddff, 0xff0099cc, 0xff33cc33, 0xffff6600, 0xffcccccc, 0xff0000ff, 0x00000000
     };
 
-    const uint8_t MIN_HIT_ACC_DIFFICULTY = 0;
-    const uint8_t MAX_HIT_ACC_DIFFICULTY = 10;
-    const double HOLD_RELEASE_WINDOW_MULTIPLIER = 2;
-    const uint8_t MAX_BAD_WINDOW_SIZE = 200;
-    
+    inline constexpr std::array<uint8_t, HIT_SCORE_COUNT> HIT_SCORE_ACCS = {
+        100, 95, 70, 40, 10, 0, 0 // %
+    };
+
+    inline constexpr std::array<uint8_t, TIMED_HIT_SCORES.size()> HIT_SCORE_BASE_WINDOWS = {
+        10, 25, 50, 80, 160 // +/- ms
+    };
+
+    constexpr std::string_view hit_score_name(HitScore score) {
+        return HIT_SCORE_NAMES[(size_t)score];
+    }
+
+    constexpr uint32_t hit_score_color(HitScore score) {
+        return HIT_SCORE_COLORS[(size_t)score];
+    }
+
+    constexpr uint8_t hit_score_acc(HitScore score) {
+        return HIT_SCORE_ACCS[(size_t)score];
+    }
+
+    inline constexpr uint8_t MIN_HIT_ACC_DIFFICULTY = 0;
+    inline constexpr uint8_t MAX_HIT_ACC_DIFFICULTY = 10;
+    inline constexpr double HOLD_RELEASE_WINDOW_MULTIPLIER = 2;
+    inline constexpr uint8_t MAX_BAD_WINDOW_SIZE = 200;
+
     uint16_t get_window_from_hit_acc_diff(HitScore score, uint8_t hit_acc_diff, bool release = false);
 
     /**
