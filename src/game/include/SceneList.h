@@ -43,15 +43,15 @@ namespace nascent {
         std::string played_at;
     };
 
+    template <typename T>
+    struct LeaderboardRequest {
+        std::string key;
+        uint64_t generation = 0;
+        std::future<T> result;
+    };
+
     class SceneList : public Scene {
         protected:
-        template <typename T>
-        struct LeaderboardRequest {
-            std::string key;
-            uint64_t generation = 0;
-            std::future<T> result;
-        };
-
         struct BackgroundLoadRequest {
             uint64_t generation = 0;
             std::string image_path;
