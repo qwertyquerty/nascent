@@ -29,7 +29,11 @@ namespace nascent {
         };
 
         static constexpr size_t MAX_DOWNLOAD_BYTES = 512u * 1024u * 1024u;
-        static constexpr size_t MAX_FOLDER_NAME_BYTES = 120;
+        static constexpr size_t MAX_FOLDER_NAME_BYTES = 64;
+        static constexpr size_t MAX_FILE_NAME_BYTES = 255;
+        static constexpr size_t MAX_PATH_LENGTH = 259;
+        static constexpr int32_t DOWNLOAD_ATTEMPTS = 2;
+        static constexpr int32_t RETRY_DELAY_MS = 2000;
 
         static std::shared_ptr<Download> start(int64_t set_id, const std::string& artist, const std::string& title);
         static std::shared_ptr<Download> find(int64_t set_id);

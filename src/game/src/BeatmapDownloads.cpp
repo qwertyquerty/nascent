@@ -6,12 +6,17 @@
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include <miniz.h>
 
+#include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <map>
+#include <optional>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace nascent {
     static std::mutex downloads_mutex;
@@ -50,18 +55,108 @@ namespace nascent {
         return std::filesystem::path(std::u8string(text.begin(), text.end()));
     }
 
-    static bool is_safe_entry(const std::filesystem::path& entry) {
-        if (entry.empty() || entry.has_root_name() || entry.has_root_directory()) {
-            return false;
-        }
+    static bool is_valid_utf8(const std::string& text) {
+        for (size_t i = 0; i < text.size();) {
+            unsigned char c = (unsigned char)text[i];
+            size_t length = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2
+                : (c >> 4) == 0xe                          ? 3
+                : (c >> 3) == 0x1e                         ? 4
+                                                           : 0;
 
-        for (const std::filesystem::path& part : entry) {
-            if (part == "..") {
+            if (length == 0 || i + length > text.size()) {
                 return false;
             }
+
+            for (size_t j = 1; j < length; j++) {
+                if (((unsigned char)text[i + j] & 0xc0) != 0x80) {
+                    return false;
+                }
+            }
+
+            i += length;
         }
 
         return true;
+    }
+
+    static std::string safe_component(std::string part) {
+        for (char& c : part) {
+            if ((unsigned char)c < 0x20 || c == 0x7f || std::string_view("<>:\"\\|?*").find(c) != std::string_view::npos) {
+                c = '_';
+            }
+        }
+
+        while (!part.empty() && (part.back() == ' ' || part.back() == '.')) {
+            part.pop_back();
+        }
+
+        std::string stem = part.substr(0, part.find('.'));
+
+        for (char& c : stem) {
+            c = (char)std::toupper((unsigned char)c);
+        }
+
+        bool reserved = stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" || ((stem.starts_with("COM") || stem.starts_with("LPT")) && stem.size() == 4 && stem[3] >= '1' && stem[3] <= '9');
+        return reserved ? "_" + part : part;
+    }
+
+    static std::optional<std::filesystem::path> safe_entry(std::string name) {
+        if (!is_valid_utf8(name)) {
+            for (char& c : name) {
+                if ((unsigned char)c >= 0x80) {
+                    c = '_';
+                }
+            }
+        }
+
+        std::filesystem::path entry;
+        size_t start = 0;
+
+        while (start <= name.size()) {
+            size_t slash = name.find_first_of("/\\", start);
+            std::string part = name.substr(start, slash == std::string::npos ? std::string::npos : slash - start);
+            start = slash == std::string::npos ? name.size() + 1 : slash + 1;
+
+            if (part.empty() || part == ".") {
+                continue;
+            }
+
+            if (part == "..") {
+                return std::nullopt;
+            }
+
+            part = safe_component(part);
+
+            if (part.empty()) {
+                return std::nullopt;
+            }
+
+            entry /= utf8_path(part);
+        }
+
+        return entry.empty() ? std::nullopt : std::optional<std::filesystem::path>(entry);
+    }
+
+    static bool fits(const std::filesystem::path& target) {
+        std::error_code ec;
+        std::filesystem::path absolute = std::filesystem::absolute(target, ec);
+        return target.filename().u8string().size() <= BeatmapDownloads::MAX_FILE_NAME_BYTES && (ec || absolute.native().size() <= BeatmapDownloads::MAX_PATH_LENGTH);
+    }
+
+    static std::filesystem::path shorten_chart_file(const std::filesystem::path& target, mz_uint index) {
+        std::string stem = std::string(reinterpret_cast<const char*>(target.stem().u8string().c_str()));
+        size_t open = stem.rfind('[');
+        size_t close = stem.rfind(']');
+
+        if (open != std::string::npos && close != std::string::npos && close > open) {
+            std::filesystem::path difficulty = target.parent_path() / utf8_path(stem.substr(open, close - open + 1) + ".osu");
+
+            if (fits(difficulty)) {
+                return difficulty;
+            }
+        }
+
+        return target.parent_path() / std::format("{}.osu", index);
     }
 
     static bool extract(const std::string& archive, const std::filesystem::path& destination, std::string& error) {
@@ -72,46 +167,117 @@ namespace nascent {
             return false;
         }
 
-        bool ok = true;
+        size_t charts_written = 0;
+        std::string first_failure;
         mz_uint count = mz_zip_reader_get_num_files(&zip);
 
-        for (mz_uint index = 0; index < count && ok; index++) {
+        for (mz_uint index = 0; index < count; index++) {
             mz_zip_archive_file_stat stat;
 
             if (!mz_zip_reader_file_stat(&zip, index, &stat) || mz_zip_reader_is_file_a_directory(&zip, index)) {
                 continue;
             }
 
-            std::filesystem::path entry = utf8_path(stat.m_filename).lexically_normal();
+            std::optional<std::filesystem::path> entry = safe_entry(stat.m_filename);
 
-            if (!is_safe_entry(entry)) {
+            if (!entry) {
                 continue;
             }
 
+            std::filesystem::path target = destination / *entry;
+            bool is_chart = target.extension() == ".osu";
+
+            if (is_chart && !fits(target)) {
+                target = shorten_chart_file(target, index);
+            }
+
+            std::string failure;
             size_t size = 0;
             void* data = mz_zip_reader_extract_to_heap(&zip, index, &size, 0);
 
             if (data == nullptr) {
-                error = std::format("could not extract {}", stat.m_filename);
-                ok = false;
-                break;
+                failure = "it could not be decompressed";
+            }
+            else if (!fits(target)) {
+                failure = "its path is too long for this system";
+            }
+            else {
+                std::error_code ec;
+                std::filesystem::create_directories(target.parent_path(), ec);
+                std::ofstream file(target, std::ios::binary | std::ios::trunc);
+                file.write(static_cast<const char*>(data), (std::streamsize)size);
+
+                if (!file) {
+                    failure = ec ? ec.message() : std::string("the file could not be created");
+                }
             }
 
-            std::filesystem::path target = destination / entry;
-            std::error_code ec;
-            std::filesystem::create_directories(target.parent_path(), ec);
-            std::ofstream file(target, std::ios::binary | std::ios::trunc);
-            file.write(static_cast<const char*>(data), (std::streamsize)size);
             mz_free(data);
 
-            if (!file) {
-                error = std::format("could not write {}", stat.m_filename);
-                ok = false;
+            if (failure.empty()) {
+                charts_written += is_chart;
+                continue;
+            }
+
+            std::cerr << std::format("Skipped {} from the download: {}", stat.m_filename, failure) << std::endl;
+
+            if (first_failure.empty() || is_chart) {
+                first_failure = std::format("could not write {}: {}", stat.m_filename, failure);
             }
         }
 
         mz_zip_reader_end(&zip);
-        return ok;
+
+        if (charts_written == 0) {
+            error = first_failure.empty() ? std::string("the download has no .osu files") : first_failure;
+            return false;
+        }
+
+        return true;
+    }
+
+    static std::string host_of(const std::string& url) {
+        size_t start = url.find("://");
+        start = start == std::string::npos ? 0 : start + 3;
+        return url.substr(start, url.find('/', start) - start);
+    }
+
+    static bool is_archive(const std::string& data) {
+        mz_zip_archive zip = {};
+        bool valid = mz_zip_reader_init_mem(&zip, data.data(), data.size(), 0);
+
+        if (valid) {
+            mz_zip_reader_end(&zip);
+        }
+
+        return valid;
+    }
+
+    static std::optional<std::string> fetch_archive(const std::vector<std::string>& urls, BeatmapDownloads::Download& download, std::string& error) {
+        for (const std::string& url : urls) {
+            for (int32_t attempt = 1; attempt <= BeatmapDownloads::DOWNLOAD_ATTEMPTS; attempt++) {
+                bool retryable = false;
+                std::string attempt_error;
+                download.progress = 0.0;
+                std::optional<std::string> archive = ServerClient::download(url, BeatmapDownloads::MAX_DOWNLOAD_BYTES, [&download](double progress) { download.progress = progress; }, attempt_error, retryable);
+
+                if (archive && is_archive(*archive)) {
+                    return archive;
+                }
+
+                error = std::format("{}: {}", host_of(url), archive ? std::string("the download is not a valid .osz archive") : attempt_error);
+
+                if (archive || !retryable) {
+                    break;
+                }
+
+                if (attempt < BeatmapDownloads::DOWNLOAD_ATTEMPTS) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(BeatmapDownloads::RETRY_DELAY_MS));
+                }
+            }
+        }
+
+        return std::nullopt;
     }
 
     std::string BeatmapDownloads::Download::error() const {
@@ -139,18 +305,23 @@ namespace nascent {
         auto download = std::make_shared<Download>();
         downloads[set_id] = download;
 
-        std::string url = SettingsManager::settings.beatmap_download_url;
-        size_t placeholder = url.find("{id}");
+        std::vector<std::string> urls;
 
-        if (placeholder != std::string::npos) {
-            url.replace(placeholder, 4, std::to_string(set_id));
+        for (std::string url : SettingsManager::settings.beatmap_download_urls) {
+            size_t placeholder = url.find("{id}");
+
+            if (placeholder != std::string::npos) {
+                url.replace(placeholder, 4, std::to_string(set_id));
+            }
+
+            urls.push_back(std::move(url));
         }
 
         std::filesystem::path destination = std::filesystem::path(SettingsManager::settings.list_song_directory) / utf8_path(folder_name(set_id, artist, title));
 
-        std::thread([download, url, destination] {
-            std::string error;
-            std::optional<std::string> archive = ServerClient::download(url, MAX_DOWNLOAD_BYTES, [&download](double progress) { download->progress = progress; }, error);
+        std::thread([download, urls, destination] {
+            std::string error = "no beatmap download mirrors are configured";
+            std::optional<std::string> archive = fetch_archive(urls, *download, error);
 
             if (!archive) {
                 download->fail(error);

@@ -23,7 +23,7 @@ namespace nascent {
         list_song_directory,
         discord_application_id,
         server_url,
-        beatmap_download_url,
+        beatmap_download_urls,
         lane_keymaps
     )
 
