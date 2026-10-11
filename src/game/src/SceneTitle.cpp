@@ -145,7 +145,12 @@ namespace nascent {
     void SceneTitle::update(float elapsed_time) {
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
             if (bg_chart != nullptr) {
-                list->select_chart_by_hash(bg_chart->gameplay_hash());
+                bool playing = bg_started && bg_audio_id != -1 && game->get_audio().IsPlaying(bg_audio_id);
+                list->select_chart_by_hash(bg_chart->gameplay_hash(), playing ? bg_audio_id : -1);
+
+                if (playing) {
+                    bg_audio_id = -1;
+                }
             }
 
             game->play_sound(bg_skin->get_random_menu_pluck());

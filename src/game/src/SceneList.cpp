@@ -121,6 +121,7 @@ namespace nascent {
 
         if (pending_selection) {
             auto found = std::find(chart_hashes.begin(), chart_hashes.end(), *pending_selection);
+            int audio_id = std::exchange(pending_audio_id, -1);
             pending_selection.reset();
 
             if (found != chart_hashes.end()) {
@@ -131,6 +132,19 @@ namespace nascent {
                     search.clear();
                     apply_search(chart);
                 }
+
+                if (audio_id != -1) {
+                    stop_preview_audio();
+                    selected_chart_audio_id = audio_id;
+                    preview_audio_chart = charts[chart].get();
+                    audio_fadein_timer = 1.0f;
+                    audio_id = -1;
+                }
+            }
+
+            if (audio_id != -1) {
+                game->get_audio().Stop(audio_id);
+                game->get_audio().UnloadSound(audio_id);
             }
         }
 
@@ -223,6 +237,11 @@ namespace nascent {
 
         if (selected_chart_audio_id != -1) {
             game->get_audio().SetVolume(selected_chart_audio_id, audio_fadein_timer * audio_fadein_timer);
+        }
+
+        if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart && !game->get_audio().IsPlaying(selected_chart_audio_id)) {
+            game->get_audio().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
+            game->get_audio().Play(selected_chart_audio_id, true);
         }
 
         if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart) {
@@ -805,8 +824,9 @@ namespace nascent {
         }
     }
 
-    void SceneList::select_chart_by_hash(std::string hash) {
+    void SceneList::select_chart_by_hash(std::string hash, int playing_audio_id) {
         pending_selection = std::move(hash);
+        pending_audio_id = playing_audio_id;
     }
 
     const std::unordered_set<std::string>& SceneList::get_local_hashes() const {
