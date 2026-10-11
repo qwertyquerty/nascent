@@ -3,6 +3,7 @@
 #include "Hit.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -89,7 +90,16 @@ namespace nascent {
     }
 
     static bool parse_number(std::string_view text, double& value) {
-        std::istringstream stream{std::string(trim(text))};
+        text = trim(text);
+        int64_t integer = 0;
+        auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), integer);
+
+        if (ec == std::errc() && end == text.data() + text.size()) {
+            value = (double)integer;
+            return true;
+        }
+
+        std::istringstream stream{std::string(text)};
         stream.imbue(std::locale::classic());
         stream >> value;
         return !stream.fail() && std::isfinite(value);

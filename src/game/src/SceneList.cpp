@@ -23,10 +23,13 @@
 #include "Sha256.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <mutex>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 
@@ -38,6 +41,25 @@ namespace nascent {
     static constexpr float LENGTH_OFFSET = 90.0f;
     static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
     static constexpr float GRADE_GAP = 8.0f;
+
+    template <typename F>
+    static void parallel_for(size_t count, F work) {
+        size_t thread_count = std::min<size_t>(std::max(1u, std::thread::hardware_concurrency()), std::max<size_t>(count, 1));
+        std::atomic<size_t> next = 0;
+        std::vector<std::thread> threads;
+
+        for (size_t t = 0; t < thread_count; t++) {
+            threads.emplace_back([&] {
+                for (size_t index = next++; index < count; index = next++) {
+                    work(index);
+                }
+            });
+        }
+
+        for (std::thread& thread : threads) {
+            thread.join();
+        }
+    }
 
     SceneList::SceneList(Skin* skin) {
         this->skin = skin;
@@ -336,8 +358,12 @@ namespace nascent {
             std::string hash;
         };
 
-        std::vector<LoadedChart> loaded;
-        std::unordered_set<std::string> loaded_hashes;
+        struct ChartFile {
+            std::filesystem::path path;
+            std::u8string folder;
+        };
+
+        std::vector<ChartFile> chart_files;
 
         auto extension_rank = [](const std::filesystem::path& path) {
             auto found = std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), path.extension().string());
@@ -357,37 +383,52 @@ namespace nascent {
                 }
             }
 
-            std::vector<std::filesystem::path> chart_files;
+            std::vector<std::filesystem::path> paths;
 
             for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder.path(), ec)) {
                 if (extension_rank(chart_file.path()) < CHART_FILE_EXTENSIONS.size()) {
-                    chart_files.push_back(chart_file.path());
+                    paths.push_back(chart_file.path());
                 }
             }
 
-            std::sort(chart_files.begin(), chart_files.end(), [&](const std::filesystem::path& a, const std::filesystem::path& b) {
+            std::sort(paths.begin(), paths.end(), [&](const std::filesystem::path& a, const std::filesystem::path& b) {
                 return std::make_pair(extension_rank(a), a) < std::make_pair(extension_rank(b), b);
             });
 
-            for (const std::filesystem::path& chart_path : chart_files) {
-                std::string error;
-                std::unique_ptr<Chart> chart = Chart::load(chart_path, pitch, error);
-
-                if (chart == nullptr) {
-                    std::cerr << "Skipping chart " << chart_path.string() << ": " << error << std::endl;
-                    continue;
-                }
-
-                std::string hash = chart->gameplay_hash();
-
-                if (!loaded_hashes.insert(hash).second) {
-                    continue;
-                }
-
-                float difficulty = (float)DifficultyCalculator::calculate(*chart);
-                loaded.push_back({std::move(chart), folder, difficulty, std::move(hash)});
+            for (std::filesystem::path& path : paths) {
+                chart_files.push_back({std::move(path), folder});
             }
         }
+
+        std::vector<LoadedChart> parsed(chart_files.size());
+        std::mutex log_mutex;
+
+        parallel_for(chart_files.size(), [&](size_t index) {
+            std::string error;
+            std::unique_ptr<Chart> chart = Chart::load(chart_files[index].path, pitch, error);
+
+            if (chart == nullptr) {
+                std::lock_guard<std::mutex> lock(log_mutex);
+                std::cerr << "Skipping chart " << chart_files[index].path.string() << ": " << error << std::endl;
+                return;
+            }
+
+            std::string hash = chart->gameplay_hash();
+            parsed[index] = {std::move(chart), chart_files[index].folder, 0.0f, std::move(hash)};
+        });
+
+        std::vector<LoadedChart> loaded;
+        std::unordered_set<std::string> loaded_hashes;
+
+        for (LoadedChart& entry : parsed) {
+            if (entry.chart != nullptr && loaded_hashes.insert(entry.hash).second) {
+                loaded.push_back(std::move(entry));
+            }
+        }
+
+        parallel_for(loaded.size(), [&](size_t index) {
+            loaded[index].difficulty = (float)DifficultyCalculator::calculate(*loaded[index].chart);
+        });
 
         std::stable_sort(loaded.begin(), loaded.end(), [](const LoadedChart& a, const LoadedChart& b) {
             if (a.folder != b.folder) {
