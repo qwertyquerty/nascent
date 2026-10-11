@@ -21,6 +21,7 @@
 #include "ScenePlay.h"
 #include "SettingsManager.h"
 #include "Sha256.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <atomic>
@@ -944,7 +945,7 @@ namespace nascent {
     void SceneList::draw_search(olc::PixelGameEngine* window) {
         olc::vi2d screensize = window->GetScreenSize();
         olc::Font& font = skin->display_font_small;
-        olc::FontRect metrics = font.GetStringBounds("Hgjy");
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = (StatusBar::HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
 
         olc::Pixel::Mode mode = window->GetPixelMode();
@@ -954,14 +955,14 @@ namespace nascent {
         window->SetPixelMode(mode);
 
         if (search.empty()) {
-            font.DrawString("Type to search", {StatusBar::PADDING, baseline}, olc::DARK_GREY);
+            draw_text(font, "Type to search", {StatusBar::PADDING, baseline}, olc::DARK_GREY);
             return;
         }
 
         std::string count = std::format("{} / {}", visible.size(), charts.size());
-        int32_t count_width = font.GetStringBounds(count).size.x;
-        font.DrawString(search, {StatusBar::PADDING, baseline}, olc::WHITE);
-        font.DrawString(count, {screensize.x - StatusBar::PADDING - count_width, baseline}, visible.empty() ? olc::RED : olc::GREY);
+        int32_t count_width = text_bounds(font, count).size.x;
+        draw_text(font, search, {StatusBar::PADDING, baseline}, olc::WHITE);
+        draw_text(font, count, {screensize.x - StatusBar::PADDING - count_width, baseline}, visible.empty() ? olc::RED : olc::GREY);
     }
 
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
@@ -984,12 +985,9 @@ namespace nascent {
         olc::vi2d screensize = window->GetScreenSize();
 
         if (visible.empty()) {
-            skin->display_font_medium.DrawString(
-                library_loading && charts.empty() ? std::string("Loading charts...") : charts.empty() ? std::format("No charts found in {}", SettingsManager::settings.list_song_directory)
-                                                                                                      : std::string("No charts match your search"),
-                {screensize.x / 48, screensize.y / 2},
-                olc::GREY
-            );
+            draw_text(skin->display_font_medium, library_loading && charts.empty() ? std::string("Loading charts...") : charts.empty() ? std::format("No charts found in {}", SettingsManager::settings.list_song_directory)
+                                                                                                                                       : std::string("No charts match your search"),
+                      {screensize.x / 48, screensize.y / 2}, olc::GREY);
             return;
         }
 
@@ -1025,7 +1023,7 @@ namespace nascent {
         float widest_grade = 0;
 
         for (Grade grade : {Grade::X, Grade::S, Grade::A, Grade::B, Grade::C, Grade::D, Grade::E}) {
-            widest_grade = std::max(widest_grade, (float)skin->display_font_large.GetStringBounds(std::string(grade_name(grade))).size.x);
+            widest_grade = std::max(widest_grade, (float)text_bounds(skin->display_font_large, std::string(grade_name(grade))).size.x);
         }
 
         float grade_indent = std::max(0.0f, GRADE_SCREEN_MARGIN + widest_grade + GRADE_GAP - list_margin);
@@ -1041,17 +1039,9 @@ namespace nascent {
             float y = (float)screensize.y / 2 + (index - selected_chart_index) * list_chart_height + list_scroll_offset;
             float x = list_margin + grade_indent + std::pow(std::max(300.0 - std::abs((float)screensize.y / 2 - (y)), 0.0) / 50.0, 2);
 
-            skin->display_font_medium.DrawString(
-                std::format("{}", chart->info.title),
-                {(int)x, (int)y},
-                index == selected_chart_index ? olc::WHITE : olc::GREY
-            );
+            draw_text(skin->display_font_medium, std::format("{}", chart->info.title), {(int)x, (int)y}, index == selected_chart_index ? olc::WHITE : olc::GREY);
 
-            skin->display_font_small.DrawString(
-                std::format("[{}] - {} // {}", chart->info.difficulty_name, chart->info.artist, chart->info.mapper),
-                {(int)x, (int)y + 36},
-                index == selected_chart_index ? olc::WHITE : olc::GREY
-            );
+            draw_text(skin->display_font_small, std::format("[{}] - {} // {}", chart->info.difficulty_name, chart->info.artist, chart->info.mapper), {(int)x, (int)y + 36}, index == selected_chart_index ? olc::WHITE : olc::GREY);
 
             std::optional<float> rating = get_difficulty(chart_index, difficulty_budget);
             float fill = rating ? std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f) : 0.0f;
@@ -1060,32 +1050,20 @@ namespace nascent {
             difficulty_bar.draw(window, {x, y + 50}, fill, bar_color);
 
             if (rating) {
-                skin->display_font_small.DrawString(
-                    std::format("{:.2f}", *rating),
-                    {(int)(x + DIFFICULTY_BAR_WIDTH + 12), (int)y + 58},
-                    index == selected_chart_index ? olc::WHITE : olc::GREY
-                );
+                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + DIFFICULTY_BAR_WIDTH + 12), (int)y + 58}, index == selected_chart_index ? olc::WHITE : olc::GREY);
             }
 
             int64_t length_ms = std::llround((double)chart->get_duration_ms() * chart->pitch / pitch);
-            skin->display_font_small.DrawString(
-                std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60),
-                {(int)(x + DIFFICULTY_BAR_WIDTH + LENGTH_OFFSET), (int)y + 58},
-                index == selected_chart_index ? olc::WHITE : olc::GREY
-            );
+            draw_text(skin->display_font_small, std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60), {(int)(x + DIFFICULTY_BAR_WIDTH + LENGTH_OFFSET), (int)y + 58}, index == selected_chart_index ? olc::WHITE : olc::GREY);
 
             std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[chart_index], pitch);
 
             if (best) {
                 Grade grade = grade_for_accuracy(best->accuracy);
                 std::string grade_text = std::string(grade_name(grade));
-                olc::FontRect grade_bounds = skin->display_font_large.GetStringBounds(grade_text);
+                olc::FontRect grade_bounds = text_bounds(skin->display_font_large, grade_text);
                 float grade_center_y = y + 18;
-                skin->display_font_large.DrawString(
-                    grade_text,
-                    {(int)(x - GRADE_GAP - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)},
-                    grade_color(grade)
-                );
+                draw_text(skin->display_font_large, grade_text, {(int)(x - GRADE_GAP - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)}, grade_color(grade));
             }
         }
     }

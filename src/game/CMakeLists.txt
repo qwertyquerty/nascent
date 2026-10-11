@@ -22,6 +22,7 @@ add_library(game
     src/SettingsManager.cpp
     src/Skin.cpp
     src/StatusBar.cpp
+    src/TextCache.cpp
     src/TextField.cpp
     src/UiForm.cpp
     src/Util.cpp

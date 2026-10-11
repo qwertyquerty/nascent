@@ -259,7 +259,7 @@ namespace olc {
             }
 
             FT_Vector pen;
-            pen.x = -rect.offset.x;
+            pen.x = -rect.offset.x * 64;
             pen.y = (pge->ScreenHeight() + rect.offset.y) * 64;
 
             olc::Pixel::Mode prevMode = pge->GetPixelMode();

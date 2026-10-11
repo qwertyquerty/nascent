@@ -9,6 +9,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "TextField.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <chrono>
@@ -35,7 +36,7 @@ namespace nascent {
     }
 
     static int32_t text_width(olc::Font& font, const std::string& text) {
-        return text.empty() ? 0 : font.GetStringBounds(text).size.x;
+        return text.empty() ? 0 : text_bounds(font, text).size.x;
     }
 
     static std::string fit_text(olc::Font& font, std::string text, int32_t max_width) {
@@ -268,7 +269,7 @@ namespace nascent {
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 
-        skin->display_font_large.DrawString("Browse Charts", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Browse Charts", {x, y}, olc::WHITE);
         y += 90;
 
         std::string subtitle;
@@ -283,7 +284,7 @@ namespace nascent {
             subtitle = std::format("{} charts on {}", total, SettingsManager::settings.server_url);
         }
 
-        skin->display_font_small.DrawString(subtitle, {x, y}, error.empty() ? olc::GREY : olc::RED);
+        draw_text(skin->display_font_small, subtitle, {x, y}, error.empty() ? olc::GREY : olc::RED);
         y += 60;
 
         form.draw(window, skin, {x, y});
@@ -296,11 +297,11 @@ namespace nascent {
 
         olc::Font& title_font = skin->display_font_medium;
         olc::Font& detail_font = skin->display_font_small;
-        olc::FontRect title_metrics = title_font.GetStringBounds("Hgjy");
-        olc::FontRect detail_metrics = detail_font.GetStringBounds("Hgjy");
+        olc::FontRect title_metrics = text_bounds(title_font, "Hgjy");
+        olc::FontRect detail_metrics = text_bounds(detail_font, "Hgjy");
 
         if (shown && results.empty() && error.empty()) {
-            detail_font.DrawString("No charts match these filters", {panel_x + ROW_PADDING, top - detail_metrics.offset.y}, olc::GREY);
+            draw_text(detail_font, "No charts match these filters", {panel_x + ROW_PADDING, top - detail_metrics.offset.y}, olc::GREY);
         }
 
         for (size_t index = 0; index < results.size(); index++) {
@@ -367,7 +368,7 @@ namespace nascent {
 
             std::string title = std::format("{} - {} [{}]", chart.artist, chart.title, chart.difficulty_name);
             int32_t title_baseline = row_y + 8 - title_metrics.offset.y;
-            title_font.DrawString(fit_text(title_font, title, panel_width - STATUS_WIDTH - ROW_PADDING * 3), {panel_x + ROW_PADDING, title_baseline}, color);
+            draw_text(title_font, fit_text(title_font, title, panel_width - STATUS_WIDTH - ROW_PADDING * 3), {panel_x + ROW_PADDING, title_baseline}, color);
 
             std::string details = std::format(
                 "{}K      {:.2f}      {}      {} notes      {}      mapped by {}",
@@ -379,10 +380,10 @@ namespace nascent {
                 chart.mapper
             );
             int32_t detail_baseline = row_y + ROW_HEIGHT - 16 - (detail_metrics.size.y + detail_metrics.offset.y);
-            detail_font.DrawString(fit_text(detail_font, details, panel_width - STATUS_WIDTH - ROW_PADDING * 3), {panel_x + ROW_PADDING, detail_baseline}, olc::GREY);
+            draw_text(detail_font, fit_text(detail_font, details, panel_width - STATUS_WIDTH - ROW_PADDING * 3), {panel_x + ROW_PADDING, detail_baseline}, olc::GREY);
 
             int32_t status_x = panel_x + panel_width - ROW_PADDING - text_width(detail_font, status);
-            detail_font.DrawString(status, {status_x, title_baseline}, status_color);
+            draw_text(detail_font, status, {status_x, title_baseline}, status_color);
         }
 
         std::vector<std::string> hints = results_focused ? std::vector<std::string>{"↑/↓:  chart", "Enter:  download", "Ctrl+Tab:  filters", "Esc:  back"}
@@ -390,7 +391,7 @@ namespace nascent {
         int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * HINT_LINE_HEIGHT;
 
         for (const std::string& hint : hints) {
-            detail_font.DrawString(hint, {x, hint_baseline}, olc::GREY);
+            draw_text(detail_font, hint, {x, hint_baseline}, olc::GREY);
             hint_baseline += HINT_LINE_HEIGHT;
         }
     }

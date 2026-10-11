@@ -10,6 +10,7 @@
 #include "discord-rpc.hpp"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <ctime>
@@ -25,6 +26,7 @@ namespace nascent {
         release_scenes();
         scene_list.reset();
         skin.reset();
+        text_cache_clear();
     };
 
     void GameNascent::init() {
@@ -62,6 +64,7 @@ namespace nascent {
         }
 
         begin_frame(elapsed_time);
+        text_cache_begin_frame();
 
         this->elapsed_time = elapsed_time;
         scene->update(elapsed_time);
@@ -72,7 +75,7 @@ namespace nascent {
 
         if (debug) {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
-            skin->display_font_small.DrawString(std::format("FPS: {}", fps), window->GetScreenSize().x - 100, 30, olc::WHITE);
+            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - 100, 30, olc::WHITE);
         }
     }
 

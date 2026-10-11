@@ -1,6 +1,7 @@
 #include "TextField.h"
 
 #include "Skin.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <cmath>
@@ -53,7 +54,7 @@ namespace nascent {
     }
 
     static int32_t text_width(olc::Font& font, const std::string& text) {
-        return text.empty() ? 0 : font.GetStringBounds(text).size.x;
+        return text.empty() ? 0 : text_bounds(font, text).size.x;
     }
 
     TextField::TextField(std::string label, std::string value, bool secret) : label(std::move(label)), value(std::move(value)), secret(secret) {
@@ -115,8 +116,8 @@ namespace nascent {
         olc::Font& text_font = skin->display_font_medium;
         olc::Pixel color = focused ? olc::WHITE : olc::GREY;
 
-        olc::FontRect label_metrics = label_font.GetStringBounds("Hgjy");
-        label_font.DrawString(label, {position.x, position.y - label_metrics.offset.y}, color);
+        olc::FontRect label_metrics = text_bounds(label_font, "Hgjy");
+        draw_text(label_font, label, {position.x, position.y - label_metrics.offset.y}, color);
 
         int32_t box_top = position.y + label_metrics.size.y + LABEL_GAP;
         window->FillRectDecal({(float)position.x, (float)box_top}, {(float)WIDTH, (float)HEIGHT}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
@@ -137,10 +138,10 @@ namespace nascent {
             visible.erase(previous_character(visible, visible.size()));
         }
 
-        olc::FontRect text_metrics = text_font.GetStringBounds("Hgjy");
+        olc::FontRect text_metrics = text_bounds(text_font, "Hgjy");
         int32_t baseline = box_top + (HEIGHT - text_metrics.size.y) / 2 - text_metrics.offset.y;
         int32_t text_left = position.x + PADDING;
-        text_font.DrawString(visible, {text_left, baseline}, color);
+        draw_text(text_font, visible, {text_left, baseline}, color);
 
         if (focused && std::fmod(blink_timer, 1.0f) < 0.5f) {
             int32_t caret = text_left + text_width(text_font, shown.substr(first, caret_index - first)) + 1;

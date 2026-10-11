@@ -2,6 +2,7 @@
 
 #include "Account.h"
 #include "Skin.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <chrono>
@@ -106,12 +107,12 @@ namespace nascent {
         window->DrawLine({0, top}, {screen.x, top}, EDGE);
         window->SetPixelMode(mode);
 
-        olc::FontRect metrics = font.GetStringBounds("Hgjy");
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = top + (HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
         int32_t x = PADDING;
 
         auto width = [&](const std::string& text) {
-            return text.empty() ? 0 : font.GetStringBounds(text).size.x;
+            return text.empty() ? 0 : text_bounds(font, text).size.x;
         };
 
         std::string status;
@@ -141,24 +142,24 @@ namespace nascent {
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
             hint_x -= SEGMENT_GAP + width(*hint);
-            font.DrawString(*hint, {hint_x, baseline}, olc::GREY);
+            draw_text(font, *hint, {hint_x, baseline}, olc::GREY);
         }
 
         int32_t status_x = hint_x - SEGMENT_GAP - width(status);
         int32_t dot_x = status_x - LABEL_GAP - DOT_RADIUS * 2;
-        font.DrawString(status, {status_x, baseline}, olc::WHITE);
+        draw_text(font, status, {status_x, baseline}, olc::WHITE);
         window->FillCircle({dot_x, top + HEIGHT / 2}, DOT_RADIUS, status_color);
 
         std::string rate_value = std::format("{:.2f}x", rate);
         int32_t rate_value_x = dot_x - DOT_RADIUS - SEGMENT_GAP - width(rate_value);
         int32_t rate_label_x = rate_value_x - LABEL_GAP - width("Rate");
-        font.DrawString("Rate", {rate_label_x, baseline}, olc::GREY);
-        font.DrawString(rate_value, {rate_value_x, baseline}, std::abs(rate - 1.0f) < 0.001f ? olc::WHITE : RATE_CHANGED_COLOR);
+        draw_text(font, "Rate", {rate_label_x, baseline}, olc::GREY);
+        draw_text(font, rate_value, {rate_value_x, baseline}, std::abs(rate - 1.0f) < 0.001f ? olc::WHITE : RATE_CHANGED_COLOR);
         int32_t left_limit = rate_label_x - SEGMENT_GAP;
         bool left_full = false;
 
         auto text = [&](const std::string& value, olc::Pixel color) {
-            font.DrawString(value, {x, baseline}, color);
+            draw_text(font, value, {x, baseline}, color);
             x += width(value);
         };
 

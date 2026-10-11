@@ -6,6 +6,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "TextField.h"
+#include "TextCache.h"
 
 #include <chrono>
 #include <format>
@@ -157,23 +158,23 @@ namespace nascent {
 
         const char* title = mode == Mode::SIGN_IN ? "Sign in" : mode == Mode::REGISTER ? "Create an account"
                                                                                        : "Account";
-        skin->display_font_large.DrawString(title, {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, title, {x, y}, olc::WHITE);
         y += 90;
 
-        skin->display_font_small.DrawString("Signing in lets your plays count towards the leaderboards.", {x, y}, olc::GREY);
+        draw_text(skin->display_font_small, "Signing in lets your plays count towards the leaderboards.", {x, y}, olc::GREY);
         y += 26;
-        skin->display_font_small.DrawString(SettingsManager::settings.server_url, {x, y}, olc::DARK_GREY);
+        draw_text(skin->display_font_small, SettingsManager::settings.server_url, {x, y}, olc::DARK_GREY);
         y += 60;
 
         if (mode == Mode::SIGNED_IN) {
-            skin->display_font_medium.DrawString(std::format("Signed in as {}", Account::username()), {x, y}, olc::WHITE);
+            draw_text(skin->display_font_medium, std::format("Signed in as {}", Account::username()), {x, y}, olc::WHITE);
             y += 60;
         }
 
         y += form.draw(window, skin, {x, y});
 
         if (!status.empty()) {
-            skin->display_font_small.DrawString(status, {x, y}, status_is_error ? olc::RED : olc::GREY);
+            draw_text(skin->display_font_small, status, {x, y}, status_is_error ? olc::RED : olc::GREY);
         }
 
         std::string footer;
@@ -189,8 +190,8 @@ namespace nascent {
             );
         }
 
-        olc::FontRect footer_bounds = skin->display_font_small.GetStringBounds(footer);
+        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
         int32_t footer_bottom = screen.y - screen.y / 12;
-        skin->display_font_small.DrawString(footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
+        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
     }
 }

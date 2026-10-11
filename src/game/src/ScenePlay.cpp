@@ -18,6 +18,7 @@
 #include "Sha256.h"
 #include "Skin.h"
 #include "Util.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -222,26 +223,12 @@ namespace nascent {
         float progress = (float)((position - chart_start) / chart_length);
         ProgressBar({SONG_PROGRESS_WIDTH, SONG_PROGRESS_HEIGHT}).draw(window, {screensize.x - SONG_PROGRESS_RIGHT, SONG_PROGRESS_TOP}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
 
-        skin->display_font_medium.DrawString(std::format("{:.2f}%", attempt.get_accuracy() * 100), 20, 40, olc::WHITE);
-        skin->display_font_medium.DrawString(std::format("{:.1f}ms", attempt.get_avg_err()), 20, 80, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{:.2f}%", attempt.get_accuracy() * 100), 20, 40, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{:.1f}ms", attempt.get_avg_err()), 20, 80, olc::WHITE);
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
-        uint16_t w = skin->display_font_medium.GetStringBounds(now_playing_string).size.x;
-        skin->display_font_medium.DrawString(
-            now_playing_string,
-            {screensize.x / 2 - w / 2,
-             (int)smoothstep(
-                 -(float)screensize.x / 24,
-                 (float)screensize.x / 24,
-                 (timer - SettingsManager::settings.play_start_delay + 2) * 2
-             ) +
-                 (int)smoothstep(
-                     0,
-                     -(float)screensize.x / 12,
-                     (timer - SettingsManager::settings.play_start_delay - 1) * 2
-                 )},
-            olc::WHITE
-        );
+        uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
+        draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, olc::WHITE);
 
         uint8_t l = 0;
         const double vspacing = 26;

@@ -8,6 +8,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "Util.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <cmath>
@@ -290,21 +291,21 @@ namespace nascent {
 
         int step_index = (int)step;
 
-        skin->display_font_large.DrawString("Offset Calibration", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Offset Calibration", {x, y}, olc::WHITE);
         y += 90;
 
-        skin->display_font_medium.DrawString(std::format("Step {} of 3: {}", step_index + 1, step_names[step_index]), {x, y}, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("Step {} of 3: {}", step_index + 1, step_names[step_index]), {x, y}, olc::WHITE);
         y += 50;
 
         for (const char* line : step_descriptions[step_index]) {
-            skin->display_font_small.DrawString(line, {x, y}, olc::GREY);
+            draw_text(skin->display_font_small, line, {x, y}, olc::GREY);
             y += 26;
         }
 
         y += 20;
 
         for (const char* line : step_instructions[step_index]) {
-            skin->display_font_small.DrawString(line, {x, y}, olc::WHITE);
+            draw_text(skin->display_font_small, line, {x, y}, olc::WHITE);
             y += 26;
         }
 
@@ -318,8 +319,8 @@ namespace nascent {
 
         for (int i = 0; i < 3; i++) {
             olc::Pixel color = i == step_index ? olc::WHITE : olc::DARK_GREY;
-            skin->display_font_medium.DrawString(std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
-            skin->display_font_medium.DrawString(values[i], {x + 380, y}, color);
+            draw_text(skin->display_font_medium, std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
+            draw_text(skin->display_font_medium, values[i], {x + 380, y}, color);
             y += 48;
         }
 
@@ -329,21 +330,21 @@ namespace nascent {
             std::string taps = tap_errors.empty()
                 ? std::string("No taps yet")
                 : std::format("{} taps, average error {:+.1f} ms{}", tap_errors.size(), get_average_tap_error(), tap_errors.size() < MIN_TAPS_FOR_SUGGESTION ? " (keep tapping)" : "");
-            skin->display_font_small.DrawString(taps, {x, y}, olc::WHITE);
+            draw_text(skin->display_font_small, taps, {x, y}, olc::WHITE);
             y += 26;
-            skin->display_font_small.DrawString("R: clear taps", {x, y}, olc::GREY);
+            draw_text(skin->display_font_small, "R: clear taps", {x, y}, olc::GREY);
             y += 40;
         }
 
         if (!status_message.empty()) {
-            skin->display_font_small.DrawString(status_message, {x, y}, olc::RED);
+            draw_text(skin->display_font_small, status_message, {x, y}, olc::RED);
         }
 
         std::string footer = "↑/↓:  change step        ←/→:  adjust (Shift for bigger steps)        Enter:  save and exit        Esc:  exit";
 
-        olc::FontRect footer_bounds = skin->display_font_small.GetStringBounds(footer);
+        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
         int32_t footer_bottom = field != nullptr ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;
 
-        skin->display_font_small.DrawString(footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
+        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
     }
 }

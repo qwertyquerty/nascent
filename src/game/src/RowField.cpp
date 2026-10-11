@@ -2,6 +2,7 @@
 
 #include "InputManager.h"
 #include "Skin.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <cmath>
@@ -14,7 +15,7 @@ namespace nascent {
     static constexpr int32_t CARET_INSET = 9;
 
     static int32_t text_width(olc::Font& font, const std::string& text) {
-        return text.empty() ? 0 : font.GetStringBounds(text).size.x;
+        return text.empty() ? 0 : text_bounds(font, text).size.x;
     }
 
     static std::string format_number(double value) {
@@ -56,13 +57,13 @@ namespace nascent {
 
         window->FillRectDecal({(float)position.x, (float)position.y}, {(float)WIDTH, (float)HEIGHT}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
 
-        olc::FontRect metrics = font.GetStringBounds("Hgjy");
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = position.y + (HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
-        font.DrawString(label, {position.x + PADDING, baseline}, color);
+        draw_text(font, label, {position.x + PADDING, baseline}, color);
 
         std::string value = display_value(focused);
         int32_t value_x = position.x + WIDTH - PADDING - text_width(font, value);
-        font.DrawString(value, {value_x, baseline}, is_placeholder() ? olc::DARK_GREY : color);
+        draw_text(font, value, {value_x, baseline}, is_placeholder() ? olc::DARK_GREY : color);
 
         if (focused && shows_caret() && std::fmod(blink_timer, 1.0f) < 0.5f) {
             int32_t caret = is_placeholder() ? position.x + WIDTH - PADDING : value_x + text_width(font, value) + 1;

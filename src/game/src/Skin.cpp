@@ -1,6 +1,7 @@
 #include "Skin.h"
 #include "Game.h"
 #include "Accuracy.h"
+#include "TextCache.h"
 
 #include <format>
 
@@ -15,6 +16,10 @@ namespace nascent {
     }
 
     Skin::~Skin() {
+        for (const olc::Font* font : {&display_font_large, &display_font_medium, &display_font_small}) {
+            text_cache_forget(*font);
+        }
+
         for (int32_t sound : menu_pluck_sfx) {
             game->get_audio().UnloadSound(sound);
         }

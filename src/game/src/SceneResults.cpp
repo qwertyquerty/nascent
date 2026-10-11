@@ -5,6 +5,7 @@
 #include "Game.h"
 #include "InputManager.h"
 #include "Skin.h"
+#include "TextCache.h"
 
 #include <algorithm>
 #include <chrono>
@@ -172,17 +173,17 @@ namespace nascent {
         olc::Font& detail_font = skin->display_font_small;
 
         if (!submission.valid() && !submitted) {
-            detail_font.DrawString("Not submitted: sign in to submit your plays", {x, y}, olc::DARK_GREY);
+            draw_text(detail_font, "Not submitted: sign in to submit your plays", {x, y}, olc::DARK_GREY);
             return;
         }
 
         if (!submitted) {
-            detail_font.DrawString("Submitting your play...", {x, y}, olc::GREY);
+            draw_text(detail_font, "Submitting your play...", {x, y}, olc::GREY);
             return;
         }
 
         if (!submitted->ok()) {
-            detail_font.DrawString(std::format("Not submitted: {}", submitted->error()), {x, y}, olc::RED);
+            draw_text(detail_font, std::format("Not submitted: {}", submitted->error()), {x, y}, olc::RED);
             return;
         }
 
@@ -190,19 +191,8 @@ namespace nascent {
 
         if (result.play.ranked) {
             const Standing& standing = result.key_mode ? *result.key_mode : result.combined;
-            title_font.DrawString(std::format("Ranked  {:.2f} performance", result.play.performance), {x, y}, olc::WHITE);
-            detail_font.DrawString(
-                std::format(
-                    "{} on this chart        {}global {}        performance {:.2f} ({:+.2f})",
-                    result.chart_rank ? std::format("#{}", *result.chart_rank) : std::string("Unranked"),
-                    standing.key_count ? std::format("{}K ", *standing.key_count) : std::string(),
-                    format_rank_change(standing.global_rank, standing.previous_global_rank),
-                    standing.performance,
-                    standing.performance_change
-                ),
-                {x, y + 34},
-                olc::GREY
-            );
+            draw_text(title_font, std::format("Ranked  {:.2f} performance", result.play.performance), {x, y}, olc::WHITE);
+            draw_text(detail_font, std::format("{} on this chart        {}global {}        performance {:.2f} ({:+.2f})", result.chart_rank ? std::format("#{}", *result.chart_rank) : std::string("Unranked"), standing.key_count ? std::format("{}K ", *standing.key_count) : std::string(), format_rank_change(standing.global_rank, standing.previous_global_rank), standing.performance, standing.performance_change), {x, y + 34}, olc::GREY);
             return;
         }
 
@@ -218,7 +208,7 @@ namespace nascent {
             reason = "Submitted, but not ranked because the play ticket was missing or expired";
         }
 
-        detail_font.DrawString(reason, {x, y}, olc::GREY);
+        draw_text(detail_font, reason, {x, y}, olc::GREY);
     }
 
     void SceneResults::draw(olc::PixelGameEngine* window) {
@@ -232,13 +222,13 @@ namespace nascent {
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 
-        skin->display_font_medium.DrawString(std::format("{} - {}", chart->info.artist, chart->info.title), {x, y}, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{} - {}", chart->info.artist, chart->info.title), {x, y}, olc::WHITE);
         y += 36;
-        skin->display_font_small.DrawString(std::format("[{}] // {}    {:.2f}x", chart->info.difficulty_name, chart->info.mapper, chart->pitch), {x, y}, olc::GREY);
+        draw_text(skin->display_font_small, std::format("[{}] // {}    {:.2f}x", chart->info.difficulty_name, chart->info.mapper, chart->pitch), {x, y}, olc::GREY);
         y += 110;
 
-        skin->display_font_large.DrawString(std::string(grade_name(summary.grade)), {x, y + 20}, grade_color(summary.grade));
-        skin->display_font_large.DrawString(std::format("{:.2f}%", std::floor(summary.accuracy * 10000.0) / 100.0), {x + 110, y + 20}, olc::WHITE);
+        draw_text(skin->display_font_large, std::string(grade_name(summary.grade)), {x, y + 20}, grade_color(summary.grade));
+        draw_text(skin->display_font_large, std::format("{:.2f}%", std::floor(summary.accuracy * 10000.0) / 100.0), {x + 110, y + 20}, olc::WHITE);
         y += 80;
 
         const std::pair<const char*, std::string> stats[] = {
@@ -249,8 +239,8 @@ namespace nascent {
         };
 
         for (const auto& [label, value] : stats) {
-            skin->display_font_medium.DrawString(label, {x, y}, olc::GREY);
-            skin->display_font_medium.DrawString(value, {x + 300, y}, olc::WHITE);
+            draw_text(skin->display_font_medium, label, {x, y}, olc::GREY);
+            draw_text(skin->display_font_medium, value, {x + 300, y}, olc::WHITE);
             y += 44;
         }
 
@@ -264,22 +254,22 @@ namespace nascent {
                 continue;
             }
 
-            skin->display_font_medium.DrawString(std::string(hit_score_name(score)), {counts_x, counts_y}, olc::Pixel(hit_score_color(score)));
-            skin->display_font_medium.DrawString(std::format("{}", summary.score_counts[(size_t)score]), {counts_x + 260, counts_y}, olc::WHITE);
+            draw_text(skin->display_font_medium, std::string(hit_score_name(score)), {counts_x, counts_y}, olc::Pixel(hit_score_color(score)));
+            draw_text(skin->display_font_medium, std::format("{}", summary.score_counts[(size_t)score]), {counts_x + 260, counts_y}, olc::WHITE);
             counts_y += 44;
         }
 
         if (error_graph) {
-            skin->display_font_small.DrawString("Hit error over the song", {error_graph_pos.x, error_graph_pos.y - 12}, olc::GREY);
+            draw_text(skin->display_font_small, "Hit error over the song", {error_graph_pos.x, error_graph_pos.y - 12}, olc::GREY);
             window->DrawDecal(error_graph_pos, error_graph.get());
         }
 
         int32_t footer_y = screen.y - screen.y / 24;
-        skin->display_font_small.DrawString("Enter / Esc:  back to the song list", {x, footer_y}, olc::GREY);
+        draw_text(skin->display_font_small, "Enter / Esc:  back to the song list", {x, footer_y}, olc::GREY);
 
         if (!replay_message.empty()) {
-            olc::FontRect bounds = skin->display_font_small.GetStringBounds(replay_message);
-            skin->display_font_small.DrawString(replay_message, {screen.x - x - bounds.size.x, footer_y}, olc::DARK_GREY);
+            olc::FontRect bounds = text_bounds(skin->display_font_small, replay_message);
+            draw_text(skin->display_font_small, replay_message, {screen.x - x - bounds.size.x, footer_y}, olc::DARK_GREY);
         }
     }
 }
