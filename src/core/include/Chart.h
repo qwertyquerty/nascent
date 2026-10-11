@@ -71,6 +71,8 @@ namespace nascent {
          * Set the pitch of the chart and recaculate the time of all the notes
          */
         void set_pitch(float);
+        void pitched_timing(float pitch, std::vector<Hit>& out_hits, std::vector<ChartTimingPoint>& out_timing_points) const;
+        uint8_t unpitched_key_count() const;
 
         nlohmann::json serialize() const;
         std::string gameplay_hash() const;

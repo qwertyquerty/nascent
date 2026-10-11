@@ -130,6 +130,13 @@ namespace nascent {
         return calculate(chart.hits, chart.info.key_count, chart.timing_points, RANKED_HIT_ACC_DIFFICULTY, parameters);
     }
 
+    double DifficultyCalculator::calculate_at_pitch(const Chart& chart, float pitch, const DifficultyParameters& parameters) {
+        std::vector<Hit> hits;
+        std::vector<ChartTimingPoint> timing_points;
+        chart.pitched_timing(pitch, hits, timing_points);
+        return calculate(hits, chart.unpitched_key_count(), timing_points, RANKED_HIT_ACC_DIFFICULTY, parameters);
+    }
+
     double DifficultyCalculator::strictness_factor(uint8_t hit_accuracy, const DifficultyParameters& p) {
         double accuracy = std::clamp<double>(hit_accuracy, MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY);
         double reference = std::clamp<double>(p.strictness_reference, MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY);

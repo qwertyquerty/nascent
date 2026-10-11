@@ -234,20 +234,27 @@ namespace nascent {
         this->pitch = pitch;
 
         info = unpitched_info;
-        hits = unpitched_hits;
-        timing_points = unpitched_timing_points;
-
         info.audio_lead_in = (int32_t)(unpitched_info.audio_lead_in / pitch);
+        pitched_timing(pitch, hits, timing_points);
+    }
 
-        for (Hit& hit : hits) {
+    void Chart::pitched_timing(float pitch, std::vector<Hit>& out_hits, std::vector<ChartTimingPoint>& out_timing_points) const {
+        out_hits = unpitched_hits;
+        out_timing_points = unpitched_timing_points;
+
+        for (Hit& hit : out_hits) {
             hit.time = (int32_t)(hit.time / pitch);
             hit.end_time = (int32_t)(hit.end_time / pitch);
         }
 
-        for (ChartTimingPoint& tp : timing_points) {
+        for (ChartTimingPoint& tp : out_timing_points) {
             tp.beat_length /= pitch;
             tp.time = (int32_t)(tp.time / pitch);
         }
+    }
+
+    uint8_t Chart::unpitched_key_count() const {
+        return unpitched_info.key_count;
     }
 
     int32_t Chart::get_duration_ms() const {
