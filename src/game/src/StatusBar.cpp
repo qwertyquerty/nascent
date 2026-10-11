@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <format>
+#include <memory>
 #include <vector>
 #include <utility>
 
@@ -101,11 +102,8 @@ namespace nascent {
         int32_t top = screen.y - HEIGHT;
         olc::Font& font = skin->display_font_small;
 
-        olc::Pixel::Mode mode = window->GetPixelMode();
-        window->SetPixelMode(olc::Pixel::ALPHA);
-        window->FillRect({0, top}, {screen.x, HEIGHT}, BACKGROUND);
-        window->DrawLine({0, top}, {screen.x, top}, EDGE);
-        window->SetPixelMode(mode);
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)HEIGHT}, BACKGROUND);
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, EDGE);
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = top + (HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
@@ -148,7 +146,19 @@ namespace nascent {
         int32_t status_x = hint_x - SEGMENT_GAP - width(status);
         int32_t dot_x = status_x - LABEL_GAP - DOT_RADIUS * 2;
         draw_text(font, status, {status_x, baseline}, olc::WHITE);
-        window->FillCircle({dot_x, top + HEIGHT / 2}, DOT_RADIUS, status_color);
+        if (!dot) {
+            auto sprite = std::make_unique<olc::Sprite>(DOT_RADIUS * 2 + 1, DOT_RADIUS * 2 + 1);
+
+            for (int32_t y = -DOT_RADIUS; y <= DOT_RADIUS; y++) {
+                for (int32_t x = -DOT_RADIUS; x <= DOT_RADIUS; x++) {
+                    sprite->SetPixel(x + DOT_RADIUS, y + DOT_RADIUS, x * x + y * y <= DOT_RADIUS * DOT_RADIUS ? olc::WHITE : olc::BLANK);
+                }
+            }
+
+            dot = SpriteDecal(std::move(sprite), true);
+        }
+
+        window->DrawDecal({(float)(dot_x - DOT_RADIUS), (float)(top + HEIGHT / 2 - DOT_RADIUS)}, dot.get(), {1.0f, 1.0f}, status_color);
 
         std::string rate_value = std::format("{:.2f}x", rate);
         int32_t rate_value_x = dot_x - DOT_RADIUS - SEGMENT_GAP - width(rate_value);

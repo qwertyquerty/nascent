@@ -948,11 +948,8 @@ namespace nascent {
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = (StatusBar::HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
 
-        olc::Pixel::Mode mode = window->GetPixelMode();
-        window->SetPixelMode(olc::Pixel::ALPHA);
-        window->FillRect({0, 0}, {screensize.x, StatusBar::HEIGHT}, StatusBar::BACKGROUND);
-        window->DrawLine({0, StatusBar::HEIGHT - 1}, {screensize.x, StatusBar::HEIGHT - 1}, StatusBar::EDGE);
-        window->SetPixelMode(mode);
+        window->FillRectDecal({0.0f, 0.0f}, {(float)screensize.x, (float)StatusBar::HEIGHT}, StatusBar::BACKGROUND);
+        window->FillRectDecal({0.0f, (float)(StatusBar::HEIGHT - 1)}, {(float)screensize.x, 1.0f}, StatusBar::EDGE);
 
         if (search.empty()) {
             draw_text(font, "Type to search", {StatusBar::PADDING, baseline}, olc::DARK_GREY);

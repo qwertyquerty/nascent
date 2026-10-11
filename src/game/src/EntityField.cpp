@@ -146,9 +146,9 @@ namespace nascent {
         }
 
         if (debug) {
-            window->DrawString(pos.x + 20, pos.y + 20, std::format("POS {:.1f}", position), olc::WHITE, 2);
-            window->DrawString(pos.x + 20, pos.y + 40, std::format("MB {}", chart->meter_beat_at(position)), olc::WHITE, 2);
-            window->DrawString(pos.x + 20, pos.y + 60, std::format("SB {}", chart->section_beat_at(position)), olc::WHITE, 2);
+            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 20)}, std::format("POS {:.1f}", position), olc::WHITE, {2.0f, 2.0f});
+            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 40)}, std::format("MB {}", chart->meter_beat_at(position)), olc::WHITE, {2.0f, 2.0f});
+            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 60)}, std::format("SB {}", chart->section_beat_at(position)), olc::WHITE, {2.0f, 2.0f});
         }
     };
 

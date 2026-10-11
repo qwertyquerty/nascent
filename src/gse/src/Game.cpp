@@ -20,13 +20,12 @@ namespace nascent {
         key_event_hook_active = install_window_hook(&key_event_queue, window->sAppName);
     }
 
-    void Game::make_layer_smooth(uint32_t layer) {
-        olc::vi2d size = window->GetScreenSize();
-        window->GetLayers()[layer].pDrawTarget.Create(size.x, size.y, true);
+    void Game::make_layer_blank(uint32_t layer) {
+        window->GetLayers()[layer].pDrawTarget.Create(1, 1);
     }
 
-    void Game::use_smooth_scaling() {
-        make_layer_smooth(0);
+    void Game::use_blank_canvas() {
+        make_layer_blank(0);
         window->SetDrawTarget(nullptr);
     }
 
@@ -67,7 +66,7 @@ namespace nascent {
         if (outgoing_scene != nullptr) {
             if (transition_layer < 0) {
                 transition_layer = (int32_t)window->CreateLayer();
-                make_layer_smooth((uint32_t)transition_layer);
+                make_layer_blank((uint32_t)transition_layer);
             }
 
             window->EnableLayer((uint8_t)transition_layer, true);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ServerApi.h"
+#include "Util.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstdint>
@@ -33,6 +34,8 @@ namespace nascent {
 
         uint8_t key_count = 0;
         float rate = 1.0f;
+
+        mutable SpriteDecal dot;
 
         void poll_heartbeat();
         void poll_profile();

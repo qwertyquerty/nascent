@@ -38,7 +38,7 @@ namespace nascent {
         olc::Font::init();
 
         init_input();
-        use_smooth_scaling();
+        use_blank_canvas();
 
         start_time = time(nullptr);
         std::srand(start_time);
