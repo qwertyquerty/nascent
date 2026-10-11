@@ -23,7 +23,11 @@ namespace nascent {
         std::string replay_message;
         std::future<ApiResult<Submission>> submission;
         std::optional<ApiResult<Submission>> submitted;
+        int song_audio_id = -1;
 
+        void release_song();
+
+        SpriteDecal background_image;
         SpriteDecal error_graph;
         olc::vi2d error_graph_pos;
 
@@ -31,8 +35,9 @@ namespace nascent {
         void draw_submission(int32_t x, int32_t y) const;
 
         public:
-        SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission);
+        SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission, int song_audio_id = -1);
         void init(Game*) override;
+        void on_exit() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };

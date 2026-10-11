@@ -15,6 +15,8 @@
 #include <utility>
 
 namespace nascent {
+    static const olc::Pixel BACKGROUND_TINT = olc::Pixel(240, 240, 240, 25);
+
     static olc::Pixel blend(olc::Pixel below, olc::Pixel above) {
         float a = above.a / 255.0f;
         return olc::Pixel(
@@ -25,13 +27,14 @@ namespace nascent {
         );
     }
 
-    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission) {
+    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission, int song_audio_id) {
         this->skin = skin;
         this->return_scene = return_scene;
         this->chart = chart;
         this->summary = std::move(summary);
         this->replay_message = std::move(replay_message);
         this->submission = std::move(submission);
+        this->song_audio_id = song_audio_id;
     }
 
     void SceneResults::init(Game* game) {
@@ -40,6 +43,14 @@ namespace nascent {
 
         error_graph_pos = {margin, (int32_t)(screen.y * 0.56)};
         build_error_graph({screen.x - margin * 2, (int32_t)(screen.y * 0.32)});
+
+        if (!chart->info.image_file.empty()) {
+            auto sprite = std::make_unique<olc::Sprite>();
+
+            if (sprite->LoadFromFile(chart->image_path.string()) == olc::OK) {
+                background_image = SpriteDecal(std::move(sprite), true);
+            }
+        }
     }
 
     void SceneResults::build_error_graph(olc::vi2d size) {
@@ -117,7 +128,23 @@ namespace nascent {
         error_graph = SpriteDecal(std::move(sprite));
     }
 
+    void SceneResults::release_song() {
+        if (song_audio_id != -1) {
+            game->get_audio().Stop(song_audio_id);
+            game->get_audio().UnloadSound(song_audio_id);
+            song_audio_id = -1;
+        }
+    }
+
+    void SceneResults::on_exit() {
+        release_song();
+    }
+
     void SceneResults::update(float) {
+        if (song_audio_id != -1 && !game->get_audio().IsPlaying(song_audio_id)) {
+            release_song();
+        }
+
         if (submission.valid() && submission.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             submitted = submission.get();
         }
@@ -196,6 +223,12 @@ namespace nascent {
 
     void SceneResults::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
+
+        if (background_image) {
+            olc::vf2d corners[4] = {{0.0f, 0.0f}, {0.0f, screen.y - 1.0f}, {screen.x - 1.0f, screen.y - 1.0f}, {screen.x - 1.0f, 0.0f}};
+            window->DrawWarpedDecal(background_image.get(), corners, BACKGROUND_TINT);
+        }
+
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 

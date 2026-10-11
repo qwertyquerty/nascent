@@ -77,7 +77,14 @@ namespace nascent {
             submission = ServerApi::submit_play(*chart, replay, ticket);
         }
 
-        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), replay_message, std::move(submission)));
+        int continuing_audio_id = -1;
+
+        if (chart_audio_id != -1 && game->get_audio().IsPlaying(chart_audio_id)) {
+            continuing_audio_id = chart_audio_id;
+            chart_audio_id = -1;
+        }
+
+        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), replay_message, std::move(submission), continuing_audio_id));
     }
 
     ScenePlay::~ScenePlay() {
