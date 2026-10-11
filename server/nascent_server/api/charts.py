@@ -1,10 +1,10 @@
 from flask import Blueprint, request
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Chart, ChartStatus, Play, User
+from ..models import Chart, ChartSource, ChartStatus, Play, User
 from ..ratelimit import check_rate_limit
 from ..schemas import json_body, pagination, query_float, query_int
 from ..security import authenticate, current_user, require_not_banned
@@ -41,13 +41,23 @@ def list_charts():
     if "key_count" in request.args:
         query = query.where(Chart.key_count == query_int("key_count", 4, 1, 32))
 
-    minimum, maximum = query_float("min_difficulty"), query_float("max_difficulty")
+    for column, minimum, maximum in (
+        (Chart.difficulty, query_float("min_difficulty"), query_float("max_difficulty")),
+        (Chart.duration_ms, query_float("min_duration"), query_float("max_duration")),
+        (Chart.note_count, query_float("min_notes"), query_float("max_notes")),
+    ):
+        scale = 1000 if column is Chart.duration_ms else 1
 
-    if minimum is not None:
-        query = query.where(Chart.difficulty >= minimum)
+        if minimum is not None:
+            query = query.where(column >= minimum * scale)
 
-    if maximum is not None:
-        query = query.where(Chart.difficulty <= maximum)
+        if maximum is not None:
+            query = query.where(column <= maximum * scale)
+
+    source = request.args.get("source")
+
+    if source:
+        query = query.where(Chart.sources.any(ChartSource.source == source[:16]))
 
     search = (request.args.get("q") or "").strip()[:100]
 
@@ -64,8 +74,8 @@ def list_charts():
     order = request.args.get("order", "asc")
     column = SORTS[sort].desc() if order == "desc" else SORTS[sort].asc()
     total = db.session.scalar(select(func.count()).select_from(query.subquery()))
-    charts = db.session.scalars(query.order_by(column, Chart.id.asc()).offset(offset).limit(limit)).all()
-    return {"total": total, "charts": [chart_summary(chart) for chart in charts]}
+    charts = db.session.scalars(query.options(selectinload(Chart.sources)).order_by(column, Chart.id.asc()).offset(offset).limit(limit)).all()
+    return {"total": total, "charts": [chart_summary(chart, include_sources=True) for chart in charts]}
 
 
 @blueprint.post("")
@@ -132,9 +142,7 @@ def leaderboard(chart_hash: str):
 def rates(chart_hash: str):
     chart = get_chart_or_404(chart_hash)
     counts = dict(
-        db.session.execute(
-            select(Play.rate_key, func.count()).where(Play.chart_id == chart.id, Play.is_chart_best.is_(True)).group_by(Play.rate_key)
-        ).all()
+        db.session.execute(select(Play.rate_key, func.count()).where(Play.chart_id == chart.id, Play.is_chart_best.is_(True)).group_by(Play.rate_key)).all()
     )
     return {
         "chart_hash": chart.hash,

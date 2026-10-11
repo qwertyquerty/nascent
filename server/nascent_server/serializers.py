@@ -39,8 +39,8 @@ def private_user(user: User) -> dict[str, Any]:
     return {**user_summary(user), "email": user.email, "role": user.role, "is_restricted": user.is_banned, "created_at": isoformat(user.created_at)}
 
 
-def chart_summary(chart: Chart) -> dict[str, Any]:
-    return {
+def chart_summary(chart: Chart, include_sources: bool = False) -> dict[str, Any]:
+    body = {
         "hash": chart.hash,
         "status": chart.status,
         "title": chart.title,
@@ -58,6 +58,11 @@ def chart_summary(chart: Chart) -> dict[str, Any]:
         "play_count": chart.play_count,
     }
 
+    if include_sources:
+        body["sources"] = [chart_source_out(source) for source in chart.sources]
+
+    return body
+
 
 def chart_source_out(source: ChartSource) -> dict[str, Any]:
     body: dict[str, Any] = {"source": source.source, "checksum": source.checksum, "id": source.source_id, "set_id": source.source_set_id, "url": None}
@@ -70,13 +75,12 @@ def chart_source_out(source: ChartSource) -> dict[str, Any]:
 
 def chart_detail(chart: Chart) -> dict[str, Any]:
     return {
-        **chart_summary(chart),
+        **chart_summary(chart, include_sources=True),
         "damage": chart.damage,
         "created_at": isoformat(chart.created_at),
         "ranked_at": isoformat(chart.ranked_at),
         "calculator_version": chart.calculator_version,
         "difficulties": [{"rate": entry.rate_key / 100, "difficulty": entry.difficulty} for entry in chart.difficulties],
-        "sources": [chart_source_out(source) for source in chart.sources],
     }
 
 
