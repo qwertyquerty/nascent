@@ -317,7 +317,7 @@ namespace nascent {
             urls.push_back(std::move(url));
         }
 
-        std::filesystem::path destination = std::filesystem::path(SettingsManager::settings.list_song_directory) / utf8_path(folder_name(set_id, artist, title));
+        std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(folder_name(set_id, artist, title));
 
         std::thread([download, urls, destination] {
             std::string error = "no beatmap download mirrors are configured";

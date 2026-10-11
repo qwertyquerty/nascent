@@ -46,7 +46,7 @@ namespace nascent {
         AttemptSummary summary = summarize_attempt(attempt, DifficultyCalculator::calculate(*chart));
 
         std::error_code ec;
-        std::filesystem::path relative = std::filesystem::relative(chart->file_path, SettingsManager::settings.list_song_directory, ec);
+        std::filesystem::path relative = std::filesystem::relative(chart->file_path, SettingsManager::song_directory(), ec);
 
         ReplayChart replay_chart;
         replay_chart.path = (ec || relative.empty() ? chart->file_path : relative).generic_string();

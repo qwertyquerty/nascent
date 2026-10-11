@@ -639,7 +639,7 @@ namespace nascent {
         }
 
         library_loading = true;
-        std::filesystem::path song_directory = SettingsManager::settings.list_song_directory;
+        std::filesystem::path song_directory = SettingsManager::song_directory();
         float load_pitch = pitch;
         bool hash_files = !LocalBests::is_backfilled();
 

@@ -34,7 +34,7 @@ namespace nascent {
         std::vector<std::filesystem::path> candidates;
         std::error_code ec;
 
-        for (const auto& folder : std::filesystem::directory_iterator(SettingsManager::settings.list_song_directory, ec)) {
+        for (const auto& folder : std::filesystem::directory_iterator(SettingsManager::song_directory(), ec)) {
             for (const auto& file : std::filesystem::directory_iterator(folder.path(), ec)) {
                 if (std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), file.path().extension().string()) != CHART_FILE_EXTENSIONS.end()) {
                     candidates.push_back(file.path());
