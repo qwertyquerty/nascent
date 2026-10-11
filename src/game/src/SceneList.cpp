@@ -119,6 +119,21 @@ namespace nascent {
             refresh_search();
         }
 
+        if (pending_selection) {
+            auto found = std::find(chart_hashes.begin(), chart_hashes.end(), *pending_selection);
+            pending_selection.reset();
+
+            if (found != chart_hashes.end()) {
+                size_t chart = (size_t)(found - chart_hashes.begin());
+                apply_search(chart);
+
+                if (std::find(visible.begin(), visible.end(), chart) == visible.end()) {
+                    search.clear();
+                    apply_search(chart);
+                }
+            }
+        }
+
         if (!visible.empty()) {
             select_chart(selected_chart_index);
         }
@@ -788,6 +803,10 @@ namespace nascent {
                 break;
             }
         }
+    }
+
+    void SceneList::select_chart_by_hash(std::string hash) {
+        pending_selection = std::move(hash);
     }
 
     const std::unordered_set<std::string>& SceneList::get_local_hashes() const {

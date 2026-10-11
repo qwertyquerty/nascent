@@ -39,6 +39,7 @@ namespace nascent {
         std::vector<std::string> search_texts;
         std::vector<size_t> visible;
         std::string search;
+        std::optional<std::string> pending_selection;
         std::unordered_set<std::string> local_hashes;
         std::vector<std::optional<float>> chart_difficulties;
         Chart* selected_chart = nullptr;
@@ -107,5 +108,6 @@ namespace nascent {
         void draw(olc::PixelGameEngine*) override;
 
         const std::unordered_set<std::string>& get_local_hashes() const;
+        void select_chart_by_hash(std::string hash);
     };
 }

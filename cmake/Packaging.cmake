@@ -75,6 +75,7 @@ add_custom_target(portable_zip
     COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:NascentMain>" "${PROJECT_SOURCE_DIR}/README.md" "${nascent_root}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/skins" "${nascent_root}/assets/skins"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/fonts" "${nascent_root}/assets/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/logo" "${nascent_root}/assets/logo"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${nascent_libs}/kissfft/LICENSES" "${nascent_root}/licenses/kissfft"
     ${nascent_copy_commands}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/dist"

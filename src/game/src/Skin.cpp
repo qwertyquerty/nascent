@@ -34,9 +34,15 @@ namespace nascent {
 
         title_gradient = std::make_unique<olc::Sprite>((skin_path / "title_gradient.png").string());
 
-        display_font_small = {(skin_path / "display_font.ttf").string(), display_font_small_size};
-        display_font_medium = {(skin_path / "display_font.ttf").string(), display_font_medium_size};
-        display_font_large = {(skin_path / "display_font.ttf").string(), display_font_large_size};
+        std::filesystem::path font_path = skin_path / DISPLAY_FONT_FILE;
+
+        if (!std::filesystem::exists(font_path)) {
+            font_path = skins_directory / DEFAULT_SKIN_NAME / DISPLAY_FONT_FILE;
+        }
+
+        display_font_small = {font_path.string(), display_font_small_size};
+        display_font_medium = {font_path.string(), display_font_medium_size};
+        display_font_large = {font_path.string(), display_font_large_size};
 
         if (std::filesystem::exists(symbol_font_path)) {
             display_font_small.AddFallbackFont(symbol_font_path.string());

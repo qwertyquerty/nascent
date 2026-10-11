@@ -37,6 +37,9 @@ namespace nascent {
         void load_sounds();
 
         public:
+        static constexpr const char* DEFAULT_SKIN_NAME = "default";
+        static constexpr const char* DISPLAY_FONT_FILE = "display_font.ttf";
+
         olc::Font display_font_large;
         olc::Font display_font_medium;
         olc::Font display_font_small;

@@ -105,11 +105,9 @@ namespace nascent {
         }
 
         const JudgedHit* jhit = attempt != nullptr ? attempt->get_last_scored() : nullptr;
+        olc::Decal* hs_skin = draw_hit_score && jhit != nullptr ? skin->hit_score_decal(jhit->released ? jhit->release_score : jhit->hit_score) : nullptr;
 
-        if (jhit != nullptr) {
-            HitScore hs = jhit->released ? jhit->release_score : jhit->hit_score;
-            olc::Decal* hs_skin = skin->hit_score_decal(hs);
-
+        if (hs_skin != nullptr) {
             double t = (position - (jhit->hit_played ? (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) : jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, attempt->hit_accuracy))) / 1000;
 
             float scale = smoothstep(0.8, 0.6, t * 4);

@@ -1,0 +1,164 @@
+{
+  "info": {
+    "title": "Nascent Logo",
+    "title_unicode": "Nascent Logo",
+    "artist": "qwertyquerty",
+    "artist_unicode": "qwertyquerty",
+    "mapper": "qwertyquerty",
+    "difficulty_name": "v3",
+    "audio_file": "audio.mp3",
+    "audio_lead_in": 0,
+    "preview_time": -1,
+    "hit_accuracy": 1,
+    "key_count": 7,
+    "damage": 5,
+    "image_file": ""
+  },
+  "timing_points": [
+    {
+      "time": 600,
+      "beat_length": 300.0,
+      "meter": 4
+    }
+  ],
+  "hit_objects": [
+    {
+      "key": 6,
+      "time": 600,
+      "hit_type": 1,
+      "end_time": 750
+    },
+    {
+      "key": 4,
+      "time": 600,
+      "hit_type": 1,
+      "end_time": 750
+    },
+    {
+      "key": 3,
+      "time": 600,
+      "hit_type": 1,
+      "end_time": 750
+    },
+    {
+      "key": 0,
+      "time": 600,
+      "hit_type": 1,
+      "end_time": 750
+    },
+    {
+      "key": 0,
+      "time": 1050,
+      "hit_type": 1,
+      "end_time": 1200
+    },
+    {
+      "key": 2,
+      "time": 1050,
+      "hit_type": 1,
+      "end_time": 1200
+    },
+    {
+      "key": 3,
+      "time": 1050,
+      "hit_type": 1,
+      "end_time": 1200
+    },
+    {
+      "key": 5,
+      "time": 1050,
+      "hit_type": 1,
+      "end_time": 1200
+    },
+    {
+      "key": 6,
+      "time": 1500,
+      "hit_type": 1,
+      "end_time": 1650
+    },
+    {
+      "key": 4,
+      "time": 1500,
+      "hit_type": 1,
+      "end_time": 1650
+    },
+    {
+      "key": 3,
+      "time": 1500,
+      "hit_type": 1,
+      "end_time": 1650
+    },
+    {
+      "key": 1,
+      "time": 1500,
+      "hit_type": 1,
+      "end_time": 1650
+    },
+    {
+      "key": 2,
+      "time": 1950,
+      "hit_type": 1,
+      "end_time": 2100
+    },
+    {
+      "key": 0,
+      "time": 1950,
+      "hit_type": 1,
+      "end_time": 2100
+    },
+    {
+      "key": 4,
+      "time": 1950,
+      "hit_type": 1,
+      "end_time": 2100
+    },
+    {
+      "key": 6,
+      "time": 1950,
+      "hit_type": 1,
+      "end_time": 2100
+    },
+    {
+      "key": 0,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    },
+    {
+      "key": 1,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    },
+    {
+      "key": 2,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    },
+    {
+      "key": 3,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    },
+    {
+      "key": 4,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    },
+    {
+      "key": 5,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    },
+    {
+      "key": 6,
+      "time": 2400,
+      "hit_type": 1,
+      "end_time": 3900
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 #include "olcPixelGameEngine.h"
 #include "SceneAccount.h"
 #include "SceneList.h"
+#include "SceneTitle.h"
 #include "discord-rpc.hpp"
 #include "SettingsManager.h"
 #include "Skin.h"
@@ -39,15 +40,10 @@ namespace nascent {
         start_time = time(nullptr);
         std::srand(start_time);
 
-        skin = std::make_unique<Skin>(this, "default", 7);
+        skin = std::make_unique<Skin>(this, Skin::DEFAULT_SKIN_NAME, 7);
         scene_list = std::make_unique<SceneList>(skin.get());
 
-        if (Account::signed_in()) {
-            set_scene(scene_list.get());
-        }
-        else {
-            set_scene(std::make_unique<SceneAccount>(skin.get(), scene_list.get()));
-        }
+        set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get()));
 
         discord_init();
         discord_update();
