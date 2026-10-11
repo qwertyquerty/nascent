@@ -34,6 +34,7 @@ namespace nascent {
 
         uint8_t key_count = 0;
         float rate = 1.0f;
+        bool leaderboards_shown = false;
 
         mutable SpriteDecal dot;
 
@@ -54,6 +55,7 @@ namespace nascent {
         void refresh();
         void set_key_count(uint8_t key_count);
         void set_rate(float rate);
+        void set_leaderboards_shown(bool shown);
         void update(float elapsed_time);
         void draw(olc::PixelGameEngine* window, Skin* skin) const;
     };

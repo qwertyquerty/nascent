@@ -40,6 +40,10 @@ namespace nascent {
         this->rate = rate;
     }
 
+    void StatusBar::set_leaderboards_shown(bool shown) {
+        leaderboards_shown = shown;
+    }
+
     void StatusBar::set_key_count(uint8_t key_count) {
         this->key_count = key_count;
     }
@@ -137,7 +141,7 @@ namespace nascent {
                 break;
         }
 
-        const std::array<std::string_view, 4> hints = {"Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse"};
+        const std::array<std::string_view, 5> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse"};
         int32_t hint_x = screen.x - PADDING + SEGMENT_GAP;
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {

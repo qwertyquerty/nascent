@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -36,8 +37,21 @@ namespace nascent {
         bool hashed_files = false;
     };
 
+    struct LocalScore {
+        double accuracy = 0;
+        uint32_t max_combo = 0;
+        std::string played_at;
+    };
+
     class SceneList : public Scene {
         protected:
+        template <typename T>
+        struct LeaderboardRequest {
+            std::string key;
+            uint64_t generation = 0;
+            std::future<T> result;
+        };
+
         struct BackgroundLoadRequest {
             uint64_t generation = 0;
             std::string image_path;
@@ -129,6 +143,14 @@ namespace nascent {
 
         float widest_grade = -1.0f;
 
+        bool show_leaderboards = false;
+        float leaderboard_delay = 0;
+        uint64_t leaderboard_generation = 0;
+        std::unordered_map<std::string, std::vector<LocalScore>> local_scores;
+        std::unordered_map<std::string, ApiResult<ChartLeaderboard>> online_scores;
+        std::optional<LeaderboardRequest<std::vector<LocalScore>>> local_request;
+        std::optional<LeaderboardRequest<ApiResult<ChartLeaderboard>>> online_request;
+
         void start_library_load();
         void poll_library_load();
         void apply_library(ChartLibrary library);
@@ -150,6 +172,9 @@ namespace nascent {
         void background_load_loop();
         void stop_preview_audio();
         void draw_list(olc::PixelGameEngine* window);
+        std::string leaderboard_key() const;
+        void update_leaderboards(float elapsed_time);
+        void draw_leaderboards(olc::PixelGameEngine* window);
 
         public:
         SceneList(Skin* skin);

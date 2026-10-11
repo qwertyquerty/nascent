@@ -1,4 +1,5 @@
 #include "Const.h"
+#include "Account.h"
 #include "SceneList.h"
 #include "BeatmapDownloads.h"
 #include "Chart.h"
@@ -48,6 +49,18 @@ namespace nascent {
     static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
     static constexpr float GRADE_GAP = 8.0f;
     static constexpr double SEARCH_TOLERANCE = 0.5;
+    static constexpr float LEADERBOARD_DELAY = 0.25f;
+    static constexpr int32_t ONLINE_LEADERBOARD_LIMIT = 50;
+    static constexpr int32_t LOCAL_LEADERBOARD_ROWS = 8;
+    static constexpr int32_t LEADERBOARD_PADDING = 24;
+    static constexpr int32_t LEADERBOARD_ROW_HEIGHT = 30;
+    static constexpr int32_t LEADERBOARD_HEADER_HEIGHT = 52;
+    static constexpr int32_t LEADERBOARD_SECTION_GAP = 30;
+    static constexpr int32_t LEADERBOARD_GRADE_OFFSET = 56;
+    static constexpr int32_t LEADERBOARD_ACCURACY_OFFSET = 90;
+    static constexpr int32_t LEADERBOARD_NAME_OFFSET = 190;
+    static const olc::Pixel LEADERBOARD_BACKGROUND = olc::Pixel(0, 0, 0, 150);
+    static const olc::Pixel LEADERBOARD_HIGHLIGHT = olc::Pixel(255, 255, 255, 24);
 
     template <typename F>
     static void parallel_for(size_t count, F work) {
@@ -239,6 +252,37 @@ namespace nascent {
         return library;
     }
 
+    static std::vector<LocalScore> load_local_scores(const std::filesystem::path& chart_path, const std::filesystem::path& replay_directory, long rate) {
+        std::vector<LocalScore> scores;
+        std::optional<std::string> file_hash = sha256_file_hex(chart_path);
+
+        if (!file_hash) {
+            return scores;
+        }
+
+        std::error_code ec;
+
+        for (const auto& file : std::filesystem::directory_iterator(replay_directory / file_hash->substr(0, Replay::FOLDER_HASH_LENGTH), ec)) {
+            std::string error;
+            std::optional<Replay> replay = load_replay(file.path(), error);
+
+            if (replay && std::lround(replay->rate * 100.0f) == rate) {
+                scores.push_back({replay->result.accuracy, replay->result.max_combo, replay->played_at});
+            }
+        }
+
+        std::sort(scores.begin(), scores.end(), [](const LocalScore& a, const LocalScore& b) {
+            return a.accuracy != b.accuracy ? a.accuracy > b.accuracy : a.max_combo > b.max_combo;
+        });
+
+        return scores;
+    }
+
+    template <typename T>
+    static bool request_ready(const std::optional<T>& request) {
+        return request && request->result.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+    }
+
     SceneList::SceneList(Skin* skin) {
         this->skin = skin;
 
@@ -338,6 +382,9 @@ namespace nascent {
 
         timer = 0;
         status_bar.refresh();
+        leaderboard_generation++;
+        local_scores.clear();
+        online_scores.clear();
     }
 
     void SceneList::on_exit() {
@@ -349,6 +396,7 @@ namespace nascent {
         status_bar.update(elapsed_time);
         poll_library_load();
         collect_difficulties();
+        update_leaderboards(elapsed_time);
 
         if (game->window->GetKey(InputManager::calibration_key).bPressed) {
             game->play_sound(skin->get_random_menu_pluck());
@@ -369,6 +417,13 @@ namespace nascent {
         }
 
         update_search();
+
+        if (game->window->GetKey(InputManager::leaderboard_key).bPressed) {
+            show_leaderboards = !show_leaderboards;
+            status_bar.set_leaderboards_shown(show_leaderboards);
+            leaderboard_delay = 0;
+            game->play_sound(skin->hitsound_sfx);
+        }
 
         if (game->window->GetKey(InputManager::keybind_mod1).bHeld) {
             if (game->window->GetKey(InputManager::menu_left_key).bPressed) {
@@ -457,6 +512,7 @@ namespace nascent {
     void SceneList::select_chart(int32_t index, bool sound) {
         selected_chart = charts[visible[index]].get();
         status_bar.set_key_count(selected_chart->info.key_count);
+        leaderboard_delay = LEADERBOARD_DELAY;
 
         selected_chart->set_pitch(this->pitch);
 
@@ -981,6 +1037,178 @@ namespace nascent {
         draw_text(font, count, {screensize.x - StatusBar::PADDING - count_width, baseline}, visible.empty() ? olc::RED : olc::GREY);
     }
 
+    std::string SceneList::leaderboard_key() const {
+        return std::format("{}@{}", chart_hashes[visible[selected_chart_index]], std::lround(pitch * 100.0f));
+    }
+
+    void SceneList::update_leaderboards(float elapsed_time) {
+        if (request_ready(local_request)) {
+            std::vector<LocalScore> scores = local_request->result.get();
+
+            if (local_request->generation == leaderboard_generation) {
+                local_scores[local_request->key] = std::move(scores);
+            }
+
+            local_request.reset();
+        }
+
+        if (request_ready(online_request)) {
+            ApiResult<ChartLeaderboard> board = online_request->result.get();
+
+            if (online_request->generation == leaderboard_generation) {
+                online_scores.insert_or_assign(online_request->key, std::move(board));
+            }
+
+            online_request.reset();
+        }
+
+        leaderboard_delay = std::max(0.0f, leaderboard_delay - elapsed_time);
+
+        if (!show_leaderboards || selected_chart == nullptr || visible.empty() || leaderboard_delay > 0) {
+            return;
+        }
+
+        std::string key = leaderboard_key();
+
+        if (!local_request && !local_scores.contains(key)) {
+            std::filesystem::path chart_path = selected_chart->file_path;
+            std::filesystem::path replay_directory = user_config_directory(SettingsManager::APP_NAME) / "replays";
+            long rate = std::lround(pitch * 100.0f);
+
+            local_request = LeaderboardRequest<std::vector<LocalScore>>{key, leaderboard_generation, std::async(std::launch::async, [chart_path, replay_directory, rate] {
+                                                                            return load_local_scores(chart_path, replay_directory, rate);
+                                                                        })};
+        }
+
+        if (!online_request && !online_scores.contains(key)) {
+            online_request = LeaderboardRequest<ApiResult<ChartLeaderboard>>{key, leaderboard_generation, ServerApi::chart_leaderboard(chart_hashes[visible[selected_chart_index]], pitch, ONLINE_LEADERBOARD_LIMIT)};
+        }
+    }
+
+    void SceneList::draw_leaderboards(olc::PixelGameEngine* window) {
+        olc::vi2d screen = window->GetScreenSize();
+        int32_t left = screen.x / 4 * 3 - screen.x / 48;
+        int32_t width = screen.x / 4;
+        int32_t top = StatusBar::HEIGHT;
+        int32_t bottom = screen.y - StatusBar::HEIGHT;
+
+        window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)(bottom - top)}, LEADERBOARD_BACKGROUND);
+
+        olc::Font& header_font = skin->display_font_medium;
+        olc::Font& row_font = skin->display_font_small;
+        olc::FontRect header_metrics = text_bounds(header_font, "Hgjy");
+        olc::FontRect row_metrics = text_bounds(row_font, "Hgjy");
+        int32_t x = left + LEADERBOARD_PADDING;
+        int32_t right = left + width - LEADERBOARD_PADDING;
+        int32_t y = top + LEADERBOARD_PADDING;
+        std::string key = leaderboard_key();
+        std::string own_name = Account::signed_in() ? Account::username() : std::string();
+
+        auto header = [&](std::string_view title, std::string_view detail) {
+            draw_text(header_font, title, {x, y - header_metrics.offset.y}, olc::WHITE);
+
+            if (!detail.empty()) {
+                int32_t detail_width = text_bounds(row_font, detail).size.x;
+                draw_text(row_font, detail, {right - detail_width, y - header_metrics.offset.y}, olc::GREY);
+            }
+
+            y += LEADERBOARD_HEADER_HEIGHT;
+        };
+
+        auto message = [&](std::string_view text, olc::Pixel color) {
+            draw_text(row_font, text, {x, y - row_metrics.offset.y}, color);
+            y += LEADERBOARD_ROW_HEIGHT;
+        };
+
+        auto row = [&](int64_t rank, double accuracy, std::string name, uint32_t combo, bool highlight) {
+            int32_t baseline = y + (LEADERBOARD_ROW_HEIGHT - row_metrics.size.y) / 2 - row_metrics.offset.y;
+            Grade grade = grade_for_accuracy(accuracy);
+            std::string combo_text = std::format("{}x", combo);
+            int32_t combo_width = text_bounds(row_font, combo_text).size.x;
+            int32_t name_width = right - combo_width - LEADERBOARD_PADDING / 2 - (x + LEADERBOARD_NAME_OFFSET);
+
+            if (highlight) {
+                window->FillRectDecal({(float)(left + LEADERBOARD_PADDING / 2), (float)y}, {(float)(width - LEADERBOARD_PADDING), (float)LEADERBOARD_ROW_HEIGHT}, LEADERBOARD_HIGHLIGHT);
+            }
+
+            while (!name.empty() && text_bounds(row_font, name).size.x > name_width) {
+                name.pop_back();
+
+                while (!name.empty() && ((unsigned char)name.back() & 0xc0) == 0x80) {
+                    name.pop_back();
+                }
+
+                if (!name.empty() && (unsigned char)name.back() >= 0xc0) {
+                    name.pop_back();
+                }
+            }
+
+            draw_text(row_font, std::format("#{}", rank), {x, baseline}, olc::GREY);
+            draw_text(row_font, grade_name(grade), {x + LEADERBOARD_GRADE_OFFSET, baseline}, grade_color(grade));
+            draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + LEADERBOARD_ACCURACY_OFFSET, baseline}, olc::WHITE);
+            draw_text(row_font, name, {x + LEADERBOARD_NAME_OFFSET, baseline}, highlight ? olc::WHITE : olc::GREY);
+            draw_text(row_font, combo_text, {right - combo_width, baseline}, olc::GREY);
+            y += LEADERBOARD_ROW_HEIGHT;
+        };
+
+        auto local = local_scores.find(key);
+        header("Local", local != local_scores.end() && !local->second.empty() ? std::format("{} plays", local->second.size()) : std::string());
+
+        if (local == local_scores.end()) {
+            message("Loading...", olc::GREY);
+        }
+        else if (local->second.empty()) {
+            message("No plays at this rate yet", olc::DARK_GREY);
+        }
+        else {
+            for (size_t index = 0; index < local->second.size() && (int32_t)index < LOCAL_LEADERBOARD_ROWS; index++) {
+                const LocalScore& score = local->second[index];
+                row((int64_t)index + 1, score.accuracy, score.played_at.substr(0, 10), score.max_combo, false);
+            }
+        }
+
+        y = std::max(y, top + LEADERBOARD_PADDING + LEADERBOARD_HEADER_HEIGHT + LEADERBOARD_ROW_HEIGHT * LOCAL_LEADERBOARD_ROWS) + LEADERBOARD_SECTION_GAP;
+
+        auto online = online_scores.find(key);
+        const ChartLeaderboard* board = online != online_scores.end() && online->second.ok() ? &*online->second.value : nullptr;
+        header("Online", board != nullptr && board->total > 0 ? std::format("{} players", board->total) : std::string());
+
+        if (online == online_scores.end()) {
+            message("Loading...", olc::GREY);
+            return;
+        }
+
+        if (board == nullptr) {
+            message(online->second.error(), olc::DARK_GREY);
+            return;
+        }
+
+        if (board->entries.empty()) {
+            message("No plays at this rate yet", olc::DARK_GREY);
+            return;
+        }
+
+        bool viewer_listed = false;
+        int32_t rows = (bottom - LEADERBOARD_PADDING - y) / LEADERBOARD_ROW_HEIGHT;
+
+        for (const RankedPlay& entry : board->entries) {
+            bool own = entry.play.user && !own_name.empty() && entry.play.user->username == own_name;
+            bool reserve = board->viewer && !viewer_listed && !own;
+
+            if (rows - (reserve ? 1 : 0) <= 0) {
+                break;
+            }
+
+            viewer_listed = viewer_listed || own;
+            row(entry.rank, entry.play.accuracy, entry.play.user ? entry.play.user->username : std::string(), (uint32_t)entry.play.max_combo, own);
+            rows--;
+        }
+
+        if (board->viewer && !viewer_listed && rows > 0) {
+            row(board->viewer->rank, board->viewer->play.accuracy, own_name, (uint32_t)board->viewer->play.max_combo, true);
+        }
+    }
+
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
         pending_selection = std::move(hash);
         pending_selection_path = std::move(path);
@@ -1048,7 +1276,12 @@ namespace nascent {
         const ProgressBar difficulty_bar({DIFFICULTY_BAR_WIDTH, DIFFICULTY_BAR_HEIGHT});
         wanted_difficulties.clear();
 
-        field->draw(window);
+        if (show_leaderboards) {
+            draw_leaderboards(window);
+        }
+        else {
+            field->draw(window);
+        }
 
         for (int32_t index = selected_chart_index - (charts_per_screen / 2 + 5); index < selected_chart_index + (charts_per_screen / 2 + 5); index++) {
             size_t chart_index = visible[positive_modulo(index, visible.size())];
