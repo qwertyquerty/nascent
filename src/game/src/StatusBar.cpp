@@ -102,8 +102,8 @@ namespace nascent {
 
         olc::Pixel::Mode mode = window->GetPixelMode();
         window->SetPixelMode(olc::Pixel::ALPHA);
-        window->FillRect({0, top}, {screen.x, HEIGHT}, olc::Pixel(0, 0, 0, 213));
-        window->DrawLine({0, top}, {screen.x, top}, olc::Pixel(255, 255, 255, 30));
+        window->FillRect({0, top}, {screen.x, HEIGHT}, BACKGROUND);
+        window->DrawLine({0, top}, {screen.x, top}, EDGE);
         window->SetPixelMode(mode);
 
         olc::FontRect metrics = font.GetStringBounds("Hgjy");

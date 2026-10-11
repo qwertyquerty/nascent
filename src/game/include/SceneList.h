@@ -6,6 +6,7 @@
 #include "Util.h"
 
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -19,6 +20,7 @@ namespace nascent {
     class Chart;
     class EntityField;
     class Skin;
+    struct SearchFilter;
 
     class SceneList : public Scene {
         protected:
@@ -34,6 +36,9 @@ namespace nascent {
 
         std::vector<std::unique_ptr<Chart>> charts;
         std::vector<std::string> chart_hashes;
+        std::vector<std::string> search_texts;
+        std::vector<size_t> visible;
+        std::string search;
         std::unordered_set<std::string> local_hashes;
         std::vector<std::optional<float>> chart_difficulties;
         Chart* selected_chart = nullptr;
@@ -77,6 +82,11 @@ namespace nascent {
         void load_charts();
         void reload_charts();
         void backfill_bests();
+        void apply_search(size_t keep_chart);
+        void refresh_search();
+        bool matches_filter(size_t index, const SearchFilter& filter);
+        void update_search();
+        void draw_search(olc::PixelGameEngine* window);
         void select_chart(int32_t);
         void set_pitch(float);
         std::optional<float> get_difficulty(size_t index, int32_t& budget);

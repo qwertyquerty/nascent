@@ -24,12 +24,17 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <cstdint>
 #include <cmath>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <iterator>
+#include <locale>
+#include <sstream>
 #include <unordered_set>
 #include <utility>
 
@@ -41,6 +46,7 @@ namespace nascent {
     static constexpr float LENGTH_OFFSET = 90.0f;
     static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
     static constexpr float GRADE_GAP = 8.0f;
+    static constexpr double SEARCH_TOLERANCE = 0.5;
 
     template <typename F>
     static void parallel_for(size_t count, F work) {
@@ -109,8 +115,11 @@ namespace nascent {
         if (BeatmapDownloads::take_library_changed()) {
             reload_charts();
         }
+        else {
+            refresh_search();
+        }
 
-        if (!charts.empty()) {
+        if (!visible.empty()) {
             select_chart(selected_chart_index);
         }
 
@@ -144,33 +153,7 @@ namespace nascent {
             return;
         }
 
-        if (charts.empty()) {
-            return;
-        }
-
-        if (game->window->GetKey(InputManager::random_chart_key).bPressed) {
-            select_chart(rand() % charts.size());
-        }
-
-        if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
-            select_chart(positive_modulo((selected_chart_index + 1), charts.size()));
-        }
-
-        if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
-            select_chart(positive_modulo((selected_chart_index - 1), charts.size()));
-        }
-
-        int mwheel = game->window->GetMouseWheel();
-        if (mwheel != 0) {
-            select_chart(positive_modulo(
-                selected_chart_index + ((mwheel < 0) - (mwheel > 0)),
-                charts.size()
-            ));
-        }
-
-        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
-            game->set_scene(std::make_unique<ScenePlay>(selected_chart, skin, this));
-        }
+        update_search();
 
         if (game->window->GetKey(InputManager::keybind_mod1).bHeld) {
             if (game->window->GetKey(InputManager::menu_left_key).bPressed) {
@@ -179,6 +162,34 @@ namespace nascent {
             if (game->window->GetKey(InputManager::menu_right_key).bPressed) {
                 set_pitch(pitch + PITCH_INTERVAL);
             }
+        }
+
+        if (visible.empty()) {
+            return;
+        }
+
+        if (game->window->GetKey(InputManager::random_chart_key).bPressed) {
+            select_chart(rand() % visible.size());
+        }
+
+        if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
+            select_chart(positive_modulo((selected_chart_index + 1), visible.size()));
+        }
+
+        if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
+            select_chart(positive_modulo((selected_chart_index - 1), visible.size()));
+        }
+
+        int mwheel = game->window->GetMouseWheel();
+        if (mwheel != 0) {
+            select_chart(positive_modulo(
+                selected_chart_index + ((mwheel < 0) - (mwheel > 0)),
+                visible.size()
+            ));
+        }
+
+        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            game->set_scene(std::make_unique<ScenePlay>(selected_chart, skin, this));
         }
 
         std::optional<BackgroundLoadResult> load_result;
@@ -224,13 +235,13 @@ namespace nascent {
     };
 
     void SceneList::select_chart(int32_t index) {
-        selected_chart = charts[index].get();
+        selected_chart = charts[visible[index]].get();
         status_bar.set_key_count(selected_chart->info.key_count);
 
         selected_chart->set_pitch(this->pitch);
 
-        int32_t down_steps = (index - selected_chart_index + charts.size()) % charts.size();
-        int32_t up_steps = (selected_chart_index - index + charts.size()) % charts.size();
+        int32_t down_steps = (index - selected_chart_index + visible.size()) % visible.size();
+        int32_t up_steps = (selected_chart_index - index + visible.size()) % visible.size();
 
         list_scroll_offset += std::clamp(
             (up_steps < down_steps ? -up_steps : down_steps) * list_chart_height,
@@ -445,14 +456,324 @@ namespace nascent {
         charts.clear();
         chart_hashes.clear();
         chart_difficulties.clear();
+        search_texts.clear();
 
         for (LoadedChart& entry : loaded) {
+            const ChartInfo& info = entry.chart->info;
+            std::string text = std::format("{} {} {} {} {} {}", info.title, info.title_unicode, info.artist, info.artist_unicode, info.mapper, info.difficulty_name);
+
+            for (char& c : text) {
+                c = (char)std::tolower((unsigned char)c);
+            }
+
             charts.push_back(std::move(entry.chart));
             chart_hashes.push_back(std::move(entry.hash));
             chart_difficulties.push_back(entry.difficulty);
+            search_texts.push_back(std::move(text));
         }
 
         local_hashes = std::move(loaded_hashes);
+        apply_search(SIZE_MAX);
+    }
+
+    struct SearchFilter {
+        std::string field;
+        std::string op;
+        std::string value;
+    };
+
+    struct SearchQuery {
+        std::vector<std::string> words;
+        std::vector<SearchFilter> filters;
+    };
+
+    static std::string lowercase(std::string text) {
+        for (char& c : text) {
+            c = (char)std::tolower((unsigned char)c);
+        }
+
+        return text;
+    }
+
+    static std::optional<double> parse_number(const std::string& text) {
+        if (text.empty()) {
+            return std::nullopt;
+        }
+
+        size_t colon = text.find(':');
+
+        if (colon != std::string::npos) {
+            std::optional<double> minutes = parse_number(text.substr(0, colon));
+            std::optional<double> seconds = parse_number(text.substr(colon + 1));
+            return minutes && seconds ? std::optional<double>(*minutes * 60.0 + *seconds) : std::nullopt;
+        }
+
+        std::istringstream stream(text);
+        stream.imbue(std::locale::classic());
+        double value = 0;
+        stream >> value;
+        return stream.fail() || !stream.eof() ? std::nullopt : std::optional<double>(value);
+    }
+
+    static std::optional<bool> parse_bool(const std::string& text) {
+        if (text == "true" || text == "yes" || text == "1") {
+            return true;
+        }
+
+        if (text == "false" || text == "no" || text == "0") {
+            return false;
+        }
+
+        return std::nullopt;
+    }
+
+    static std::optional<int32_t> parse_grade(const std::string& text) {
+        for (Grade grade : {Grade::X, Grade::S, Grade::A, Grade::B, Grade::C, Grade::D, Grade::E}) {
+            if (lowercase(std::string(grade_name(grade))) == text) {
+                return -(int32_t)grade;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    static bool compare(double actual, const std::string& op, double expected, double tolerance) {
+        if (op == "=") {
+            return std::abs(actual - expected) <= tolerance;
+        }
+
+        if (op == "!=") {
+            return std::abs(actual - expected) > tolerance;
+        }
+
+        if (op == "<") {
+            return actual < expected;
+        }
+
+        if (op == ">") {
+            return actual > expected;
+        }
+
+        if (op == "<=") {
+            return actual <= expected;
+        }
+
+        return actual >= expected;
+    }
+
+    static std::string canonical_field(const std::string& field) {
+        static const std::pair<const char*, const char*> aliases[] = {
+            {"diff", "difficulty"},
+            {"len", "length"},
+            {"key", "keys"},
+            {"note", "notes"},
+        };
+
+        for (const auto& [alias, name] : aliases) {
+            if (field == alias) {
+                return name;
+            }
+        }
+
+        return field;
+    }
+
+    static bool is_search_field(const std::string& field) {
+        static const char* fields[] = {"keys", "difficulty", "length", "notes", "played", "grade", "artist", "title", "mapper"};
+        return std::any_of(std::begin(fields), std::end(fields), [&](const char* name) { return field == name; });
+    }
+
+    static SearchQuery parse_search(const std::string& search) {
+        SearchQuery query;
+        std::string token;
+
+        auto finish = [&]() {
+            if (token.empty()) {
+                return;
+            }
+
+            std::string lowered = lowercase(token);
+            size_t op_start = lowered.find_first_of("<>=!");
+
+            if (op_start != std::string::npos && op_start > 0) {
+                size_t op_end = op_start + 1;
+
+                if (op_end < lowered.size() && lowered[op_end] == '=' && lowered[op_start] != '=') {
+                    op_end++;
+                }
+
+                std::string field = canonical_field(lowered.substr(0, op_start));
+                std::string op = lowered.substr(op_start, op_end - op_start);
+
+                if (is_search_field(field) && op != "!") {
+                    query.filters.push_back({field, op, lowered.substr(op_end)});
+                    token.clear();
+                    return;
+                }
+            }
+
+            query.words.push_back(std::move(lowered));
+            token.clear();
+        };
+
+        for (char c : search) {
+            if (c == ' ') {
+                finish();
+            }
+            else {
+                token.push_back(c);
+            }
+        }
+
+        finish();
+        return query;
+    }
+
+    bool SceneList::matches_filter(size_t index, const SearchFilter& filter) {
+        const Chart& chart = *charts[index];
+
+        if (filter.value.empty()) {
+            return true;
+        }
+
+        if (filter.field == "artist" || filter.field == "title" || filter.field == "mapper") {
+            std::string text = lowercase(filter.field == "artist" ? chart.info.artist + " " + chart.info.artist_unicode : filter.field == "title" ? chart.info.title + " " + chart.info.title_unicode
+                                                                                                                                                  : chart.info.mapper);
+            bool contains = text.find(filter.value) != std::string::npos;
+            return filter.op == "!=" ? !contains : filter.op == "=" ? contains
+                                                                    : true;
+        }
+
+        if (filter.field == "played" || filter.field == "grade") {
+            std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[index], pitch);
+
+            if (filter.field == "played") {
+                std::optional<bool> wanted = parse_bool(filter.value);
+
+                if (!wanted || (filter.op != "=" && filter.op != "!=")) {
+                    return true;
+                }
+
+                return (best.has_value() == *wanted) == (filter.op == "=");
+            }
+
+            std::optional<int32_t> wanted = parse_grade(filter.value);
+
+            if (!wanted) {
+                return true;
+            }
+
+            return best && compare(-(double)grade_for_accuracy(best->accuracy), filter.op, *wanted, 0.0);
+        }
+
+        std::optional<double> wanted = parse_number(filter.value);
+
+        if (!wanted) {
+            return true;
+        }
+
+        if (filter.field == "keys") {
+            return compare(chart.info.key_count, filter.op, *wanted, 0.0);
+        }
+
+        if (filter.field == "notes") {
+            return compare((double)chart.hits.size(), filter.op, *wanted, 0.0);
+        }
+
+        if (filter.field == "length") {
+            return compare((double)chart.get_duration_ms() * chart.pitch / pitch / 1000.0, filter.op, *wanted, SEARCH_TOLERANCE);
+        }
+
+        int32_t budget = (int32_t)charts.size();
+        std::optional<float> rating = get_difficulty(index, budget);
+        return rating && compare(*rating, filter.op, *wanted, SEARCH_TOLERANCE);
+    }
+
+    void SceneList::apply_search(size_t keep_chart) {
+        SearchQuery query = parse_search(search);
+        visible.clear();
+        selected_chart_index = 0;
+
+        for (size_t index = 0; index < charts.size(); index++) {
+            bool matches = std::all_of(query.words.begin(), query.words.end(), [&](const std::string& term) {
+                return search_texts[index].find(term) != std::string::npos;
+            });
+
+            matches = matches && std::all_of(query.filters.begin(), query.filters.end(), [&](const SearchFilter& filter) {
+                          return matches_filter(index, filter);
+                      });
+
+            if (!matches) {
+                continue;
+            }
+
+            if (index == keep_chart) {
+                selected_chart_index = (int32_t)visible.size();
+            }
+
+            visible.push_back(index);
+        }
+
+        list_scroll_offset = 0;
+    }
+
+    void SceneList::refresh_search() {
+        apply_search(selected_chart != nullptr && !visible.empty() ? visible[selected_chart_index] : SIZE_MAX);
+    }
+
+    void SceneList::update_search() {
+        olc::PixelGameEngine* window = game->window;
+        std::string before = search;
+        search += game->get_frame_text();
+
+        for (int32_t keycode : window->GetKeyPressCache()) {
+            if (window->ConvertKeycode(keycode) == olc::Key::BACK && !search.empty()) {
+                search.pop_back();
+
+                while (!search.empty() && ((unsigned char)search.back() & 0xc0) == 0x80) {
+                    search.pop_back();
+                }
+            }
+        }
+
+        if (window->GetKey(InputManager::back_key).bPressed) {
+            search.clear();
+        }
+
+        if (search == before) {
+            return;
+        }
+
+        size_t keep_chart = !visible.empty() ? visible[selected_chart_index] : SIZE_MAX;
+        apply_search(keep_chart);
+
+        if (!visible.empty() && charts[visible[selected_chart_index]].get() != selected_chart) {
+            select_chart(selected_chart_index);
+            list_scroll_offset = 0;
+        }
+    }
+
+    void SceneList::draw_search(olc::PixelGameEngine* window) {
+        olc::vi2d screensize = window->GetScreenSize();
+        olc::Font& font = skin->display_font_small;
+        olc::FontRect metrics = font.GetStringBounds("Hgjy");
+        int32_t baseline = (StatusBar::HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
+
+        olc::Pixel::Mode mode = window->GetPixelMode();
+        window->SetPixelMode(olc::Pixel::ALPHA);
+        window->FillRect({0, 0}, {screensize.x, StatusBar::HEIGHT}, StatusBar::BACKGROUND);
+        window->DrawLine({0, StatusBar::HEIGHT - 1}, {screensize.x, StatusBar::HEIGHT - 1}, StatusBar::EDGE);
+        window->SetPixelMode(mode);
+
+        if (search.empty()) {
+            font.DrawString("Type to search", {StatusBar::PADDING, baseline}, olc::DARK_GREY);
+            return;
+        }
+
+        std::string count = std::format("{} / {}", visible.size(), charts.size());
+        int32_t count_width = font.GetStringBounds(count).size.x;
+        font.DrawString(search, {StatusBar::PADDING, baseline}, olc::WHITE);
+        font.DrawString(count, {screensize.x - StatusBar::PADDING - count_width, baseline}, visible.empty() ? olc::RED : olc::GREY);
     }
 
     void SceneList::reload_charts() {
@@ -460,11 +781,10 @@ namespace nascent {
         selected_chart = nullptr;
         preview_audio_chart = nullptr;
         load_charts();
-        selected_chart_index = 0;
 
         for (size_t index = 0; index < charts.size(); index++) {
-            if (charts[index]->gameplay_hash() == selected_hash) {
-                selected_chart_index = (int32_t)index;
+            if (chart_hashes[index] == selected_hash) {
+                apply_search(index);
                 break;
             }
         }
@@ -476,15 +796,16 @@ namespace nascent {
 
     void SceneList::draw(olc::PixelGameEngine* window) {
         draw_list(window);
+        draw_search(window);
         status_bar.draw(window, skin);
     }
 
     void SceneList::draw_list(olc::PixelGameEngine* window) {
         olc::vi2d screensize = window->GetScreenSize();
 
-        if (charts.empty()) {
+        if (visible.empty()) {
             skin->display_font_medium.DrawString(
-                std::format("No charts found in {}", SettingsManager::settings.list_song_directory),
+                charts.empty() ? std::format("No charts found in {}", SettingsManager::settings.list_song_directory) : std::string("No charts match your search"),
                 {screensize.x / 48, screensize.y / 2},
                 olc::GREY
             );
@@ -533,7 +854,8 @@ namespace nascent {
         field->draw(window);
 
         for (int32_t index = selected_chart_index - (charts_per_screen / 2 + 5); index < selected_chart_index + (charts_per_screen / 2 + 5); index++) {
-            Chart* chart = charts[positive_modulo(index, charts.size())].get();
+            size_t chart_index = visible[positive_modulo(index, visible.size())];
+            Chart* chart = charts[chart_index].get();
 
             float y = (float)screensize.y / 2 + (index - selected_chart_index) * list_chart_height + list_scroll_offset;
             float x = list_margin + grade_indent + std::pow(std::max(300.0 - std::abs((float)screensize.y / 2 - (y)), 0.0) / 50.0, 2);
@@ -550,7 +872,7 @@ namespace nascent {
                 index == selected_chart_index ? olc::WHITE : olc::GREY
             );
 
-            std::optional<float> rating = get_difficulty(positive_modulo(index, charts.size()), difficulty_budget);
+            std::optional<float> rating = get_difficulty(chart_index, difficulty_budget);
             float fill = rating ? std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f) : 0.0f;
             olc::Pixel bar_color = skin->title_gradient_at(fill, 0.5);
             bar_color.a = index == selected_chart_index ? 255 : 140;
@@ -571,7 +893,7 @@ namespace nascent {
                 index == selected_chart_index ? olc::WHITE : olc::GREY
             );
 
-            std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[positive_modulo(index, charts.size())], pitch);
+            std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[chart_index], pitch);
 
             if (best) {
                 Grade grade = grade_for_accuracy(best->accuracy);
@@ -605,6 +927,10 @@ namespace nascent {
         this->pitch = snap_pitch(pitch);
         status_bar.set_rate(this->pitch);
         chart_difficulties.assign(charts.size(), std::nullopt);
-        select_chart(selected_chart_index);
+        refresh_search();
+
+        if (!visible.empty()) {
+            select_chart(selected_chart_index);
+        }
     }
 }
