@@ -160,7 +160,8 @@ namespace nascent {
             bool waiting = capturing && selected;
 
             olc::Pixel color = skin->title_gradient_at(key_count > 1 ? (double)lane / (key_count - 1) : 0.5, 0.5);
-            color.a = (held >> lane) & 1 ? 255 : selected ? 170 : IDLE_NOTE_ALPHA;
+            color.a = (held >> lane) & 1 ? 255 : selected ? 170
+                                                          : IDLE_NOTE_ALPHA;
 
             if (olc::Decal* note = skin->note_decal(lane)) {
                 float scale = size / note->sprite->width;

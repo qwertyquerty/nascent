@@ -29,6 +29,7 @@ namespace nascent {
 
         double timer = 0;
         double paused_position = 0;
+        float restart_hold = 0;
 
         bool chart_started = false;
         bool paused = false;
@@ -39,8 +40,12 @@ namespace nascent {
         void pause(double now);
         void resume(double now);
         void finish();
+        void start_attempt();
+        void restart();
 
         public:
+        static constexpr float RESTART_HOLD_TIME = 0.3f;
+
         ScenePlay(Chart* chart, Skin* skin, Scene* return_scene);
         ~ScenePlay();
         void init(Game*) override;

@@ -90,17 +90,24 @@ namespace nascent {
     }
 
     void ScenePlay::init(Game* game) {
-        olc::vi2d window_size = game->window->GetScreenSize();
-
         if (Account::signed_in()) {
             ticket = ServerApi::request_ticket(*chart).share();
         }
 
-        const uint8_t max_lanes_per_screen = 15;
-
-        double lane_width = (double)window_size.x / ((double)max_lanes_per_screen);
-
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
+        start_attempt();
+
+        chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
+
+        game->play_sound(skin->get_random_menu_pluck());
+
+        game->get_audio().SetPitch(chart_audio_id, chart->pitch);
+    };
+
+    void ScenePlay::start_attempt() {
+        olc::vi2d window_size = game->window->GetScreenSize();
+        const uint8_t max_lanes_per_screen = 15;
+        double lane_width = (double)window_size.x / ((double)max_lanes_per_screen);
 
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
@@ -114,13 +121,25 @@ namespace nascent {
         field->judge_height = lane_width / 2;
         field->draw_combo = true;
         timer = 0;
+    }
 
-        chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
+    void ScenePlay::restart() {
+        game->get_audio().Stop(chart_audio_id);
+        game->get_audio().Seek(chart_audio_id, 0);
+        game->stop_sound(skin->idle_loop_sfx);
+
+        if (Account::signed_in()) {
+            ticket = ServerApi::request_ticket(*chart).share();
+        }
+
+        chart_started = false;
+        paused = false;
+        audio_finished = false;
+        restart_hold = 0;
+        start_attempt();
 
         game->play_sound(skin->get_random_menu_pluck());
-
-        game->get_audio().SetPitch(chart_audio_id, chart->pitch);
-    };
+    }
 
     void ScenePlay::on_exit() {
         if (chart_audio_id != -1) {
@@ -157,6 +176,18 @@ namespace nascent {
 
         if (game->window->GetKey(InputManager::hit_log_key).bPressed) {
             show_hit_log = !show_hit_log;
+        }
+
+        if (!finished && game->window->GetKey(InputManager::restart_key).bHeld) {
+            restart_hold += elapsed_time;
+
+            if (restart_hold >= RESTART_HOLD_TIME) {
+                restart();
+                return;
+            }
+        }
+        else {
+            restart_hold = 0;
         }
 
         if (paused) {
