@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace nascent {
     Game::Game(olc::PixelGameEngine* window) {
@@ -54,7 +55,11 @@ namespace nascent {
             return;
         }
 
-        transition_time += elapsed_time;
+        if (std::exchange(skip_transition_step, false)) {
+            return;
+        }
+
+        transition_time += std::min(elapsed_time, MAX_TRANSITION_STEP);
 
         if (transition_time >= scene_transition_time) {
             outgoing_scene = nullptr;
@@ -133,6 +138,7 @@ namespace nascent {
             outgoing_owned_scene = std::move(owned_scene);
             outgoing_scene = scene;
             transition_time = 0;
+            skip_transition_step = true;
         }
 
         scene = pending_scene;

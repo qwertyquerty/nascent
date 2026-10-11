@@ -20,6 +20,7 @@ namespace nascent {
         Scene* outgoing_scene = nullptr;
         std::unique_ptr<Scene> outgoing_owned_scene;
         float transition_time = 0;
+        bool skip_transition_step = false;
         int32_t transition_layer = -1;
         KeyEventQueue key_event_queue;
         std::vector<KeyEvent> frame_key_events;
@@ -40,6 +41,7 @@ namespace nascent {
         public:
         olc::PixelGameEngine* window;
         float scene_transition_time = 0.35f;
+        static constexpr float MAX_TRANSITION_STEP = 1.0f / 30.0f;
 
         Game(olc::PixelGameEngine* window);
         virtual ~Game();
