@@ -1,4 +1,5 @@
 #include "ScenePlay.h"
+#include "Account.h"
 #include "Accuracy.h"
 #include "Chart.h"
 #include "EntityField.h"
@@ -70,7 +71,13 @@ namespace nascent {
             std::cerr << replay_message << std::endl;
         }
 
-        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), replay_message));
+        std::future<ApiResult<Submission>> submission;
+
+        if (ticket.valid()) {
+            submission = ServerApi::submit_play(*chart, replay, ticket);
+        }
+
+        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), replay_message, std::move(submission)));
     }
 
     ScenePlay::~ScenePlay() {
@@ -78,6 +85,10 @@ namespace nascent {
 
     void ScenePlay::init(Game* game) {
         olc::vi2d window_size = game->window->GetWindowSize();
+
+        if (Account::signed_in()) {
+            ticket = ServerApi::request_ticket(*chart).share();
+        }
 
         const uint8_t max_lanes_per_screen = 15;
 

@@ -7,7 +7,9 @@
 #include "Skin.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <format>
 #include <memory>
 #include <utility>
@@ -23,12 +25,13 @@ namespace nascent {
         );
     }
 
-    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message) {
+    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission) {
         this->skin = skin;
         this->return_scene = return_scene;
         this->chart = chart;
         this->summary = std::move(summary);
         this->replay_message = std::move(replay_message);
+        this->submission = std::move(submission);
     }
 
     void SceneResults::init(Game* game) {
@@ -115,10 +118,80 @@ namespace nascent {
     }
 
     void SceneResults::update(float) {
+        if (submission.valid() && submission.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            submitted = submission.get();
+        }
+
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
             game->play_sound(skin->hitsound_sfx);
             game->set_scene(return_scene);
         }
+    }
+
+    static std::string format_rank_change(std::optional<int64_t> rank, std::optional<int64_t> previous) {
+        if (!rank) {
+            return "unranked";
+        }
+
+        if (!previous || *previous == *rank) {
+            return std::format("#{}", *rank);
+        }
+
+        return std::format("#{} ({}{})", *rank, *previous > *rank ? "+" : "-", std::abs(*previous - *rank));
+    }
+
+    void SceneResults::draw_submission(int32_t x, int32_t y) const {
+        olc::Font& title_font = skin->display_font_medium;
+        olc::Font& detail_font = skin->display_font_small;
+
+        if (!submission.valid() && !submitted) {
+            detail_font.DrawString("Not submitted: sign in to submit your plays", {x, y}, olc::DARK_GREY);
+            return;
+        }
+
+        if (!submitted) {
+            detail_font.DrawString("Submitting your play...", {x, y}, olc::GREY);
+            return;
+        }
+
+        if (!submitted->ok()) {
+            detail_font.DrawString(std::format("Not submitted: {}", submitted->error()), {x, y}, olc::RED);
+            return;
+        }
+
+        const Submission& result = *submitted->value;
+
+        if (result.play.ranked) {
+            const Standing& standing = result.key_mode ? *result.key_mode : result.combined;
+            title_font.DrawString(std::format("Ranked  {:.2f} performance", result.play.performance), {x, y}, olc::WHITE);
+            detail_font.DrawString(
+                std::format(
+                    "{} on this chart        {}global {}        performance {:.2f} ({:+.2f})",
+                    result.chart_rank ? std::format("#{}", *result.chart_rank) : std::string("Unranked"),
+                    standing.key_count ? std::format("{}K ", *standing.key_count) : std::string(),
+                    format_rank_change(standing.global_rank, standing.previous_global_rank),
+                    standing.performance,
+                    standing.performance_change
+                ),
+                {x, y + 34},
+                olc::GREY
+            );
+            return;
+        }
+
+        std::string reason;
+
+        if (result.play.status == "pending_review") {
+            reason = "Submitted, it will count once a moderator reviews it";
+        }
+        else if (result.chart.status != "ranked") {
+            reason = "Submitted, but this chart is not ranked";
+        }
+        else {
+            reason = "Submitted, but not ranked because the play ticket was missing or expired";
+        }
+
+        detail_font.DrawString(reason, {x, y}, olc::GREY);
     }
 
     void SceneResults::draw(olc::PixelGameEngine* window) {
@@ -147,6 +220,8 @@ namespace nascent {
             skin->display_font_medium.DrawString(value, {x + 300, y}, olc::WHITE);
             y += 44;
         }
+
+        draw_submission(x, y + 16);
 
         int32_t counts_x = screen.x / 2 + screen.x / 12;
         int32_t counts_y = screen.y / 10 + 146;

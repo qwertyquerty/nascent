@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Scene.h"
+#include "ServerApi.h"
 #include "olcPixelGameEngine.h"
 
+#include <future>
 #include <memory>
 #include <vector>
 
@@ -20,6 +22,7 @@ namespace nascent {
         std::vector<olc::Key> lane_keys;
 
         int chart_audio_id = -1;
+        std::shared_future<ApiResult<PlayTicket>> ticket;
 
         Skin* skin;
         Scene* return_scene;

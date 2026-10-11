@@ -2,9 +2,12 @@
 
 #include "Results.h"
 #include "Scene.h"
+#include "ServerApi.h"
 #include "Util.h"
 #include "olcPixelGameEngine.h"
 
+#include <future>
+#include <optional>
 #include <string>
 
 namespace nascent {
@@ -18,14 +21,17 @@ namespace nascent {
         const Chart* chart;
         AttemptSummary summary;
         std::string replay_message;
+        std::future<ApiResult<Submission>> submission;
+        std::optional<ApiResult<Submission>> submitted;
 
         SpriteDecal error_graph;
         olc::vi2d error_graph_pos;
 
         void build_error_graph(olc::vi2d size);
+        void draw_submission(int32_t x, int32_t y) const;
 
         public:
-        SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message);
+        SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission);
         void init(Game*) override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;

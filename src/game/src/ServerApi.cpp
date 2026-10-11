@@ -384,15 +384,27 @@ namespace nascent {
     }
 
     std::future<ApiResult<Submission>> ServerApi::submit_play(const Chart& chart, const Replay& replay, const std::string& ticket) {
-        json body = {{"chart_hash", chart.gameplay_hash()}, {"replay", replay}};
+        std::promise<ApiResult<PlayTicket>> ready;
+        ApiResult<PlayTicket> issued;
 
         if (!ticket.empty()) {
-            body["ticket"] = ticket;
+            issued.value = PlayTicket();
+            issued.value->ticket = ticket;
         }
 
+        ready.set_value(issued);
+        return submit_play(chart, replay, ready.get_future().share());
+    }
+
+    std::future<ApiResult<Submission>> ServerApi::submit_play(const Chart& chart, const Replay& replay, std::shared_future<ApiResult<PlayTicket>> ticket) {
+        json body = {{"chart_hash", chart.gameplay_hash()}, {"replay", replay}};
         json chart_data = chart.serialize();
 
-        return run_detached([body, chart_data]() mutable {
+        return run_detached([body, chart_data, ticket]() mutable {
+            if (ticket.valid() && ticket.get().ok() && !ticket.get().value->ticket.empty()) {
+                body["ticket"] = ticket.get().value->ticket;
+            }
+
             ApiResult<Submission> result;
             result.response = Account::authorized("POST", "/plays", body);
 

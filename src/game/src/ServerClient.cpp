@@ -148,7 +148,8 @@ namespace nascent {
         return 0;
     }
 
-    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error) {
+    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable) {
+        retryable = false;
         static std::once_flag curl_ready;
         std::call_once(curl_ready, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
 
@@ -192,11 +193,13 @@ namespace nascent {
 
         if (result != CURLE_OK) {
             error = error_buffer[0] != '\0' ? error_buffer : curl_easy_strerror(result);
+            retryable = result != CURLE_WRITE_ERROR && result != CURLE_URL_MALFORMAT && result != CURLE_UNSUPPORTED_PROTOCOL && result != CURLE_PARTIAL_FILE;
             return std::nullopt;
         }
 
         if (status >= 400) {
             error = std::format("the download server answered with HTTP {}", status);
+            retryable = status == 429 || status >= 500;
             return std::nullopt;
         }
 
