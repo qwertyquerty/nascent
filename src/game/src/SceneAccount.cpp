@@ -19,7 +19,7 @@ namespace nascent {
     }
 
     void SceneAccount::init(Game*) {
-        olc::vi2d window_size = game->window->GetWindowSize();
+        olc::vi2d window_size = game->window->GetScreenSize();
         double height = (double)window_size.y * FFT_HEIGHT_RATIO;
 
         fft = std::make_unique<EntityFFT>(skin, olc::vd2d{0, (double)window_size.y - height}, olc::vd2d{(double)window_size.x, height}, 0);

@@ -268,7 +268,7 @@ namespace nascent {
 
         game->play_sound(skin->hitsound_sfx);
 
-        olc::vi2d window_size = game->window->GetWindowSize();
+        olc::vi2d window_size = game->window->GetScreenSize();
         field = std::make_unique<EntityField>(selected_chart, skin, olc::vd2d{(double)window_size.x / 4 * 3 - (double)window_size.x / 48, 0.0}, olc::vd2d{(double)(window_size.x / 4), (double)window_size.y});
         field->draw_judge = false;
 

@@ -38,7 +38,7 @@ int main() {
 
     NascentMain ns_main;
 
-    if (ns_main.Construct(1920, 1080, 1, 1, true, false, false, true)) {
+    if (ns_main.Construct(1920, 1080, 1, 1, true, false, false, false)) {
         ns_main.Start();
     }
 

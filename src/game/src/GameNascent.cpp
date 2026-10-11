@@ -36,6 +36,7 @@ namespace nascent {
         olc::Font::init();
 
         init_input();
+        use_smooth_scaling();
 
         start_time = time(nullptr);
         std::srand(start_time);
@@ -71,7 +72,7 @@ namespace nascent {
 
         if (debug) {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
-            skin->display_font_small.DrawString(std::format("FPS: {}", fps), window->GetWindowSize().x - 100, 30, olc::WHITE);
+            skin->display_font_small.DrawString(std::format("FPS: {}", fps), window->GetScreenSize().x - 100, 30, olc::WHITE);
         }
     }
 

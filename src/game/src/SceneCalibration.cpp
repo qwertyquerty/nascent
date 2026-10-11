@@ -124,7 +124,7 @@ namespace nascent {
             return;
         }
 
-        olc::vi2d window_size = game->window->GetWindowSize();
+        olc::vi2d window_size = game->window->GetScreenSize();
         const uint8_t max_lanes_per_screen = 15;
         double lane_width = (double)window_size.x / max_lanes_per_screen;
 

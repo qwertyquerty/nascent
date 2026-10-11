@@ -74,7 +74,7 @@ namespace nascent {
         bg_field.clear();
         bg_chart = std::move(chart);
 
-        olc::vi2d window_size = game->window->GetWindowSize();
+        olc::vi2d window_size = game->window->GetScreenSize();
         uint8_t field_count = get_field_count();
 
         for (uint8_t i = 0; i < field_count; i++) {
@@ -91,7 +91,7 @@ namespace nascent {
     }
 
     void SceneTitle::init(Game* game) {
-        olc::vi2d window_size = game->window->GetWindowSize();
+        olc::vi2d window_size = game->window->GetScreenSize();
         std::string error;
 
         logo_chart = Chart::load(LOGO_CHART_PATH, 1.0, error);
@@ -203,7 +203,7 @@ namespace nascent {
             }
 
             if (bg_field.size() > 1 && bg_field[1]->pos.x <= 0) {
-                double window_width = game->window->GetWindowSize().x;
+                double window_width = game->window->GetScreenSize().x;
 
                 for (size_t i = 0; i < bg_field.size(); i++) {
                     bg_field[i]->pos.x = window_width / (bg_field.size() - 1) * i;

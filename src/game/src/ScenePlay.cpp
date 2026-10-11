@@ -91,7 +91,7 @@ namespace nascent {
     }
 
     void ScenePlay::init(Game* game) {
-        olc::vi2d window_size = game->window->GetWindowSize();
+        olc::vi2d window_size = game->window->GetScreenSize();
 
         if (Account::signed_in()) {
             ticket = ServerApi::request_ticket(*chart).share();

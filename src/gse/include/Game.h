@@ -28,6 +28,8 @@ namespace nascent {
         bool quit_requested = false;
 
         void init_input();
+        void use_smooth_scaling();
+        void make_layer_smooth(uint32_t layer);
         void poll_key_events();
         void begin_frame(float elapsed_time);
         void apply_pending_scene();
