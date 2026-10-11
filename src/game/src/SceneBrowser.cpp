@@ -88,8 +88,8 @@ namespace nascent {
         key_field = &form.add<ChoiceField>("Keys", key_options);
         status_field = &form.add<ChoiceField>("Status", std::vector<std::string>{"Ranked", "Unranked", "Any"});
         downloadable_field = &form.add<ChoiceField>("Downloadable only", std::vector<std::string>{"Yes", "No"});
-        min_difficulty_field = &form.add<NumberField>("Min difficulty", "", 1.0, 1000.0);
-        max_difficulty_field = &form.add<NumberField>("Max difficulty", "", 1.0, 1000.0);
+        min_difficulty_field = &form.add<NumberField>("Min diff", "", 1.0, 1000.0);
+        max_difficulty_field = &form.add<NumberField>("Max diff", "", 1.0, 1000.0);
         min_length_field = &form.add<NumberField>("Min length", "s", 30.0, 36000.0);
         max_length_field = &form.add<NumberField>("Max length", "s", 30.0, 36000.0);
         wanted = build_query();

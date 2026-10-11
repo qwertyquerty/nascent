@@ -26,11 +26,6 @@ namespace nascent {
         return rank ? std::format("#{}", *rank) : std::string("Unranked");
     }
 
-    static std::string format_playtime(int64_t milliseconds) {
-        int64_t minutes = milliseconds / 60000;
-        return minutes >= 60 ? std::format("{}h {}m", minutes / 60, minutes % 60) : std::format("{}m", minutes);
-    }
-
     void StatusBar::refresh() {
         heartbeat_timer = 0;
         profile_timer = 0;
@@ -202,7 +197,7 @@ namespace nascent {
 
             if (profile) {
                 const PlayerStats& stats = profile->stats;
-                segment("Performance", std::format("{:.2f}", stats.performance));
+                segment("Perf", std::format("{:.2f}", stats.performance));
                 segment("Global", format_rank(stats.global_rank));
 
                 if (key_count > 0) {
@@ -219,8 +214,6 @@ namespace nascent {
                 }
 
                 segment("Accuracy", std::format("{:.2f}%", stats.accuracy * 100));
-                segment("Ranked plays", std::format("{}", stats.ranked_play_count));
-                segment("Playtime", format_playtime(stats.total_playtime_ms));
             }
             else {
                 x += SEGMENT_GAP;

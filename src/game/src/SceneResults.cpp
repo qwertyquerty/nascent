@@ -165,7 +165,8 @@ namespace nascent {
     using BarPart = std::pair<std::string, olc::Pixel>;
 
     static olc::Pixel change_color(double change) {
-        return change > 0 ? POSITIVE_COLOR : change < 0 ? NEGATIVE_COLOR : olc::GREY;
+        return change > 0 ? POSITIVE_COLOR : change < 0 ? NEGATIVE_COLOR
+                                                        : olc::GREY;
     }
 
     static std::vector<BarPart> performance_parts(const Standing& standing) {
@@ -289,7 +290,7 @@ namespace nascent {
             segment("Chart", {{std::format("#{}", *result.chart_rank), olc::WHITE}});
         }
 
-        segment("Performance", performance_parts(result.combined));
+        segment("Perf", performance_parts(result.combined));
         segment("Global", rank_parts(result.combined.global_rank, result.combined.previous_global_rank));
 
         if (result.key_mode) {
@@ -327,8 +328,8 @@ namespace nascent {
         const std::pair<const char*, std::string> stats[] = {
             {"Max combo", std::format("{}", summary.max_combo)},
             {"Average error", std::format("{:+.1f} ms", summary.average_error)},
-            {"Difficulty", std::format("{:.2f}", summary.difficulty)},
-            {"Performance", std::format("{:.2f}", summary.performance)},
+            {"Diff", std::format("{:.2f}", summary.difficulty)},
+            {"Perf", std::format("{:.2f}", summary.performance)},
         };
 
         for (const auto& [label, value] : stats) {
