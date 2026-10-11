@@ -65,6 +65,7 @@ if(WIN32)
     )
 else()
     find_package(CURL REQUIRED)
+    set_target_properties(CURL::libcurl PROPERTIES IMPORTED_GLOBAL TRUE)
 endif()
 
 add_library(stb INTERFACE)
