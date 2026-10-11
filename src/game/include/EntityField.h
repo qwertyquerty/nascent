@@ -16,7 +16,10 @@ namespace nascent {
         double note_size = 0;
         double note_x_spacing = 0;
 
-        uint32_t earliest_visible_object_index = 0;
+        int32_t longest_hold_ms = 0;
+        float longest_hold_pitch = 0;
+
+        void update_longest_hold();
 
         SpriteDecal combo_decal;
         uint32_t last_rendered_combo = 0;

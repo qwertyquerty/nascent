@@ -53,11 +53,17 @@ namespace nascent {
             }
         }
 
-        bool evoi_assigned = false;
         double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
 
+        update_longest_hold();
+        double field_ms = scroll_rate_px_per_ms > 0 ? size.y / scroll_rate_px_per_ms : 0;
+        double earliest_time = position - longest_hold_ms - field_ms;
+        auto first_hit = std::lower_bound(chart->hits.begin(), chart->hits.end(), earliest_time, [](const Hit& hit, double time) {
+            return hit.time < time;
+        });
+
         // Draw notes
-        for (uint32_t i = earliest_visible_object_index; i < chart->hits.size(); i++) {
+        for (size_t i = (size_t)(first_hit - chart->hits.begin()); i < chart->hits.size(); i++) {
             const Hit& hit = chart->hits[i];
             bool hit_played = attempt != nullptr && attempt->judged_hits[i].hit_played;
 
@@ -66,8 +72,6 @@ namespace nascent {
             int32_t hit_height = hit.hit_type == HitType::HOLD ? (hit.end_time - hit.time) * scroll_rate_px_per_ms : 0;
 
             int32_t screen_hit_y = jl_y - hit_y;
-
-            bool visible = false;
 
             if ((screen_hit_y + note_size) < pos.y) {
                 break;
@@ -88,19 +92,12 @@ namespace nascent {
                         }
 
                         window->DrawWarpedDecal(skin->note_decal(hit.key), {{(float)hit_x, (float)hold_smear_y}, {(float)hit_x, (float)(hold_smear_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)(hold_smear_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)hold_smear_y}}, with_opacity(hold_color));
-                        visible = true;
                     }
                 }
 
                 if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
                     window->DrawWarpedDecal(skin->note_decal(hit.key), {{(float)hit_x, (float)screen_hit_y}, {(float)hit_x, (float)(screen_hit_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)(screen_hit_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)screen_hit_y}}, with_opacity(skin->title_gradient_at((double)hit_x / window->GetScreenSize().x, (double)screen_hit_y / window->GetScreenSize().y)));
-                    visible = true;
                 }
-            }
-
-            if (visible && !evoi_assigned) {
-                earliest_visible_object_index = i;
-                evoi_assigned = true;
             }
         }
 
@@ -162,11 +159,22 @@ namespace nascent {
     }
 
     void EntityField::set_position(double position) {
-        if (position < this->position) {
-            earliest_visible_object_index = 0;
+        this->position = position;
+    }
+
+    void EntityField::update_longest_hold() {
+        if (longest_hold_pitch == chart->pitch) {
+            return;
         }
 
-        this->position = position;
+        longest_hold_pitch = chart->pitch;
+        longest_hold_ms = 0;
+
+        for (const Hit& hit : chart->hits) {
+            if (hit.hit_type == HitType::HOLD) {
+                longest_hold_ms = std::max(longest_hold_ms, hit.end_time - hit.time);
+            }
+        }
     }
 
     void EntityField::set_attempt(const Attempt* attempt) {
