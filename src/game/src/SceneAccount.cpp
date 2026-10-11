@@ -23,6 +23,9 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetScreenSize();
         double height = (double)window_size.y * FFT_HEIGHT_RATIO;
 
+        starfield = std::make_unique<EntityStarfield>(skin, olc::vd2d{(double)window_size.x, (double)window_size.y});
+        starfield->init(this);
+
         fft = std::make_unique<EntityFFT>(skin, olc::vd2d{0, (double)window_size.y - height}, olc::vd2d{(double)window_size.x, height}, 0);
         fft->flipped = true;
         fft->init(this);
@@ -102,6 +105,8 @@ namespace nascent {
     void SceneAccount::update(float elapsed_time) {
         olc::PixelGameEngine* window = game->window;
 
+        starfield->update(this, elapsed_time);
+
         if (skin->account_loop_sfx != -1 && game->get_audio().IsPlaying(skin->account_loop_sfx)) {
             game->get_audio().CopyEngineBuffer(audio_buffer);
             fft->update_song_buffer(audio_buffer, elapsed_time);
@@ -151,6 +156,7 @@ namespace nascent {
 
     void SceneAccount::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
+        starfield->draw(window);
         fft->draw(window);
 
         int32_t x = screen.x / 24;

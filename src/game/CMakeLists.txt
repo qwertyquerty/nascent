@@ -5,6 +5,7 @@ add_library(game
     src/BeatmapDownloads.cpp
     src/EntityFFT.cpp
     src/EntityField.cpp
+    src/EntityStarfield.cpp
     src/GameNascent.cpp
     src/InputManager.cpp
     src/LocalBests.cpp

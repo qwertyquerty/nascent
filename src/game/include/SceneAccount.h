@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EntityFFT.h"
+#include "EntityStarfield.h"
 #include "Scene.h"
 #include "ServerClient.h"
 #include "UiForm.h"
@@ -32,6 +33,7 @@ namespace nascent {
         TextField* email_field = nullptr;
         TextField* password_field = nullptr;
 
+        std::unique_ptr<EntityStarfield> starfield;
         std::unique_ptr<EntityFFT> fft;
         std::vector<float> audio_buffer;
 
