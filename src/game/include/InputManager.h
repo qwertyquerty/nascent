@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -16,6 +17,7 @@ namespace nascent {
         static const olc::Key calibration_key = olc::Key::F3;
         static const olc::Key account_key = olc::Key::F4;
         static const olc::Key browse_key = olc::Key::F5;
+        static const olc::Key input_key = olc::Key::F6;
         static const olc::Key field_key = olc::Key::TAB;
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;
@@ -37,8 +39,13 @@ namespace nascent {
 
         static bool switch_pressed(olc::PixelGameEngine* window);
         static std::optional<olc::Key> key_from_name(std::string_view name);
+        static std::string_view key_name(olc::Key key);
+        static std::string key_label(olc::Key key);
         static std::vector<olc::Key> default_lane_keys(uint8_t key_count);
         static std::vector<olc::Key> get_lane_keys(uint8_t key_count);
+        static bool is_custom_lane_keys(uint8_t key_count);
+        static bool set_lane_keys(uint8_t key_count, const std::vector<olc::Key>& keys);
+        static bool reset_lane_keys(uint8_t key_count);
         static std::optional<uint8_t> get_lane(const std::vector<olc::Key>& lane_keys, olc::Key key);
         static uint32_t get_lane_keys_held(olc::PixelGameEngine* window, const std::vector<olc::Key>& lane_keys);
     };

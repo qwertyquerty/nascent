@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <iostream>
 #include <string>
 
@@ -36,6 +37,82 @@ namespace nascent {
         }
 
         return std::nullopt;
+    }
+
+    std::string_view InputManager::key_name(olc::Key key) {
+        return (size_t)key < KEY_NAMES.size() ? KEY_NAMES[(size_t)key] : KEY_NAMES[0];
+    }
+
+    std::string InputManager::key_label(olc::Key key) {
+        if (key >= olc::Key::K0 && key <= olc::Key::K9) {
+            return std::string(1, (char)('0' + ((int)key - (int)olc::Key::K0)));
+        }
+
+        if (key >= olc::Key::NP0 && key <= olc::Key::NP9) {
+            return std::format("Num {}", (int)key - (int)olc::Key::NP0);
+        }
+
+        switch (key) {
+            case olc::Key::UP: return "↑";
+            case olc::Key::DOWN: return "↓";
+            case olc::Key::LEFT: return "←";
+            case olc::Key::RIGHT: return "→";
+            case olc::Key::SPACE: return "Space";
+            case olc::Key::TAB: return "Tab";
+            case olc::Key::SHIFT: return "Shift";
+            case olc::Key::CTRL: return "Ctrl";
+            case olc::Key::INS: return "Insert";
+            case olc::Key::DEL: return "Delete";
+            case olc::Key::HOME: return "Home";
+            case olc::Key::END: return "End";
+            case olc::Key::PGUP: return "Page Up";
+            case olc::Key::PGDN: return "Page Down";
+            case olc::Key::BACK: return "Backspace";
+            case olc::Key::ESCAPE: return "Esc";
+            case olc::Key::RETURN: return "Return";
+            case olc::Key::ENTER: return "Enter";
+            case olc::Key::PAUSE: return "Pause";
+            case olc::Key::SCROLL: return "Scroll Lock";
+            case olc::Key::NP_MUL: return "Num *";
+            case olc::Key::NP_DIV: return "Num /";
+            case olc::Key::NP_ADD: return "Num +";
+            case olc::Key::NP_SUB: return "Num -";
+            case olc::Key::NP_DECIMAL: return "Num .";
+            case olc::Key::PERIOD: return ".";
+            case olc::Key::EQUALS: return "=";
+            case olc::Key::COMMA: return ",";
+            case olc::Key::MINUS: return "-";
+            case olc::Key::OEM_1: return ";";
+            case olc::Key::OEM_2: return "/";
+            case olc::Key::OEM_3: return "`";
+            case olc::Key::OEM_4: return "[";
+            case olc::Key::OEM_5: return "\\";
+            case olc::Key::OEM_6: return "]";
+            case olc::Key::OEM_7: return "'";
+            case olc::Key::OEM_8: return "OEM 8";
+            case olc::Key::CAPS_LOCK: return "Caps Lock";
+            default: return std::string(key_name(key));
+        }
+    }
+
+    bool InputManager::is_custom_lane_keys(uint8_t key_count) {
+        return get_lane_keys(key_count) != default_lane_keys(key_count);
+    }
+
+    bool InputManager::set_lane_keys(uint8_t key_count, const std::vector<olc::Key>& keys) {
+        std::vector<std::string> names;
+
+        for (olc::Key key : keys) {
+            names.emplace_back(key_name(key));
+        }
+
+        SettingsManager::settings.lane_keymaps[std::to_string(key_count)] = names;
+        return SettingsManager::save();
+    }
+
+    bool InputManager::reset_lane_keys(uint8_t key_count) {
+        SettingsManager::settings.lane_keymaps.erase(std::to_string(key_count));
+        return SettingsManager::save();
     }
 
     std::vector<olc::Key> InputManager::default_lane_keys(uint8_t key_count) {

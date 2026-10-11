@@ -136,7 +136,7 @@ namespace nascent {
                 break;
         }
 
-        const std::array<std::string_view, 5> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse"};
+        const std::array<std::string_view, 6> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse", "F6  input"};
         int32_t hint_x = screen.x - PADDING + SEGMENT_GAP;
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
