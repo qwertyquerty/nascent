@@ -49,6 +49,7 @@ namespace nascent {
 
         void set_scene(Scene* scene);
         void set_scene(std::unique_ptr<Scene> scene);
+        bool is_transitioning() const;
         olc::MiniAudio& get_audio();
 
         void play_sound(int id, bool looping = false);

@@ -115,6 +115,10 @@ namespace nascent {
         pending_owned_scene = std::move(scene);
     }
 
+    bool Game::is_transitioning() const {
+        return outgoing_scene != nullptr;
+    }
+
     void Game::apply_pending_scene() {
         if (pending_scene == nullptr) {
             return;

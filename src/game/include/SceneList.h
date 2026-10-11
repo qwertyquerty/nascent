@@ -8,11 +8,13 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -21,6 +23,16 @@ namespace nascent {
     class EntityField;
     class Skin;
     struct SearchFilter;
+
+    struct ChartLibrary {
+        std::vector<std::unique_ptr<Chart>> charts;
+        std::vector<std::string> hashes;
+        std::vector<std::optional<float>> difficulties;
+        std::vector<std::string> search_texts;
+        std::unordered_map<std::string, std::string> hash_by_replay_folder;
+        float pitch = 1.0f;
+        bool hashed_files = false;
+    };
 
     class SceneList : public Scene {
         protected:
@@ -40,6 +52,7 @@ namespace nascent {
         std::vector<size_t> visible;
         std::string search;
         std::optional<std::string> pending_selection;
+        std::filesystem::path pending_selection_path;
         int pending_audio_id = -1;
         std::unordered_set<std::string> local_hashes;
         std::vector<std::optional<float>> chart_difficulties;
@@ -81,15 +94,21 @@ namespace nascent {
 
         std::thread background_loader;
 
-        void load_charts();
-        void reload_charts();
-        void backfill_bests();
+        std::mutex library_load_mutex;
+        std::optional<ChartLibrary> completed_library_load;
+        std::thread library_loader;
+        bool library_loading = false;
+        bool library_reload_pending = false;
+
+        void start_library_load();
+        void poll_library_load();
+        void apply_library(ChartLibrary library);
         void apply_search(size_t keep_chart);
         void refresh_search();
         bool matches_filter(size_t index, const SearchFilter& filter);
         void update_search();
         void draw_search(olc::PixelGameEngine* window);
-        void select_chart(int32_t);
+        void select_chart(int32_t, bool sound = true);
         void set_pitch(float);
         std::optional<float> get_difficulty(size_t index, int32_t& budget);
 
@@ -109,6 +128,6 @@ namespace nascent {
         void draw(olc::PixelGameEngine*) override;
 
         const std::unordered_set<std::string>& get_local_hashes() const;
-        void select_chart_by_hash(std::string hash, int playing_audio_id = -1);
+        void select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id = -1);
     };
 }

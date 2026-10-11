@@ -35,6 +35,7 @@
 #include <iterator>
 #include <locale>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -67,6 +68,175 @@ namespace nascent {
         }
     }
 
+    struct LoadedChart {
+        std::unique_ptr<Chart> chart;
+        std::u8string folder;
+        float difficulty;
+        std::string hash;
+    };
+
+    static std::u8string folder_key(const std::filesystem::path& folder_path) {
+        std::u8string folder = folder_path.filename().u8string();
+
+        for (char8_t& c : folder) {
+            if (c >= u8'A' && c <= u8'Z') {
+                c = (char8_t)(c - u8'A' + u8'a');
+            }
+        }
+
+        return folder;
+    }
+
+    static ChartLibrary build_library(std::vector<LoadedChart> loaded, float pitch) {
+        parallel_for(loaded.size(), [&](size_t index) {
+            loaded[index].difficulty = (float)DifficultyCalculator::calculate(*loaded[index].chart);
+        });
+
+        std::unordered_map<std::u8string, std::string> folder_titles;
+
+        for (const LoadedChart& entry : loaded) {
+            std::string title = entry.chart->info.title;
+
+            for (char& c : title) {
+                c = (char)std::tolower((unsigned char)c);
+            }
+
+            folder_titles.emplace(entry.folder, std::move(title));
+        }
+
+        std::stable_sort(loaded.begin(), loaded.end(), [&](const LoadedChart& a, const LoadedChart& b) {
+            const std::string& a_title = folder_titles.at(a.folder);
+            const std::string& b_title = folder_titles.at(b.folder);
+
+            if (a_title != b_title) {
+                return a_title < b_title;
+            }
+
+            if (a.folder != b.folder) {
+                return a.folder < b.folder;
+            }
+
+            if (a.difficulty != b.difficulty) {
+                return a.difficulty < b.difficulty;
+            }
+
+            return a.chart->info.difficulty_name < b.chart->info.difficulty_name;
+        });
+
+        ChartLibrary library;
+        library.pitch = pitch;
+
+        for (LoadedChart& entry : loaded) {
+            const ChartInfo& info = entry.chart->info;
+            std::string text = std::format("{} {} {} {} {} {}", info.title, info.title_unicode, info.artist, info.artist_unicode, info.mapper, info.difficulty_name);
+
+            for (char& c : text) {
+                c = (char)std::tolower((unsigned char)c);
+            }
+
+            library.charts.push_back(std::move(entry.chart));
+            library.hashes.push_back(std::move(entry.hash));
+            library.difficulties.push_back(entry.difficulty);
+            library.search_texts.push_back(std::move(text));
+        }
+
+        return library;
+    }
+
+    static ChartLibrary load_library(const std::filesystem::path& song_directory, float pitch, bool hash_files) {
+        std::error_code ec;
+        std::vector<LoadedChart> loaded;
+
+        if (std::filesystem::is_directory(song_directory, ec)) {
+            struct ChartFile {
+                std::filesystem::path path;
+                std::u8string folder;
+            };
+
+            std::vector<ChartFile> chart_files;
+
+            auto extension_rank = [](const std::filesystem::path& path) {
+                auto found = std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), path.extension().string());
+                return (size_t)(found - CHART_FILE_EXTENSIONS.begin());
+            };
+
+            for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
+                if (!chart_folder.is_directory(ec)) {
+                    continue;
+                }
+
+                std::u8string folder = folder_key(chart_folder.path());
+
+                std::vector<std::filesystem::path> paths;
+
+                for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder.path(), ec)) {
+                    if (extension_rank(chart_file.path()) < CHART_FILE_EXTENSIONS.size()) {
+                        paths.push_back(chart_file.path());
+                    }
+                }
+
+                std::sort(paths.begin(), paths.end(), [&](const std::filesystem::path& a, const std::filesystem::path& b) {
+                    return std::make_pair(extension_rank(a), a) < std::make_pair(extension_rank(b), b);
+                });
+
+                for (std::filesystem::path& path : paths) {
+                    chart_files.push_back({std::move(path), folder});
+                }
+            }
+
+            std::vector<LoadedChart> parsed(chart_files.size());
+            std::mutex log_mutex;
+
+            parallel_for(chart_files.size(), [&](size_t index) {
+                std::string error;
+                std::unique_ptr<Chart> chart = Chart::load(chart_files[index].path, pitch, error);
+
+                std::error_code audio_ec;
+
+                if (chart != nullptr && !std::filesystem::is_regular_file(chart->audio_path, audio_ec)) {
+                    error = std::format("audio file {} is missing", chart->audio_path.string());
+                    chart.reset();
+                }
+
+                if (chart == nullptr) {
+                    std::lock_guard<std::mutex> lock(log_mutex);
+                    std::cerr << "Skipping chart " << chart_files[index].path.string() << ": " << error << std::endl;
+                    return;
+                }
+
+                std::string hash = chart->gameplay_hash();
+                parsed[index] = {std::move(chart), chart_files[index].folder, 0.0f, std::move(hash)};
+            });
+
+            std::unordered_set<std::string> loaded_hashes;
+
+            for (LoadedChart& entry : parsed) {
+                if (entry.chart != nullptr && loaded_hashes.insert(entry.hash).second) {
+                    loaded.push_back(std::move(entry));
+                }
+            }
+        }
+
+        ChartLibrary library = build_library(std::move(loaded), pitch);
+        library.hashed_files = hash_files;
+
+        if (hash_files) {
+            std::vector<std::optional<std::string>> file_hashes(library.charts.size());
+
+            parallel_for(library.charts.size(), [&](size_t index) {
+                file_hashes[index] = sha256_file_hex(library.charts[index]->file_path);
+            });
+
+            for (size_t index = 0; index < file_hashes.size(); index++) {
+                if (file_hashes[index]) {
+                    library.hash_by_replay_folder[file_hashes[index]->substr(0, Replay::FOLDER_HASH_LENGTH)] = library.hashes[index];
+                }
+            }
+        }
+
+        return library;
+    }
+
     SceneList::SceneList(Skin* skin) {
         this->skin = skin;
 
@@ -86,43 +256,40 @@ namespace nascent {
         if (background_loader.joinable()) {
             background_loader.join();
         }
+
+        if (library_loader.joinable()) {
+            library_loader.join();
+        }
     }
 
     void SceneList::init(Game*) {
-        load_charts();
-        backfill_bests();
-    };
+        if (!pending_selection_path.empty()) {
+            std::string error;
+            std::unique_ptr<Chart> chart = Chart::load(pending_selection_path, pitch, error);
 
-    void SceneList::backfill_bests() {
-        if (LocalBests::is_backfilled()) {
-            return;
-        }
-
-        std::unordered_map<std::string, std::string> chart_hash_by_folder;
-
-        for (size_t index = 0; index < charts.size(); index++) {
-            std::optional<std::string> file_hash = sha256_file_hex(charts[index]->file_path);
-
-            if (file_hash) {
-                chart_hash_by_folder[file_hash->substr(0, Replay::FOLDER_HASH_LENGTH)] = chart_hashes[index];
+            if (chart != nullptr) {
+                std::vector<LoadedChart> loaded;
+                std::string hash = chart->gameplay_hash();
+                loaded.push_back({std::move(chart), folder_key(pending_selection_path.parent_path()), 0.0f, std::move(hash)});
+                apply_library(build_library(std::move(loaded), pitch));
             }
         }
 
-        LocalBests::backfill(chart_hash_by_folder, user_config_directory(SettingsManager::APP_NAME) / "replays");
-    }
+        start_library_load();
+    };
 
     void SceneList::on_enter() {
         if (BeatmapDownloads::take_library_changed()) {
-            reload_charts();
+            start_library_load();
         }
-        else {
-            refresh_search();
-        }
+
+        refresh_search();
 
         if (pending_selection) {
             auto found = std::find(chart_hashes.begin(), chart_hashes.end(), *pending_selection);
             int audio_id = std::exchange(pending_audio_id, -1);
             pending_selection.reset();
+            pending_selection_path.clear();
 
             if (found != chart_hashes.end()) {
                 size_t chart = (size_t)(found - chart_hashes.begin());
@@ -163,6 +330,7 @@ namespace nascent {
 
     void SceneList::update(float elapsed_time) {
         status_bar.update(elapsed_time);
+        poll_library_load();
 
         if (game->window->GetKey(InputManager::calibration_key).bPressed) {
             game->play_sound(skin->get_random_menu_pluck());
@@ -268,7 +436,7 @@ namespace nascent {
         list_scroll_offset *= std::abs(list_scroll_offset) > 1.0 ? (std::pow(0.005, elapsed_time * 2)) : 0;
     };
 
-    void SceneList::select_chart(int32_t index) {
+    void SceneList::select_chart(int32_t index, bool sound) {
         selected_chart = charts[visible[index]].get();
         status_bar.set_key_count(selected_chart->info.key_count);
 
@@ -285,7 +453,9 @@ namespace nascent {
 
         selected_chart_index = index;
 
-        game->play_sound(skin->hitsound_sfx);
+        if (sound) {
+            game->play_sound(skin->hitsound_sfx);
+        }
 
         olc::vi2d window_size = game->window->GetScreenSize();
         field = std::make_unique<EntityField>(selected_chart, skin, olc::vd2d{(double)window_size.x / 4 * 3 - (double)window_size.x / 48, 0.0}, olc::vd2d{(double)(window_size.x / 4), (double)window_size.y});
@@ -388,126 +558,93 @@ namespace nascent {
         }
     }
 
-    void SceneList::load_charts() {
-        std::error_code ec;
-        std::filesystem::path song_directory = SettingsManager::settings.list_song_directory;
-
-        if (!std::filesystem::is_directory(song_directory, ec)) {
+    void SceneList::start_library_load() {
+        if (library_loading) {
+            library_reload_pending = true;
             return;
         }
 
-        struct LoadedChart {
-            std::unique_ptr<Chart> chart;
-            std::u8string folder;
-            float difficulty;
-            std::string hash;
-        };
+        library_loading = true;
+        std::filesystem::path song_directory = SettingsManager::settings.list_song_directory;
+        float load_pitch = pitch;
+        bool hash_files = !LocalBests::is_backfilled();
 
-        struct ChartFile {
-            std::filesystem::path path;
-            std::u8string folder;
-        };
+        library_loader = std::thread([this, song_directory, load_pitch, hash_files] {
+            ChartLibrary library = load_library(song_directory, load_pitch, hash_files);
+            std::lock_guard<std::mutex> lock(library_load_mutex);
+            completed_library_load = std::move(library);
+        });
+    }
 
-        std::vector<ChartFile> chart_files;
-
-        auto extension_rank = [](const std::filesystem::path& path) {
-            auto found = std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), path.extension().string());
-            return (size_t)(found - CHART_FILE_EXTENSIONS.begin());
-        };
-
-        for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
-            if (!chart_folder.is_directory(ec)) {
-                continue;
-            }
-
-            std::u8string folder = chart_folder.path().filename().u8string();
-
-            for (char8_t& c : folder) {
-                if (c >= u8'A' && c <= u8'Z') {
-                    c = (char8_t)(c - u8'A' + u8'a');
-                }
-            }
-
-            std::vector<std::filesystem::path> paths;
-
-            for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder.path(), ec)) {
-                if (extension_rank(chart_file.path()) < CHART_FILE_EXTENSIONS.size()) {
-                    paths.push_back(chart_file.path());
-                }
-            }
-
-            std::sort(paths.begin(), paths.end(), [&](const std::filesystem::path& a, const std::filesystem::path& b) {
-                return std::make_pair(extension_rank(a), a) < std::make_pair(extension_rank(b), b);
-            });
-
-            for (std::filesystem::path& path : paths) {
-                chart_files.push_back({std::move(path), folder});
-            }
+    void SceneList::poll_library_load() {
+        if (BeatmapDownloads::take_library_changed()) {
+            start_library_load();
         }
 
-        std::vector<LoadedChart> parsed(chart_files.size());
-        std::mutex log_mutex;
-
-        parallel_for(chart_files.size(), [&](size_t index) {
-            std::string error;
-            std::unique_ptr<Chart> chart = Chart::load(chart_files[index].path, pitch, error);
-
-            if (chart == nullptr) {
-                std::lock_guard<std::mutex> lock(log_mutex);
-                std::cerr << "Skipping chart " << chart_files[index].path.string() << ": " << error << std::endl;
-                return;
-            }
-
-            std::string hash = chart->gameplay_hash();
-            parsed[index] = {std::move(chart), chart_files[index].folder, 0.0f, std::move(hash)};
-        });
-
-        std::vector<LoadedChart> loaded;
-        std::unordered_set<std::string> loaded_hashes;
-
-        for (LoadedChart& entry : parsed) {
-            if (entry.chart != nullptr && loaded_hashes.insert(entry.hash).second) {
-                loaded.push_back(std::move(entry));
-            }
+        if (!library_loading || game->is_transitioning()) {
+            return;
         }
 
-        parallel_for(loaded.size(), [&](size_t index) {
-            loaded[index].difficulty = (float)DifficultyCalculator::calculate(*loaded[index].chart);
-        });
-
-        std::stable_sort(loaded.begin(), loaded.end(), [](const LoadedChart& a, const LoadedChart& b) {
-            if (a.folder != b.folder) {
-                return a.folder < b.folder;
-            }
-
-            if (a.difficulty != b.difficulty) {
-                return a.difficulty < b.difficulty;
-            }
-
-            return a.chart->info.difficulty_name < b.chart->info.difficulty_name;
-        });
-
-        charts.clear();
-        chart_hashes.clear();
-        chart_difficulties.clear();
-        search_texts.clear();
-
-        for (LoadedChart& entry : loaded) {
-            const ChartInfo& info = entry.chart->info;
-            std::string text = std::format("{} {} {} {} {} {}", info.title, info.title_unicode, info.artist, info.artist_unicode, info.mapper, info.difficulty_name);
-
-            for (char& c : text) {
-                c = (char)std::tolower((unsigned char)c);
-            }
-
-            charts.push_back(std::move(entry.chart));
-            chart_hashes.push_back(std::move(entry.hash));
-            chart_difficulties.push_back(entry.difficulty);
-            search_texts.push_back(std::move(text));
+        std::optional<ChartLibrary> library;
+        {
+            std::lock_guard<std::mutex> lock(library_load_mutex);
+            library = std::exchange(completed_library_load, std::nullopt);
         }
 
-        local_hashes = std::move(loaded_hashes);
-        apply_search(SIZE_MAX);
+        if (!library) {
+            return;
+        }
+
+        library_loader.join();
+        library_loading = false;
+
+        if (library->hashed_files && !LocalBests::is_backfilled()) {
+            LocalBests::backfill(library->hash_by_replay_folder, user_config_directory(SettingsManager::APP_NAME) / "replays");
+        }
+
+        apply_library(std::move(*library));
+
+        if (std::exchange(library_reload_pending, false)) {
+            start_library_load();
+        }
+    }
+
+    void SceneList::apply_library(ChartLibrary library) {
+        std::string selected_hash = selected_chart != nullptr ? selected_chart->gameplay_hash() : std::string();
+        std::string preview_hash = preview_audio_chart != nullptr ? preview_audio_chart->gameplay_hash() : std::string();
+
+        charts = std::move(library.charts);
+        chart_hashes = std::move(library.hashes);
+        search_texts = std::move(library.search_texts);
+        chart_difficulties = std::move(library.difficulties);
+        local_hashes = std::unordered_set<std::string>(chart_hashes.begin(), chart_hashes.end());
+
+        if (library.pitch != pitch) {
+            chart_difficulties.assign(charts.size(), std::nullopt);
+        }
+
+        auto find_chart = [&](const std::string& hash) {
+            auto found = std::find(chart_hashes.begin(), chart_hashes.end(), hash);
+            return !hash.empty() && found != chart_hashes.end() ? (size_t)(found - chart_hashes.begin()) : SIZE_MAX;
+        };
+
+        size_t selected = find_chart(selected_hash);
+        size_t preview = find_chart(preview_hash);
+        selected_chart = nullptr;
+        preview_audio_chart = preview != SIZE_MAX ? charts[preview].get() : nullptr;
+
+        if (preview_audio_chart == nullptr) {
+            stop_preview_audio();
+        }
+
+        apply_search(selected);
+
+        if (visible.empty()) {
+            field.reset();
+            return;
+        }
+
+        select_chart(selected_chart_index, false);
     }
 
     struct SearchFilter {
@@ -728,6 +865,23 @@ namespace nascent {
         visible.clear();
         selected_chart_index = 0;
 
+        bool filters_difficulty = std::any_of(query.filters.begin(), query.filters.end(), [](const SearchFilter& filter) {
+            return filter.field == "difficulty";
+        });
+
+        if (filters_difficulty) {
+            if (chart_difficulties.size() != charts.size()) {
+                chart_difficulties.assign(charts.size(), std::nullopt);
+            }
+
+            parallel_for(charts.size(), [&](size_t index) {
+                if (!chart_difficulties[index]) {
+                    charts[index]->set_pitch(pitch);
+                    chart_difficulties[index] = (float)DifficultyCalculator::calculate(*charts[index]);
+                }
+            });
+        }
+
         for (size_t index = 0; index < charts.size(); index++) {
             bool matches = std::all_of(query.words.begin(), query.words.end(), [&](const std::string& term) {
                 return search_texts[index].find(term) != std::string::npos;
@@ -810,22 +964,9 @@ namespace nascent {
         font.DrawString(count, {screensize.x - StatusBar::PADDING - count_width, baseline}, visible.empty() ? olc::RED : olc::GREY);
     }
 
-    void SceneList::reload_charts() {
-        std::string selected_hash = selected_chart != nullptr ? selected_chart->gameplay_hash() : std::string();
-        selected_chart = nullptr;
-        preview_audio_chart = nullptr;
-        load_charts();
-
-        for (size_t index = 0; index < charts.size(); index++) {
-            if (chart_hashes[index] == selected_hash) {
-                apply_search(index);
-                break;
-            }
-        }
-    }
-
-    void SceneList::select_chart_by_hash(std::string hash, int playing_audio_id) {
+    void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
         pending_selection = std::move(hash);
+        pending_selection_path = std::move(path);
         pending_audio_id = playing_audio_id;
     }
 
@@ -844,7 +985,8 @@ namespace nascent {
 
         if (visible.empty()) {
             skin->display_font_medium.DrawString(
-                charts.empty() ? std::format("No charts found in {}", SettingsManager::settings.list_song_directory) : std::string("No charts match your search"),
+                library_loading && charts.empty() ? std::string("Loading charts...") : charts.empty() ? std::format("No charts found in {}", SettingsManager::settings.list_song_directory)
+                                                                                                      : std::string("No charts match your search"),
                 {screensize.x / 48, screensize.y / 2},
                 olc::GREY
             );
