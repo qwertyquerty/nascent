@@ -71,6 +71,9 @@ def import_charts(path: Path, rank: bool):
     files = [path] if path.is_file() else sorted(file for file in path.rglob("*") if file.suffix.lower() in CHART_SUFFIXES)
     imported = 0
 
+    if not files:
+        raise click.ClickException(f"no .osu or .json chart files in {path} that this user can read")
+
     for file in files:
         try:
             data, source = _read_chart_file(file)
