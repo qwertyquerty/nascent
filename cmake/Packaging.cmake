@@ -47,7 +47,7 @@ set(nascent_license_files
     "${nascent_libs}/olcPixelGameEngine/LICENCE.md|olcPixelGameEngine"
 )
 
-foreach(nascent_cpm_package fmt glaze)
+foreach(nascent_cpm_package fmt glaze miniz)
     if(EXISTS "${CPM_PACKAGE_${nascent_cpm_package}_SOURCE_DIR}/LICENSE")
         list(APPEND nascent_license_files "${CPM_PACKAGE_${nascent_cpm_package}_SOURCE_DIR}/LICENSE|${nascent_cpm_package}")
     endif()

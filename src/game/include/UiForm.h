@@ -17,8 +17,12 @@ namespace nascent {
         public:
         static constexpr int32_t FIELD_SPACING = 28;
 
+        int32_t spacing = FIELD_SPACING;
+
         enum class Action {
             NONE,
+            MOVED,
+            CHANGED,
             SUBMIT
         };
 

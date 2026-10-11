@@ -66,12 +66,18 @@ namespace nascent {
             return Action::NONE;
         }
 
-        fields[focus]->update(window, typed, elapsed_time);
+        bool changed = fields[focus]->update(window, typed, elapsed_time);
+
+        if (window->GetKey(InputManager::field_key).bPressed && !window->GetKey(InputManager::switch_modifier).bHeld && fields.size() > 1) {
+            bool backwards = window->GetKey(InputManager::keybind_mod1).bHeld;
+            focus_field(window, backwards ? (focus + fields.size() - 1) % fields.size() : (focus + 1) % fields.size());
+            return Action::MOVED;
+        }
 
         if (window->GetKey(InputManager::menu_start_key).bPressed) {
             if (focus + 1 < fields.size()) {
                 focus_field(window, focus + 1);
-                return Action::NONE;
+                return Action::MOVED;
             }
 
             return Action::SUBMIT;
@@ -79,19 +85,22 @@ namespace nascent {
 
         if (window->GetKey(InputManager::menu_down_key).bPressed && focus + 1 < fields.size()) {
             focus_field(window, focus + 1);
-        }
-        else if (window->GetKey(InputManager::menu_up_key).bPressed && focus > 0) {
-            focus_field(window, focus - 1);
+            return Action::MOVED;
         }
 
-        return Action::NONE;
+        if (window->GetKey(InputManager::menu_up_key).bPressed && focus > 0) {
+            focus_field(window, focus - 1);
+            return Action::MOVED;
+        }
+
+        return changed ? Action::CHANGED : Action::NONE;
     }
 
     int32_t UiForm::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position) const {
         int32_t y = position.y;
 
         for (size_t i = 0; i < fields.size(); i++) {
-            y += fields[i]->draw(window, skin, {position.x, y}, enabled && i == focus) + FIELD_SPACING;
+            y += fields[i]->draw(window, skin, {position.x, y}, enabled && i == focus) + spacing;
         }
 
         return y - position.y;

@@ -122,6 +122,8 @@ namespace olc
         static std::mutex m_capture_mutex;
 
     public:
+        static constexpr size_t CAPTURE_FRAMES = 4096;
+
         void CopyEngineBuffer(std::vector<float>& out);
 
     public: // configuration
@@ -479,7 +481,14 @@ namespace olc
         {
             std::unique_lock<std::mutex> lock(m_capture_mutex, std::try_to_lock);
             if(lock.owns_lock())
-                m_capture_buffer.assign(m_engine_buffer.begin(), m_engine_buffer.end());
+            {
+                m_capture_buffer.insert(m_capture_buffer.end(), m_engine_buffer.begin(), m_engine_buffer.end());
+
+                size_t capture_limit = CAPTURE_FRAMES * DEVICE_CHANNELS;
+
+                if(m_capture_buffer.size() > capture_limit)
+                    m_capture_buffer.erase(m_capture_buffer.begin(), m_capture_buffer.end() - capture_limit);
+            }
         }
 
         /**

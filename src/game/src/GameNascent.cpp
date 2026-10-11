@@ -2,6 +2,7 @@
 
 #include "Account.h"
 #include "InputManager.h"
+#include "LocalBests.h"
 #include "olcPixelGameEngine.h"
 #include "SceneAccount.h"
 #include "SceneList.h"
@@ -28,6 +29,7 @@ namespace nascent {
     void GameNascent::init() {
         SettingsManager::load();
         Account::load();
+        LocalBests::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
 
         olc::Font::init();
@@ -57,7 +59,8 @@ namespace nascent {
             return;
         }
 
-        if (window->GetKey(InputManager::back_key).bPressed) {
+        if (window->GetKey(InputManager::back_key).bPressed && scene != scene_list.get()) {
+            play_sound(skin->get_random_menu_pluck());
             set_scene(scene_list.get());
         }
 

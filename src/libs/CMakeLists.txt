@@ -22,6 +22,16 @@ add_subdirectory(picosha2)
 
 include(discord-presence/cmake/CPM.cmake)
 CPMAddPackage("gh:fmtlib/fmt#11.2.0")
+CPMAddPackage(
+    NAME miniz
+    GITHUB_REPOSITORY richgel999/miniz
+    GIT_TAG 3.1.0
+    OPTIONS
+        "BUILD_EXAMPLES OFF"
+        "BUILD_FUZZERS OFF"
+        "BUILD_TESTS OFF"
+        "INSTALL_PROJECT OFF"
+)
 set(DISCORD_RPC_NO_GLAZE ON)
 add_subdirectory(discord-presence)
 

@@ -5,6 +5,7 @@
 #include "Game.h"
 #include "InputManager.h"
 #include "KeyEvents.h"
+#include "LocalBests.h"
 #include "PlaySession.h"
 #include "ProgressBar.h"
 #include "DifficultyCalculator.h"
@@ -59,6 +60,7 @@ namespace nascent {
         replay_settings.scroll_speed = field->scroll_speed;
 
         Replay replay = make_replay(attempt, summary, replay_chart, chart->pitch, replay_settings, current_utc_timestamp());
+        LocalBests::record(chart->gameplay_hash(), chart->pitch, summary, replay.played_at);
 
         std::string error;
         std::optional<std::filesystem::path> saved = save_replay(replay, user_config_directory(SettingsManager::APP_NAME) / "replays", error);

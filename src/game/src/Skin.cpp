@@ -19,7 +19,7 @@ namespace nascent {
             game->get_audio().UnloadSound(sound);
         }
 
-        for (int32_t sound : {hitsound_sfx, idle_loop_sfx}) {
+        for (int32_t sound : {hitsound_sfx, idle_loop_sfx, account_loop_sfx}) {
             if (sound != -1) {
                 game->get_audio().UnloadSound(sound);
             }
@@ -69,6 +69,11 @@ namespace nascent {
         std::filesystem::path path_idle_loop_sfx = skin_path / "idle_loop.wav";
         if (std::filesystem::exists(path_idle_loop_sfx)) {
             idle_loop_sfx = game->get_audio().LoadSound(path_idle_loop_sfx.string());
+        }
+
+        std::filesystem::path path_account_loop_sfx = skin_path / "account_loop.wav";
+        if (std::filesystem::exists(path_account_loop_sfx)) {
+            account_loop_sfx = game->get_audio().LoadSound(path_account_loop_sfx.string());
         }
     }
 

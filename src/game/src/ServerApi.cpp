@@ -116,6 +116,9 @@ namespace nascent {
             chart.difficulties = get_list<std::pair<float, double>>(j, "difficulties", [](const json& entry) {
                 return std::pair<float, double>((float)get_double(entry, "rate"), get_double(entry, "difficulty"));
             });
+            chart.sources = get_list<ServerChartSource>(j, "sources", [](const json& entry) {
+                return ServerChartSource{get_string(entry, "source"), get_string(entry, "checksum"), get_optional_int(entry, "id"), get_optional_int(entry, "set_id"), get_string(entry, "url")};
+            });
             return chart;
         }
 
@@ -307,6 +310,23 @@ namespace nascent {
 
         if (!query.status.empty()) {
             path += "&status=" + query.status;
+        }
+
+        if (!query.source.empty()) {
+            path += "&source=" + ServerClient::url_encode(query.source);
+        }
+
+        for (const auto& [name, value] : {
+                 std::pair{"min_difficulty", query.min_difficulty},
+                 std::pair{"max_difficulty", query.max_difficulty},
+                 std::pair{"min_duration", query.min_duration_s},
+                 std::pair{"max_duration", query.max_duration_s},
+                 std::pair{"min_notes", query.min_notes},
+                 std::pair{"max_notes", query.max_notes},
+             }) {
+            if (value) {
+                path += std::format("&{}={}", name, *value);
+            }
         }
 
         path += key_count_query(query.key_count, '&');

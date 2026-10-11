@@ -1,12 +1,15 @@
 #pragma once
 
+#include "EntityFFT.h"
 #include "Scene.h"
 #include "ServerClient.h"
 #include "UiForm.h"
 #include "olcPixelGameEngine.h"
 
 #include <future>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace nascent {
     class Skin;
@@ -29,6 +32,9 @@ namespace nascent {
         TextField* email_field = nullptr;
         TextField* password_field = nullptr;
 
+        std::unique_ptr<EntityFFT> fft;
+        std::vector<float> audio_buffer;
+
         std::future<ServerResponse> pending;
         std::string status;
         bool status_is_error = false;
@@ -37,6 +43,7 @@ namespace nascent {
         void submit();
         void finish(const ServerResponse& response);
         void leave();
+        void play_menu_sound();
 
         public:
         SceneAccount(Skin* skin, Scene* next_scene);

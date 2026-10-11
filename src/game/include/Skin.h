@@ -49,6 +49,7 @@ namespace nascent {
 
         int32_t hitsound_sfx = -1;
         int32_t idle_loop_sfx = -1;
+        int32_t account_loop_sfx = -1;
 
         Skin(Game* game, std::string name, uint8_t key_count);
         ~Skin();

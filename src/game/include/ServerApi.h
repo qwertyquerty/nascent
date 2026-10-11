@@ -92,6 +92,14 @@ namespace nascent {
         int64_t ranked_players = 0;
     };
 
+    struct ServerChartSource {
+        std::string source;
+        std::string checksum;
+        std::optional<int64_t> id;
+        std::optional<int64_t> set_id;
+        std::string url;
+    };
+
     struct ServerChart {
         std::string hash;
         std::string status;
@@ -107,6 +115,7 @@ namespace nascent {
         int64_t hold_count = 0;
         int64_t play_count = 0;
         std::vector<std::pair<float, double>> difficulties;
+        std::vector<ServerChartSource> sources;
     };
 
     struct ServerPlay {
@@ -174,10 +183,19 @@ namespace nascent {
         std::string search;
         std::string status;
         std::optional<uint8_t> key_count;
+        std::optional<double> min_difficulty;
+        std::optional<double> max_difficulty;
+        std::optional<double> min_duration_s;
+        std::optional<double> max_duration_s;
+        std::optional<double> min_notes;
+        std::optional<double> max_notes;
+        std::string source;
         std::string sort = "difficulty";
         bool descending = false;
         int32_t limit = 50;
         int32_t offset = 0;
+
+        bool operator==(const ChartQuery&) const = default;
     };
 
     struct ChartList {

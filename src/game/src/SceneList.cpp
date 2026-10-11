@@ -1,19 +1,26 @@
 #include "Const.h"
 #include "SceneList.h"
+#include "BeatmapDownloads.h"
 #include "Chart.h"
 #include "DifficultyCalculator.h"
 #include "EntityField.h"
 #include "Game.h"
 #include "InputManager.h"
+#include "GradeColor.h"
 #include "KeyEvents.h"
+#include "LocalBests.h"
+#include "Replay.h"
+#include "Platform.h"
 #include "ProgressBar.h"
 #include "Scene.h"
 #include "Skin.h"
 #include "Util.h"
 #include "SceneAccount.h"
+#include "SceneBrowser.h"
 #include "SceneCalibration.h"
 #include "ScenePlay.h"
 #include "SettingsManager.h"
+#include "Sha256.h"
 
 #include <algorithm>
 #include <cmath>
@@ -28,6 +35,9 @@ namespace nascent {
     static constexpr int32_t DIFFICULTY_CALCULATIONS_PER_FRAME = 4;
     static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
     static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
+    static constexpr float LENGTH_OFFSET = 90.0f;
+    static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
+    static constexpr float GRADE_GAP = 8.0f;
 
     SceneList::SceneList(Skin* skin) {
         this->skin = skin;
@@ -52,9 +62,32 @@ namespace nascent {
 
     void SceneList::init(Game*) {
         load_charts();
+        backfill_bests();
     };
 
+    void SceneList::backfill_bests() {
+        if (LocalBests::is_backfilled()) {
+            return;
+        }
+
+        std::unordered_map<std::string, std::string> chart_hash_by_folder;
+
+        for (size_t index = 0; index < charts.size(); index++) {
+            std::optional<std::string> file_hash = sha256_file_hex(charts[index]->file_path);
+
+            if (file_hash) {
+                chart_hash_by_folder[file_hash->substr(0, Replay::FOLDER_HASH_LENGTH)] = chart_hashes[index];
+            }
+        }
+
+        LocalBests::backfill(chart_hash_by_folder, user_config_directory(SettingsManager::APP_NAME) / "replays");
+    }
+
     void SceneList::on_enter() {
+        if (BeatmapDownloads::take_library_changed()) {
+            reload_charts();
+        }
+
         if (!charts.empty()) {
             select_chart(selected_chart_index);
         }
@@ -72,12 +105,20 @@ namespace nascent {
         status_bar.update(elapsed_time);
 
         if (game->window->GetKey(InputManager::calibration_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
             game->set_scene(std::make_unique<SceneCalibration>(skin, this));
             return;
         }
 
         if (game->window->GetKey(InputManager::account_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
             game->set_scene(std::make_unique<SceneAccount>(skin, this));
+            return;
+        }
+
+        if (game->window->GetKey(InputManager::browse_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneBrowser>(skin, this));
             return;
         }
 
@@ -292,6 +333,7 @@ namespace nascent {
             std::unique_ptr<Chart> chart;
             std::u8string folder;
             float difficulty;
+            std::string hash;
         };
 
         std::vector<LoadedChart> loaded;
@@ -336,12 +378,14 @@ namespace nascent {
                     continue;
                 }
 
-                if (!loaded_hashes.insert(chart->gameplay_hash()).second) {
+                std::string hash = chart->gameplay_hash();
+
+                if (!loaded_hashes.insert(hash).second) {
                     continue;
                 }
 
                 float difficulty = (float)DifficultyCalculator::calculate(*chart);
-                loaded.push_back({std::move(chart), folder, difficulty});
+                loaded.push_back({std::move(chart), folder, difficulty, std::move(hash)});
             }
         }
 
@@ -358,12 +402,35 @@ namespace nascent {
         });
 
         charts.clear();
+        chart_hashes.clear();
         chart_difficulties.clear();
 
         for (LoadedChart& entry : loaded) {
             charts.push_back(std::move(entry.chart));
+            chart_hashes.push_back(std::move(entry.hash));
             chart_difficulties.push_back(entry.difficulty);
         }
+
+        local_hashes = std::move(loaded_hashes);
+    }
+
+    void SceneList::reload_charts() {
+        std::string selected_hash = selected_chart != nullptr ? selected_chart->gameplay_hash() : std::string();
+        selected_chart = nullptr;
+        preview_audio_chart = nullptr;
+        load_charts();
+        selected_chart_index = 0;
+
+        for (size_t index = 0; index < charts.size(); index++) {
+            if (charts[index]->gameplay_hash() == selected_hash) {
+                selected_chart_index = (int32_t)index;
+                break;
+            }
+        }
+    }
+
+    const std::unordered_set<std::string>& SceneList::get_local_hashes() const {
+        return local_hashes;
     }
 
     void SceneList::draw(olc::PixelGameEngine* window) {
@@ -411,6 +478,14 @@ namespace nascent {
         }
 
         const uint8_t charts_per_screen = screensize.y / list_chart_height;
+        float list_margin = (float)screensize.x / 48;
+        float widest_grade = 0;
+
+        for (Grade grade : {Grade::X, Grade::S, Grade::A, Grade::B, Grade::C, Grade::D, Grade::E}) {
+            widest_grade = std::max(widest_grade, (float)skin->display_font_large.GetStringBounds(std::string(grade_name(grade))).size.x);
+        }
+
+        float grade_indent = std::max(0.0f, GRADE_SCREEN_MARGIN + widest_grade + GRADE_GAP - list_margin);
         const ProgressBar difficulty_bar({DIFFICULTY_BAR_WIDTH, DIFFICULTY_BAR_HEIGHT});
         int32_t difficulty_budget = DIFFICULTY_CALCULATIONS_PER_FRAME;
 
@@ -420,7 +495,7 @@ namespace nascent {
             Chart* chart = charts[positive_modulo(index, charts.size())].get();
 
             float y = (float)screensize.y / 2 + (index - selected_chart_index) * list_chart_height + list_scroll_offset;
-            float x = (float)screensize.x / 48 + std::pow(std::max(300.0 - std::abs((float)screensize.y / 2 - (y)), 0.0) / 50.0, 2);
+            float x = list_margin + grade_indent + std::pow(std::max(300.0 - std::abs((float)screensize.y / 2 - (y)), 0.0) / 50.0, 2);
 
             skin->display_font_medium.DrawString(
                 std::format("{}", chart->info.title),
@@ -441,11 +516,31 @@ namespace nascent {
             difficulty_bar.draw(window, {x, y + 50}, fill, bar_color);
 
             if (rating) {
-
                 skin->display_font_small.DrawString(
                     std::format("{:.2f}", *rating),
                     {(int)(x + DIFFICULTY_BAR_WIDTH + 12), (int)y + 58},
                     index == selected_chart_index ? olc::WHITE : olc::GREY
+                );
+            }
+
+            int64_t length_ms = std::llround((double)chart->get_duration_ms() * chart->pitch / pitch);
+            skin->display_font_small.DrawString(
+                std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60),
+                {(int)(x + DIFFICULTY_BAR_WIDTH + LENGTH_OFFSET), (int)y + 58},
+                index == selected_chart_index ? olc::WHITE : olc::GREY
+            );
+
+            std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[positive_modulo(index, charts.size())], pitch);
+
+            if (best) {
+                Grade grade = grade_for_accuracy(best->accuracy);
+                std::string grade_text = std::string(grade_name(grade));
+                olc::FontRect grade_bounds = skin->display_font_large.GetStringBounds(grade_text);
+                float grade_center_y = y + 18;
+                skin->display_font_large.DrawString(
+                    grade_text,
+                    {(int)(x - GRADE_GAP - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)},
+                    grade_color(grade)
                 );
             }
         }
@@ -467,6 +562,7 @@ namespace nascent {
 
     void SceneList::set_pitch(float pitch) {
         this->pitch = snap_pitch(pitch);
+        status_bar.set_rate(this->pitch);
         chart_difficulties.assign(charts.size(), std::nullopt);
         select_chart(selected_chart_index);
     }

@@ -5,10 +5,13 @@
 #include <cctype>
 #include <format>
 #include <mutex>
+#include <utility>
 
 namespace nascent {
     static constexpr long REQUEST_TIMEOUT_S = 20;
     static constexpr long CONNECT_TIMEOUT_S = 10;
+    static constexpr long DOWNLOAD_LOW_SPEED_BYTES = 1024;
+    static constexpr long DOWNLOAD_LOW_SPEED_TIME_S = 30;
 
     static size_t append_body(char* data, size_t size, size_t count, void* target) {
         static_cast<std::string*>(target)->append(data, size * count);
@@ -116,6 +119,88 @@ namespace nascent {
         return run_detached([base_url, method, path, body, access_token] {
             return request(base_url, method, path, body, access_token);
         });
+    }
+
+    struct DownloadTarget {
+        std::string data;
+        size_t max_bytes = 0;
+        const std::function<void(double)>* progress = nullptr;
+    };
+
+    static size_t append_download(char* data, size_t size, size_t count, void* target) {
+        DownloadTarget* download = static_cast<DownloadTarget*>(target);
+
+        if (download->data.size() + size * count > download->max_bytes) {
+            return 0;
+        }
+
+        download->data.append(data, size * count);
+        return size * count;
+    }
+
+    static int report_progress(void* target, curl_off_t total, curl_off_t now, curl_off_t, curl_off_t) {
+        DownloadTarget* download = static_cast<DownloadTarget*>(target);
+
+        if (total > 0 && *download->progress) {
+            (*download->progress)((double)now / (double)total);
+        }
+
+        return 0;
+    }
+
+    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error) {
+        static std::once_flag curl_ready;
+        std::call_once(curl_ready, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
+
+        CURL* curl = curl_easy_init();
+
+        if (curl == nullptr) {
+            error = "could not start a download";
+            return std::nullopt;
+        }
+
+        DownloadTarget target{std::string(), max_bytes, &progress};
+        char error_buffer[CURL_ERROR_SIZE] = {};
+        long status = 0;
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, append_download);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &target);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, report_progress);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &target);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT_S);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, DOWNLOAD_LOW_SPEED_BYTES);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, DOWNLOAD_LOW_SPEED_TIME_S);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
+
+#ifdef _WIN32
+        curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
+#endif
+
+        CURLcode result = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+        curl_easy_cleanup(curl);
+
+        if (result == CURLE_WRITE_ERROR && target.data.size() + CURL_MAX_WRITE_SIZE > max_bytes) {
+            error = std::format("the download is larger than {} MB", max_bytes / (1024 * 1024));
+            return std::nullopt;
+        }
+
+        if (result != CURLE_OK) {
+            error = error_buffer[0] != '\0' ? error_buffer : curl_easy_strerror(result);
+            return std::nullopt;
+        }
+
+        if (status >= 400) {
+            error = std::format("the download server answered with HTTP {}", status);
+            return std::nullopt;
+        }
+
+        return std::move(target.data);
     }
 
     std::string ServerClient::url_encode(const std::string& text) {

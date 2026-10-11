@@ -29,6 +29,7 @@ namespace nascent {
         std::string discord_application_id = "1360933253070061718";
 
         std::string server_url = "https://dev-ns.madeline.sh";
+        std::string beatmap_download_url = "https://catboy.best/d/{id}";
 
         std::map<std::string, std::vector<std::string>> lane_keymaps = {
             {"4", {"Z", "X", "PERIOD", "OEM_2"}},

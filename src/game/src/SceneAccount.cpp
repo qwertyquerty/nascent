@@ -11,27 +11,38 @@
 #include <format>
 
 namespace nascent {
+    static constexpr double FFT_HEIGHT_RATIO = 0.28;
+
     SceneAccount::SceneAccount(Skin* skin, Scene* next_scene) {
         this->skin = skin;
         this->next_scene = next_scene;
     }
 
     void SceneAccount::init(Game*) {
+        olc::vi2d window_size = game->window->GetWindowSize();
+        double height = (double)window_size.y * FFT_HEIGHT_RATIO;
+
+        fft = std::make_unique<EntityFFT>(skin, olc::vd2d{0, (double)window_size.y - height}, olc::vd2d{(double)window_size.x, height}, 0);
+        fft->flipped = true;
+        fft->init(this);
     }
 
     void SceneAccount::on_enter() {
+        game->play_sound(skin->account_loop_sfx, true);
         status.clear();
         set_mode(Account::signed_in() ? Mode::SIGNED_IN : Mode::SIGN_IN);
     }
 
     void SceneAccount::on_exit() {
         form.set_enabled(game->window, false);
+        game->stop_sound(skin->account_loop_sfx);
+    }
+
+    void SceneAccount::play_menu_sound() {
+        game->play_sound(skin->get_random_menu_pluck());
     }
 
     void SceneAccount::set_mode(Mode mode) {
-        std::string login = login_field != nullptr ? login_field->value : std::string();
-        std::string password = password_field != nullptr ? password_field->value : std::string();
-
         this->mode = mode;
         form.clear(game->window);
         login_field = email_field = password_field = nullptr;
@@ -40,13 +51,13 @@ namespace nascent {
             return;
         }
 
-        login_field = &form.add<TextField>(mode == Mode::SIGN_IN ? "Username or email" : "Username", login);
+        login_field = &form.add<TextField>(mode == Mode::SIGN_IN ? "Username or email" : "Username");
 
         if (mode == Mode::REGISTER) {
             email_field = &form.add<TextField>("Email");
         }
 
-        password_field = &form.add<TextField>("Password", password, true);
+        password_field = &form.add<TextField>("Password", "", true);
         form.focus_field(game->window, 0);
     }
 
@@ -83,12 +94,17 @@ namespace nascent {
     }
 
     void SceneAccount::leave() {
-        game->play_sound(skin->get_random_menu_pluck());
+        play_menu_sound();
         game->set_scene(next_scene);
     }
 
     void SceneAccount::update(float elapsed_time) {
         olc::PixelGameEngine* window = game->window;
+
+        if (skin->account_loop_sfx != -1 && game->get_audio().IsPlaying(skin->account_loop_sfx)) {
+            game->get_audio().CopyEngineBuffer(audio_buffer);
+            fft->update_song_buffer(audio_buffer, elapsed_time);
+        }
 
         if (pending.valid()) {
             if (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -102,7 +118,8 @@ namespace nascent {
             if (window->GetKey(InputManager::menu_start_key).bPressed) {
                 leave();
             }
-            else if (window->GetKey(InputManager::switch_key).bPressed) {
+            else if (InputManager::switch_pressed(window)) {
+                play_menu_sound();
                 Account::sign_out();
                 status = "Signed out";
                 status_is_error = false;
@@ -114,17 +131,27 @@ namespace nascent {
 
         UiForm::Action action = form.update(window, game->get_frame_text(), elapsed_time);
 
-        if (window->GetKey(InputManager::switch_key).bPressed) {
+        if (InputManager::switch_pressed(window)) {
+            play_menu_sound();
             status.clear();
             set_mode(mode == Mode::SIGN_IN ? Mode::REGISTER : Mode::SIGN_IN);
         }
         else if (action == UiForm::Action::SUBMIT) {
+            play_menu_sound();
             submit();
+        }
+        else if (action == UiForm::Action::MOVED) {
+            game->play_sound(skin->hitsound_sfx);
+        }
+        else if (action == UiForm::Action::CHANGED) {
+            play_menu_sound();
         }
     }
 
     void SceneAccount::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
+        fft->draw(window);
+
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 
@@ -152,11 +179,11 @@ namespace nascent {
         std::string footer;
 
         if (mode == Mode::SIGNED_IN) {
-            footer = "Enter:  continue        Tab:  sign out        Esc:  back";
+            footer = "Enter:  continue        Ctrl+Tab:  sign out        Esc:  back";
         }
         else {
             footer = std::format(
-                "↑/↓:  field        Enter:  {}        Tab:  {}        Esc:  play offline",
+                "Tab:  field        Enter:  {}        Ctrl+Tab:  {}        Esc:  play offline",
                 mode == Mode::SIGN_IN ? "sign in" : "create account",
                 mode == Mode::SIGN_IN ? "create an account" : "sign in instead"
             );

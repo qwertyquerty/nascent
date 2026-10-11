@@ -65,6 +65,7 @@ namespace nascent {
 
         fft_r = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, (double)window_size.y - (double)window_size.y * 0.28}, olc::vd2d{(double)window_size.x, (double)window_size.y * 0.28}, 1);
         fft_r->flipped = true;
+        fft_r->mirrored = true;
         fft_r->init(this);
 
         logo_audio_id = game->get_audio().LoadSound(logo_chart->audio_path.string());

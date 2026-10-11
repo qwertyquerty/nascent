@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace nascent {
@@ -32,6 +33,8 @@ namespace nascent {
         };
 
         std::vector<std::unique_ptr<Chart>> charts;
+        std::vector<std::string> chart_hashes;
+        std::unordered_set<std::string> local_hashes;
         std::vector<std::optional<float>> chart_difficulties;
         Chart* selected_chart = nullptr;
         int32_t selected_chart_index = 0;
@@ -72,6 +75,8 @@ namespace nascent {
         std::thread background_loader;
 
         void load_charts();
+        void reload_charts();
+        void backfill_bests();
         void select_chart(int32_t);
         void set_pitch(float);
         std::optional<float> get_difficulty(size_t index, int32_t& budget);
@@ -90,5 +95,7 @@ namespace nascent {
         void on_exit() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
+
+        const std::unordered_set<std::string>& get_local_hashes() const;
     };
 }

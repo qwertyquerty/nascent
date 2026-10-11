@@ -32,6 +32,7 @@ namespace nascent {
         std::future<ApiResult<Profile>> profile_request;
 
         uint8_t key_count = 0;
+        float rate = 1.0f;
 
         void poll_heartbeat();
         void poll_profile();
@@ -47,6 +48,7 @@ namespace nascent {
 
         void refresh();
         void set_key_count(uint8_t key_count);
+        void set_rate(float rate);
         void update(float elapsed_time);
         void draw(olc::PixelGameEngine* window, Skin* skin) const;
     };

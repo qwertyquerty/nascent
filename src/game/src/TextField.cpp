@@ -65,7 +65,7 @@ namespace nascent {
         cursor = value.size();
     }
 
-    void TextField::update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) {
+    bool TextField::update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) {
         size_t before = cursor;
         std::string old_value = value;
         blink_timer += elapsed_time;
@@ -106,6 +106,8 @@ namespace nascent {
         if (cursor != before || value != old_value) {
             blink_timer = 0;
         }
+
+        return false;
     }
 
     int32_t TextField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const {

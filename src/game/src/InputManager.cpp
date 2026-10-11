@@ -24,6 +24,10 @@ namespace nascent {
 
     static_assert(KEY_NAMES.back() == "CAPS_LOCK" && KEY_NAMES.size() == (size_t)olc::Key::CAPS_LOCK + 1);
 
+    bool InputManager::switch_pressed(olc::PixelGameEngine* window) {
+        return window->GetKey(switch_modifier).bHeld && window->GetKey(switch_key).bPressed;
+    }
+
     std::optional<olc::Key> InputManager::key_from_name(std::string_view name) {
         for (size_t i = 1; i < KEY_NAMES.size(); i++) {
             if (KEY_NAMES[i] == name) {

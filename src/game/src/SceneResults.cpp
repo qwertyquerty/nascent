@@ -1,4 +1,5 @@
 #include "SceneResults.h"
+#include "GradeColor.h"
 #include "Accuracy.h"
 #include "Chart.h"
 #include "Game.h"
@@ -12,27 +13,6 @@
 #include <utility>
 
 namespace nascent {
-    static olc::Pixel grade_color(Grade grade) {
-        switch (grade) {
-            case Grade::X:
-                return olc::Pixel(255, 240, 160);
-            case Grade::S:
-                return olc::Pixel(255, 210, 80);
-            case Grade::A:
-                return olc::Pixel(110, 220, 120);
-            case Grade::B:
-                return olc::Pixel(90, 170, 255);
-            case Grade::C:
-                return olc::Pixel(190, 120, 255);
-            case Grade::D:
-                return olc::Pixel(255, 150, 70);
-            case Grade::E:
-                return olc::Pixel(240, 90, 90);
-            default:
-                return olc::Pixel(150, 150, 150);
-        }
-    }
-
     static olc::Pixel blend(olc::Pixel below, olc::Pixel above) {
         float a = above.a / 255.0f;
         return olc::Pixel(

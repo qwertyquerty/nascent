@@ -23,7 +23,7 @@ namespace nascent {
         TextField(std::string label, std::string value = "", bool secret = false);
 
         void on_focus(olc::PixelGameEngine* window) override;
-        void update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
+        bool update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
         int32_t draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const override;
         bool is_filled() const override;
     };
