@@ -236,12 +236,15 @@ namespace nascent {
 
         logo_field->draw(window);
 
-        if (start_hint) {
+        bool logo_finished = logo_started && !game->get_audio().IsPlaying(logo_audio_id);
+
+        if (start_hint && (bg_started || (bg_chart == nullptr && logo_finished))) {
             olc::Decal* hint = start_hint.get();
             olc::vi2d screen = window->GetScreenSize();
             float pulse = 0.5f + 0.5f * std::sin((float)timer * START_HINT_PULSE_SPEED);
+            float visibility = bg_chart != nullptr ? bg_fade : 1.0f;
             float y = (float)(logo_field->pos.y + logo_field->size.y + START_HINT_GAP);
-            window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, olc::Pixel(255, 255, 255, (uint8_t)(110 + 145 * pulse)));
+            window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, olc::Pixel(255, 255, 255, (uint8_t)((110 + 145 * pulse) * visibility)));
         }
     };
 }
