@@ -5,6 +5,7 @@
 #include "Game.h"
 #include "InputManager.h"
 #include "Skin.h"
+#include "StatusBar.h"
 #include "TextCache.h"
 
 #include <algorithm>
@@ -13,10 +14,16 @@
 #include <cstdlib>
 #include <format>
 #include <memory>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace nascent {
     static const olc::Pixel BACKGROUND_TINT = olc::Pixel(240, 240, 240, 25);
+    static const olc::Pixel POSITIVE_COLOR = olc::Pixel(90, 220, 120);
+    static const olc::Pixel NEGATIVE_COLOR = olc::Pixel(235, 80, 80);
+    static const olc::Pixel BEST_COLOR = olc::Pixel(240, 190, 70);
+    static constexpr std::string_view BACK_HINT = "Enter / Esc  back to the song list";
 
     static olc::Pixel blend(olc::Pixel below, olc::Pixel above) {
         float a = above.a / 255.0f;
@@ -28,12 +35,11 @@ namespace nascent {
         );
     }
 
-    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::string replay_message, std::future<ApiResult<Submission>> submission, int song_audio_id) {
+    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id) {
         this->skin = skin;
         this->return_scene = return_scene;
         this->chart = chart;
         this->summary = std::move(summary);
-        this->replay_message = std::move(replay_message);
         this->submission = std::move(submission);
         this->song_audio_id = song_audio_id;
     }
@@ -156,59 +162,146 @@ namespace nascent {
         }
     }
 
-    static std::string format_rank_change(std::optional<int64_t> rank, std::optional<int64_t> previous) {
-        if (!rank) {
-            return "unranked";
-        }
+    using BarPart = std::pair<std::string, olc::Pixel>;
 
-        if (!previous || *previous == *rank) {
-            return std::format("#{}", *rank);
-        }
-
-        return std::format("#{} ({}{})", *rank, *previous > *rank ? "+" : "-", std::abs(*previous - *rank));
+    static olc::Pixel change_color(double change) {
+        return change > 0 ? POSITIVE_COLOR : change < 0 ? NEGATIVE_COLOR : olc::GREY;
     }
 
-    void SceneResults::draw_submission(int32_t x, int32_t y) const {
-        olc::Font& title_font = skin->display_font_medium;
-        olc::Font& detail_font = skin->display_font_small;
+    static std::vector<BarPart> performance_parts(const Standing& standing) {
+        return {
+            {std::format("{:.2f}", standing.performance), olc::WHITE},
+            {std::format("{:+.2f}", standing.performance_change), change_color(standing.performance_change)},
+        };
+    }
+
+    static std::vector<BarPart> rank_parts(std::optional<int64_t> rank, std::optional<int64_t> previous) {
+        if (!rank) {
+            return {{"Unranked", olc::WHITE}};
+        }
+
+        std::vector<BarPart> parts = {{std::format("#{}", *rank), olc::WHITE}};
+
+        if (!previous) {
+            parts.emplace_back("new", POSITIVE_COLOR);
+        }
+        else if (*previous != *rank) {
+            parts.emplace_back(std::format("{:+}", *previous - *rank), change_color((double)(*previous - *rank)));
+        }
+
+        return parts;
+    }
+
+    void SceneResults::draw_bottom_bar(olc::PixelGameEngine* window) const {
+        olc::vi2d screen = window->GetScreenSize();
+        int32_t top = screen.y - StatusBar::HEIGHT;
+        olc::Font& font = skin->display_font_small;
+
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)StatusBar::HEIGHT}, StatusBar::BACKGROUND);
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, StatusBar::EDGE);
+
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
+        int32_t baseline = top + (StatusBar::HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
+
+        auto width = [&](std::string_view text) {
+            return text.empty() ? 0 : text_bounds(font, text).size.x;
+        };
+
+        int32_t right = screen.x - StatusBar::PADDING - width(BACK_HINT);
+        draw_text(font, BACK_HINT, {right, baseline}, olc::GREY);
+
+        int32_t left_limit = right - StatusBar::SEGMENT_GAP;
+        int32_t x = StatusBar::PADDING;
+        bool left_full = false;
+
+        auto place = [&](int32_t needed) {
+            int32_t gap = x > StatusBar::PADDING ? StatusBar::SEGMENT_GAP : 0;
+            left_full = left_full || x + gap + needed > left_limit;
+
+            if (!left_full) {
+                x += gap;
+            }
+
+            return !left_full;
+        };
+
+        auto message = [&](const std::string& text, olc::Pixel color) {
+            if (place(width(text))) {
+                draw_text(font, text, {x, baseline}, color);
+                x += width(text);
+            }
+        };
+
+        auto segment = [&](const std::string& label, const std::vector<BarPart>& parts) {
+            int32_t needed = width(label);
+
+            for (const BarPart& part : parts) {
+                needed += StatusBar::LABEL_GAP + width(part.first);
+            }
+
+            if (!place(needed)) {
+                return;
+            }
+
+            draw_text(font, label, {x, baseline}, olc::GREY);
+            x += width(label);
+
+            for (const BarPart& part : parts) {
+                x += StatusBar::LABEL_GAP;
+                draw_text(font, part.first, {x, baseline}, part.second);
+                x += width(part.first);
+            }
+        };
 
         if (!submission.valid() && !submitted) {
-            draw_text(detail_font, "Not submitted: sign in to submit your plays", {x, y}, olc::DARK_GREY);
+            message("Not submitted: sign in to submit your plays", olc::DARK_GREY);
             return;
         }
 
         if (!submitted) {
-            draw_text(detail_font, "Submitting your play...", {x, y}, olc::GREY);
+            message("Submitting your play...", olc::GREY);
             return;
         }
 
         if (!submitted->ok()) {
-            draw_text(detail_font, std::format("Not submitted: {}", submitted->error()), {x, y}, olc::RED);
+            message(std::format("Not submitted: {}", submitted->error()), NEGATIVE_COLOR);
             return;
         }
 
         const Submission& result = *submitted->value;
 
         if (result.play.ranked) {
-            const Standing& standing = result.key_mode ? *result.key_mode : result.combined;
-            draw_text(title_font, std::format("Ranked  {:.2f} performance", result.play.performance), {x, y}, olc::WHITE);
-            draw_text(detail_font, std::format("{} on this chart        {}global {}        performance {:.2f} ({:+.2f})", result.chart_rank ? std::format("#{}", *result.chart_rank) : std::string("Unranked"), standing.key_count ? std::format("{}K ", *standing.key_count) : std::string(), format_rank_change(standing.global_rank, standing.previous_global_rank), standing.performance, standing.performance_change), {x, y + 34}, olc::GREY);
-            return;
+            message("Ranked", POSITIVE_COLOR);
         }
-
-        std::string reason;
-
-        if (result.play.status == "pending_review") {
-            reason = "Submitted, it will count once a moderator reviews it";
+        else if (result.play.status == "pending_review") {
+            message("Pending review", BEST_COLOR);
         }
         else if (result.chart.status != "ranked") {
-            reason = "Submitted, but this chart is not ranked";
+            message("Unranked chart", olc::GREY);
         }
         else {
-            reason = "Submitted, but not ranked because the play ticket was missing or expired";
+            message("Not ranked: ticket expired", olc::GREY);
         }
 
-        draw_text(detail_font, reason, {x, y}, olc::GREY);
+        segment("Play", {{std::format("{:.2f}", result.play.performance), olc::WHITE}});
+
+        if (result.chart_rank) {
+            segment("Chart", {{std::format("#{}", *result.chart_rank), olc::WHITE}});
+        }
+
+        segment("Performance", performance_parts(result.combined));
+        segment("Global", rank_parts(result.combined.global_rank, result.combined.previous_global_rank));
+
+        if (result.key_mode) {
+            std::vector<BarPart> parts = performance_parts(*result.key_mode);
+            std::vector<BarPart> rank = rank_parts(result.key_mode->global_rank, result.key_mode->previous_global_rank);
+            parts.insert(parts.end(), rank.begin(), rank.end());
+            segment(result.key_mode->key_count ? std::format("{}K", *result.key_mode->key_count) : std::string("Mode"), parts);
+        }
+
+        if (result.play.is_chart_best) {
+            message("New chart best", BEST_COLOR);
+        }
     }
 
     void SceneResults::draw(olc::PixelGameEngine* window) {
@@ -244,8 +337,6 @@ namespace nascent {
             y += 44;
         }
 
-        draw_submission(x, y + 16);
-
         int32_t counts_x = screen.x / 2 + screen.x / 12;
         int32_t counts_y = screen.y / 10 + 146;
 
@@ -264,12 +355,6 @@ namespace nascent {
             window->DrawDecal(error_graph_pos, error_graph.get());
         }
 
-        int32_t footer_y = screen.y - screen.y / 24;
-        draw_text(skin->display_font_small, "Enter / Esc:  back to the song list", {x, footer_y}, olc::GREY);
-
-        if (!replay_message.empty()) {
-            olc::FontRect bounds = text_bounds(skin->display_font_small, replay_message);
-            draw_text(skin->display_font_small, replay_message, {screen.x - x - bounds.size.x, footer_y}, olc::DARK_GREY);
-        }
+        draw_bottom_bar(window);
     }
 }

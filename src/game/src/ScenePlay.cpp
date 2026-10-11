@@ -66,10 +66,8 @@ namespace nascent {
 
         std::string error;
         std::optional<std::filesystem::path> saved = save_replay(replay, user_config_directory(SettingsManager::APP_NAME) / "replays", error);
-        std::string replay_message = saved ? std::format("Replay saved to {}", saved->string()) : std::format("Replay not saved: {}", error);
-
         if (!saved) {
-            std::cerr << replay_message << std::endl;
+            std::cerr << std::format("Replay not saved: {}", error) << std::endl;
         }
 
         std::future<ApiResult<Submission>> submission;
@@ -85,7 +83,7 @@ namespace nascent {
             chart_audio_id = -1;
         }
 
-        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), replay_message, std::move(submission), continuing_audio_id));
+        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), std::move(submission), continuing_audio_id));
     }
 
     ScenePlay::~ScenePlay() {
