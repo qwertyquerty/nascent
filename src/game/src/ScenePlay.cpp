@@ -155,6 +155,10 @@ namespace nascent {
         double now = now_ms();
         bool pause_pressed = game->window->GetKey(InputManager::pause_key).bPressed;
 
+        if (game->window->GetKey(InputManager::hit_log_key).bPressed) {
+            show_hit_log = !show_hit_log;
+        }
+
         if (paused) {
             if (pause_pressed) {
                 resume(now);
@@ -231,7 +235,7 @@ namespace nascent {
         uint8_t l = 0;
         const double vspacing = 26;
         const uint8_t vlen = 35;
-        for (int64_t i = attempt.soonest_scored_hit_index; i >= 0 && i < (int64_t)attempt.judged_hits.size(); i--) {
+        for (int64_t i = attempt.soonest_scored_hit_index; show_hit_log && i >= 0 && i < (int64_t)attempt.judged_hits.size(); i--) {
             const JudgedHit& jhit = attempt.judged_hits[i];
 
             if (jhit.hit) {

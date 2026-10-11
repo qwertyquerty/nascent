@@ -32,6 +32,7 @@ namespace nascent {
 
         bool chart_started = false;
         bool paused = false;
+        static inline bool show_hit_log = false;
         bool finished = false;
         bool audio_finished = false;
 

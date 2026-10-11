@@ -21,6 +21,7 @@ namespace nascent {
         static const olc::Key field_key = olc::Key::TAB;
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;
+        static const olc::Key hit_log_key = olc::Key::F10;
         static const olc::Key switch_modifier = olc::Key::CTRL;
         static const olc::Key calibration_reset_key = olc::Key::R;
 
