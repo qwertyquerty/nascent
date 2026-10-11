@@ -113,6 +113,7 @@ namespace nascent {
         logo_field->draw_hit_score = false;
         logo_field->judge_alpha = 150;
         logo_field->scroll_speed = SettingsManager::settings.field_scroll_speed;
+        logo_field->opacity = PLAY_LOGO_INTRO ? 1.0f : 0.0f;
 
         fft_l = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{(double)window_size.x, (double)window_size.y * 0.28}, 0);
         fft_l->init(this);
@@ -122,13 +123,31 @@ namespace nascent {
         fft_r->mirrored = true;
         fft_r->init(this);
 
-        logo_audio_id = game->get_audio().LoadSound(logo_chart->audio_path.string());
+        if constexpr (PLAY_LOGO_INTRO) {
+            logo_audio_id = game->get_audio().LoadSound(logo_chart->audio_path.string());
+        }
+        else {
+            logo_started = true;
+            logo_position = logo_chart->get_chart_end_ms() + LOGO_FINISHED_OFFSET_MS;
+        }
 
         logo_clock.max_error = SettingsManager::settings.field_audio_sync_max_error;
         bg_clock.max_error = SettingsManager::settings.field_audio_sync_max_error;
 
         loaded = true;
     };
+
+    bool SceneTitle::logo_playing() {
+        return logo_audio_id != -1 && game->get_audio().IsPlaying(logo_audio_id);
+    }
+
+    bool SceneTitle::logo_finished() {
+        if constexpr (PLAY_LOGO_INTRO) {
+            return logo_started && !logo_playing();
+        }
+
+        return timer >= LOGO_FADE_DELAY + LOGO_FADE_IN_TIME + LOGO_HOLD_TIME;
+    }
 
     void SceneTitle::on_exit() {
         for (int* id : {&logo_audio_id, &bg_audio_id}) {
@@ -163,13 +182,14 @@ namespace nascent {
         }
 
         double now = now_ms();
+        float step = std::min(elapsed_time, MAX_TIMER_STEP);
 
         if (timer > SettingsManager::settings.title_logo_start_delay && !logo_started) {
             logo_started = true;
             game->get_audio().Play(logo_audio_id);
         }
 
-        if (bg_chart != nullptr && logo_started && !game->get_audio().IsPlaying(logo_audio_id) && !game->get_audio().IsPlaying(bg_audio_id)) {
+        if (bg_chart != nullptr && logo_finished() && !game->get_audio().IsPlaying(bg_audio_id)) {
             if (bg_started) {
                 load_background();
             }
@@ -180,11 +200,17 @@ namespace nascent {
         }
 
         if (bg_started) {
-            bg_fade = std::min(1.0f, bg_fade + elapsed_time / BACKGROUND_FADE_IN_TIME);
+            bg_fade = std::min(1.0f, bg_fade + step / BACKGROUND_FADE_IN_TIME);
         }
 
-        logo_clock.sync(game->get_audio().GetCursorMilliseconds(logo_audio_id), now);
-        logo_position = logo_clock.position_at(now);
+        if (logo_audio_id != -1) {
+            logo_clock.sync(game->get_audio().GetCursorMilliseconds(logo_audio_id), now);
+            logo_position = logo_clock.position_at(now);
+        }
+
+        if constexpr (!PLAY_LOGO_INTRO) {
+            logo_field->opacity = std::clamp(((float)timer - LOGO_FADE_DELAY) / LOGO_FADE_IN_TIME, 0.0f, 1.0f);
+        }
 
         uint32_t logo_keys = logo_chart->held_lanes_at(logo_position);
         logo_attempt->set_keys(logo_keys, (int32_t)logo_position);
@@ -196,7 +222,7 @@ namespace nascent {
             bg_position = bg_clock.position_at(now);
 
             for (auto& field : bg_field) {
-                field->pos.x -= elapsed_time * SettingsManager::settings.title_h_scroll_rate;
+                field->pos.x -= step * SettingsManager::settings.title_h_scroll_rate;
                 field->set_position(bg_position);
                 field->opacity = bg_fade;
             }
@@ -216,7 +242,7 @@ namespace nascent {
             }
         }
 
-        timer += elapsed_time;
+        timer += step;
     };
 
     void SceneTitle::draw(olc::PixelGameEngine* window) {
@@ -241,9 +267,7 @@ namespace nascent {
 
         logo_field->draw(window);
 
-        bool logo_finished = logo_started && !game->get_audio().IsPlaying(logo_audio_id);
-
-        if (start_hint && (bg_started || (bg_chart == nullptr && logo_finished))) {
+        if (start_hint && (bg_started || (bg_chart == nullptr && logo_finished()))) {
             olc::Decal* hint = start_hint.get();
             olc::vi2d screen = window->GetScreenSize();
             float pulse = 0.5f + 0.5f * std::sin((float)timer * START_HINT_PULSE_SPEED);

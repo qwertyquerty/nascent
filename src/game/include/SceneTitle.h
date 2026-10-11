@@ -52,9 +52,17 @@ namespace nascent {
         uint8_t get_field_count();
         std::unique_ptr<Chart> load_random_chart();
         bool load_background();
+        bool logo_playing();
+        bool logo_finished();
 
         public:
         static constexpr const char* LOGO_CHART_PATH = "assets/logo/logo.json";
+        static constexpr bool PLAY_LOGO_INTRO = false;
+        static constexpr int32_t LOGO_FINISHED_OFFSET_MS = 1000;
+        static constexpr float LOGO_FADE_DELAY = 0.5f;
+        static constexpr float LOGO_FADE_IN_TIME = 0.5f;
+        static constexpr float LOGO_HOLD_TIME = 2.0f;
+        static constexpr float MAX_TIMER_STEP = 1.0f / 30.0f;
         static constexpr int32_t RANDOM_CHART_ATTEMPTS = 10;
         static constexpr float BACKGROUND_FADE_IN_TIME = 1.0f;
         static constexpr const char* START_HINT = "Press Enter to start";
