@@ -59,6 +59,27 @@ namespace nascent {
     static constexpr int32_t LEADERBOARD_GRADE_OFFSET = 56;
     static constexpr int32_t LEADERBOARD_ACCURACY_OFFSET = 90;
     static constexpr int32_t LEADERBOARD_NAME_OFFSET = 190;
+    struct RecommendedSong {
+        int64_t set_id;
+        const char* artist;
+        const char* title;
+    };
+
+    static constexpr RecommendedSong RECOMMENDED_SONGS[] = {
+        {1488740, "Orange Lounge", "100sec. Kitchen Battle!!"},
+        {2170099, "fiend", "2DF2"},
+        {2236810, "Minato Aqua", "Aqua Cat"},
+        {772809, "Silentroom", "Finixe"},
+        {2199227, "M2U", "Happy birthday to You (M2U Version)"},
+        {2238570, "Bruno Coulais", "Les avions en papier"},
+        {2146559, "JVKE", "this is what falling in love feels like"},
+        {884961, "Akira Complex", "Ether Strike"},
+        {2292680, "Satoru Kosaki feat. issei", "Into the world (TV Size)"},
+        {2339429, "petit milady", "Koi wa Milk Tea (TV Size)"},
+    };
+
+    static constexpr int32_t RECOMMENDED_ROW_HEIGHT = 30;
+    static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;
     static const olc::Pixel LEADERBOARD_BACKGROUND = olc::Pixel(0, 0, 0, 150);
     static const olc::Pixel LEADERBOARD_HIGHLIGHT = olc::Pixel(255, 255, 255, 24);
 
@@ -432,6 +453,10 @@ namespace nascent {
             if (game->window->GetKey(InputManager::menu_right_key).bPressed) {
                 set_pitch(pitch + PITCH_INTERVAL);
             }
+        }
+
+        if (charts.empty() && (!library_loading || recommended_started) && game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            download_recommended();
         }
 
         if (visible.empty()) {
@@ -1209,6 +1234,68 @@ namespace nascent {
         }
     }
 
+    void SceneList::download_recommended() {
+        for (const RecommendedSong& song : RECOMMENDED_SONGS) {
+            BeatmapDownloads::start(song.set_id, song.artist, song.title);
+        }
+
+        recommended_started = true;
+        game->play_sound(skin->get_random_menu_pluck());
+    }
+
+    void SceneList::draw_recommended(olc::PixelGameEngine* window) {
+        olc::vi2d screen = window->GetScreenSize();
+        int32_t x = screen.x / 24;
+        int32_t y = screen.y / 10;
+        bool any_failed = false;
+        bool all_started = true;
+
+        draw_text(skin->display_font_large, "Your library is empty", {x, y}, olc::WHITE);
+        y += 70;
+        draw_text(skin->display_font_small, "Download these recommended songs to get started.", {x, y}, olc::GREY);
+        y += 60;
+
+        for (const RecommendedSong& song : RECOMMENDED_SONGS) {
+            std::shared_ptr<BeatmapDownloads::Download> download = BeatmapDownloads::find(song.set_id);
+            std::string status;
+            olc::Pixel status_color = olc::GREY;
+
+            if (download == nullptr) {
+                all_started = false;
+            }
+            else {
+                switch (download->state.load()) {
+                    case BeatmapDownloads::State::DOWNLOADING:
+                        status = std::format("{:.0f}%", download->progress.load() * 100.0);
+                        break;
+                    case BeatmapDownloads::State::EXTRACTING:
+                        status = "Extracting";
+                        break;
+                    case BeatmapDownloads::State::DONE:
+                        status = "Downloaded";
+                        status_color = olc::Pixel(90, 220, 120);
+                        break;
+                    case BeatmapDownloads::State::FAILED:
+                        status = "Failed";
+                        status_color = olc::RED;
+                        any_failed = true;
+                        break;
+                }
+            }
+
+            draw_text(skin->display_font_small, std::format("{} - {}", song.artist, song.title), {x, y}, olc::WHITE);
+            draw_text(skin->display_font_small, status, {x + RECOMMENDED_STATUS_OFFSET, y}, status_color);
+            y += RECOMMENDED_ROW_HEIGHT;
+        }
+
+        y += 30;
+
+        std::string hint = !all_started ? "Enter:  download recommended songs        F5:  browse charts"
+            : any_failed                ? "Enter:  retry failed downloads        F5:  browse charts"
+                                        : "Downloading...        F5:  browse charts";
+        draw_text(skin->display_font_small, hint, {x, y}, olc::GREY);
+    }
+
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
         pending_selection = std::move(hash);
         pending_selection_path = std::move(path);
@@ -1229,9 +1316,12 @@ namespace nascent {
         olc::vi2d screensize = window->GetScreenSize();
 
         if (visible.empty()) {
-            draw_text(skin->display_font_medium, library_loading && charts.empty() ? std::string("Loading charts...") : charts.empty() ? std::format("No charts found in {}", SettingsManager::settings.list_song_directory)
-                                                                                                                                       : std::string("No charts match your search"),
-                      {screensize.x / 48, screensize.y / 2}, olc::GREY);
+            if (charts.empty() && (!library_loading || recommended_started)) {
+                draw_recommended(window);
+                return;
+            }
+
+            draw_text(skin->display_font_medium, charts.empty() ? std::string("Loading charts...") : std::string("No charts match your search"), {screensize.x / 48, screensize.y / 2}, olc::GREY);
             return;
         }
 

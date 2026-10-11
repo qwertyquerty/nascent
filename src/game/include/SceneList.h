@@ -144,6 +144,7 @@ namespace nascent {
         float widest_grade = -1.0f;
 
         bool show_leaderboards = false;
+        bool recommended_started = false;
         float leaderboard_delay = 0;
         uint64_t leaderboard_generation = 0;
         std::unordered_map<std::string, std::vector<LocalScore>> local_scores;
@@ -175,6 +176,8 @@ namespace nascent {
         std::string leaderboard_key() const;
         void update_leaderboards(float elapsed_time);
         void draw_leaderboards(olc::PixelGameEngine* window);
+        void download_recommended();
+        void draw_recommended(olc::PixelGameEngine* window);
 
         public:
         SceneList(Skin* skin);
