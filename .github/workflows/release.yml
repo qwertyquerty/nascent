@@ -85,7 +85,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DNASCENT_VERSION=${{ github.ref_name }} -DNASCENT_PACKAGE_ARCH=${{ matrix.arch }} ${{ matrix.osx_arch && format('-DCMAKE_OSX_ARCHITECTURES={0}', matrix.osx_arch) || '' }}
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} "-DNASCENT_VERSION=${{ github.ref_name }}" "-DNASCENT_PACKAGE_ARCH=${{ matrix.arch }}" ${{ matrix.osx_arch && format('-DCMAKE_OSX_ARCHITECTURES={0}', matrix.osx_arch) || '' }}
 
       - name: Build
         run: cmake --build build --parallel
@@ -127,5 +127,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/*.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "Nascent $GITHUB_REF_NAME" \
-            --generate-notes \
+            --notes "" \
             $prerelease
