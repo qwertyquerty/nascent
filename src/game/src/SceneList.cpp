@@ -42,7 +42,6 @@
 
 namespace nascent {
     static constexpr float DIFFICULTY_BAR_MAX = 100.0f;
-    static constexpr int32_t DIFFICULTY_CALCULATIONS_PER_FRAME = 4;
     static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
     static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
     static constexpr float LENGTH_OFFSET = 90.0f;
@@ -139,6 +138,8 @@ namespace nascent {
             library.hashes.push_back(std::move(entry.hash));
             library.difficulties.push_back(entry.difficulty);
             library.search_texts.push_back(std::move(text));
+            library.details.push_back(std::format("[{}] - {} // {}", info.difficulty_name, info.artist, info.mapper));
+            library.lengths_ms.push_back((double)library.charts.back()->get_duration_ms() * library.charts.back()->pitch);
         }
 
         return library;
@@ -244,6 +245,10 @@ namespace nascent {
         background_loader = std::thread([this] {
             background_load_loop();
         });
+
+        difficulty_worker = std::thread([this] {
+            difficulty_loop();
+        });
     };
 
     SceneList::~SceneList() {
@@ -260,6 +265,17 @@ namespace nascent {
 
         if (library_loader.joinable()) {
             library_loader.join();
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(difficulty_mutex);
+            difficulty_stopping = true;
+        }
+
+        difficulty_cv.notify_all();
+
+        if (difficulty_worker.joinable()) {
+            difficulty_worker.join();
         }
     }
 
@@ -332,6 +348,7 @@ namespace nascent {
     void SceneList::update(float elapsed_time) {
         status_bar.update(elapsed_time);
         poll_library_load();
+        collect_difficulties();
 
         if (game->window->GetKey(InputManager::calibration_key).bPressed) {
             game->play_sound(skin->get_random_menu_pluck());
@@ -614,9 +631,13 @@ namespace nascent {
         std::string selected_hash = selected_chart != nullptr ? selected_chart->gameplay_hash() : std::string();
         std::string preview_hash = preview_audio_chart != nullptr ? preview_audio_chart->gameplay_hash() : std::string();
 
+        cancel_difficulties(true);
+
         charts = std::move(library.charts);
         chart_hashes = std::move(library.hashes);
         search_texts = std::move(library.search_texts);
+        chart_details = std::move(library.details);
+        chart_lengths_ms = std::move(library.lengths_ms);
         chart_difficulties = std::move(library.difficulties);
         local_hashes = std::unordered_set<std::string>(chart_hashes.begin(), chart_hashes.end());
 
@@ -817,7 +838,7 @@ namespace nascent {
         }
 
         if (filter.field == "played" || filter.field == "grade") {
-            std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[index], pitch);
+            const LocalBest* best = LocalBests::lookup(chart_hashes[index], pitch);
 
             if (filter.field == "played") {
                 std::optional<bool> wanted = parse_bool(filter.value);
@@ -826,7 +847,7 @@ namespace nascent {
                     return true;
                 }
 
-                return (best.has_value() == *wanted) == (filter.op == "=");
+                return ((best != nullptr) == *wanted) == (filter.op == "=");
             }
 
             std::optional<int32_t> wanted = parse_grade(filter.value);
@@ -853,11 +874,10 @@ namespace nascent {
         }
 
         if (filter.field == "length") {
-            return compare((double)chart.get_duration_ms() * chart.pitch / pitch / 1000.0, filter.op, *wanted, SEARCH_TOLERANCE);
+            return compare(chart_lengths_ms[index] / pitch / 1000.0, filter.op, *wanted, SEARCH_TOLERANCE);
         }
 
-        int32_t budget = (int32_t)charts.size();
-        std::optional<float> rating = get_difficulty(index, budget);
+        std::optional<float> rating = get_difficulty(index);
         return rating && compare(*rating, filter.op, *wanted, SEARCH_TOLERANCE);
     }
 
@@ -877,8 +897,7 @@ namespace nascent {
 
             parallel_for(charts.size(), [&](size_t index) {
                 if (!chart_difficulties[index]) {
-                    charts[index]->set_pitch(pitch);
-                    chart_difficulties[index] = (float)DifficultyCalculator::calculate(*charts[index]);
+                    chart_difficulties[index] = (float)DifficultyCalculator::calculate_at_pitch(*charts[index], pitch);
                 }
             });
         }
@@ -1017,15 +1036,17 @@ namespace nascent {
 
         const uint8_t charts_per_screen = screensize.y / list_chart_height;
         float list_margin = (float)screensize.x / 48;
-        float widest_grade = 0;
+        if (widest_grade < 0) {
+            widest_grade = 0;
 
-        for (Grade grade : {Grade::X, Grade::S, Grade::A, Grade::B, Grade::C, Grade::D, Grade::E}) {
-            widest_grade = std::max(widest_grade, (float)text_bounds(skin->display_font_large, std::string(grade_name(grade))).size.x);
+            for (Grade grade : {Grade::X, Grade::S, Grade::A, Grade::B, Grade::C, Grade::D, Grade::E}) {
+                widest_grade = std::max(widest_grade, (float)text_bounds(skin->display_font_large, grade_name(grade)).size.x);
+            }
         }
 
         float grade_indent = std::max(0.0f, GRADE_SCREEN_MARGIN + widest_grade + GRADE_GAP - list_margin);
         const ProgressBar difficulty_bar({DIFFICULTY_BAR_WIDTH, DIFFICULTY_BAR_HEIGHT});
-        int32_t difficulty_budget = DIFFICULTY_CALCULATIONS_PER_FRAME;
+        wanted_difficulties.clear();
 
         field->draw(window);
 
@@ -1034,13 +1055,23 @@ namespace nascent {
             Chart* chart = charts[chart_index].get();
 
             float y = (float)screensize.y / 2 + (index - selected_chart_index) * list_chart_height + list_scroll_offset;
+
+            if (y < -list_chart_height || y > screensize.y + list_chart_height) {
+                continue;
+            }
+
             float x = list_margin + grade_indent + std::pow(std::max(300.0 - std::abs((float)screensize.y / 2 - (y)), 0.0) / 50.0, 2);
 
-            draw_text(skin->display_font_medium, std::format("{}", chart->info.title), {(int)x, (int)y}, index == selected_chart_index ? olc::WHITE : olc::GREY);
+            draw_text(skin->display_font_medium, chart->info.title, {(int)x, (int)y}, index == selected_chart_index ? olc::WHITE : olc::GREY);
 
-            draw_text(skin->display_font_small, std::format("[{}] - {} // {}", chart->info.difficulty_name, chart->info.artist, chart->info.mapper), {(int)x, (int)y + 36}, index == selected_chart_index ? olc::WHITE : olc::GREY);
+            draw_text(skin->display_font_small, chart_details[chart_index], {(int)x, (int)y + 36}, index == selected_chart_index ? olc::WHITE : olc::GREY);
 
-            std::optional<float> rating = get_difficulty(chart_index, difficulty_budget);
+            std::optional<float> rating = get_difficulty(chart_index);
+
+            if (!rating) {
+                wanted_difficulties.push_back(chart_index);
+            }
+
             float fill = rating ? std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f) : 0.0f;
             olc::Pixel bar_color = skin->title_gradient_at(fill, 0.5);
             bar_color.a = index == selected_chart_index ? 255 : 140;
@@ -1050,38 +1081,99 @@ namespace nascent {
                 draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + DIFFICULTY_BAR_WIDTH + 12), (int)y + 58}, index == selected_chart_index ? olc::WHITE : olc::GREY);
             }
 
-            int64_t length_ms = std::llround((double)chart->get_duration_ms() * chart->pitch / pitch);
+            int64_t length_ms = std::llround(chart_lengths_ms[chart_index] / pitch);
             draw_text(skin->display_font_small, std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60), {(int)(x + DIFFICULTY_BAR_WIDTH + LENGTH_OFFSET), (int)y + 58}, index == selected_chart_index ? olc::WHITE : olc::GREY);
 
-            std::optional<LocalBest> best = LocalBests::lookup(chart_hashes[chart_index], pitch);
+            const LocalBest* best = LocalBests::lookup(chart_hashes[chart_index], pitch);
 
-            if (best) {
+            if (best != nullptr) {
                 Grade grade = grade_for_accuracy(best->accuracy);
-                std::string grade_text = std::string(grade_name(grade));
+                std::string_view grade_text = grade_name(grade);
                 olc::FontRect grade_bounds = text_bounds(skin->display_font_large, grade_text);
                 float grade_center_y = y + 18;
                 draw_text(skin->display_font_large, grade_text, {(int)(x - GRADE_GAP - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)}, grade_color(grade));
             }
         }
+
+        request_difficulties();
     }
 
-    std::optional<float> SceneList::get_difficulty(size_t index, int32_t& budget) {
+    std::optional<float> SceneList::get_difficulty(size_t index) const {
+        return index < chart_difficulties.size() ? chart_difficulties[index] : std::nullopt;
+    }
+
+    void SceneList::difficulty_loop() {
+        std::unique_lock<std::mutex> lock(difficulty_mutex);
+
+        while (true) {
+            difficulty_cv.wait(lock, [this] { return difficulty_stopping || !difficulty_jobs.empty(); });
+
+            if (difficulty_stopping) {
+                return;
+            }
+
+            DifficultyJob job = difficulty_jobs.front();
+            difficulty_jobs.erase(difficulty_jobs.begin());
+            difficulty_busy = true;
+            lock.unlock();
+
+            float difficulty = (float)DifficultyCalculator::calculate_at_pitch(*job.chart, job.pitch);
+
+            lock.lock();
+            difficulty_busy = false;
+            difficulty_results.push_back({job.generation, job.index, difficulty});
+            difficulty_cv.notify_all();
+        }
+    }
+
+    void SceneList::request_difficulties() {
+        {
+            std::lock_guard<std::mutex> lock(difficulty_mutex);
+            difficulty_jobs.clear();
+
+            for (size_t index : wanted_difficulties) {
+                difficulty_jobs.push_back({difficulty_generation, index, charts[index].get(), pitch});
+            }
+        }
+
+        if (!wanted_difficulties.empty()) {
+            difficulty_cv.notify_all();
+        }
+    }
+
+    void SceneList::cancel_difficulties(bool wait) {
+        std::unique_lock<std::mutex> lock(difficulty_mutex);
+        difficulty_generation++;
+        difficulty_jobs.clear();
+        difficulty_results.clear();
+
+        if (wait) {
+            difficulty_cv.wait(lock, [this] { return !difficulty_busy; });
+        }
+    }
+
+    void SceneList::collect_difficulties() {
+        std::vector<DifficultyResult> results;
+        {
+            std::lock_guard<std::mutex> lock(difficulty_mutex);
+            results.swap(difficulty_results);
+        }
+
         if (chart_difficulties.size() != charts.size()) {
             chart_difficulties.assign(charts.size(), std::nullopt);
         }
 
-        if (!chart_difficulties[index] && budget > 0) {
-            budget--;
-            charts[index]->set_pitch(pitch);
-            chart_difficulties[index] = (float)DifficultyCalculator::calculate(*charts[index]);
+        for (const DifficultyResult& result : results) {
+            if (result.generation == difficulty_generation && result.index < chart_difficulties.size()) {
+                chart_difficulties[result.index] = result.difficulty;
+            }
         }
-
-        return chart_difficulties[index];
     }
 
     void SceneList::set_pitch(float pitch) {
         this->pitch = snap_pitch(pitch);
         status_bar.set_rate(this->pitch);
+        cancel_difficulties(false);
         chart_difficulties.assign(charts.size(), std::nullopt);
         refresh_search();
 

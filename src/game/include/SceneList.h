@@ -29,6 +29,8 @@ namespace nascent {
         std::vector<std::string> hashes;
         std::vector<std::optional<float>> difficulties;
         std::vector<std::string> search_texts;
+        std::vector<std::string> details;
+        std::vector<double> lengths_ms;
         std::unordered_map<std::string, std::string> hash_by_replay_folder;
         float pitch = 1.0f;
         bool hashed_files = false;
@@ -41,6 +43,19 @@ namespace nascent {
             std::string image_path;
         };
 
+        struct DifficultyJob {
+            uint64_t generation = 0;
+            size_t index = 0;
+            const Chart* chart = nullptr;
+            float pitch = 1.0f;
+        };
+
+        struct DifficultyResult {
+            uint64_t generation = 0;
+            size_t index = 0;
+            float difficulty = 0;
+        };
+
         struct BackgroundLoadResult {
             uint64_t generation = 0;
             std::unique_ptr<olc::Sprite> sprite;
@@ -49,6 +64,8 @@ namespace nascent {
         std::vector<std::unique_ptr<Chart>> charts;
         std::vector<std::string> chart_hashes;
         std::vector<std::string> search_texts;
+        std::vector<std::string> chart_details;
+        std::vector<double> chart_lengths_ms;
         std::vector<size_t> visible;
         std::string search;
         std::optional<std::string> pending_selection;
@@ -100,6 +117,18 @@ namespace nascent {
         bool library_loading = false;
         bool library_reload_pending = false;
 
+        std::mutex difficulty_mutex;
+        std::condition_variable difficulty_cv;
+        std::vector<DifficultyJob> difficulty_jobs;
+        std::vector<DifficultyResult> difficulty_results;
+        std::vector<size_t> wanted_difficulties;
+        uint64_t difficulty_generation = 0;
+        bool difficulty_busy = false;
+        bool difficulty_stopping = false;
+        std::thread difficulty_worker;
+
+        float widest_grade = -1.0f;
+
         void start_library_load();
         void poll_library_load();
         void apply_library(ChartLibrary library);
@@ -110,7 +139,11 @@ namespace nascent {
         void draw_search(olc::PixelGameEngine* window);
         void select_chart(int32_t, bool sound = true);
         void set_pitch(float);
-        std::optional<float> get_difficulty(size_t index, int32_t& budget);
+        std::optional<float> get_difficulty(size_t index) const;
+        void difficulty_loop();
+        void request_difficulties();
+        void cancel_difficulties(bool wait);
+        void collect_difficulties();
 
         void request_background_load();
         void apply_background_load(std::unique_ptr<olc::Sprite> sprite);

@@ -26,6 +26,6 @@ namespace nascent {
         static bool is_backfilled();
         static void backfill(const std::unordered_map<std::string, std::string>& chart_hash_by_folder, const std::filesystem::path& replay_directory);
         static void record(const std::string& chart_hash, float rate, const AttemptSummary& summary, const std::string& played_at);
-        static std::optional<LocalBest> lookup(const std::string& chart_hash, float rate);
+        static const LocalBest* lookup(const std::string& chart_hash, float rate);
     };
 }

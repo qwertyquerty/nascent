@@ -5,10 +5,12 @@
 #include "TextCache.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
 #include <memory>
+#include <string_view>
 #include <vector>
 #include <utility>
 
@@ -109,7 +111,7 @@ namespace nascent {
         int32_t baseline = top + (HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
         int32_t x = PADDING;
 
-        auto width = [&](const std::string& text) {
+        auto width = [&](std::string_view text) {
             return text.empty() ? 0 : text_bounds(font, text).size.x;
         };
 
@@ -135,7 +137,7 @@ namespace nascent {
                 break;
         }
 
-        std::vector<std::string> hints = {"Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse"};
+        const std::array<std::string_view, 4> hints = {"Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse"};
         int32_t hint_x = screen.x - PADDING + SEGMENT_GAP;
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {

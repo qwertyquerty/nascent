@@ -103,18 +103,18 @@ namespace nascent {
         }
     }
 
-    std::optional<LocalBest> LocalBests::lookup(const std::string& chart_hash, float rate) {
+    const LocalBest* LocalBests::lookup(const std::string& chart_hash, float rate) {
         if (store == nullptr) {
-            return std::nullopt;
+            return nullptr;
         }
 
         auto chart = store->value.charts.find(chart_hash);
 
         if (chart == store->value.charts.end()) {
-            return std::nullopt;
+            return nullptr;
         }
 
         auto best = chart->second.find(rate_key(rate));
-        return best != chart->second.end() ? std::optional<LocalBest>(best->second) : std::nullopt;
+        return best != chart->second.end() ? &best->second : nullptr;
     }
 }
