@@ -40,6 +40,7 @@ namespace nascent {
         std::vector<size_t> visible;
         std::string search;
         std::optional<std::string> pending_selection;
+        int pending_audio_id = -1;
         std::unordered_set<std::string> local_hashes;
         std::vector<std::optional<float>> chart_difficulties;
         Chart* selected_chart = nullptr;
@@ -108,6 +109,6 @@ namespace nascent {
         void draw(olc::PixelGameEngine*) override;
 
         const std::unordered_set<std::string>& get_local_hashes() const;
-        void select_chart_by_hash(std::string hash);
+        void select_chart_by_hash(std::string hash, int playing_audio_id = -1);
     };
 }
