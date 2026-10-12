@@ -1,4 +1,6 @@
-from .helpers import CHART, make_replay, rank_chart, submit
+from .helpers import CHART, make_chart, make_replay, rank_chart, submit
+
+UNRANKED = make_chart(title="Unranked Song", note_count=200)
 
 
 def test_global_stats(api, clock):
@@ -8,7 +10,7 @@ def test_global_stats(api, clock):
     assert empty["top_plays"] == []
 
     alice = api.token("alice")
-    submit(api, clock, alice, make_replay(CHART, seed=1))
+    submit(api, clock, alice, make_replay(UNRANKED, seed=1), chart=UNRANKED)
     rank_chart(api)
     ranked = submit(api, clock, alice, make_replay(CHART, seed=2)).get_json()
 
@@ -17,7 +19,7 @@ def test_global_stats(api, clock):
     assert stats["ranked_players"] == 1
     assert stats["plays"] == 2
     assert stats["ranked_plays"] == 1
-    assert stats["charts"] == 1
+    assert stats["charts"] == 2
     assert stats["ranked_charts"] == 1
     assert stats["total_playtime_ms"] > 0
     assert [play["id"] for play in stats["top_plays"]] == [ranked["play"]["id"]]
