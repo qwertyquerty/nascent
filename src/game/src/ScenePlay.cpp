@@ -18,11 +18,14 @@
 #include "Sha256.h"
 #include "Skin.h"
 #include "Util.h"
+#include "Utf8Path.h"
 #include "TextCache.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <system_error>
 
@@ -32,9 +35,13 @@ namespace nascent {
     static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
     static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
     static constexpr float SONG_PROGRESS_TOP = 40.0f;
-    static constexpr float DIAGNOSTICS_RIGHT = 520.0f;
+    static constexpr float DIAGNOSTICS_RIGHT = 570.0f;
     static constexpr float DIAGNOSTICS_TOP = 70.0f;
-    static constexpr float DIAGNOSTICS_LINE_HEIGHT = 24.0f;
+    static constexpr float DIAGNOSTICS_LINE_HEIGHT = 18.0f;
+    static constexpr float DIAGNOSTICS_SCALE = 1.5f;
+    static constexpr float DIAGNOSTICS_PADDING = 10.0f;
+    static constexpr size_t DIAGNOSTICS_MAX_CHARS = 45;
+    static constexpr uint8_t DIAGNOSTICS_BACKGROUND_ALPHA = 170;
 
     ScenePlay::ScenePlay(Chart* chart, Skin* skin, Scene* return_scene) {
         this->chart = chart;
@@ -128,35 +135,197 @@ namespace nascent {
         timer = 0;
         frames_played = 0;
         frame_time_total = 0;
+        frame_histogram.fill(0);
+        worst_frame_ms = 0;
+        last_press_time.reset();
+        closest_press_gap.reset();
+        simultaneous_presses = 0;
         game->reset_input_delay();
+    }
+
+    void ScenePlay::record_frame(float elapsed_time) {
+        double frame_ms = elapsed_time * 1000.0;
+        frame_histogram[std::min((size_t)(frame_ms / FRAME_HISTOGRAM_STEP_MS), FRAME_HISTOGRAM_BUCKETS - 1)]++;
+        worst_frame_ms = std::max(worst_frame_ms, frame_ms);
+    }
+
+    void ScenePlay::record_press(double time) {
+        if (last_press_time) {
+            double gap = time - *last_press_time;
+
+            if (gap <= 0) {
+                simultaneous_presses++;
+            }
+            else {
+                closest_press_gap = std::min(closest_press_gap.value_or(gap), gap);
+            }
+        }
+
+        last_press_time = time;
+    }
+
+    double ScenePlay::frame_percentile_ms(double fraction) const {
+        uint64_t target = (uint64_t)std::ceil(frames_played * fraction);
+        uint64_t seen = 0;
+
+        for (size_t bucket = 0; frames_played > 0 && bucket + 1 < FRAME_HISTOGRAM_BUCKETS; bucket++) {
+            seen += frame_histogram[bucket];
+
+            if (seen >= target) {
+                return (double)(bucket + 1) * FRAME_HISTOGRAM_STEP_MS;
+            }
+        }
+
+        return worst_frame_ms;
+    }
+
+    std::vector<std::string> ScenePlay::diagnostics_lines(bool full) const {
+        const Attempt& attempt = session->get_attempt();
+        olc::MiniAudio& audio = game->get_audio();
+        InputDelayStats delay = game->input_delay();
+
+        uint32_t hits = 0;
+        uint32_t early = 0;
+        uint32_t late = 0;
+        double error_sum = 0;
+        double error_squares = 0;
+
+        for (const JudgedHit& jhit : attempt.judged_hits) {
+            if (!jhit.hit_played || jhit.hit_score == HitScore::MISS || jhit.hit_score == HitScore::NONE) {
+                continue;
+            }
+
+            hits++;
+            error_sum += jhit.hit_err;
+            error_squares += (double)jhit.hit_err * jhit.hit_err;
+            early += jhit.hit_err < 0 ? 1 : 0;
+            late += jhit.hit_err > 0 ? 1 : 0;
+        }
+
+        double mean_error = hits > 0 ? error_sum / hits : 0.0;
+        double unstable_rate = hits > 0 ? std::sqrt(std::max(0.0, error_squares / hits - mean_error * mean_error)) * 10.0 : 0.0;
+        std::string windows;
+
+        for (HitScore score : TIMED_HIT_SCORES) {
+            windows += std::format("{}{}", windows.empty() ? "" : "/", get_window_from_hit_acc_diff(score, attempt.hit_accuracy));
+        }
+
+        const std::string& hash = chart->gameplay_hash();
+        uint16_t frame_limit = SettingsManager::settings.frame_rate_limit;
+        double average_frame_ms = frames_played > 0 ? frame_time_total * 1000.0 / frames_played : 0.0;
+        std::string press_gap = closest_press_gap ? std::format("{:.2f} ms", *closest_press_gap) : "none";
+
+        std::vector<std::string> lines;
+
+        if (full) {
+            lines.push_back(std::format("song {} - {} [{}]", chart->info.artist, chart->info.title, chart->info.difficulty_name));
+        }
+
+        lines.insert(lines.end(), {
+                                      std::format("nascent {} {}", NASCENT_VERSION_STRING, platform_description()),
+                                      std::format("chart {} {}K {:.2f}x", full ? hash : hash.substr(0, 16), chart->info.key_count, chart->pitch),
+                                      std::format("UR {:.1f} mean {:+.1f} ms", unstable_rate, mean_error),
+                                      std::format("early {} late {}", early, late),
+                                      std::format("windows {} ms", windows),
+                                      std::format("input {}", input_mode_name(game->get_input_mode())),
+                                      std::format("input delay {:.2f} ms avg of {}", delay.average_ms(), delay.count),
+                                      std::format("closest press gap {} same {}", press_gap, simultaneous_presses),
+                                      std::format("offset input {:+} visual {:+} ms", session->audio_input_offset, session->audio_visual_offset),
+                                      std::format("scroll speed {}", field->scroll_speed),
+                                      std::format("audio {} {} Hz", audio.GetBackendName(), audio.GetDeviceSampleRate()),
+                                      std::format("device {}", audio.GetDeviceName()),
+                                      std::format("latency {:.1f} ms period {:.1f} ms", audio.GetOutputLatencyMilliseconds(), audio.GetCallbackPeriodMilliseconds()),
+                                      std::format("mp3 padding {:.1f} ms", audio.GetStartOffsetMilliseconds(chart_audio_id)),
+                                      std::format("clock drift {:+.2f} ms snaps {}", session->last_clock_drift(), session->clock_snaps()),
+                                      std::format("frame {:.2f} p99 {:.2f} max {:.2f} ms", average_frame_ms, frame_percentile_ms(0.99), worst_frame_ms),
+                                      std::format("frame cap {}", frame_limit == 0 ? std::string("off") : std::format("{} fps", frame_limit)),
+                                  });
+
+        return lines;
+    }
+
+    void ScenePlay::copy_diagnostics() {
+        std::string text;
+
+        for (const std::string& line : diagnostics_lines(true)) {
+            text += line;
+            text += '\n';
+        }
+
+        std::string stamp = current_utc_timestamp();
+        std::erase_if(stamp, [](char c) { return c == '-' || c == ':'; });
+
+        std::error_code ec;
+        std::filesystem::path directory = user_config_directory(SettingsManager::APP_NAME) / "diagnostics";
+        std::filesystem::create_directories(directory, ec);
+        std::filesystem::path path = directory / (stamp + ".txt");
+
+        std::ofstream file(path, std::ios::binary);
+        file << text;
+        file.close();
+
+        bool saved = !file.fail();
+        bool copied = copy_to_clipboard(text);
+
+        if (copied && saved) {
+            game->notify(std::format("Diagnostics copied and saved to {}", path_utf8(path)));
+        }
+        else if (saved) {
+            game->notify(std::format("Diagnostics saved to {}", path_utf8(path)));
+        }
+        else if (copied) {
+            game->notify("Diagnostics copied to clipboard");
+        }
+        else {
+            game->notify("Could not copy or save diagnostics", true);
+        }
     }
 
     nlohmann::json ScenePlay::timing_diagnostics() const {
         InputDelayStats delay = game->input_delay();
+        olc::MiniAudio& audio = game->get_audio();
 
         return nlohmann::json{
-            {"audio_callback_period_ms", game->get_audio().GetCallbackPeriodMilliseconds()},
+            {"audio_backend", audio.GetBackendName()},
+            {"audio_callback_period_ms", audio.GetCallbackPeriodMilliseconds()},
+            {"audio_output_latency_ms", audio.GetOutputLatencyMilliseconds()},
+            {"mp3_padding_ms", audio.GetStartOffsetMilliseconds(chart_audio_id)},
             {"clock_snaps", session->clock_snaps()},
+            {"input_mode", input_mode_name(game->get_input_mode())},
             {"input_delay_average_ms", delay.average_ms()},
             {"input_delay_max_ms", delay.max_ms},
             {"input_delay_samples", delay.count},
+            {"closest_press_gap_ms", closest_press_gap ? nlohmann::json(*closest_press_gap) : nlohmann::json()},
+            {"simultaneous_presses", simultaneous_presses},
             {"average_frame_ms", frames_played > 0 ? frame_time_total * 1000.0 / frames_played : 0.0},
+            {"p99_frame_ms", frame_percentile_ms(0.99)},
+            {"worst_frame_ms", worst_frame_ms},
+            {"platform", platform_description()},
+            {"version", NASCENT_VERSION_STRING},
         };
     }
 
     void ScenePlay::draw_timing_diagnostics(olc::PixelGameEngine* window) const {
-        InputDelayStats delay = game->input_delay();
-        double frame_ms = frames_played > 0 ? frame_time_total * 1000.0 / frames_played : 0.0;
-        const std::string lines[] = {
-            std::format("audio period   {:.1f} ms", game->get_audio().GetCallbackPeriodMilliseconds()),
-            std::format("clock snaps    {}", session->clock_snaps()),
-            std::format("input delay    {:.2f} ms avg of {}", delay.average_ms(), delay.count),
-            std::format("frame time     {:.2f} ms", frame_ms),
-        };
+        std::vector<std::string> lines = diagnostics_lines(false);
         float x = (float)window->GetScreenSize().x - DIAGNOSTICS_RIGHT;
+        float char_size = DIAGNOSTICS_SCALE * 8.0f;
+        float width = char_size * DIAGNOSTICS_MAX_CHARS + DIAGNOSTICS_PADDING * 2;
+        float height = DIAGNOSTICS_LINE_HEIGHT * (float)(lines.size() - 1) + char_size + DIAGNOSTICS_PADDING * 2;
 
-        for (size_t index = 0; index < std::size(lines); index++) {
-            window->DrawStringDecal({x, DIAGNOSTICS_TOP + (float)index * DIAGNOSTICS_LINE_HEIGHT}, lines[index], olc::WHITE, {2.0f, 2.0f});
+        window->FillRectDecal({x - DIAGNOSTICS_PADDING, DIAGNOSTICS_TOP - DIAGNOSTICS_PADDING}, {width, height}, olc::Pixel(0, 0, 0, DIAGNOSTICS_BACKGROUND_ALPHA));
+
+        for (size_t index = 0; index < lines.size(); index++) {
+            std::string line = lines[index];
+
+            for (char& c : line) {
+                c = (unsigned char)c < 0x80 ? c : '?';
+            }
+
+            if (line.size() > DIAGNOSTICS_MAX_CHARS) {
+                line = line.substr(0, DIAGNOSTICS_MAX_CHARS - 3) + "...";
+            }
+
+            window->DrawStringDecal({x, DIAGNOSTICS_TOP + (float)index * DIAGNOSTICS_LINE_HEIGHT}, line, olc::WHITE, {DIAGNOSTICS_SCALE, DIAGNOSTICS_SCALE});
         }
     }
 
@@ -215,6 +384,10 @@ namespace nascent {
             show_hit_log = !show_hit_log;
         }
 
+        if (game->window->GetKey(InputManager::diagnostics_copy_key).bPressed) {
+            copy_diagnostics();
+        }
+
         if (!finished && game->window->GetKey(InputManager::restart_key).bHeld) {
             restart_hold += elapsed_time;
 
@@ -261,6 +434,7 @@ namespace nascent {
                 }
 
                 if (event.pressed) {
+                    record_press(event.time);
                     session->press(*lane, event.time);
                 }
                 else {
@@ -273,6 +447,7 @@ namespace nascent {
             if (chart_started) {
                 frames_played++;
                 frame_time_total += elapsed_time;
+                record_frame(elapsed_time);
             }
 
             timer += elapsed_time;

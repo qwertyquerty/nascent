@@ -35,5 +35,6 @@ namespace nascent {
         const Attempt& get_attempt() const;
         uint32_t get_held_keys() const;
         unsigned int clock_snaps() const;
+        double last_clock_drift() const;
     };
 }

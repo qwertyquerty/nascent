@@ -78,6 +78,7 @@ namespace nascent {
         InputMode get_input_mode() const;
         void reset_input_delay();
 
+        virtual void notify(const std::string& message, bool is_error = false);
         void quit();
         bool should_quit();
     };

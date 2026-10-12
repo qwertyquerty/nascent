@@ -12,6 +12,7 @@ namespace nascent {
         double max_error = 20;
         double correction_rate = 0.1;
         unsigned int snaps = 0;
+        double last_drift = 0;
 
         void reset(double position, double now);
         void sync(double reported_position, double now);

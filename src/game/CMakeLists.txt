@@ -33,5 +33,6 @@ add_library(game
 )
 
 target_include_directories(game PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(game PRIVATE NASCENT_VERSION_STRING="${NASCENT_VERSION}")
 target_link_libraries(game PUBLIC core gse olcPixelGameEngine kissfft discord-rpc PRIVATE CURL::libcurl miniz stb)
 nascent_target_warnings(game)

@@ -284,6 +284,9 @@ namespace nascent {
         return frame_key_events;
     }
 
+    void Game::notify(const std::string&, bool) {
+    }
+
     void Game::quit() {
         quit_requested = true;
     }

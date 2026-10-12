@@ -2,8 +2,12 @@
 
 #include <cctype>
 #include <chrono>
+#include <csignal>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <format>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -135,5 +139,101 @@ namespace nascent {
 #else
         std::this_thread::sleep_for(std::chrono::duration<double>(seconds));
 #endif
+    }
+
+    bool copy_to_clipboard(const std::string& text) {
+#if defined(_WIN32)
+        int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
+        HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, ((size_t)length + 1) * sizeof(wchar_t));
+
+        if (memory == nullptr) {
+            return false;
+        }
+
+        wchar_t* wide = (wchar_t*)GlobalLock(memory);
+        MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), wide, length);
+        wide[length] = L'\0';
+        GlobalUnlock(memory);
+
+        if (!OpenClipboard(nullptr)) {
+            GlobalFree(memory);
+            return false;
+        }
+
+        EmptyClipboard();
+        bool copied = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
+        CloseClipboard();
+
+        if (!copied) {
+            GlobalFree(memory);
+        }
+
+        return copied;
+#else
+#if defined(__APPLE__)
+        std::vector<const char*> commands = {"pbcopy"};
+#else
+        std::vector<const char*> commands;
+
+        if (std::getenv("WAYLAND_DISPLAY") != nullptr) {
+            commands.push_back("command -v wl-copy >/dev/null 2>&1 && wl-copy");
+        }
+
+        commands.push_back("command -v xclip >/dev/null 2>&1 && xclip -selection clipboard");
+        commands.push_back("command -v xsel >/dev/null 2>&1 && xsel --clipboard --input");
+#endif
+        auto previous_handler = std::signal(SIGPIPE, SIG_IGN);
+        bool copied = false;
+
+        for (const char* command : commands) {
+            FILE* pipe = popen(command, "w");
+
+            if (pipe == nullptr) {
+                continue;
+            }
+
+            bool written = std::fwrite(text.data(), 1, text.size(), pipe) == text.size();
+
+            if (pclose(pipe) == 0 && written) {
+                copied = true;
+                break;
+            }
+        }
+
+        std::signal(SIGPIPE, previous_handler);
+        return copied;
+#endif
+    }
+
+    std::string platform_description() {
+#if defined(_WIN32)
+        const char* os = "Windows";
+#elif defined(__APPLE__)
+        const char* os = "macOS";
+#elif defined(__linux__)
+        const char* os = "Linux";
+#else
+        const char* os = "unknown OS";
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+        const char* arch = "x86_64";
+#elif defined(__aarch64__) || defined(_M_ARM64)
+        const char* arch = "arm64";
+#else
+        const char* arch = "unknown arch";
+#endif
+
+#if defined(__clang__)
+        std::string compiler = std::format("Clang {}.{}", __clang_major__, __clang_minor__);
+#elif defined(_MSC_VER)
+        std::string compiler = std::format("MSVC {}", _MSC_VER);
+#elif defined(__GNUC__)
+        std::string compiler = std::format("GCC {}.{}", __GNUC__, __GNUC_MINOR__);
+#else
+        std::string compiler = "unknown compiler";
+#endif
+
+        return std::format("{} {} {}", os, arch, compiler);
     }
 }

@@ -102,6 +102,10 @@ namespace nascent {
         toast_timer = duration;
     }
 
+    void GameNascent::notify(const std::string& message, bool is_error) {
+        show_toast(message, is_error);
+    }
+
     void GameNascent::handle_dropped_files() {
         if (skin_import.valid() && skin_import.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             SkinImportResult result = skin_import.get();

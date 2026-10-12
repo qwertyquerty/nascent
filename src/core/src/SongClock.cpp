@@ -13,6 +13,7 @@ namespace nascent {
     void SongClock::sync(double reported_position, double now) {
         double predicted = position_at(now);
         double drift = reported_position - predicted;
+        last_drift = has_report ? drift : 0.0;
 
         if (!has_report || std::abs(drift) > max_error) {
             snaps += has_report ? 1 : 0;

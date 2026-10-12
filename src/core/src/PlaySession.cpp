@@ -51,6 +51,10 @@ namespace nascent {
         return clock.snaps;
     }
 
+    double PlaySession::last_clock_drift() const {
+        return clock.last_drift;
+    }
+
     uint32_t PlaySession::get_held_keys() const {
         return attempt.held_keys;
     }
