@@ -1,0 +1,9 @@
+- name: Import a folder of replays as ranked plays for a player
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Import the replays
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: import_replays

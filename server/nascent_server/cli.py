@@ -1,20 +1,24 @@
 import json
 import os
+import sys
+from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
 from flask import current_app
 from flask.cli import AppGroup
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from . import tasks, timeutil
 from .errors import ApiError
 from .extensions import db
 from .models import AuthSession, Chart, ChartStatus, PlayTicket, Role, User
-from .security import hash_password
+from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
 from .services.charts import add_chart_source, get_chart, parse_chart, read_osu_file, register_chart, set_chart_status
+from .services.plays import submit_play
 
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
 
@@ -43,18 +47,126 @@ def create_user(username: str, email: str, role: str, password: str):
     click.echo(f"created {role} {username} with id {user.id}")
 
 
-@nascent_cli.command("set-role")
-@click.argument("username")
-@click.argument("role", type=click.Choice([role.value for role in Role]))
-def set_role(username: str, role: str):
+def _get_user(username: str) -> User:
     user = db.session.scalar(select(User).where(User.username_key == username.lower()))
 
     if user is None:
         raise click.ClickException(f"no user named {username}")
 
+    return user
+
+
+@nascent_cli.command("set-role")
+@click.argument("username")
+@click.argument("role", type=click.Choice([role.value for role in Role]))
+def set_role(username: str, role: str):
+    user = _get_user(username)
     user.role = role
     db.session.commit()
     click.echo(f"{username} is now {role}")
+
+
+@nascent_cli.command("set-password")
+@click.argument("username")
+@click.option("--password-stdin", is_flag=True, help="Read the new password from standard input instead of prompting")
+def set_password(username: str, password_stdin: bool):
+    user = _get_user(username)
+    password = sys.stdin.readline().rstrip("\r\n") if password_stdin else click.prompt("New password", hide_input=True, confirmation_prompt=True)
+
+    if not 8 <= len(password) <= 256:
+        raise click.ClickException("the password must be 8 to 256 characters long")
+
+    user.password_hash = hash_password(password)
+    revoke_user_sessions(user.id)
+    db.session.commit()
+    click.echo(f"set the password for {user.username} and signed them out everywhere")
+
+
+def _read_replay(file: Path) -> dict | None:
+    try:
+        raw = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    return raw if isinstance(raw, dict) and isinstance(raw.get("chart"), dict) and isinstance(raw.get("inputs"), list) else None
+
+
+def _played_at(raw: dict) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(raw.get("played_at"))).astimezone(UTC)
+    except ValueError:
+        return None
+
+
+def _replay_charts(raw: dict) -> list[Chart]:
+    meta = raw["chart"]
+    gameplay_hash = meta.get("gameplay_hash")
+
+    if isinstance(gameplay_hash, str) and (chart := get_chart(gameplay_hash)) is not None:
+        return [chart]
+
+    return list(
+        db.session.scalars(
+            select(Chart).where(
+                func.lower(Chart.title) == str(meta.get("title", "")).lower(),
+                func.lower(Chart.artist) == str(meta.get("artist", "")).lower(),
+                func.lower(Chart.difficulty_name) == str(meta.get("difficulty_name", "")).lower(),
+                Chart.key_count == meta.get("key_count"),
+            )
+        )
+    )
+
+
+def _import_replay(user: User, raw: dict) -> tuple[str, str]:
+    charts = _replay_charts(raw)
+
+    if not charts:
+        return "skipped", "its chart is not on the server"
+
+    reason = "it does not match any chart on the server with that name"
+
+    for chart in charts:
+        name = f"{chart.artist} - {chart.title} [{chart.difficulty_name}]"
+
+        try:
+            result = submit_play(user, chart.hash, raw, None, None, imported=True, trusted=True, submitted_at=_played_at(raw))
+        except ApiError as error:
+            db.session.rollback()
+
+            if error.code == "duplicate_replay":
+                return "exists", name
+
+            if error.code not in ("result_mismatch", "invalid_replay"):
+                reason = error.message
+
+            continue
+
+        play = result.play
+        return "added", f"{name} {play.rate:.2f}x {play.accuracy * 100:.2f}% {'ranked' if play.ranked else play.status}"
+
+    return "skipped", reason
+
+
+@nascent_cli.command("import-replays")
+@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.option("--user", "username", required=True, help="The player the replays belong to")
+def import_replays(path: Path, username: str):
+    user = _get_user(username)
+    files = [path] if path.is_file() else sorted(path.rglob("*.json"))
+    replays = [(file, raw) for file in files if (raw := _read_replay(file)) is not None]
+    counts = Counter()
+
+    if not replays:
+        raise click.ClickException(f"no replay files in {path} that this user can read")
+
+    replays.sort(key=lambda entry: str(entry[1].get("played_at", "")))
+
+    for file, raw in replays:
+        outcome, detail = _import_replay(user, raw)
+        counts[outcome] += 1
+        click.echo(f"{outcome} {file.name}: {detail}")
+
+    click.echo(f"{counts['added']} added, {counts['exists']} already on the server, {counts['skipped']} skipped, {len(files) - len(replays)} not replays")
 
 
 def _read_chart_file(file: Path) -> tuple[dict, dict | None]:

@@ -1,0 +1,82 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - player is defined and player | length > 0
+      - replays is defined and replays | length > 0
+    fail_msg: pass the player with -e player=name and a local replay folder with -e replays=/path/to/Nascent/replays
+
+- name: Count the replays on this machine
+  delegate_to: localhost
+  become: false
+  run_once: true
+  ansible.builtin.shell: find {{ replays | quote }} -name '*.json' -type f | wc -l
+  register: local_replays
+  changed_when: false
+
+- name: Check there are replays to import
+  ansible.builtin.assert:
+    that: local_replays.stdout | int > 0
+    fail_msg: no .json replay files in {{ replays }}
+
+- name: Upload and import the replays
+  block:
+    - name: Create a local archive name
+      delegate_to: localhost
+      become: false
+      run_once: true
+      ansible.builtin.tempfile:
+        state: file
+        suffix: -nascent-replays.tar.gz
+      register: archive
+
+    - name: Pack the replays
+      delegate_to: localhost
+      become: false
+      run_once: true
+      ansible.builtin.command:
+        argv: [tar, -czf, "{{ archive.path }}", -C, "{{ replays }}", .]
+      changed_when: false
+
+    - name: Clear the upload directory
+      ansible.builtin.file:
+        path: "{{ nascent_replay_import_dir }}"
+        state: absent
+
+    - name: Create the upload directory
+      ansible.builtin.file:
+        path: "{{ nascent_replay_import_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Upload the replays
+      ansible.builtin.unarchive:
+        src: "{{ archive.path }}"
+        dest: "{{ nascent_replay_import_dir }}"
+        mode: u=rwX,g=rX,o=rX
+
+    - name: Import the replays for {{ player }}
+      ansible.builtin.command:
+        argv: [docker, compose, run, --rm, -T, -v, "{{ nascent_replay_import_dir }}:/import:ro", api, flask, --app, wsgi, nascent, import-replays, /import, --user, "{{ player }}"]
+        chdir: "{{ nascent_compose_dir }}"
+      async: 7200
+      poll: 15
+      register: imported
+      changed_when: "imported.stdout_lines | select('match', '^added ') | list | length > 0"
+
+    - name: Show what was imported
+      ansible.builtin.debug:
+        msg: "{{ [imported.stdout_lines | last] + (imported.stdout_lines | select('match', '^skipped ') | list) }}"
+  always:
+    - name: Remove the local archive
+      delegate_to: localhost
+      become: false
+      run_once: true
+      ansible.builtin.file:
+        path: "{{ archive.path }}"
+        state: absent
+      when: archive.path is defined
+
+    - name: Remove the uploaded replays
+      ansible.builtin.file:
+        path: "{{ nascent_replay_import_dir }}"
+        state: absent

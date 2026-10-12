@@ -1,7 +1,7 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import nascent_core as nc
@@ -206,10 +206,22 @@ def _player_history(user: User) -> anticheat.PlayerHistory:
     return anticheat.PlayerHistory(user.ranked_play_count, float(best or 0.0))
 
 
-def submit_play(user: User, chart_hash: str, raw_replay: dict, raw_chart: dict | None, ticket_token: str | None) -> SubmissionResult:
+def submit_play(
+    user: User,
+    chart_hash: str,
+    raw_replay: dict,
+    raw_chart: dict | None,
+    ticket_token: str | None,
+    *,
+    imported: bool = False,
+    trusted: bool = False,
+    submitted_at: datetime | None = None,
+) -> SubmissionResult:
     require_not_banned(user)
-    check_rate_limit("submit_burst", user.id)
-    check_rate_limit("submit", user.id)
+
+    if not imported:
+        check_rate_limit("submit_burst", user.id)
+        check_rate_limit("submit", user.id)
 
     chart_hash = chart_hash.lower()
     chart = get_chart(chart_hash)
@@ -243,8 +255,8 @@ def submit_play(user: User, chart_hash: str, raw_replay: dict, raw_chart: dict |
     if db.session.scalar(select(Play.id).where(Play.replay_hash == fingerprint)) is not None:
         raise ApiError(409, "duplicate_replay", "This replay has already been submitted")
 
-    ticket, ticket_flag = _resolve_ticket(user, ticket_token, chart_hash, rate_key, replay.end_time)
-    eligible = ticket is not None
+    ticket, ticket_flag = (None, None) if trusted else _resolve_ticket(user, ticket_token, chart_hash, rate_key, replay.end_time)
+    eligible = trusted or ticket is not None
     chart_created = False
 
     if chart is None:
@@ -287,7 +299,7 @@ def submit_play(user: User, chart_hash: str, raw_replay: dict, raw_chart: dict |
         replay_key=replay_key,
         settings=replay.settings,
         flags=[flag.to_dict() for flag in flags],
-        submitted_at=timeutil.utcnow(),
+        submitted_at=submitted_at or timeutil.utcnow(),
         ticket_id=ticket.id if ticket else None,
     )
     db.session.add(play)

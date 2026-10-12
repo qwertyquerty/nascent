@@ -14,3 +14,4 @@ nascent_configure_firewall: true
 nascent_cloudflare: false
 nascent_db_admin_email: "{{ nascent_letsencrypt_email }}"
 nascent_db_admin_port: 5050
+nascent_replay_import_dir: /opt/nascent/replay-import
