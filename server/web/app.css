@@ -1,0 +1,43 @@
+[v-cloak] {
+    display: none;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+main {
+    flex: 1;
+}
+
+.grade {
+    color: #141414 !important;
+    font-weight: 700;
+    min-width: 2em;
+}
+
+.grade-X { background-color: #fff0a0 !important; }
+.grade-S { background-color: #ffd250 !important; }
+.grade-A { background-color: #6edc78 !important; }
+.grade-B { background-color: #5aaaff !important; }
+.grade-C { background-color: #be78ff !important; }
+.grade-D { background-color: #ff9646 !important; }
+.grade-E { background-color: #f05a5a !important; }
+.grade-F { background-color: #969696 !important; }
+
+.table td,
+.table th {
+    vertical-align: middle;
+}
+
+.is-numeric {
+    font-variant-numeric: tabular-nums;
+    text-align: right !important;
+    white-space: nowrap;
+}
+
+.chart-name {
+    min-width: 16rem;
+}

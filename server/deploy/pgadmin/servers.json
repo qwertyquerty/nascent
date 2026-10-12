@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Nascent",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "nascent",
+      "Username": "nascent",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpass"
+    }
+  }
+}

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="nascent-api" content="/api/v1">
+    <title>Nascent</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
+    <link rel="stylesheet" href="app.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+<div id="app" v-cloak>
+    <nav class="navbar has-shadow">
+        <div class="container">
+            <div class="navbar-brand">
+                <a class="navbar-item has-text-weight-bold is-size-5" href="#/">Nascent</a>
+                <a class="navbar-burger" :class="{'is-active': menuOpen}" @click="menuOpen = !menuOpen"><span></span><span></span><span></span><span></span></a>
+            </div>
+            <div class="navbar-menu" :class="{'is-active': menuOpen}">
+                <div class="navbar-start">
+                    <a class="navbar-item" :class="{'is-active': route.name === 'home'}" href="#/">Home</a>
+                    <a class="navbar-item" :class="{'is-active': route.name === 'leaderboard'}" href="#/leaderboard">Leaderboard</a>
+                    <a class="navbar-item" :class="{'is-active': route.name.startsWith('chart')}" href="#/charts">Charts</a>
+                </div>
+                <form class="navbar-end navbar-item" @submit.prevent="submit($event)">
+                    <input class="input is-small" name="player" type="search" placeholder="Find a player" required>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <main class="section">
+        <div class="container">
+            <div v-if="error" class="notification is-danger is-light">{{ error }}</div>
+            <progress v-else-if="!view" class="progress is-small is-link"></progress>
+
+            <template v-else-if="route.name === 'home'">
+                <h1 class="title">Nascent</h1>
+                <div class="columns is-multiline is-mobile">
+                    <div v-for="[label, value] in [
+                        ['Players', $f.number(view.stats.players)],
+                        ['Ranked players', $f.number(view.stats.ranked_players)],
+                        ['Plays', $f.number(view.stats.plays)],
+                        ['Ranked plays', $f.number(view.stats.ranked_plays)],
+                        ['Ranked charts', `${$f.number(view.stats.ranked_charts)} / ${$f.number(view.stats.charts)}`],
+                        ['Time played', $f.playtime(view.stats.total_playtime_ms)],
+                    ]" class="column is-2-desktop is-4-tablet is-6-mobile">
+                        <div class="box has-text-centered"><p class="is-size-7 is-uppercase has-text-grey">{{ label }}</p><p class="title is-4">{{ value }}</p></div>
+                    </div>
+                </div>
+                <div class="columns">
+                    <div class="column">
+                        <h2 class="title is-4">Top players</h2>
+                        <player-table :entries="view.board.entries"></player-table>
+                        <a class="button is-small" href="#/leaderboard">Full leaderboard</a>
+                    </div>
+                    <div class="column">
+                        <h2 class="title is-4">Top plays</h2>
+                        <play-table :plays="view.stats.top_plays" show-user empty="No ranked plays yet."></play-table>
+                    </div>
+                </div>
+            </template>
+
+            <template v-else-if="route.name === 'leaderboard'">
+                <h1 class="title">Leaderboard</h1>
+                <p class="subtitle">{{ $f.number(view.total) }} ranked players</p>
+                <div class="tabs is-boxed">
+                    <ul>
+                        <li :class="{'is-active': !route.params.key_count}"><a href="#/leaderboard">Overall</a></li>
+                        <li v-for="count in keyCounts" :class="{'is-active': route.params.key_count == count}">
+                            <a :href="$link.to('/leaderboard', {key_count: count})">{{ count }}K</a>
+                        </li>
+                    </ul>
+                </div>
+                <player-table :entries="view.entries" detailed></player-table>
+                <pager :total="view.total"></pager>
+            </template>
+
+            <template v-else-if="route.name === 'user'">
+                <h1 class="title">
+                    {{ view.user.username }}
+                    <span v-if="view.user.role !== 'user'" class="tag is-info is-light">{{ view.user.role }}</span>
+                    <span v-if="view.user.is_restricted" class="tag is-danger is-light">restricted</span>
+                </h1>
+                <p class="subtitle is-6 has-text-grey">Joined {{ $f.date(view.user.created_at) }} &middot; last played {{ $f.date(view.user.last_played_at) }}</p>
+                <div class="columns is-multiline is-mobile">
+                    <div v-for="[label, value] in [
+                        ['Performance', $f.performance(view.user.stats.performance)],
+                        ['Global rank', $f.rank(view.user.stats.global_rank)],
+                        ['Accuracy', $f.accuracy(view.user.stats.accuracy)],
+                        ['Ranked plays', $f.number(view.user.stats.ranked_play_count)],
+                        ['Time played', $f.playtime(view.user.stats.total_playtime_ms)],
+                        ['Max combo', $f.number(view.user.stats.max_combo)],
+                    ]" class="column is-2-desktop is-4-tablet is-6-mobile">
+                        <div class="box has-text-centered"><p class="is-size-7 is-uppercase has-text-grey">{{ label }}</p><p class="title is-4">{{ value }}</p></div>
+                    </div>
+                </div>
+                <div class="tags mb-5">
+                    <span v-for="grade in 'XSABCDEF'" class="tag is-medium">
+                        <span class="tag grade mr-2" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}
+                    </span>
+                </div>
+
+                <h2 class="title is-4">Key modes</h2>
+                <div class="table-container">
+                    <table class="table is-fullwidth is-hoverable is-striped">
+                        <thead><tr>
+                            <th>Mode</th><th class="is-numeric">Rank</th><th class="is-numeric">Performance</th>
+                            <th class="is-numeric">Accuracy</th><th class="is-numeric">Ranked plays</th><th class="is-numeric">Time played</th>
+                        </tr></thead>
+                        <tbody><tr v-for="mode in view.user.key_modes" :key="mode.key_count">
+                            <td>{{ mode.key_count }}K</td>
+                            <td class="is-numeric">{{ $f.rank(mode.global_rank) }}</td>
+                            <td class="is-numeric">{{ $f.performance(mode.performance) }}</td>
+                            <td class="is-numeric">{{ $f.accuracy(mode.accuracy) }}</td>
+                            <td class="is-numeric">{{ $f.number(mode.ranked_play_count) }}</td>
+                            <td class="is-numeric">{{ $f.playtime(mode.total_playtime_ms) }}</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+
+                <div class="tabs mt-5">
+                    <ul>
+                        <li :class="{'is-active': route.params.tab !== 'recent'}"><a :href="$link.user(view.user.username)">Best plays</a></li>
+                        <li :class="{'is-active': route.params.tab === 'recent'}"><a :href="$link.user(view.user.username, {tab: 'recent'})">Recent plays</a></li>
+                    </ul>
+                </div>
+                <play-table :plays="view.plays"></play-table>
+            </template>
+
+            <template v-else-if="route.name === 'charts'">
+                <h1 class="title">Charts</h1>
+                <p class="subtitle">{{ $f.number(view.total) }} {{ route.params.status === 'all' ? 'charts' : 'ranked charts' }}</p>
+                <form class="field is-grouped mb-5" @submit.prevent="submit($event, '/charts')">
+                    <input class="input" name="q" type="search" placeholder="Search title, artist or mapper" :value="route.params.q">
+                    <div class="select ml-2">
+                        <select name="key_count">
+                            <option value="">Any keys</option>
+                            <option v-for="count in keyCounts" :value="count" :selected="route.params.key_count == count">{{ count }}K</option>
+                        </select>
+                    </div>
+                    <div class="select ml-2">
+                        <select name="status">
+                            <option value="">Ranked</option>
+                            <option value="all" :selected="route.params.status === 'all'">All charts</option>
+                        </select>
+                    </div>
+                    <button class="button is-link ml-2">Search</button>
+                </form>
+                <div class="table-container">
+                    <table class="table is-fullwidth is-hoverable is-striped">
+                        <thead><tr>
+                            <th>Song</th><th>Mapper</th><th class="is-numeric">Keys</th><th class="is-numeric">Difficulty</th>
+                            <th class="is-numeric">Length</th><th class="is-numeric">Plays</th><th>Status</th>
+                        </tr></thead>
+                        <tbody><tr v-for="chart in view.charts" :key="chart.hash">
+                            <td class="chart-name">
+                                <a :href="$link.chart(chart.hash)">{{ chart.artist }} - {{ chart.title }}</a>
+                                <span class="has-text-grey">[{{ chart.difficulty_name }}]</span>
+                            </td>
+                            <td>{{ chart.mapper }}</td>
+                            <td class="is-numeric">{{ chart.key_count }}K</td>
+                            <td class="is-numeric">{{ $f.performance(chart.difficulty) }}</td>
+                            <td class="is-numeric">{{ $f.length(chart.duration_ms) }}</td>
+                            <td class="is-numeric">{{ $f.number(chart.play_count) }}</td>
+                            <td><span class="tag is-light" :class="{'is-success': chart.status === 'ranked'}">{{ chart.status }}</span></td>
+                        </tr></tbody>
+                    </table>
+                </div>
+                <pager :total="view.total"></pager>
+            </template>
+
+            <template v-else-if="route.name === 'chart'">
+                <h1 class="title">{{ view.chart.artist }} - {{ view.chart.title }}</h1>
+                <p class="subtitle">
+                    [{{ view.chart.difficulty_name }}] by {{ view.chart.mapper }}
+                    <span class="tag is-light" :class="{'is-success': view.chart.status === 'ranked'}">{{ view.chart.status }}</span>
+                </p>
+                <p class="mb-4">
+                    {{ view.chart.key_count }}K &middot; {{ $f.length(view.chart.duration_ms) }} &middot;
+                    {{ $f.number(view.chart.note_count) }} notes &middot; {{ $f.number(view.chart.hold_count) }} holds &middot;
+                    {{ $f.number(view.chart.play_count) }} plays
+                    <a v-for="source in view.chart.sources.filter((source) => source.url?.startsWith('https://'))" class="ml-2" :href="source.url" target="_blank" rel="noopener">{{ source.source }}</a>
+                </p>
+                <div class="tags mb-4">
+                    <a v-for="entry in view.chart.difficulties" class="tag" :class="entry.rate === view.board.rate ? 'is-link' : 'is-light'"
+                        :href="$link.chart(view.chart.hash, entry.rate)">{{ $f.rate(entry.rate) }} &middot; {{ $f.performance(entry.difficulty) }}</a>
+                </div>
+                <h2 class="title is-4">Leaderboard at {{ $f.rate(view.board.rate) }} <span class="has-text-grey is-size-6">{{ $f.number(view.board.total) }} players</span></h2>
+                <play-table :plays="view.board.entries" show-user :show-chart="false" empty="Nobody has played this rate yet."></play-table>
+                <pager :total="view.board.total"></pager>
+            </template>
+        </div>
+    </main>
+
+    <footer class="footer has-text-centered is-size-7 has-text-grey">Nascent &middot; <a href="https://github.com/qwertyquerty/nascent">source</a></footer>
+</div>
+</body>
+</html>
