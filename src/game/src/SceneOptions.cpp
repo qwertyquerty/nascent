@@ -31,6 +31,8 @@ namespace nascent {
 
     SceneOptions::SceneOptions(Skin* skin) : skin(skin) {}
 
+    SceneOptions::~SceneOptions() = default;
+
     void SceneOptions::init(Game* game) {
         const Settings& settings = SettingsManager::settings;
 

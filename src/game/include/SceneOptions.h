@@ -46,6 +46,7 @@ namespace nascent {
 
         public:
         SceneOptions(Skin* skin);
+        ~SceneOptions() override;
         void init(Game*) override;
         void on_exit() override;
         void update(float) override;

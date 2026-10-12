@@ -226,10 +226,10 @@ namespace nascent {
 
         olc::Key previous = get_key(binding);
         std::optional<KeyBinding> swapped;
-        std::map<std::string, std::string>& bindings = SettingsManager::settings.key_bindings;
 
-        auto store = [&bindings](KeyBinding target, olc::Key value) {
+        auto store = [](KeyBinding target, olc::Key value) {
             const KeyBindingInfo& info = binding_info(target);
+            std::map<std::string, std::string>& bindings = SettingsManager::settings.key_bindings;
 
             if (value == info.default_key) {
                 bindings.erase(info.id);
