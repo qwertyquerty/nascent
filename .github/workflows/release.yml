@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   package:
     name: Package ${{ matrix.os_name }}-${{ matrix.arch }}
@@ -124,8 +128,12 @@ jobs:
             prerelease="--prerelease"
           fi
 
-          gh release create "$GITHUB_REF_NAME" dist/*.zip \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Nascent $GITHUB_REF_NAME" \
-            --notes "" \
-            $prerelease
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Nascent $GITHUB_REF_NAME" \
+              --notes "" \
+              $prerelease
+          fi
