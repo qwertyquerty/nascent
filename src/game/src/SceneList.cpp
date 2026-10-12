@@ -14,6 +14,7 @@
 #include "Platform.h"
 #include "ProgressBar.h"
 #include "Scene.h"
+#include "ServerApi.h"
 #include "Skin.h"
 #include "Util.h"
 #include "SceneAccount.h"
@@ -85,6 +86,23 @@ namespace nascent {
     static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;
     static const olc::Pixel LEADERBOARD_BACKGROUND = olc::Pixel(0, 0, 0, 150);
     static const olc::Pixel LEADERBOARD_HIGHLIGHT = olc::Pixel(255, 255, 255, 24);
+
+    enum class ChartAction : uint8_t {
+        OPEN_WEBSITE,
+        DELETE_CHART,
+        DELETE_PACK
+    };
+
+    static constexpr std::array<ChartAction, 3> CHART_ACTIONS = {ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
+    static constexpr int32_t CHART_MENU_MIN_WIDTH = 720;
+    static constexpr int32_t CHART_MENU_SCREEN_MARGIN = 120;
+    static constexpr int32_t CHART_MENU_PADDING = 32;
+    static constexpr int32_t CHART_MENU_ROW_HEIGHT = 44;
+    static constexpr int32_t CHART_MENU_ROW_INSET = 14;
+    static constexpr int32_t CHART_MENU_GAP = 14;
+    static constexpr uint8_t CHART_MENU_DIM = 160;
+    static const olc::Pixel CHART_MENU_BACKGROUND = olc::Pixel(10, 10, 14, 235);
+    static const olc::Pixel CHART_MENU_DANGER = olc::Pixel(235, 80, 80);
 
     template <typename F>
     static void parallel_for(size_t count, F work) {
@@ -423,84 +441,15 @@ namespace nascent {
         collect_difficulties();
         update_leaderboards(elapsed_time);
 
-        if (game->window->GetKey(InputManager::calibration_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneCalibration>(skin, this));
+        if (chart_menu) {
+            update_chart_menu();
+        }
+        else if (!update_controls()) {
             return;
-        }
-
-        if (game->window->GetKey(InputManager::account_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneAccount>(skin, this, sky));
-            return;
-        }
-
-        if (game->window->GetKey(InputManager::browse_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneBrowser>(skin, this));
-            return;
-        }
-
-        if (game->window->GetKey(InputManager::options_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneOptions>(skin));
-            return;
-        }
-
-        if (game->window->GetKey(InputManager::input_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneInput>(skin, this, selected_chart != nullptr ? selected_chart->info.key_count : (uint8_t)4));
-            return;
-        }
-
-        update_search();
-
-        if (game->window->GetKey(InputManager::leaderboard_key).bPressed) {
-            show_leaderboards = !show_leaderboards;
-            status_bar.set_leaderboards_shown(show_leaderboards);
-            leaderboard_delay = 0;
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
-        }
-
-        if (game->window->GetKey(InputManager::keybind_mod1).bHeld) {
-            if (game->window->GetKey(InputManager::menu_left_key).bPressed) {
-                set_pitch(pitch - PITCH_INTERVAL);
-            }
-            if (game->window->GetKey(InputManager::menu_right_key).bPressed) {
-                set_pitch(pitch + PITCH_INTERVAL);
-            }
-        }
-
-        if (charts.empty() && (!library_loading || recommended_started) && game->window->GetKey(InputManager::menu_start_key).bPressed) {
-            download_recommended();
         }
 
         if (visible.empty()) {
             return;
-        }
-
-        if (game->window->GetKey(InputManager::random_chart_key).bPressed) {
-            select_chart(rand() % visible.size());
-        }
-
-        if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
-            select_chart(positive_modulo((selected_chart_index + 1), visible.size()));
-        }
-
-        if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
-            select_chart(positive_modulo((selected_chart_index - 1), visible.size()));
-        }
-
-        int mwheel = game->window->GetMouseWheel();
-        if (mwheel != 0) {
-            select_chart(positive_modulo(
-                selected_chart_index + ((mwheel < 0) - (mwheel > 0)),
-                visible.size()
-            ));
-        }
-
-        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
-            game->set_scene(std::make_unique<ScenePlay>(selected_chart, skin, this));
         }
 
         std::optional<BackgroundLoadResult> load_result;
@@ -549,6 +498,96 @@ namespace nascent {
 
         list_scroll_offset *= std::abs(list_scroll_offset) > 1.0 ? (std::pow(0.005, elapsed_time * 2)) : 0;
     };
+
+    bool SceneList::update_controls() {
+        if (game->window->GetKey(InputManager::calibration_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneCalibration>(skin, this));
+            return false;
+        }
+
+        if (game->window->GetKey(InputManager::account_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneAccount>(skin, this, sky));
+            return false;
+        }
+
+        if (game->window->GetKey(InputManager::browse_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneBrowser>(skin, this));
+            return false;
+        }
+
+        if (game->window->GetKey(InputManager::options_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneOptions>(skin));
+            return false;
+        }
+
+        if (game->window->GetKey(InputManager::input_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneInput>(skin, this, selected_chart != nullptr ? selected_chart->info.key_count : (uint8_t)4));
+            return false;
+        }
+
+        update_search();
+
+        if (game->window->GetKey(InputManager::leaderboard_key).bPressed) {
+            show_leaderboards = !show_leaderboards;
+            status_bar.set_leaderboards_shown(show_leaderboards);
+            leaderboard_delay = 0;
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
+        }
+
+        if (game->window->GetKey(InputManager::keybind_mod1).bHeld) {
+            if (game->window->GetKey(InputManager::menu_left_key).bPressed) {
+                set_pitch(pitch - PITCH_INTERVAL);
+            }
+            if (game->window->GetKey(InputManager::menu_right_key).bPressed) {
+                set_pitch(pitch + PITCH_INTERVAL);
+            }
+        }
+
+        if (charts.empty() && (!library_loading || recommended_started) && game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            download_recommended();
+        }
+
+        if (visible.empty()) {
+            return false;
+        }
+
+        if (game->window->GetKey(InputManager::chart_menu_key).bPressed) {
+            chart_menu = ChartMenu();
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            return true;
+        }
+
+        if (game->window->GetKey(InputManager::random_chart_key).bPressed) {
+            select_chart(rand() % visible.size());
+        }
+
+        if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
+            select_chart(positive_modulo((selected_chart_index + 1), visible.size()));
+        }
+
+        if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
+            select_chart(positive_modulo((selected_chart_index - 1), visible.size()));
+        }
+
+        int mwheel = game->window->GetMouseWheel();
+        if (mwheel != 0) {
+            select_chart(positive_modulo(
+                selected_chart_index + ((mwheel < 0) - (mwheel > 0)),
+                visible.size()
+            ));
+        }
+
+        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            game->set_scene(std::make_unique<ScenePlay>(selected_chart, skin, this));
+        }
+
+        return true;
+    }
 
     void SceneList::select_chart(int32_t index, bool sound) {
         selected_chart = charts[visible[index]].get();
@@ -1326,6 +1365,217 @@ namespace nascent {
         draw_list(window);
         draw_search(window);
         status_bar.draw(window, skin);
+
+        if (chart_menu) {
+            draw_chart_menu(window);
+        }
+    }
+
+    size_t SceneList::pack_chart_count() const {
+        if (selected_chart == nullptr) {
+            return 0;
+        }
+
+        std::filesystem::path folder = selected_chart->file_path.parent_path();
+        return (size_t)std::count_if(charts.begin(), charts.end(), [&](const std::unique_ptr<Chart>& chart) {
+            return chart->file_path.parent_path() == folder;
+        });
+    }
+
+    void SceneList::update_chart_menu() {
+        olc::PixelGameEngine* window = game->window;
+
+        if (selected_chart == nullptr || visible.empty() || window->GetKey(InputManager::back_key).bPressed || window->GetKey(InputManager::chart_menu_key).bPressed) {
+            chart_menu.reset();
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            return;
+        }
+
+        ChartMenu& menu = *chart_menu;
+
+        if (window->GetKey(InputManager::menu_down_key).bPressed || window->GetKey(InputManager::menu_up_key).bPressed) {
+            bool down = window->GetKey(InputManager::menu_down_key).bPressed;
+            menu.selected = (menu.selected + (down ? 1 : CHART_ACTIONS.size() - 1)) % CHART_ACTIONS.size();
+            menu.confirming = false;
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            return;
+        }
+
+        if (!window->GetKey(InputManager::menu_start_key).bPressed) {
+            return;
+        }
+
+        ChartAction action = CHART_ACTIONS[menu.selected];
+
+        if (action == ChartAction::OPEN_WEBSITE) {
+            chart_menu.reset();
+            game->play_sound(skin->get_random_menu_pluck());
+            open_chart_website();
+            return;
+        }
+
+        if (!menu.confirming) {
+            menu.confirming = true;
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            return;
+        }
+
+        chart_menu.reset();
+        game->play_sound(skin->get_random_menu_pluck());
+        delete_charts(action == ChartAction::DELETE_PACK);
+    }
+
+    void SceneList::open_chart_website() {
+        if (!open_url(ServerApi::chart_page_url(selected_chart->gameplay_hash(), pitch))) {
+            game->notify("Could not open the browser", true);
+        }
+    }
+
+    void SceneList::delete_charts(bool whole_pack) {
+        std::error_code ec;
+        std::filesystem::path chart_path = selected_chart->file_path;
+        std::filesystem::path folder = std::filesystem::weakly_canonical(chart_path.parent_path(), ec);
+        std::filesystem::path songs = std::filesystem::weakly_canonical(SettingsManager::song_directory(), ec);
+
+        if (ec || folder.empty() || folder.parent_path() != songs) {
+            game->notify("That chart isn't in your songs folder, so it wasn't deleted", true);
+            return;
+        }
+
+        std::vector<bool> removed(charts.size(), false);
+        size_t removed_count = 0;
+
+        for (size_t index = 0; index < charts.size(); index++) {
+            bool in_pack = std::filesystem::weakly_canonical(charts[index]->file_path.parent_path(), ec) == folder;
+            removed[index] = whole_pack ? in_pack : charts[index].get() == selected_chart;
+            removed_count += removed[index] ? 1 : 0;
+        }
+
+        std::string name = whole_pack ? path_utf8(folder.filename()) : std::format("{} [{}]", selected_chart->info.title, selected_chart->info.difficulty_name);
+
+        if (whole_pack) {
+            std::filesystem::remove_all(folder, ec);
+        }
+        else {
+            std::filesystem::remove(chart_path, ec);
+        }
+
+        if (ec) {
+            game->notify(std::format("Could not delete {}: {}", name, ec.message()), true);
+            return;
+        }
+
+        if (!whole_pack) {
+            bool charts_left = false;
+
+            for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
+                std::string extension = entry.path().extension().string();
+                charts_left = charts_left || std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), extension) != CHART_FILE_EXTENSIONS.end();
+            }
+
+            if (!ec && !charts_left) {
+                std::filesystem::remove_all(folder, ec);
+            }
+        }
+
+        Chart* next = nullptr;
+
+        for (size_t step = 1; step <= visible.size() && next == nullptr; step++) {
+            size_t candidate = visible[(selected_chart_index + step) % visible.size()];
+
+            if (!removed[candidate]) {
+                next = charts[candidate].get();
+            }
+        }
+
+        ChartLibrary library;
+        library.pitch = pitch;
+
+        for (size_t index = 0; index < charts.size(); index++) {
+            if (removed[index]) {
+                continue;
+            }
+
+            library.charts.push_back(std::move(charts[index]));
+            library.hashes.push_back(chart_hashes[index]);
+            library.difficulties.push_back(index < chart_difficulties.size() ? chart_difficulties[index] : std::nullopt);
+            library.search_texts.push_back(search_texts[index]);
+            library.details.push_back(chart_details[index]);
+            library.lengths_ms.push_back(chart_lengths_ms[index]);
+        }
+
+        selected_chart = next;
+        apply_library(std::move(library));
+
+        if (library_loading) {
+            library_reload_pending = true;
+        }
+
+        game->notify(whole_pack ? std::format("Deleted {} ({} charts)", name, removed_count) : std::format("Deleted {}", name));
+    }
+
+    void SceneList::draw_chart_menu(olc::PixelGameEngine* window) {
+        olc::vi2d screen = window->GetScreenSize();
+        olc::Font& title_font = skin->display_font_medium;
+        olc::Font& row_font = skin->display_font_small;
+        olc::FontRect title_metrics = text_bounds(title_font, "Hgjy");
+        olc::FontRect row_metrics = text_bounds(row_font, "Hgjy");
+
+        std::string title = std::format("{} - {}", selected_chart->info.artist, selected_chart->info.title);
+        std::string subtitle = std::format("[{}]  in  {}", selected_chart->info.difficulty_name, path_utf8(selected_chart->file_path.parent_path().filename()));
+        size_t pack_count = pack_chart_count();
+        std::string pack_charts = pack_count == 1 ? std::string("1 chart") : std::format("{} charts", pack_count);
+        const ChartMenu& menu = *chart_menu;
+
+        auto label = [&](ChartAction action, bool confirming) -> std::string {
+            switch (action) {
+                case ChartAction::OPEN_WEBSITE:
+                    return "Open on website";
+                case ChartAction::DELETE_CHART:
+                    return confirming ? "Press Enter again to delete this chart" : "Delete chart";
+                default:
+                    return confirming ? std::format("Press Enter again to delete the pack and its {}", pack_charts) : std::format("Delete pack ({})", pack_charts);
+            }
+        };
+
+        int32_t content_width = std::max(text_bounds(title_font, title).size.x, text_bounds(row_font, subtitle).size.x);
+
+        for (size_t index = 0; index < CHART_ACTIONS.size(); index++) {
+            content_width = std::max(content_width, text_bounds(row_font, label(CHART_ACTIONS[index], true)).size.x + CHART_MENU_ROW_INSET * 2);
+        }
+
+        int32_t width = std::clamp(content_width + CHART_MENU_PADDING * 2, CHART_MENU_MIN_WIDTH, screen.x - CHART_MENU_SCREEN_MARGIN * 2);
+        int32_t height = CHART_MENU_PADDING * 2 + title_metrics.size.y + CHART_MENU_GAP + row_metrics.size.y + CHART_MENU_GAP * 2 + (int32_t)CHART_ACTIONS.size() * CHART_MENU_ROW_HEIGHT;
+        int32_t left = (screen.x - width) / 2;
+        int32_t top = (screen.y - height) / 2;
+        int32_t x = left + CHART_MENU_PADDING;
+        int32_t y = top + CHART_MENU_PADDING;
+
+        window->FillRectDecal({0.0f, 0.0f}, {(float)screen.x, (float)screen.y}, olc::Pixel(0, 0, 0, CHART_MENU_DIM));
+        window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)height}, CHART_MENU_BACKGROUND);
+
+        draw_text(title_font, title, {x, y - title_metrics.offset.y}, olc::WHITE);
+        y += title_metrics.size.y + CHART_MENU_GAP;
+        draw_text(row_font, subtitle, {x, y - row_metrics.offset.y}, olc::GREY);
+        y += row_metrics.size.y + CHART_MENU_GAP * 2;
+
+        for (size_t index = 0; index < CHART_ACTIONS.size(); index++) {
+            ChartAction action = CHART_ACTIONS[index];
+            bool selected = index == menu.selected;
+            bool confirming = selected && menu.confirming;
+            bool danger = action != ChartAction::OPEN_WEBSITE;
+
+            if (selected) {
+                window->FillRectDecal({(float)x, (float)y}, {(float)(width - CHART_MENU_PADDING * 2), (float)CHART_MENU_ROW_HEIGHT}, LEADERBOARD_HIGHLIGHT);
+            }
+
+            olc::Pixel color = confirming ? CHART_MENU_DANGER : selected ? olc::WHITE
+                : danger                                                 ? olc::Pixel(200, 140, 140)
+                                                                         : olc::GREY;
+            int32_t baseline = y + (CHART_MENU_ROW_HEIGHT - row_metrics.size.y) / 2 - row_metrics.offset.y;
+            draw_text(row_font, label(action, confirming), {x + CHART_MENU_ROW_INSET, baseline}, color);
+            y += CHART_MENU_ROW_HEIGHT;
+        }
     }
 
     void SceneList::draw_list(olc::PixelGameEngine* window) {

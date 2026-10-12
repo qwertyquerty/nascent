@@ -9,5 +9,6 @@ namespace nascent {
     std::filesystem::path user_config_directory(const std::string& app_name);
     void precise_sleep(double seconds);
     bool copy_to_clipboard(const std::string& text);
+    bool open_url(const std::string& url);
     std::string platform_description();
 }

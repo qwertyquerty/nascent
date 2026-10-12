@@ -76,6 +76,11 @@ namespace nascent {
             std::unique_ptr<olc::Sprite> sprite;
         };
 
+        struct ChartMenu {
+            size_t selected = 0;
+            bool confirming = false;
+        };
+
         std::vector<std::unique_ptr<Chart>> charts;
         std::vector<std::string> chart_hashes;
         std::vector<std::string> search_texts;
@@ -145,6 +150,8 @@ namespace nascent {
 
         float widest_grade = -1.0f;
 
+        std::optional<ChartMenu> chart_menu;
+
         bool show_leaderboards = false;
         bool recommended_started = false;
         float leaderboard_delay = 0;
@@ -180,6 +187,12 @@ namespace nascent {
         void draw_leaderboards(olc::PixelGameEngine* window);
         void download_recommended();
         void draw_recommended(olc::PixelGameEngine* window);
+        bool update_controls();
+        void update_chart_menu();
+        void draw_chart_menu(olc::PixelGameEngine* window);
+        size_t pack_chart_count() const;
+        void open_chart_website();
+        void delete_charts(bool whole_pack);
 
         public:
         SceneList(Skin* skin, EntityStarfield* sky);

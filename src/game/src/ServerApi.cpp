@@ -203,6 +203,30 @@ namespace nascent {
         }
     }
 
+    std::string ServerApi::website_url(const std::string& route) {
+        std::string base = SettingsManager::settings.server_url;
+
+        while (base.ends_with('/')) {
+            base.pop_back();
+        }
+
+        return std::format("{}/#{}", base, route);
+    }
+
+    std::string ServerApi::chart_page_url(const std::string& chart_hash, float rate) {
+        std::string route = "/charts/" + ServerClient::url_encode(chart_hash);
+
+        if (std::abs(rate - 1.0f) > 0.001f) {
+            route += std::format("?rate={:g}", rate);
+        }
+
+        return website_url(route);
+    }
+
+    std::string ServerApi::profile_page_url(const std::string& user) {
+        return website_url(user_path(user));
+    }
+
     std::future<ApiResult<ServerHealth>> ServerApi::health() {
         std::string server_url = SettingsManager::settings.server_url;
 

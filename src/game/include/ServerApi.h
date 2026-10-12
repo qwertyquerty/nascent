@@ -230,6 +230,10 @@ namespace nascent {
 
     class ServerApi {
         public:
+        static std::string website_url(const std::string& route);
+        static std::string chart_page_url(const std::string& chart_hash, float rate = 1.0f);
+        static std::string profile_page_url(const std::string& user);
+
         static std::future<ApiResult<ServerHealth>> health();
         static std::future<ApiResult<ServerInfo>> info();
 

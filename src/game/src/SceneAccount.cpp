@@ -4,6 +4,9 @@
 #include "EntityStarfield.h"
 #include "Game.h"
 #include "InputManager.h"
+#include "RowField.h"
+#include "Platform.h"
+#include "ServerApi.h"
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "TextField.h"
@@ -57,8 +60,13 @@ namespace nascent {
         this->mode = mode;
         form.clear(game->window);
         login_field = email_field = password_field = nullptr;
+        continue_button = profile_button = sign_out_button = nullptr;
 
         if (mode == Mode::SIGNED_IN) {
+            continue_button = &form.add<ButtonField>("Continue");
+            profile_button = &form.add<ButtonField>("Open profile on website");
+            sign_out_button = &form.add<ButtonField>("Sign out");
+            form.focus_field(game->window, 0);
             return;
         }
 
@@ -109,6 +117,21 @@ namespace nascent {
         game->set_scene(next_scene);
     }
 
+    void SceneAccount::sign_out() {
+        play_menu_sound();
+        Account::sign_out();
+        status = "Signed out";
+        status_is_error = false;
+        set_mode(Mode::SIGN_IN);
+    }
+
+    void SceneAccount::open_profile() {
+        play_menu_sound();
+        bool opened = open_url(ServerApi::profile_page_url(Account::username()));
+        status = opened ? "Opened your profile in the browser" : "Could not open the browser";
+        status_is_error = !opened;
+    }
+
     void SceneAccount::update(float elapsed_time) {
         olc::PixelGameEngine* window = game->window;
 
@@ -128,15 +151,19 @@ namespace nascent {
         }
 
         if (mode == Mode::SIGNED_IN) {
-            if (window->GetKey(InputManager::menu_start_key).bPressed) {
+            UiForm::Action action = form.update(window, game->get_frame_text(), elapsed_time);
+
+            if (continue_button->take_pressed()) {
                 leave();
             }
-            else if (InputManager::switch_pressed(window)) {
-                play_menu_sound();
-                Account::sign_out();
-                status = "Signed out";
-                status_is_error = false;
-                set_mode(Mode::SIGN_IN);
+            else if (profile_button->take_pressed()) {
+                open_profile();
+            }
+            else if (sign_out_button->take_pressed() || InputManager::switch_pressed(window)) {
+                sign_out();
+            }
+            else if (action == UiForm::Action::MOVED) {
+                game->play_sound(skin->sound(SkinSound::HITSOUND));
             }
 
             return;
@@ -193,7 +220,7 @@ namespace nascent {
         std::string footer;
 
         if (mode == Mode::SIGNED_IN) {
-            footer = "Enter:  continue        Ctrl+Tab:  sign out        Esc:  back";
+            footer = "↑/↓:  choose        Enter:  select        Ctrl+Tab:  sign out        Esc:  back";
         }
         else {
             footer = std::format(

@@ -88,6 +88,21 @@ namespace nascent {
         bool is_capturing() const;
     };
 
+    class ButtonField : public RowField {
+        protected:
+        bool pressed = false;
+        bool consumed = false;
+
+        std::string display_value(bool focused) const override;
+
+        public:
+        ButtonField(std::string label);
+
+        bool update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
+        bool consumes_navigation() const override;
+        bool take_pressed();
+    };
+
     class SectionField : public UiField {
         public:
         static constexpr int32_t TOP_GAP = 24;

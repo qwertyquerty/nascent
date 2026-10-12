@@ -21,6 +21,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #include <shlobj.h>
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -28,6 +29,13 @@
 #endif
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
+#endif
+
+#if !defined(_WIN32)
+#include <spawn.h>
+#include <sys/wait.h>
+
+extern char** environ;
 #endif
 
 namespace nascent {
@@ -202,6 +210,37 @@ namespace nascent {
 
         std::signal(SIGPIPE, previous_handler);
         return copied;
+#endif
+    }
+
+    bool open_url(const std::string& url) {
+        if (!url.starts_with("https://") && !url.starts_with("http://")) {
+            return false;
+        }
+
+#if defined(_WIN32)
+        int length = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), (int)url.size(), nullptr, 0);
+        std::wstring wide(length, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, url.c_str(), (int)url.size(), wide.data(), length);
+        return (INT_PTR)ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL) > 32;
+#else
+#if defined(__APPLE__)
+        std::string program = "open";
+#else
+        std::string program = "xdg-open";
+#endif
+        std::string argument = url;
+        char* arguments[] = {program.data(), argument.data(), nullptr};
+        pid_t pid = 0;
+
+        if (posix_spawnp(&pid, program.c_str(), nullptr, nullptr, arguments, environ) != 0) {
+            return false;
+        }
+
+        std::thread([pid] {
+            waitpid(pid, nullptr, 0);
+        }).detach();
+        return true;
 #endif
     }
 

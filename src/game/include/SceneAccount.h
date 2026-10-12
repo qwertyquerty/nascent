@@ -14,6 +14,7 @@
 namespace nascent {
     class EntityStarfield;
     class Skin;
+    class ButtonField;
     class TextField;
 
     class SceneAccount : public Scene {
@@ -34,6 +35,9 @@ namespace nascent {
         TextField* login_field = nullptr;
         TextField* email_field = nullptr;
         TextField* password_field = nullptr;
+        ButtonField* continue_button = nullptr;
+        ButtonField* profile_button = nullptr;
+        ButtonField* sign_out_button = nullptr;
 
         std::unique_ptr<EntityFFT> fft;
         std::vector<float> audio_buffer;
@@ -46,6 +50,8 @@ namespace nascent {
         void submit();
         void finish(const ServerResponse& response);
         void leave();
+        void sign_out();
+        void open_profile();
         void play_menu_sound();
 
         public:

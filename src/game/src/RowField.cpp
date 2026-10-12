@@ -203,6 +203,27 @@ namespace nascent {
         return capturing;
     }
 
+    ButtonField::ButtonField(std::string label) : RowField(std::move(label)) {}
+
+    std::string ButtonField::display_value(bool) const {
+        return std::string();
+    }
+
+    bool ButtonField::update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) {
+        RowField::update(window, typed, elapsed_time);
+        consumed = window->GetKey(InputManager::menu_start_key).bPressed;
+        pressed = pressed || consumed;
+        return consumed;
+    }
+
+    bool ButtonField::consumes_navigation() const {
+        return consumed;
+    }
+
+    bool ButtonField::take_pressed() {
+        return std::exchange(pressed, false);
+    }
+
     SectionField::SectionField(std::string title) : title(std::move(title)) {}
 
     int32_t SectionField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool) const {
