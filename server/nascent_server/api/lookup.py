@@ -2,7 +2,7 @@ from sqlalchemy import select
 
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Play, PlayStatus, Role, User
+from ..models import COUNTED_PLAY_STATUSES, Play, Role, User
 from ..security import authenticate
 
 
@@ -26,7 +26,7 @@ def can_see_private(user: User) -> bool:
 def get_visible_play_or_404(play_id: int) -> Play:
     play = db.session.get(Play, play_id)
 
-    if play is None or (play.status != PlayStatus.VERIFIED and not can_see_private(play.user)):
+    if play is None or (play.status not in COUNTED_PLAY_STATUSES and not can_see_private(play.user)):
         raise ApiError(404, "play_not_found", "No such play")
 
     return play

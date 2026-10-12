@@ -69,6 +69,9 @@ class PlayStatus(StrEnum):
     REJECTED = "rejected"
 
 
+COUNTED_PLAY_STATUSES = (PlayStatus.VERIFIED, PlayStatus.PENDING_REVIEW)
+
+
 class User(db.Model):
     __tablename__ = "users"
 

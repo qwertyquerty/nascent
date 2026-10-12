@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
-from ..models import Play, PlayStatus
+from ..models import COUNTED_PLAY_STATUSES, Play
 from ..schemas import pagination, query_float, query_int
 from ..serializers import key_mode_out, play_out, totals_out, user_profile
 from ..services import ranking
@@ -81,7 +81,7 @@ def recent_plays(reference: str):
     query = select(Play).options(joinedload(Play.chart)).where(Play.user_id == user.id)
 
     if not can_see_private(user):
-        query = query.where(Play.status == PlayStatus.VERIFIED)
+        query = query.where(Play.status.in_(COUNTED_PLAY_STATUSES))
 
     if before is not None:
         query = query.where(Play.id < before)
@@ -100,7 +100,7 @@ def chart_plays(reference: str, chart_hash: str):
     query = select(Play).where(Play.user_id == user.id, Play.chart_id == chart.id)
 
     if not can_see_private(user):
-        query = query.where(Play.status == PlayStatus.VERIFIED)
+        query = query.where(Play.status.in_(COUNTED_PLAY_STATUSES))
 
     rate = query_float("rate")
 

@@ -10,7 +10,7 @@ from sqlalchemy import case, func, select, update
 from ..cache import store
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Play, PlayStatus, User, UserKeyStats
+from ..models import COUNTED_PLAY_STATUSES, Play, User, UserKeyStats
 
 BOARD_PREFIX = "performance"
 
@@ -66,7 +66,7 @@ def board_name(key_count: int) -> str:
 
 
 def visible_play_filter():
-    return (Play.status == PlayStatus.VERIFIED, Play.eligible.is_(True))
+    return (Play.status.in_(COUNTED_PLAY_STATUSES), Play.eligible.is_(True))
 
 
 def refresh_chart_best(user_id: int, chart_id: int, rate_key: int) -> None:
@@ -97,14 +97,16 @@ def _top_plays(user_id: int, limit: int) -> dict[int, list]:
     ranked = select(Play.key_count, Play.performance, Play.accuracy, position).where(*best).subquery()
     per_key: dict[int, list] = defaultdict(list)
 
-    for row in db.session.execute(select(ranked.c.key_count, ranked.c.performance, ranked.c.accuracy).where(ranked.c.position <= limit).order_by(ranked.c.key_count, ranked.c.position)):
+    for row in db.session.execute(
+        select(ranked.c.key_count, ranked.c.performance, ranked.c.accuracy).where(ranked.c.position <= limit).order_by(ranked.c.key_count, ranked.c.position)
+    ):
         per_key[row.key_count].append(row)
 
     return per_key
 
 
 def _totals(user_id: int) -> dict[int, Totals]:
-    verified = Play.status == PlayStatus.VERIFIED
+    verified = Play.status.in_(COUNTED_PLAY_STATUSES)
     ranked = Play.ranked.is_(True)
     rows = db.session.execute(
         select(
@@ -253,5 +255,7 @@ def leaderboard_page(offset: int, limit: int, key_count: int) -> tuple[list[tupl
 
     query = leaderboard_users_query(key_count).subquery()
     total = db.session.scalar(select(func.count()).select_from(query)) or 0
-    rows = db.session.execute(select(query.c.user_id, query.c.performance).order_by(query.c.performance.desc(), query.c.user_id.asc()).offset(offset).limit(limit)).all()
+    rows = db.session.execute(
+        select(query.c.user_id, query.c.performance).order_by(query.c.performance.desc(), query.c.user_id.asc()).offset(offset).limit(limit)
+    ).all()
     return [(offset + index + 1, row.user_id, row.performance) for index, row in enumerate(rows)], int(total)

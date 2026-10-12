@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import tasks, timeutil
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Chart, ChartStatus, Play, PlayStatus, PlayTicket, User
+from ..models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, PlayStatus, PlayTicket, User
 from ..ratelimit import check_rate_limit
 from ..security import TICKET_PREFIX, hash_token, new_token, require_not_banned
 from ..storage import put_json_gz, sharded_key
@@ -84,7 +84,9 @@ def issue_ticket(user: User, chart_hash: str, rate: float) -> IssuedTicket:
     )
 
     token = new_token(TICKET_PREFIX)
-    ticket = PlayTicket(token_hash=hash_token(token), user_id=user.id, chart_hash=chart_hash.lower(), rate_key=rate_key, issued_at=now, expires_at=now + lifetime)
+    ticket = PlayTicket(
+        token_hash=hash_token(token), user_id=user.id, chart_hash=chart_hash.lower(), rate_key=rate_key, issued_at=now, expires_at=now + lifetime
+    )
     db.session.add(ticket)
     db.session.commit()
     return IssuedTicket(token, ticket, chart)
@@ -278,7 +280,9 @@ def submit_play(
     put_json_gz(replay_key, replay.to_json())
 
     key_count = native.key_count
-    key_mode = Standing(key_count, ranking.standing(user, key_count)[0], ranking.global_rank(user, key_count)) if key_count in ranking.ranked_key_counts() else None
+    key_mode = (
+        Standing(key_count, ranking.standing(user, key_count)[0], ranking.global_rank(user, key_count)) if key_count in ranking.ranked_key_counts() else None
+    )
 
     db.session.execute(select(User).where(User.id == user.id).with_for_update()).scalar_one()
 
@@ -289,7 +293,7 @@ def submit_play(
         key_count=native.key_count,
         status=status,
         eligible=eligible,
-        ranked=eligible and status == PlayStatus.VERIFIED and chart.status == ChartStatus.RANKED,
+        ranked=eligible and status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED,
         **judgement_fields(simulation),
         duration_ms=native.duration_ms_at(replay.rate),
         difficulty=difficulty,

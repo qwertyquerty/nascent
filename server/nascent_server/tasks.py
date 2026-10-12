@@ -7,7 +7,7 @@ from flask import Flask, current_app, has_app_context
 from sqlalchemy import and_, false, select, update
 
 from .extensions import db
-from .models import Chart, ChartStatus, Play, PlayStatus, User
+from .models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, User
 from .storage import get_json_gz
 
 _worker_app: Flask | None = None
@@ -107,7 +107,7 @@ def apply_chart_status(chart_id: int) -> None:
     if chart is None:
         return
 
-    ranked = and_(Play.eligible, Play.status == PlayStatus.VERIFIED) if chart.status == ChartStatus.RANKED else false()
+    ranked = and_(Play.eligible, Play.status.in_(COUNTED_PLAY_STATUSES)) if chart.status == ChartStatus.RANKED else false()
     db.session.execute(update(Play).where(Play.chart_id == chart.id).values(ranked=ranked))
     db.session.commit()
 
@@ -160,6 +160,7 @@ def recalculate_chart(chart_id: int, resimulate: bool) -> None:
 
         play.difficulty = chart_difficulty(chart, play.rate_key)
         play.performance = performance(play.difficulty, play.accuracy)
+        play.ranked = play.eligible and play.status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED
         play.calculator_version = version
 
     db.session.flush()

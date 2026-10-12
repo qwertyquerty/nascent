@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
-from ..models import Chart, ChartStatus, Play, PlayStatus, User, UserKeyStats
+from ..models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, User, UserKeyStats
 from ..serializers import play_out
 from ..services import ranking
 
@@ -15,7 +15,7 @@ TOP_PLAYS = 10
 @blueprint.get("")
 def stats():
     visible_user = User.is_banned.is_(False)
-    visible_plays = select(func.count()).select_from(Play).join(User, User.id == Play.user_id).where(visible_user, Play.status == PlayStatus.VERIFIED)
+    visible_plays = select(func.count()).select_from(Play).join(User, User.id == Play.user_id).where(visible_user, Play.status.in_(COUNTED_PLAY_STATUSES))
 
     top_plays = db.session.scalars(
         select(Play)
