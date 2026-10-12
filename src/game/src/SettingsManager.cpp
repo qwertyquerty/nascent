@@ -31,7 +31,8 @@ namespace nascent {
         discord_application_id,
         server_url,
         beatmap_download_urls,
-        lane_keymaps
+        lane_keymaps,
+        key_bindings
     )
 
     Settings SettingsManager::settings = Settings();

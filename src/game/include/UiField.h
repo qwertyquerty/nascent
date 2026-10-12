@@ -21,5 +21,11 @@ namespace nascent {
         virtual bool is_filled() const {
             return true;
         }
+        virtual bool consumes_navigation() const {
+            return false;
+        }
+        virtual bool focusable() const {
+            return true;
+        }
     };
 }

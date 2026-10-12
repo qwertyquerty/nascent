@@ -42,6 +42,8 @@ namespace nascent {
             {"4", {"Z", "X", "PERIOD", "OEM_2"}},
             {"7", {"Z", "X", "C", "SPACE", "COMMA", "PERIOD", "OEM_2"}}
         };
+
+        std::map<std::string, std::string> key_bindings;
     };
 
     class SettingsManager {

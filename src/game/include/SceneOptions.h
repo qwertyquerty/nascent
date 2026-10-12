@@ -11,6 +11,7 @@
 namespace nascent {
     class ChoiceField;
     class SliderField;
+    class KeyBindField;
     class Skin;
     struct SkinInfo;
 
@@ -26,12 +27,22 @@ namespace nascent {
         SliderField* master_volume_field = nullptr;
         SliderField* music_volume_field = nullptr;
         SliderField* effects_volume_field = nullptr;
+        std::vector<KeyBindField*> key_fields;
+        std::string status;
+
+        float scroll = 0;
+        float scroll_target = 0;
+        int32_t viewport_top = 0;
+        int32_t viewport_bottom = 0;
 
         std::vector<uint16_t> frame_rates;
         std::vector<SkinInfo> skins;
         bool changed = false;
 
         void apply();
+        void update_scroll(float elapsed_time);
+        std::string footer_text() const;
+        void draw_scrollbar(olc::PixelGameEngine* window, int32_t x) const;
 
         public:
         SceneOptions(Skin* skin);

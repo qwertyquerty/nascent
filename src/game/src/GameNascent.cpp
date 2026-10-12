@@ -70,7 +70,7 @@ namespace nascent {
             return;
         }
 
-        if (window->GetKey(InputManager::back_key).bPressed && scene != scene_list.get()) {
+        if (window->GetKey(InputManager::back_key).bPressed && scene != scene_list.get() && dynamic_cast<SceneTitle*>(scene) == nullptr) {
             play_sound(skin->get_random_menu_pluck());
             set_scene(scene_list.get());
         }

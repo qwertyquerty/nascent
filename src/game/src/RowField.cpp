@@ -35,6 +35,14 @@ namespace nascent {
 
     RowField::RowField(std::string label) : label(std::move(label)) {}
 
+    olc::Pixel RowField::value_color(Skin*, bool focused) const {
+        if (is_placeholder()) {
+            return olc::DARK_GREY;
+        }
+
+        return focused ? olc::WHITE : olc::GREY;
+    }
+
     bool RowField::is_placeholder() const {
         return false;
     }
@@ -64,7 +72,7 @@ namespace nascent {
 
         std::string value = display_value(focused);
         int32_t value_x = position.x + WIDTH - PADDING - text_width(font, value);
-        draw_text(font, value, {value_x, baseline}, is_placeholder() ? olc::DARK_GREY : color);
+        draw_text(font, value, {value_x, baseline}, value_color(skin, focused));
 
         if (focused && shows_caret() && std::fmod(blink_timer, 1.0f) < 0.5f) {
             int32_t caret = is_placeholder() ? position.x + WIDTH - PADDING : value_x + text_width(font, value) + 1;
@@ -131,6 +139,85 @@ namespace nascent {
 
         ProgressBar({width, (float)BAR_HEIGHT}).draw(window, {(float)(position.x + BAR_LEFT), (float)(position.y + (HEIGHT - BAR_HEIGHT) / 2)}, fill, color);
         return height;
+    }
+
+    KeyBindField::KeyBindField(KeyBinding binding) : RowField(KEY_BINDINGS[(size_t)binding].label), binding(binding) {}
+
+    std::string KeyBindField::display_value(bool) const {
+        return InputManager::key_label(InputManager::get_key(binding));
+    }
+
+    olc::Pixel KeyBindField::value_color(Skin* skin, bool focused) const {
+        if (!capturing) {
+            return RowField::value_color(skin, focused);
+        }
+
+        olc::Pixel color = skin->title_gradient_at(0.5, 0.5);
+        color.a = (uint8_t)std::lround(150.0 + 105.0 * (0.5 + 0.5 * std::cos(blink_timer * CAPTURE_PULSE_SPEED)));
+        return color;
+    }
+
+    void KeyBindField::on_blur(olc::PixelGameEngine*) {
+        capturing = false;
+    }
+
+    bool KeyBindField::update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) {
+        RowField::update(window, typed, elapsed_time);
+        consumed = false;
+
+        if (!capturing) {
+            if (window->GetKey(InputManager::menu_start_key).bPressed) {
+                capturing = true;
+                consumed = true;
+                blink_timer = 0;
+                return false;
+            }
+
+            if (window->GetKey(olc::Key::DEL).bPressed && InputManager::get_key(binding) != KEY_BINDINGS[(size_t)binding].default_key) {
+                swapped = InputManager::reset_key(binding);
+                return true;
+            }
+
+            return false;
+        }
+
+        for (size_t index = 1; index < (size_t)olc::Key::ENUM_END; index++) {
+            olc::Key key = (olc::Key)index;
+
+            if (window->GetKey(key).bPressed && InputManager::can_bind(key)) {
+                swapped = InputManager::set_key(binding, key);
+                capturing = false;
+                consumed = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool KeyBindField::consumes_navigation() const {
+        return capturing || consumed;
+    }
+
+    bool KeyBindField::is_capturing() const {
+        return capturing;
+    }
+
+    SectionField::SectionField(std::string title) : title(std::move(title)) {}
+
+    int32_t SectionField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool) const {
+        olc::Font& font = skin->display_font_small;
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
+        int32_t text_top = position.y + TOP_GAP;
+        draw_text(font, title, {position.x, text_top - metrics.offset.y}, olc::WHITE);
+
+        int32_t line_top = text_top + metrics.size.y + LINE_GAP;
+        window->FillRectDecal({(float)position.x, (float)line_top}, {(float)RowField::WIDTH, (float)LINE_HEIGHT}, olc::Pixel(255, 255, 255, LINE_ALPHA));
+        return line_top + LINE_HEIGHT - position.y;
+    }
+
+    bool SectionField::focusable() const {
+        return false;
     }
 
     NumberField::NumberField(std::string label, std::string unit, double step, double maximum) : RowField(std::move(label)), unit(std::move(unit)), step(step), maximum(maximum) {}

@@ -15,13 +15,49 @@ namespace nascent {
         enabled = true;
     }
 
+    std::optional<size_t> UiForm::step_focus(size_t from, bool forward, bool wrap) const {
+        for (size_t step = 1; step <= fields.size(); step++) {
+            if (!wrap && (forward ? from + step >= fields.size() : step > from)) {
+                return std::nullopt;
+            }
+
+            size_t index = forward ? (from + step) % fields.size() : (from + fields.size() - step) % fields.size();
+
+            if (index == from) {
+                return std::nullopt;
+            }
+
+            if (fields[index]->focusable()) {
+                return index;
+            }
+        }
+
+        return std::nullopt;
+    }
+
     void UiForm::focus_field(olc::PixelGameEngine* window, size_t index) {
         if (fields.empty()) {
             return;
         }
 
+        index = std::min(index, fields.size() - 1);
+
+        if (!fields[index]->focusable()) {
+            std::optional<size_t> nearest = step_focus(index, true, false);
+
+            if (!nearest) {
+                nearest = step_focus(index, false, false);
+            }
+
+            if (!nearest) {
+                return;
+            }
+
+            index = *nearest;
+        }
+
         fields[focus]->on_blur(window);
-        focus = std::min(index, fields.size() - 1);
+        focus = index;
 
         if (enabled) {
             fields[focus]->on_focus(window);
@@ -68,29 +104,40 @@ namespace nascent {
 
         bool changed = fields[focus]->update(window, typed, elapsed_time);
 
-        if (window->GetKey(InputManager::field_key).bPressed && !window->GetKey(InputManager::switch_modifier).bHeld && fields.size() > 1) {
+        if (fields[focus]->consumes_navigation()) {
+            return changed ? Action::CHANGED : Action::NONE;
+        }
+
+        if (window->GetKey(InputManager::field_key).bPressed && !window->GetKey(InputManager::switch_modifier).bHeld) {
             bool backwards = window->GetKey(InputManager::keybind_mod1).bHeld;
-            focus_field(window, backwards ? (focus + fields.size() - 1) % fields.size() : (focus + 1) % fields.size());
-            return Action::MOVED;
+
+            if (std::optional<size_t> next = step_focus(focus, !backwards, true)) {
+                focus_field(window, *next);
+                return Action::MOVED;
+            }
         }
 
         if (window->GetKey(InputManager::menu_start_key).bPressed) {
-            if (focus + 1 < fields.size()) {
-                focus_field(window, focus + 1);
+            if (std::optional<size_t> next = step_focus(focus, true, false)) {
+                focus_field(window, *next);
                 return Action::MOVED;
             }
 
             return Action::SUBMIT;
         }
 
-        if (window->GetKey(InputManager::menu_down_key).bPressed && focus + 1 < fields.size()) {
-            focus_field(window, focus + 1);
-            return Action::MOVED;
+        if (window->GetKey(InputManager::menu_down_key).bPressed) {
+            if (std::optional<size_t> next = step_focus(focus, true, false)) {
+                focus_field(window, *next);
+                return Action::MOVED;
+            }
         }
 
-        if (window->GetKey(InputManager::menu_up_key).bPressed && focus > 0) {
-            focus_field(window, focus - 1);
-            return Action::MOVED;
+        if (window->GetKey(InputManager::menu_up_key).bPressed) {
+            if (std::optional<size_t> previous = step_focus(focus, false, false)) {
+                focus_field(window, *previous);
+                return Action::MOVED;
+            }
         }
 
         return changed ? Action::CHANGED : Action::NONE;
@@ -98,11 +145,32 @@ namespace nascent {
 
     int32_t UiForm::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position) const {
         int32_t y = position.y;
+        field_tops.assign(fields.size(), 0);
+        field_bottoms.assign(fields.size(), 0);
 
         for (size_t i = 0; i < fields.size(); i++) {
-            y += fields[i]->draw(window, skin, {position.x, y}, enabled && i == focus) + spacing;
+            field_tops[i] = y - position.y;
+            y += fields[i]->draw(window, skin, {position.x, y}, enabled && i == focus);
+            field_bottoms[i] = y - position.y;
+            y += spacing;
         }
 
         return y - position.y;
+    }
+
+    const UiField* UiForm::focused_field() const {
+        return fields.empty() ? nullptr : fields[focus].get();
+    }
+
+    int32_t UiForm::focused_top() const {
+        return focus < field_tops.size() ? field_tops[focus] : 0;
+    }
+
+    int32_t UiForm::focused_bottom() const {
+        return focus < field_bottoms.size() ? field_bottoms[focus] : 0;
+    }
+
+    int32_t UiForm::height() const {
+        return field_bottoms.empty() ? 0 : field_bottoms.back();
     }
 }

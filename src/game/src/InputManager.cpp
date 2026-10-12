@@ -200,6 +200,62 @@ namespace nascent {
         return keys;
     }
 
+    static const KeyBindingInfo& binding_info(KeyBinding binding) {
+        return KEY_BINDINGS[(size_t)binding];
+    }
+
+    olc::Key InputManager::get_key(KeyBinding binding) {
+        const KeyBindingInfo& info = binding_info(binding);
+        auto bound = SettingsManager::settings.key_bindings.find(info.id);
+
+        if (bound == SettingsManager::settings.key_bindings.end()) {
+            return info.default_key;
+        }
+
+        return key_from_name(bound->second).value_or(info.default_key);
+    }
+
+    bool InputManager::can_bind(olc::Key key) {
+        return key != olc::Key::NONE && key != back_key && key != exit_key;
+    }
+
+    std::optional<KeyBinding> InputManager::set_key(KeyBinding binding, olc::Key key) {
+        if (!can_bind(key)) {
+            return std::nullopt;
+        }
+
+        olc::Key previous = get_key(binding);
+        std::optional<KeyBinding> swapped;
+        std::map<std::string, std::string>& bindings = SettingsManager::settings.key_bindings;
+
+        auto store = [&bindings](KeyBinding target, olc::Key value) {
+            const KeyBindingInfo& info = binding_info(target);
+
+            if (value == info.default_key) {
+                bindings.erase(info.id);
+            }
+            else {
+                bindings[info.id] = std::string(key_name(value));
+            }
+        };
+
+        for (size_t index = 0; index < KEY_BINDINGS.size(); index++) {
+            KeyBinding other = (KeyBinding)index;
+
+            if (other != binding && get_key(other) == key) {
+                store(other, previous);
+                swapped = other;
+            }
+        }
+
+        store(binding, key);
+        return swapped;
+    }
+
+    std::optional<KeyBinding> InputManager::reset_key(KeyBinding binding) {
+        return set_key(binding, binding_info(binding).default_key);
+    }
+
     std::optional<uint8_t> InputManager::get_lane(const std::vector<olc::Key>& lane_keys, olc::Key key) {
         for (size_t lane = 0; lane < lane_keys.size(); lane++) {
             if (lane_keys[lane] == key) {

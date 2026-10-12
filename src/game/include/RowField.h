@@ -1,5 +1,6 @@
 #pragma once
 
+#include "InputManager.h"
 #include "UiField.h"
 
 #include <cstddef>
@@ -13,6 +14,7 @@ namespace nascent {
         float blink_timer = 0;
 
         virtual std::string display_value(bool focused) const = 0;
+        virtual olc::Pixel value_color(Skin* skin, bool focused) const;
         virtual bool is_placeholder() const;
         virtual bool shows_caret() const;
 
@@ -62,6 +64,43 @@ namespace nascent {
 
         bool update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
         int32_t draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const override;
+    };
+
+    class KeyBindField : public RowField {
+        protected:
+        bool capturing = false;
+        bool consumed = false;
+
+        std::string display_value(bool focused) const override;
+        olc::Pixel value_color(Skin* skin, bool focused) const override;
+
+        public:
+        static constexpr float CAPTURE_PULSE_SPEED = 6.0f;
+
+        KeyBinding binding;
+        std::optional<KeyBinding> swapped;
+
+        KeyBindField(KeyBinding binding);
+
+        void on_blur(olc::PixelGameEngine* window) override;
+        bool update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
+        bool consumes_navigation() const override;
+        bool is_capturing() const;
+    };
+
+    class SectionField : public UiField {
+        public:
+        static constexpr int32_t TOP_GAP = 24;
+        static constexpr int32_t LINE_GAP = 10;
+        static constexpr int32_t LINE_HEIGHT = 2;
+        static constexpr uint8_t LINE_ALPHA = 50;
+
+        std::string title;
+
+        SectionField(std::string title);
+
+        int32_t draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const override;
+        bool focusable() const override;
     };
 
     class NumberField : public RowField {

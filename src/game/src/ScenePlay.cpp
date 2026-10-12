@@ -378,17 +378,17 @@ namespace nascent {
 
     void ScenePlay::update(float elapsed_time) {
         double now = now_ms();
-        bool pause_pressed = game->window->GetKey(InputManager::pause_key).bPressed;
+        bool pause_pressed = game->window->GetKey(InputManager::get_key(KeyBinding::PAUSE)).bPressed;
 
-        if (game->window->GetKey(InputManager::hit_log_key).bPressed) {
+        if (game->window->GetKey(InputManager::get_key(KeyBinding::DIAGNOSTICS)).bPressed) {
             show_hit_log = !show_hit_log;
         }
 
-        if (game->window->GetKey(InputManager::diagnostics_copy_key).bPressed) {
+        if (game->window->GetKey(InputManager::get_key(KeyBinding::COPY_DIAGNOSTICS)).bPressed) {
             copy_diagnostics();
         }
 
-        if (!finished && game->window->GetKey(InputManager::restart_key).bHeld) {
+        if (!finished && game->window->GetKey(InputManager::get_key(KeyBinding::RESTART)).bHeld) {
             restart_hold += elapsed_time;
 
             if (restart_hold >= RESTART_HOLD_TIME) {

@@ -2,6 +2,8 @@
 
 #include "olcPixelGameEngine.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -9,10 +11,28 @@
 #include <vector>
 
 namespace nascent {
+    enum class KeyBinding : uint8_t {
+        PAUSE,
+        RESTART,
+        DIAGNOSTICS,
+        COPY_DIAGNOSTICS
+    };
+
+    struct KeyBindingInfo {
+        const char* id;
+        const char* label;
+        olc::Key default_key;
+    };
+
+    inline constexpr std::array<KeyBindingInfo, 4> KEY_BINDINGS = {{
+        {"pause", "Pause", olc::Key::TAB},
+        {"restart", "Quick restart (hold)", olc::Key::OEM_3},
+        {"diagnostics", "Diagnostics overlay", olc::Key::F10},
+        {"copy_diagnostics", "Copy diagnostics", olc::Key::F11},
+    }};
+
     class InputManager {
         public:
-        static const olc::Key pause_key = olc::Key::TAB;
-
         static const olc::Key options_key = olc::Key::F1;
         static const olc::Key random_chart_key = olc::Key::F2;
         static const olc::Key calibration_key = olc::Key::F3;
@@ -22,9 +42,6 @@ namespace nascent {
         static const olc::Key field_key = olc::Key::TAB;
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;
-        static const olc::Key hit_log_key = olc::Key::F10;
-        static const olc::Key diagnostics_copy_key = olc::Key::F11;
-        static const olc::Key restart_key = olc::Key::OEM_3;
         static const olc::Key switch_modifier = olc::Key::CTRL;
         static const olc::Key calibration_reset_key = olc::Key::R;
 
@@ -50,6 +67,10 @@ namespace nascent {
         static bool is_custom_lane_keys(uint8_t key_count);
         static bool set_lane_keys(uint8_t key_count, const std::vector<olc::Key>& keys);
         static bool reset_lane_keys(uint8_t key_count);
+        static olc::Key get_key(KeyBinding binding);
+        static bool can_bind(olc::Key key);
+        static std::optional<KeyBinding> set_key(KeyBinding binding, olc::Key key);
+        static std::optional<KeyBinding> reset_key(KeyBinding binding);
         static std::optional<uint8_t> get_lane(const std::vector<olc::Key>& lane_keys, olc::Key key);
         static uint32_t get_lane_keys_held(olc::PixelGameEngine* window, const std::vector<olc::Key>& lane_keys);
     };
