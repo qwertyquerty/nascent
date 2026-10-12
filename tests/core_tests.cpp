@@ -2,6 +2,7 @@
 #include "Chart.h"
 #include "Const.h"
 #include "DifficultyCalculator.h"
+#include "Mp3Padding.h"
 #include "OsuFormat.h"
 #include "Replay.h"
 #include "Results.h"
@@ -347,6 +348,45 @@ static void test_snap_pitch() {
     CHECK(snap_pitch(9.0f) == PITCH_MAXIMUM);
 }
 
+static std::vector<unsigned char> mp3_with_tag(const char* tag, const char* encoder, uint32_t delay) {
+    std::vector<unsigned char> data = {'I', 'D', '3', 4, 0, 0, 0, 0, 0, 20};
+    data.resize(data.size() + 20, 0);
+    data.insert(data.end(), {0xFF, 0xFB, 0x90, 0x00});
+    data.resize(data.size() + 32, 0);
+
+    if (tag == nullptr) {
+        data.resize(data.size() + 400, 0);
+        return data;
+    }
+
+    data.insert(data.end(), tag, tag + 4);
+    data.insert(data.end(), {0, 0, 0, 0x0F});
+    data.resize(data.size() + 4 + 4 + 100 + 4, 0);
+    size_t encoder_offset = data.size();
+    data.resize(data.size() + 36, 0);
+    std::copy(encoder, encoder + 4, data.begin() + (std::ptrdiff_t)encoder_offset);
+    data[encoder_offset + 21] = (unsigned char)(delay >> 4);
+    data[encoder_offset + 22] = (unsigned char)((delay & 0x0F) << 4);
+    return data;
+}
+
+static void test_mp3_padding() {
+    std::optional<Mp3Padding> lame = parse_mp3_padding(mp3_with_tag("Info", "LAME", 576));
+    CHECK(lame && lame->sample_rate == 44100 && lame->samples == 1152 + 576 + MP3_DECODER_DELAY_SAMPLES);
+
+    std::optional<Mp3Padding> lavf = parse_mp3_padding(mp3_with_tag("Xing", "Lavf", 1105));
+    CHECK(lavf && lavf->samples == 1152 + 1105 + MP3_DECODER_DELAY_SAMPLES);
+
+    std::optional<Mp3Padding> lavc = parse_mp3_padding(mp3_with_tag("Info", "Lavc", 0));
+    CHECK(lavc && lavc->samples == 1152);
+
+    std::optional<Mp3Padding> untagged = parse_mp3_padding(mp3_with_tag(nullptr, nullptr, 0));
+    CHECK(untagged && untagged->samples == 0 && untagged->sample_rate == 44100);
+
+    CHECK(std::abs(lame->milliseconds() - 2257.0 * 1000.0 / 44100.0) < 1e-9);
+    CHECK(!parse_mp3_padding(std::vector<unsigned char>(64, 0)));
+}
+
 int main() {
     std::vector<std::pair<const char*, std::function<void()>>> tests = {
         {"chart_loading", test_chart_loading},
@@ -359,6 +399,7 @@ int main() {
         {"results", test_results},
         {"snap_pitch", test_snap_pitch},
         {"song_clock", test_song_clock},
+        {"mp3_padding", test_mp3_padding},
     };
 
     for (const auto& [name, test] : tests) {

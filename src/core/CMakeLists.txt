@@ -12,6 +12,7 @@ add_library(core
     src/Results.cpp
     src/SettingsStore.cpp
     src/Sha256.cpp
+    src/Mp3Padding.cpp
     src/SongClock.cpp
 )
 

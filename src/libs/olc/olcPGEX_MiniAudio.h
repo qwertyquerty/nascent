@@ -61,6 +61,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -103,6 +104,7 @@ namespace olc
         {
             ma_sound m_sound;
             ma_uint64 m_length_in_pcm_frames = 0;
+            ma_uint64 m_start_frame = 0;
             float m_length_in_seconds = 0;
             std::string m_path;
             bool m_play_once = false;
@@ -168,6 +170,8 @@ namespace olc
         void SetPan(const int id, const float& pan);
         // set pitch of a sound, 1.0f is normal
         void SetPitch(const int id, const float& pitch);
+        void SetStartOffsetMilliseconds(const int id, const double milliseconds);
+        double GetStartOffsetMilliseconds(const int id) const;
     
     public: // misc information
         // determine if a sound is playing
@@ -192,6 +196,7 @@ namespace olc
 
     private:
         const int find_or_create_empty_sound_slot();
+        ma_uint64 cursor_frames_from_start(const int id);
 
     private:
         ma_device m_device;
@@ -659,7 +664,7 @@ namespace olc
             return;
         
         ma_sound_stop(&m_sounds.at(id)->m_sound);
-        ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, 0);
+        ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, m_sounds.at(id)->m_start_frame);
     }
 
     void MiniAudio::Pause(const int id)
@@ -692,7 +697,7 @@ namespace olc
         if(!IsLoaded(id))
             return;
 
-        ma_uint64 frame_to_seek_to = (milliseconds * DEVICE_SAMPLE_RATE) / 1000;
+        ma_uint64 frame_to_seek_to = m_sounds.at(id)->m_start_frame + (milliseconds * DEVICE_SAMPLE_RATE) / 1000;
         ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, frame_to_seek_to);
     }
 
@@ -724,7 +729,9 @@ namespace olc
         ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &frame_to_seek_to);
         
         // calculate the step and subtract it to the current position
-        frame_to_seek_to -= ((milliseconds * DEVICE_SAMPLE_RATE) / 1000);
+        ma_uint64 step = (milliseconds * DEVICE_SAMPLE_RATE) / 1000;
+        ma_uint64 start = m_sounds.at(id)->m_start_frame;
+        frame_to_seek_to = frame_to_seek_to > start + step ? frame_to_seek_to - step : start;
 
         // seek to the new position
         ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, frame_to_seek_to);
@@ -754,6 +761,30 @@ namespace olc
         ma_sound_set_pitch(&m_sounds.at(id)->m_sound, std::max({0.0f, pitch}));
     }
 
+    void MiniAudio::SetStartOffsetMilliseconds(const int id, const double milliseconds)
+    {
+        if(!IsLoaded(id))
+            return;
+
+        Sound* sound = m_sounds.at(id);
+        ma_uint64 previous_start = sound->m_start_frame;
+        sound->m_start_frame = (ma_uint64)std::llround(std::max(milliseconds, 0.0) * DEVICE_SAMPLE_RATE / 1000.0);
+
+        ma_uint64 cursor = 0;
+        ma_sound_get_cursor_in_pcm_frames(&sound->m_sound, &cursor);
+
+        if(!ma_sound_is_playing(&sound->m_sound) && cursor == previous_start)
+            ma_sound_seek_to_pcm_frame(&sound->m_sound, sound->m_start_frame);
+    }
+
+    double MiniAudio::GetStartOffsetMilliseconds(const int id) const
+    {
+        if(!IsLoaded(id))
+            return 0.0;
+
+        return (double)m_sounds[id]->m_start_frame * 1000.0 / DEVICE_SAMPLE_RATE;
+    }
+
     bool MiniAudio::IsPlaying(const int id)
     {
         if(!IsLoaded(id))
@@ -770,9 +801,7 @@ namespace olc
         if(!IsLoaded(id))
             return 0;
 
-        ma_uint64 cursor;
-        ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
-        return (cursor * 1000) / DEVICE_SAMPLE_RATE;
+        return (cursor_frames_from_start(id) * 1000) / DEVICE_SAMPLE_RATE;
     }
 
     double MiniAudio::GetPositionMilliseconds(const int id)
@@ -792,7 +821,7 @@ namespace olc
             if(before != after)
                 continue;
 
-            double position = (double)cursor * 1000.0 / DEVICE_SAMPLE_RATE;
+            double position = ((double)cursor - (double)m_sounds.at(id)->m_start_frame) * 1000.0 / DEVICE_SAMPLE_RATE;
 
             if(!ma_sound_is_playing(sound) || after <= 0.0)
                 return position;
@@ -814,9 +843,7 @@ namespace olc
         if(!IsLoaded(id))
             return 0;
 
-        ma_uint64 cursor;
-        ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
-        return cursor;
+        return cursor_frames_from_start(id);
     }
 
     float MiniAudio::GetCursorFloat(const int id)
@@ -824,9 +851,12 @@ namespace olc
         if(!IsLoaded(id))
             return 0.0f;
 
-        float cursor;
-        ma_sound_get_cursor_in_seconds(&m_sounds.at(id)->m_sound, &cursor);
-        return cursor / m_sounds.at(id)->m_length_in_seconds;
+        Sound* sound = m_sounds.at(id);
+
+        if(sound->m_length_in_pcm_frames <= sound->m_start_frame)
+            return 0.0f;
+
+        return (float)((double)cursor_frames_from_start(id) / (double)(sound->m_length_in_pcm_frames - sound->m_start_frame));
     }
 
     int MiniAudio::GetOneOffCount()
@@ -866,6 +896,13 @@ namespace olc
     bool MiniAudio::IsLoaded(const int id) const
     {
         return id >= 0 && id < static_cast<int>(m_sounds.size()) && m_sounds[id] != nullptr;
+    }
+
+    ma_uint64 MiniAudio::cursor_frames_from_start(const int id)
+    {
+        ma_uint64 cursor = 0;
+        ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
+        return cursor > m_sounds.at(id)->m_start_frame ? cursor - m_sounds.at(id)->m_start_frame : 0;
     }
 
     const int MiniAudio::find_or_create_empty_sound_slot()

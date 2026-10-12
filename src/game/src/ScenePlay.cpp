@@ -101,7 +101,7 @@ namespace nascent {
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
         start_attempt();
 
-        chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
+        chart_audio_id = load_song_audio(game->get_audio(), chart->audio_path);
         game->apply_music_volume(chart_audio_id);
 
         game->play_sound(skin->get_random_menu_pluck());

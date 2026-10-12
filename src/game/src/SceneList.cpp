@@ -655,7 +655,7 @@ namespace nascent {
 
         stop_preview_audio();
 
-        selected_chart_audio_id = game->get_audio().LoadSound(selected_chart->audio_path.string());
+        selected_chart_audio_id = load_song_audio(game->get_audio(), selected_chart->audio_path);
         preview_audio_chart = selected_chart;
         audio_fadein_timer = 0.0f;
         game->apply_music_volume(selected_chart_audio_id, 0.0f);

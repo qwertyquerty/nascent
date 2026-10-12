@@ -90,7 +90,7 @@ namespace nascent {
             bg_field.push_back(std::move(field));
         }
 
-        bg_audio_id = game->get_audio().LoadSound(bg_chart->audio_path.string());
+        bg_audio_id = load_song_audio(game->get_audio(), bg_chart->audio_path);
         game->apply_music_volume(bg_audio_id);
         bg_clock.reset(0, now_ms());
         return true;
@@ -133,7 +133,7 @@ namespace nascent {
         fft_r->init(this);
 
         if constexpr (PLAY_LOGO_INTRO) {
-            logo_audio_id = game->get_audio().LoadSound(logo_chart->audio_path.string());
+            logo_audio_id = load_song_audio(game->get_audio(), logo_chart->audio_path);
         }
         else {
             logo_started = true;
