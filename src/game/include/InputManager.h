@@ -44,7 +44,8 @@ namespace nascent {
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;
         static const olc::Key switch_modifier = olc::Key::CTRL;
-        static const olc::Key calibration_reset_key = olc::Key::R;
+        static const olc::Key reset_shortcut_key = olc::Key::R;
+        static const olc::Key reset_modifier = olc::Key::CTRL;
 
         static const olc::Key menu_up_key = olc::Key::UP;
         static const olc::Key menu_down_key = olc::Key::DOWN;
@@ -60,6 +61,7 @@ namespace nascent {
         static const olc::Key keybind_mod1 = olc::Key::SHIFT;
 
         static bool switch_pressed(olc::PixelGameEngine* window);
+        static bool reset_pressed(olc::PixelGameEngine* window);
         static std::optional<olc::Key> key_from_name(std::string_view name);
         static std::string_view key_name(olc::Key key);
         static std::string key_label(olc::Key key);

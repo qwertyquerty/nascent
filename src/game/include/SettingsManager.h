@@ -30,7 +30,7 @@ namespace nascent {
 
         std::string skin = "default";
         uint16_t frame_rate_limit = 0;
-        uint8_t master_volume = 100;
+        uint8_t master_volume = 50;
         uint8_t music_volume = 100;
         uint8_t effects_volume = 100;
         bool show_fps = true;

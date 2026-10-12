@@ -233,7 +233,7 @@ namespace nascent {
             adjust(1, coarse);
         }
 
-        if (step == Step::INPUT_OFFSET && window->GetKey(InputManager::calibration_reset_key).bPressed) {
+        if (step == Step::INPUT_OFFSET && InputManager::reset_pressed(window)) {
             tap_errors.clear();
         }
 
@@ -333,7 +333,7 @@ namespace nascent {
                 : std::format("{} taps, average error {:+.1f} ms{}", tap_errors.size(), get_average_tap_error(), tap_errors.size() < MIN_TAPS_FOR_SUGGESTION ? " (keep tapping)" : "");
             draw_text(skin->display_font_small, taps, {x, y}, olc::WHITE);
             y += 26;
-            draw_text(skin->display_font_small, "R: clear taps", {x, y}, olc::GREY);
+            draw_text(skin->display_font_small, "Ctrl+R: clear taps", {x, y}, olc::GREY);
             y += 40;
         }
 

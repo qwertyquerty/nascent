@@ -136,7 +136,7 @@ namespace nascent {
             status.clear();
             play_menu_sound();
         }
-        else if (window->GetKey(InputManager::calibration_reset_key).bPressed) {
+        else if (InputManager::reset_pressed(window)) {
             reset();
         }
     }
@@ -234,7 +234,7 @@ namespace nascent {
         }
 
         std::string footer = capturing ? "Press any key to bind it        Esc:  back"
-                                       : "←/→:  lane        ↑/↓:  key mode        Enter:  rebind        Shift+Enter:  rebind all        R:  reset        Esc:  back";
+                                       : "←/→:  lane        ↑/↓:  key mode        Enter:  rebind        Shift+Enter:  rebind all        Ctrl+R:  reset        Esc:  back";
 
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
         int32_t footer_bottom = screen.y - screen.y / 12;
