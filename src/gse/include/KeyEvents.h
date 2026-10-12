@@ -26,6 +26,7 @@ namespace nascent {
         std::vector<KeyEvent> events;
         std::array<bool, KEY_COUNT> held = {};
         std::string text;
+        std::vector<std::string> dropped_files;
 
         public:
         void push(olc::Key key, bool pressed, double time);
@@ -33,6 +34,8 @@ namespace nascent {
         void release_all(double time);
         std::vector<KeyEvent> drain();
         std::string drain_text();
+        void push_dropped_files(std::vector<std::string> files);
+        std::vector<std::string> drain_dropped_files();
     };
 
 }

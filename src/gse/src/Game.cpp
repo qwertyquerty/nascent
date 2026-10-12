@@ -49,6 +49,7 @@ namespace nascent {
 
         frame_key_events = key_event_queue.drain();
         frame_text = key_event_hook_active ? key_event_queue.drain_text() : us_layout_text(window);
+        frame_dropped_files = key_event_queue.drain_dropped_files();
         update_transition(elapsed_time);
         apply_pending_scene();
     }
@@ -251,6 +252,10 @@ namespace nascent {
 
     const std::string& Game::get_frame_text() {
         return frame_text;
+    }
+
+    const std::vector<std::string>& Game::get_frame_dropped_files() const {
+        return frame_dropped_files;
     }
 
     const std::vector<KeyEvent>& Game::get_frame_key_events() {

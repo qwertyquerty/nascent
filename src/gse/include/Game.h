@@ -30,6 +30,7 @@ namespace nascent {
         int32_t transition_layer = -1;
         KeyEventQueue key_event_queue;
         std::vector<KeyEvent> frame_key_events;
+        std::vector<std::string> frame_dropped_files;
         std::string frame_text;
         bool key_event_hook_active = false;
         bool quit_requested = false;
@@ -71,6 +72,7 @@ namespace nascent {
 
         const std::vector<KeyEvent>& get_frame_key_events();
         const std::string& get_frame_text();
+        const std::vector<std::string>& get_frame_dropped_files() const;
 
         void quit();
         bool should_quit();

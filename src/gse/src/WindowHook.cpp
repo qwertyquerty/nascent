@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -11,6 +12,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 #include <cwchar>
 #endif
 
@@ -124,6 +126,29 @@ namespace nascent {
     static std::wstring window_title;
     static wchar_t pending_surrogate = 0;
 
+    static std::string wide_to_utf8(const std::wstring& text) {
+        int length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0, nullptr, nullptr);
+        std::string narrow(length, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), narrow.data(), length, nullptr, nullptr);
+        return narrow;
+    }
+
+    static std::vector<std::string> take_dropped_files(HDROP drop) {
+        std::vector<std::string> files;
+        UINT count = DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0);
+
+        for (UINT index = 0; index < count; index++) {
+            UINT length = DragQueryFileW(drop, index, nullptr, 0);
+            std::wstring path(length + 1, L'\0');
+            DragQueryFileW(drop, index, path.data(), length + 1);
+            path.resize(length);
+            files.push_back(wide_to_utf8(path));
+        }
+
+        DragFinish(drop);
+        return files;
+    }
+
     static std::wstring utf8_to_wide(const std::string& text) {
         int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
         std::wstring wide(length, L'\0');
@@ -173,6 +198,9 @@ namespace nascent {
                 case WM_KILLFOCUS:
                     queue->release_all(now_ms());
                     break;
+                case WM_DROPFILES:
+                    queue->push_dropped_files(take_dropped_files((HDROP)wparam));
+                    return 0;
             }
         }
 

@@ -1,6 +1,7 @@
 #include "KeyEvents.h"
 
 #include <chrono>
+#include <iterator>
 #include <utility>
 
 namespace nascent {
@@ -67,5 +68,15 @@ namespace nascent {
     std::string KeyEventQueue::drain_text() {
         std::lock_guard<std::mutex> lock(mutex);
         return std::exchange(text, {});
+    }
+
+    void KeyEventQueue::push_dropped_files(std::vector<std::string> files) {
+        std::lock_guard<std::mutex> lock(mutex);
+        dropped_files.insert(dropped_files.end(), std::make_move_iterator(files.begin()), std::make_move_iterator(files.end()));
+    }
+
+    std::vector<std::string> KeyEventQueue::drain_dropped_files() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return std::exchange(dropped_files, {});
     }
 }

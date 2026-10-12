@@ -119,6 +119,8 @@ namespace nascent {
         draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, olc::GREY);
         y += 26;
         draw_text(skin->display_font_small, "Offsets and scroll speed are in calibration (F3), and lane keys are in input (F6), from the song list.", {x, y}, olc::DARK_GREY);
+        y += 26;
+        draw_text(skin->display_font_small, "Drop an Etterna noteskin .zip onto the window to import it as a skin.", {x, y}, olc::DARK_GREY);
         y += 60;
 
         form.draw(window, skin, {x, y});
