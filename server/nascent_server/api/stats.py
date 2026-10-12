@@ -38,6 +38,6 @@ def stats():
         "ranked_plays": db.session.scalar(visible_plays.where(Play.ranked.is_(True))) or 0,
         "charts": db.session.scalar(select(func.count()).select_from(Chart)) or 0,
         "ranked_charts": db.session.scalar(select(func.count()).select_from(Chart).where(Chart.status == ChartStatus.RANKED)) or 0,
-        "total_playtime_ms": db.session.scalar(select(func.coalesce(func.sum(User.total_playtime_ms), 0)).where(visible_user)) or 0,
+        "total_playtime_ms": int(db.session.scalar(select(func.coalesce(func.sum(User.total_playtime_ms), 0)).where(visible_user)) or 0),
         "top_plays": [play_out(play) for play in top_plays],
     }
