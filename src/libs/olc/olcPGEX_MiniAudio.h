@@ -178,6 +178,7 @@ namespace olc
         ma_engine* GetEngine();
         ma_resource_manager* GetResourceManager();
         ma_sound* GetSound(const int id);
+        bool IsLoaded(const int id) const;
 
     private:
         const int find_or_create_empty_sound_slot();
@@ -521,10 +522,26 @@ namespace olc
             m_sound_file_buffers[path] = SoundFileBuffer(&m_engine);
         }
         
-        m_sound_file_buffers.at(path).Load(path, pack);
+        bool buffered = false;
+
+        try
+        {
+            buffered = m_sound_file_buffers.at(path).Load(path, pack);
+        }
+        catch(const std::exception&)
+        {
+            buffered = false;
+        }
         
-        if(ma_sound_init_from_file(&m_engine, path.c_str(), MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_ASYNC, NULL, NULL, &m_sounds.at(id)->m_sound) != MA_SUCCESS)
-            throw std::runtime_error{"PGEX_MiniAudio: failed to initialize a sound"};
+        if(!buffered || ma_sound_init_from_file(&m_engine, path.c_str(), MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_ASYNC, NULL, NULL, &m_sounds.at(id)->m_sound) != MA_SUCCESS)
+        {
+            if(buffered)
+                m_sound_file_buffers.at(path).Unload();
+
+            delete m_sounds.at(id);
+            m_sounds.at(id) = nullptr;
+            return -1;
+        }
         
         /**
          * sounds with the play once flag set will be automatically
@@ -549,8 +566,8 @@ namespace olc
 
     void MiniAudio::UnloadSound(const int id)
     {
-        if(m_sounds.at(id) == nullptr)
-            throw std::runtime_error{std::format("tried to unload non-existent sound at id({})", id)};
+        if(!IsLoaded(id))
+            return;
         
         if(m_sound_file_buffers.find(m_sounds.at(id)->m_path) == m_sound_file_buffers.end())
             throw std::runtime_error{std::format("tried to unload non-existent sound file buffer at path ({})", m_sounds.at(id)->m_path)};
@@ -584,6 +601,9 @@ namespace olc
 
     void MiniAudio::Play(const int id, const bool looping)
     {
+        if(!IsLoaded(id))
+            return;
+
         if(ma_sound_is_playing(&m_sounds.at(id)->m_sound))
             return;
         
@@ -603,6 +623,9 @@ namespace olc
 
     void MiniAudio::Stop(const int id)
     {
+        if(!IsLoaded(id))
+            return;
+
         if(!ma_sound_is_playing(&m_sounds.at(id)->m_sound))
             return;
         
@@ -612,6 +635,9 @@ namespace olc
 
     void MiniAudio::Pause(const int id)
     {
+        if(!IsLoaded(id))
+            return;
+
         if(!ma_sound_is_playing(&m_sounds.at(id)->m_sound))
             return;
         
@@ -620,6 +646,9 @@ namespace olc
 
     void MiniAudio::Toggle(const int id)
     {
+        if(!IsLoaded(id))
+            return;
+
         if(ma_sound_is_playing(&m_sounds.at(id)->m_sound))
         {
             ma_sound_stop(&m_sounds.at(id)->m_sound);
@@ -631,12 +660,18 @@ namespace olc
 
     void MiniAudio::Seek(const int id, const ma_uint64 milliseconds)
     {
+        if(!IsLoaded(id))
+            return;
+
         ma_uint64 frame_to_seek_to = (milliseconds * DEVICE_SAMPLE_RATE) / 1000;
         ma_sound_seek_to_pcm_frame(&m_sounds.at(id)->m_sound, frame_to_seek_to);
     }
 
     void MiniAudio::Forward(const int id, const ma_uint64 milliseconds)
     {
+        if(!IsLoaded(id))
+            return;
+
         ma_uint64 frame_to_seek_to;
 
         // get the current position
@@ -651,6 +686,9 @@ namespace olc
 
     void MiniAudio::Rewind(const int id, const ma_uint64 milliseconds)
     {
+        if(!IsLoaded(id))
+            return;
+
         ma_uint64 frame_to_seek_to;
 
         // get the current position
@@ -665,21 +703,33 @@ namespace olc
 
     void MiniAudio::SetVolume(const int id, const float& volume)
     {
+        if(!IsLoaded(id))
+            return;
+
         ma_sound_set_volume(&m_sounds.at(id)->m_sound, std::clamp(volume, 0.0f, 1.0f));
     }
 
     void MiniAudio::SetPan(const int id, const float& pan)
     {
+        if(!IsLoaded(id))
+            return;
+
         ma_sound_set_pan(&m_sounds.at(id)->m_sound, std::clamp(pan, -1.0f, 1.0f));
     }
 
     void MiniAudio::SetPitch(const int id, const float& pitch)
     {
+        if(!IsLoaded(id))
+            return;
+
         ma_sound_set_pitch(&m_sounds.at(id)->m_sound, std::max({0.0f, pitch}));
     }
 
     bool MiniAudio::IsPlaying(const int id)
     {
+        if(!IsLoaded(id))
+            return false;
+
         if(ma_sound_is_playing(&m_sounds.at(id)->m_sound))
             return true;
         
@@ -688,6 +738,9 @@ namespace olc
     
     ma_uint64 MiniAudio::GetCursorMilliseconds(const int id)
     {
+        if(!IsLoaded(id))
+            return 0;
+
         ma_uint64 cursor;
         ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
         return (cursor * 1000) / DEVICE_SAMPLE_RATE;
@@ -695,6 +748,9 @@ namespace olc
 
     ma_uint64 MiniAudio::GetCursorFrames(const int id)
     {
+        if(!IsLoaded(id))
+            return 0;
+
         ma_uint64 cursor;
         ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
         return cursor;
@@ -702,6 +758,9 @@ namespace olc
 
     float MiniAudio::GetCursorFloat(const int id)
     {
+        if(!IsLoaded(id))
+            return 0.0f;
+
         float cursor;
         ma_sound_get_cursor_in_seconds(&m_sounds.at(id)->m_sound, &cursor);
         return cursor / m_sounds.at(id)->m_length_in_seconds;
@@ -729,6 +788,9 @@ namespace olc
 
     ma_sound* MiniAudio::GetSound(const int id)
     {
+        if(!IsLoaded(id))
+            return nullptr;
+
         if(id > (m_sounds.size() - 1))
             return nullptr;
 
@@ -736,6 +798,11 @@ namespace olc
             return nullptr;
         
         return &m_sounds.at(id)->m_sound;
+    }
+
+    bool MiniAudio::IsLoaded(const int id) const
+    {
+        return id >= 0 && id < static_cast<int>(m_sounds.size()) && m_sounds[id] != nullptr;
     }
 
     const int MiniAudio::find_or_create_empty_sound_slot()
