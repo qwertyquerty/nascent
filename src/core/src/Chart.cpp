@@ -143,7 +143,11 @@ namespace nascent {
         };
     }
 
-    std::string Chart::gameplay_hash() const {
+    const std::string& Chart::gameplay_hash() const {
+        return cached_gameplay_hash;
+    }
+
+    std::string Chart::compute_gameplay_hash() const {
         std::vector<Hit> sorted_hits = unpitched_hits;
 
         std::sort(sorted_hits.begin(), sorted_hits.end(), [](const Hit& a, const Hit& b) {
@@ -228,6 +232,7 @@ namespace nascent {
             return a.time < b.time;
         });
 
+        cached_gameplay_hash = compute_gameplay_hash();
         return true;
     }
 

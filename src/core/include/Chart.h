@@ -48,7 +48,10 @@ namespace nascent {
 
         Chart() = default;
 
+        std::string cached_gameplay_hash;
+
         bool validate_and_prepare(std::string& error);
+        std::string compute_gameplay_hash() const;
 
         public:
         std::filesystem::path file_path;
@@ -75,7 +78,7 @@ namespace nascent {
         uint8_t unpitched_key_count() const;
 
         nlohmann::json serialize() const;
-        std::string gameplay_hash() const;
+        const std::string& gameplay_hash() const;
 
         /**
          * Get the length of the Chart in ms from the start of the first hit to the end of the last hit
