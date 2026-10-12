@@ -1,0 +1,26 @@
+- name: Delete the rate limits and leaderboards
+  when: not clear_queue | default(false) | bool
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, redis, sh, -c, "redis-cli --scan --pattern 'nascent:*' | xargs -r redis-cli unlink | awk '{ total += $1 } END { print total + 0 }'"]
+    chdir: "{{ nascent_compose_dir }}"
+  register: cleared_keys
+  changed_when: cleared_keys.stdout | int > 0
+
+- name: Delete everything in Redis, including queued jobs
+  when: clear_queue | default(false) | bool
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, redis, redis-cli, flushdb]
+    chdir: "{{ nascent_compose_dir }}"
+  register: flushed
+  changed_when: true
+
+- name: Rebuild the leaderboards from the database
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, rebuild-leaderboard]
+    chdir: "{{ nascent_compose_dir }}"
+  register: rebuilt
+  changed_when: true
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ ['deleted every Redis key, including queued jobs' if clear_queue | default(false) | bool else 'deleted ' ~ cleared_keys.stdout ~ ' keys'] + rebuilt.stdout_lines }}"

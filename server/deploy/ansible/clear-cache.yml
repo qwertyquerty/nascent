@@ -1,0 +1,9 @@
+- name: Clear the Redis cache and rebuild the leaderboards
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Clear the cache
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: clear_cache
