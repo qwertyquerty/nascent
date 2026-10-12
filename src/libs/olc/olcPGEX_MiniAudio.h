@@ -180,6 +180,10 @@ namespace olc
         ma_uint64 GetCursorMilliseconds(const int id);
         double GetPositionMilliseconds(const int id);
         double GetCallbackPeriodMilliseconds() const;
+        double GetOutputLatencyMilliseconds() const;
+        std::string GetBackendName() const;
+        std::string GetDeviceName() const;
+        ma_uint32 GetDeviceSampleRate() const;
         // gets the current position in the sound, in frames
         ma_uint64 GetCursorFrames(const int id);
         // gets the current position in the sound, as a float between 0.0f and 1.0f
@@ -827,7 +831,7 @@ namespace olc
                 return position;
 
             double elapsed = std::clamp(steady_milliseconds() - after, 0.0, MAX_EXTRAPOLATION_MS);
-            return position + elapsed * ma_sound_get_pitch(sound);
+            return position + (elapsed - GetOutputLatencyMilliseconds()) * ma_sound_get_pitch(sound);
         }
 
         return (double)GetCursorMilliseconds(id);
@@ -836,6 +840,29 @@ namespace olc
     double MiniAudio::GetCallbackPeriodMilliseconds() const
     {
         return m_callback_period_ms.load();
+    }
+
+    double MiniAudio::GetOutputLatencyMilliseconds() const
+    {
+        if(m_device.playback.internalSampleRate == 0)
+            return 0.0;
+
+        return (double)m_device.playback.internalPeriodSizeInFrames * m_device.playback.internalPeriods * 1000.0 / m_device.playback.internalSampleRate;
+    }
+
+    std::string MiniAudio::GetBackendName() const
+    {
+        return m_device.pContext != nullptr ? ma_get_backend_name(m_device.pContext->backend) : "";
+    }
+
+    std::string MiniAudio::GetDeviceName() const
+    {
+        return m_device.playback.name;
+    }
+
+    ma_uint32 MiniAudio::GetDeviceSampleRate() const
+    {
+        return m_device.playback.internalSampleRate;
     }
 
     ma_uint64 MiniAudio::GetCursorFrames(const int id)

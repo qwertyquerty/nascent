@@ -240,7 +240,7 @@ namespace nascent {
             session->reset_clock(paused_position, now);
         }
         else {
-            if (!chart_started && session->song_position(now) >= 0) {
+            if (!chart_started && session->song_position(now) >= -game->get_audio().GetOutputLatencyMilliseconds()) {
                 chart_started = true;
                 game->get_audio().Play(chart_audio_id);
             }
