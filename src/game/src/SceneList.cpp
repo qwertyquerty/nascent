@@ -307,8 +307,9 @@ namespace nascent {
         return request && request->result.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
     }
 
-    SceneList::SceneList(Skin* skin) {
+    SceneList::SceneList(Skin* skin, EntityStarfield* sky) {
         this->skin = skin;
+        this->sky = sky;
 
         background_loader = std::thread([this] {
             background_load_loop();
@@ -430,7 +431,7 @@ namespace nascent {
 
         if (game->window->GetKey(InputManager::account_key).bPressed) {
             game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneAccount>(skin, this));
+            game->set_scene(std::make_unique<SceneAccount>(skin, this, sky));
             return;
         }
 

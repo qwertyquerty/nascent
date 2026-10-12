@@ -22,6 +22,7 @@
 namespace nascent {
     class Chart;
     class EntityField;
+    class EntityStarfield;
     class Skin;
     struct SearchFilter;
 
@@ -102,6 +103,7 @@ namespace nascent {
         float list_scroll_offset = 0;
 
         Skin* skin;
+        EntityStarfield* sky;
 
         StatusBar status_bar;
 
@@ -180,7 +182,7 @@ namespace nascent {
         void draw_recommended(olc::PixelGameEngine* window);
 
         public:
-        SceneList(Skin* skin);
+        SceneList(Skin* skin, EntityStarfield* sky);
         ~SceneList();
         void init(Game*) override;
         void on_enter() override;

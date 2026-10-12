@@ -1,7 +1,6 @@
 #pragma once
 
 #include "EntityFFT.h"
-#include "EntityStarfield.h"
 #include "Scene.h"
 #include "ServerClient.h"
 #include "UiForm.h"
@@ -13,6 +12,7 @@
 #include <vector>
 
 namespace nascent {
+    class EntityStarfield;
     class Skin;
     class TextField;
 
@@ -26,6 +26,8 @@ namespace nascent {
 
         Skin* skin;
         Scene* next_scene;
+        EntityStarfield* sky;
+        bool pan_in;
 
         Mode mode = Mode::SIGN_IN;
         UiForm form;
@@ -33,7 +35,6 @@ namespace nascent {
         TextField* email_field = nullptr;
         TextField* password_field = nullptr;
 
-        std::unique_ptr<EntityStarfield> starfield;
         std::unique_ptr<EntityFFT> fft;
         std::vector<float> audio_buffer;
 
@@ -48,7 +49,7 @@ namespace nascent {
         void play_menu_sound();
 
         public:
-        SceneAccount(Skin* skin, Scene* next_scene);
+        SceneAccount(Skin* skin, Scene* next_scene, EntityStarfield* sky, bool pan_in = false);
         void init(Game*) override;
         void on_enter() override;
         void on_exit() override;

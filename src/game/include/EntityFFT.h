@@ -39,6 +39,7 @@ namespace nascent {
         olc::vd2d size = {0, 0};
         bool flipped = false;
         bool mirrored = false;
+        float opacity = 1.0f;
 
         EntityFFT(Skin*, olc::vd2d, olc::vd2d, uint8_t);
         ~EntityFFT();

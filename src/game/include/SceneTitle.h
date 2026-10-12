@@ -13,6 +13,7 @@ namespace nascent {
     class Chart;
     class EntityFFT;
     class EntityField;
+    class EntityStarfield;
     class SceneList;
     class Skin;
 
@@ -41,6 +42,7 @@ namespace nascent {
         std::unique_ptr<Skin> logo_skin;
         Skin* bg_skin;
         SceneList* list;
+        EntityStarfield* sky;
 
         double timer = 0;
         float bg_fade = 0;
@@ -65,11 +67,12 @@ namespace nascent {
         static constexpr float MAX_TIMER_STEP = 1.0f / 30.0f;
         static constexpr int32_t RANDOM_CHART_ATTEMPTS = 10;
         static constexpr float BACKGROUND_FADE_IN_TIME = 1.0f;
-        static constexpr const char* START_HINT = "Press Enter to start";
+        static constexpr float BACKGROUND_DIM = 0.5f;
+        static constexpr const char* START_HINT = "PRESS ENTER TO START";
         static constexpr int32_t START_HINT_GAP = 24;
         static constexpr float START_HINT_PULSE_SPEED = 2.5f;
 
-        SceneTitle(Skin* bg_skin, SceneList* list);
+        SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky);
         ~SceneTitle();
         void init(Game*) override;
         void on_exit() override;

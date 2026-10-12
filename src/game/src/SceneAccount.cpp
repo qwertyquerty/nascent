@@ -1,6 +1,7 @@
 #include "SceneAccount.h"
 
 #include "Account.h"
+#include "EntityStarfield.h"
 #include "Game.h"
 #include "InputManager.h"
 #include "SettingsManager.h"
@@ -14,17 +15,16 @@
 namespace nascent {
     static constexpr double FFT_HEIGHT_RATIO = 0.28;
 
-    SceneAccount::SceneAccount(Skin* skin, Scene* next_scene) {
+    SceneAccount::SceneAccount(Skin* skin, Scene* next_scene, EntityStarfield* sky, bool pan_in) {
         this->skin = skin;
         this->next_scene = next_scene;
+        this->sky = sky;
+        this->pan_in = pan_in;
     }
 
     void SceneAccount::init(Game*) {
         olc::vi2d window_size = game->window->GetScreenSize();
         double height = (double)window_size.y * FFT_HEIGHT_RATIO;
-
-        starfield = std::make_unique<EntityStarfield>(skin, olc::vd2d{(double)window_size.x, (double)window_size.y});
-        starfield->init(this);
 
         fft = std::make_unique<EntityFFT>(skin, olc::vd2d{0, (double)window_size.y - height}, olc::vd2d{(double)window_size.x, height}, 0);
         fft->flipped = true;
@@ -32,6 +32,13 @@ namespace nascent {
     }
 
     void SceneAccount::on_enter() {
+        if (pan_in) {
+            sky->pan_to(SkyView::ACCOUNT);
+        }
+        else {
+            sky->show(SkyView::ACCOUNT);
+        }
+
         game->play_music(skin->sound(SkinSound::ACCOUNT_LOOP), true);
         status.clear();
         set_mode(Account::signed_in() ? Mode::SIGNED_IN : Mode::SIGN_IN);
@@ -105,7 +112,7 @@ namespace nascent {
     void SceneAccount::update(float elapsed_time) {
         olc::PixelGameEngine* window = game->window;
 
-        starfield->update(this, elapsed_time);
+        sky->update(this, elapsed_time);
 
         if (skin->sound(SkinSound::ACCOUNT_LOOP) != -1 && game->get_audio().IsPlaying(skin->sound(SkinSound::ACCOUNT_LOOP))) {
             game->get_audio().CopyEngineBuffer(audio_buffer);
@@ -156,7 +163,7 @@ namespace nascent {
 
     void SceneAccount::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
-        starfield->draw(window);
+        sky->draw(window);
         fft->draw(window);
 
         int32_t x = screen.x / 24;

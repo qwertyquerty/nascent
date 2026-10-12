@@ -1,12 +1,15 @@
 #include "SceneTitle.h"
+#include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
 #include "Const.h"
 #include "EntityFFT.h"
 #include "EntityField.h"
+#include "EntityStarfield.h"
 #include "Game.h"
 #include "InputManager.h"
 #include "KeyEvents.h"
+#include "SceneAccount.h"
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
@@ -19,9 +22,10 @@
 #include <iostream>
 
 namespace nascent {
-    SceneTitle::SceneTitle(Skin* bg_skin, SceneList* list) {
+    SceneTitle::SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky) {
         this->bg_skin = bg_skin;
         this->list = list;
+        this->sky = sky;
     };
 
     SceneTitle::~SceneTitle() {
@@ -95,6 +99,7 @@ namespace nascent {
     void SceneTitle::init(Game* game) {
         olc::vi2d window_size = game->window->GetScreenSize();
         std::string error;
+        sky->show(SkyView::TITLE);
 
         logo_chart = Chart::load(LOGO_CHART_PATH, 1.0, error);
         if (logo_chart == nullptr) {
@@ -118,11 +123,13 @@ namespace nascent {
         logo_field->opacity = PLAY_LOGO_INTRO ? 1.0f : 0.0f;
 
         fft_l = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{(double)window_size.x, (double)window_size.y * 0.28}, 0);
+        fft_l->opacity = BACKGROUND_DIM;
         fft_l->init(this);
 
         fft_r = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, (double)window_size.y - (double)window_size.y * 0.28}, olc::vd2d{(double)window_size.x, (double)window_size.y * 0.28}, 1);
         fft_r->flipped = true;
         fft_r->mirrored = true;
+        fft_r->opacity = BACKGROUND_DIM;
         fft_r->init(this);
 
         if constexpr (PLAY_LOGO_INTRO) {
@@ -165,8 +172,10 @@ namespace nascent {
 
     void SceneTitle::update(float elapsed_time) {
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
+            bool sign_in_first = !Account::signed_in();
+
             if (bg_chart != nullptr) {
-                bool playing = bg_started && bg_audio_id != -1 && game->get_audio().IsPlaying(bg_audio_id);
+                bool playing = !sign_in_first && bg_started && bg_audio_id != -1 && game->get_audio().IsPlaying(bg_audio_id);
                 list->select_chart_by_hash(bg_chart->gameplay_hash(), bg_chart->file_path, playing ? bg_audio_id : -1);
 
                 if (playing) {
@@ -175,7 +184,14 @@ namespace nascent {
             }
 
             game->play_sound(bg_skin->get_random_menu_pluck());
-            game->set_scene(list);
+
+            if (sign_in_first) {
+                game->set_scene(std::make_unique<SceneAccount>(bg_skin, list, sky, true));
+            }
+            else {
+                game->set_scene(list);
+            }
+
             return;
         }
 
@@ -185,6 +201,7 @@ namespace nascent {
 
         double now = now_ms();
         float step = std::min(elapsed_time, MAX_TIMER_STEP);
+        sky->update(this, step);
 
         if (timer > SettingsManager::settings.title_logo_start_delay && !logo_started) {
             logo_started = true;
@@ -226,7 +243,7 @@ namespace nascent {
             for (auto& field : bg_field) {
                 field->pos.x -= step * SettingsManager::settings.title_h_scroll_rate;
                 field->set_position(bg_position);
-                field->opacity = bg_fade;
+                field->opacity = bg_fade * BACKGROUND_DIM;
             }
 
             if (game->get_audio().IsPlaying(bg_audio_id)) {
@@ -248,6 +265,8 @@ namespace nascent {
     };
 
     void SceneTitle::draw(olc::PixelGameEngine* window) {
+        sky->draw(window);
+
         if (!loaded) {
             return;
         }
@@ -264,8 +283,6 @@ namespace nascent {
             fft_l->draw(window);
             fft_r->draw(window);
         }
-
-        window->FillRectDecal({0, 0}, window->GetScreenSize(), {0, 0, 0, 128});
 
         logo_field->draw(window);
 

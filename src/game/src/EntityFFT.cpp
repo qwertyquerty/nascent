@@ -42,7 +42,7 @@ namespace nascent {
             float x = (float)bar * w * (1 + FFT_SPACING_RATIO);
             float h = std::min(bins[bar] / 4 * size.y, size.y);
             olc::Pixel c = skin->title_gradient_at(x / size.x, 0);
-            c.a = FFT_BAR_ALPHA;
+            c.a = (uint8_t)std::lround(FFT_BAR_ALPHA * std::clamp(opacity, 0.0f, 1.0f));
 
             float bar_x = (float)(mirrored ? pos.x + size.x - x - w : pos.x + x);
             float bar_y = (float)(flipped ? pos.y + size.y - h : pos.y);

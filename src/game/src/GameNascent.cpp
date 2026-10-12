@@ -1,6 +1,7 @@
 #include "GameNascent.h"
 
 #include "Account.h"
+#include "EntityStarfield.h"
 #include "InputManager.h"
 #include "LocalBests.h"
 #include "olcPixelGameEngine.h"
@@ -30,6 +31,7 @@ namespace nascent {
         discord::RPCManager::get().shutdown();
         release_scenes();
         scene_list.reset();
+        sky.reset();
         skin.reset();
         text_cache_clear();
     };
@@ -50,9 +52,13 @@ namespace nascent {
         std::srand(start_time);
 
         skin = std::make_unique<Skin>(this, SettingsManager::settings.skin);
-        scene_list = std::make_unique<SceneList>(skin.get());
+        olc::vi2d screen = window->GetScreenSize();
+        sky = std::make_unique<EntityStarfield>(skin.get(), olc::vd2d{(double)screen.x, (double)screen.y});
+        sky->init(nullptr);
 
-        set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get()));
+        scene_list = std::make_unique<SceneList>(skin.get(), sky.get());
+
+        set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get(), sky.get()));
 
         discord_init();
         discord_update();
