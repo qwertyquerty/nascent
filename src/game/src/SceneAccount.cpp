@@ -32,7 +32,7 @@ namespace nascent {
     }
 
     void SceneAccount::on_enter() {
-        game->play_sound(skin->account_loop_sfx, true);
+        game->play_music(skin->account_loop_sfx, true);
         status.clear();
         set_mode(Account::signed_in() ? Mode::SIGNED_IN : Mode::SIGN_IN);
     }

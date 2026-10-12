@@ -139,6 +139,7 @@ namespace nascent {
 
         if (write_click_track(click_path)) {
             click_audio_id = game->get_audio().LoadSound(click_path.string());
+            game->apply_effects_volume(click_audio_id);
             game->get_audio().Play(click_audio_id, true);
         }
         else {

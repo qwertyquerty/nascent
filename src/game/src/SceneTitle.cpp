@@ -87,6 +87,7 @@ namespace nascent {
         }
 
         bg_audio_id = game->get_audio().LoadSound(bg_chart->audio_path.string());
+        game->apply_music_volume(bg_audio_id);
         bg_clock.reset(0, now_ms());
         return true;
     }

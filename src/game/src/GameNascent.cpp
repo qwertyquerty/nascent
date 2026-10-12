@@ -34,6 +34,7 @@ namespace nascent {
         Account::load();
         LocalBests::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
+        set_volumes(SettingsManager::settings.master_volume / 100.0f, SettingsManager::settings.music_volume / 100.0f, SettingsManager::settings.effects_volume / 100.0f);
 
         olc::Font::init();
 

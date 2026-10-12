@@ -14,6 +14,7 @@
 #include <utility>
 
 namespace nascent {
+    static constexpr int32_t VOLUME_STEP = 5;
     static constexpr std::array<uint16_t, 9> FRAME_RATE_OPTIONS = {0, 60, 120, 144, 165, 240, 360, 480, 1000};
     static constexpr std::array<std::pair<const char*, float>, 4> TRANSITION_OPTIONS = {{{"Off", 0.0f}, {"Fast", 0.1f}, {"Normal", 0.2f}, {"Slow", 0.35f}}};
 
@@ -48,6 +49,9 @@ namespace nascent {
             }
         }
 
+        master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, VOLUME_STEP, "%");
+        music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, VOLUME_STEP, "%");
+        effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, VOLUME_STEP, "%");
         frame_rate_field = &form.add<ChoiceField>("Frame rate limit", frame_rate_labels, frame_rate_index);
         fps_counter_field = &form.add<ChoiceField>("FPS counter", std::vector<std::string>{"Off", "On"}, settings.show_fps ? 1 : 0);
         transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
@@ -56,6 +60,10 @@ namespace nascent {
 
     void SceneOptions::apply() {
         Settings& settings = SettingsManager::settings;
+        settings.master_volume = (uint8_t)master_volume_field->value;
+        settings.music_volume = (uint8_t)music_volume_field->value;
+        settings.effects_volume = (uint8_t)effects_volume_field->value;
+        game->set_volumes(settings.master_volume / 100.0f, settings.music_volume / 100.0f, settings.effects_volume / 100.0f);
         settings.frame_rate_limit = frame_rates[frame_rate_field->selected];
         settings.show_fps = fps_counter_field->selected == 1;
         settings.scene_transition_time = TRANSITION_OPTIONS[transition_field->selected].second;

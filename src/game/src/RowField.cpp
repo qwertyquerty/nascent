@@ -1,6 +1,7 @@
 #include "RowField.h"
 
 #include "InputManager.h"
+#include "ProgressBar.h"
 #include "Skin.h"
 #include "TextCache.h"
 
@@ -98,6 +99,38 @@ namespace nascent {
         }
 
         return false;
+    }
+
+    SliderField::SliderField(std::string label, int32_t value, int32_t minimum, int32_t maximum, int32_t step, std::string unit) : RowField(std::move(label)), value(std::clamp(value, minimum, maximum)), minimum(minimum), maximum(maximum), step(step), unit(std::move(unit)) {}
+
+    std::string SliderField::display_value(bool) const {
+        return std::format("{}{}", value, unit);
+    }
+
+    bool SliderField::update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) {
+        RowField::update(window, typed, elapsed_time);
+        int32_t before = value;
+
+        if (window->GetKey(InputManager::menu_left_key).bPressed) {
+            value = std::max(minimum, value - step);
+        }
+
+        if (window->GetKey(InputManager::menu_right_key).bPressed) {
+            value = std::min(maximum, value + step);
+        }
+
+        return value != before;
+    }
+
+    int32_t SliderField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const {
+        int32_t height = RowField::draw(window, skin, position, focused);
+        float width = (float)(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
+        float fill = maximum > minimum ? (float)(value - minimum) / (float)(maximum - minimum) : 0.0f;
+        olc::Pixel color = skin->title_gradient_at(fill, 0.5);
+        color.a = focused ? 255 : 140;
+
+        ProgressBar({width, (float)BAR_HEIGHT}).draw(window, {(float)(position.x + BAR_LEFT), (float)(position.y + (HEIGHT - BAR_HEIGHT) / 2)}, fill, color);
+        return height;
     }
 
     NumberField::NumberField(std::string label, std::string unit, double step, double maximum) : RowField(std::move(label)), unit(std::move(unit)), step(step), maximum(maximum) {}

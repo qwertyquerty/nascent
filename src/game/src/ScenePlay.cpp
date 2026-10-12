@@ -98,6 +98,7 @@ namespace nascent {
         start_attempt();
 
         chart_audio_id = game->get_audio().LoadSound(chart->audio_path.string());
+        game->apply_music_volume(chart_audio_id);
 
         game->play_sound(skin->get_random_menu_pluck());
 
@@ -155,7 +156,7 @@ namespace nascent {
         paused = true;
         paused_position = session->song_position(now);
         game->get_audio().Pause(chart_audio_id);
-        game->play_sound(skin->idle_loop_sfx, true);
+        game->play_music(skin->idle_loop_sfx, true);
     }
 
     void ScenePlay::resume(double now) {

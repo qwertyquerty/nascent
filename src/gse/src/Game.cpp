@@ -212,7 +212,35 @@ namespace nascent {
             audio.Stop(id);
         }
 
+        audio.SetVolume(id, effects_volume);
         audio.Play(id, looping);
+    }
+
+    void Game::play_music(int id, bool looping) {
+        if (id == -1) {
+            return;
+        }
+
+        if (audio.IsPlaying(id)) {
+            audio.Stop(id);
+        }
+
+        audio.SetVolume(id, music_volume);
+        audio.Play(id, looping);
+    }
+
+    void Game::apply_music_volume(int id, float fade) {
+        audio.SetVolume(id, music_volume * fade);
+    }
+
+    void Game::apply_effects_volume(int id) {
+        audio.SetVolume(id, effects_volume);
+    }
+
+    void Game::set_volumes(float master, float music, float effects) {
+        music_volume = std::clamp(music, 0.0f, 1.0f);
+        effects_volume = std::clamp(effects, 0.0f, 1.0f);
+        ma_engine_set_volume(audio.GetEngine(), std::clamp(master, 0.0f, 1.0f));
     }
 
     void Game::stop_sound(int id) {

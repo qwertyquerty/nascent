@@ -517,7 +517,7 @@ namespace nascent {
         double now = now_ms();
 
         if (selected_chart_audio_id != -1) {
-            game->get_audio().SetVolume(selected_chart_audio_id, audio_fadein_timer * audio_fadein_timer);
+            game->apply_music_volume(selected_chart_audio_id, audio_fadein_timer * audio_fadein_timer);
         }
 
         if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart && !game->get_audio().IsPlaying(selected_chart_audio_id)) {
@@ -657,7 +657,7 @@ namespace nascent {
         selected_chart_audio_id = game->get_audio().LoadSound(selected_chart->audio_path.string());
         preview_audio_chart = selected_chart;
         audio_fadein_timer = 0.0f;
-        game->get_audio().SetVolume(selected_chart_audio_id, 0.0f);
+        game->apply_music_volume(selected_chart_audio_id, 0.0f);
         game->get_audio().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
         game->get_audio().SetPitch(selected_chart_audio_id, selected_chart->pitch);
         game->get_audio().Play(selected_chart_audio_id, true);

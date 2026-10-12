@@ -43,6 +43,27 @@ namespace nascent {
         bool update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
     };
 
+    class SliderField : public RowField {
+        protected:
+        std::string display_value(bool focused) const override;
+
+        public:
+        static constexpr int32_t BAR_LEFT = 250;
+        static constexpr int32_t BAR_RIGHT_GAP = 110;
+        static constexpr int32_t BAR_HEIGHT = 6;
+
+        int32_t value;
+        int32_t minimum;
+        int32_t maximum;
+        int32_t step;
+        std::string unit;
+
+        SliderField(std::string label, int32_t value, int32_t minimum, int32_t maximum, int32_t step, std::string unit);
+
+        bool update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) override;
+        int32_t draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const override;
+    };
+
     class NumberField : public RowField {
         protected:
         std::string display_value(bool focused) const override;

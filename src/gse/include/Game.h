@@ -25,6 +25,8 @@ namespace nascent {
         float transition_time = 0;
         bool skip_transition_step = false;
         std::optional<std::chrono::steady_clock::time_point> next_frame;
+        float music_volume = 1.0f;
+        float effects_volume = 1.0f;
         int32_t transition_layer = -1;
         KeyEventQueue key_event_queue;
         std::vector<KeyEvent> frame_key_events;
@@ -61,6 +63,10 @@ namespace nascent {
         olc::MiniAudio& get_audio();
 
         void play_sound(int id, bool looping = false);
+        void play_music(int id, bool looping = false);
+        void apply_music_volume(int id, float fade = 1.0f);
+        void apply_effects_volume(int id);
+        void set_volumes(float master, float music, float effects);
         void stop_sound(int id);
 
         const std::vector<KeyEvent>& get_frame_key_events();
