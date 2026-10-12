@@ -13,6 +13,8 @@
 #include <format>
 
 namespace nascent {
+    static constexpr float HOLD_EDGE_INSET = 0.5f;
+
     EntityField::EntityField(const Chart* chart, Skin* skin, olc::vd2d pos, olc::vd2d size) {
         this->chart = chart;
         this->skin = skin;
@@ -112,7 +114,9 @@ namespace nascent {
                     if (body_bottom > body_top) {
                         float top = (float)flip_y(body_top);
                         float bottom = (float)flip_y(body_bottom);
-                        window->DrawWarpedDecal(hold_body, {{(float)hit_x, top}, {(float)hit_x, bottom}, {(float)(hit_x + note_size), bottom}, {(float)(hit_x + note_size), top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                        float body_height = (float)hold_body->sprite->height;
+                        float inset = body_height > HOLD_EDGE_INSET * 2 ? HOLD_EDGE_INSET : 0.0f;
+                        window->DrawPartialWarpedDecal(hold_body, {{(float)hit_x, top}, {(float)hit_x, bottom}, {(float)(hit_x + note_size), bottom}, {(float)(hit_x + note_size), top}}, {0.0f, inset}, {(float)hold_body->sprite->width, body_height - inset * 2}, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
 
                     olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, hit.key, key_count);
@@ -122,7 +126,9 @@ namespace nascent {
                         double cap_top = body_top - cap_height;
                         float top = (float)flip_y(body_top);
                         float end = (float)flip_y(cap_top);
-                        window->DrawWarpedDecal(cap, {{(float)hit_x, top}, {(float)hit_x, end}, {(float)(hit_x + note_size), end}, {(float)(hit_x + note_size), top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                        float cap_texture_height = (float)cap->sprite->height;
+                        float cap_inset = cap_texture_height > HOLD_EDGE_INSET ? HOLD_EDGE_INSET : 0.0f;
+                        window->DrawPartialWarpedDecal(cap, {{(float)hit_x, top}, {(float)hit_x, end}, {(float)(hit_x + note_size), end}, {(float)(hit_x + note_size), top}}, {0.0f, cap_inset}, {(float)cap->sprite->width, cap_texture_height - cap_inset}, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
                 }
                 else if (hit.hit_type == HitType::HOLD) {

@@ -1,5 +1,6 @@
 #include "SceneOptions.h"
 
+#include "Attempt.h"
 #include "Chart.h"
 #include "EntityField.h"
 #include "Game.h"
@@ -233,6 +234,8 @@ namespace nascent {
         preview_field = std::make_unique<EntityField>(preview_chart.get(), skin, olc::vd2d{(double)screen.x * 3 / 4 - width / 2, 0.0}, olc::vd2d{width, (double)screen.y});
         preview_field->draw_judge_colors = true;
         preview_field->draw_notes_past_judge = false;
+        preview_field->draw_hit_score = false;
+        preview_field->set_attempt(preview_attempt.get());
         preview_field->judge_alpha = 64;
         preview_field->judge_height = settings.field_judge_offset;
         preview_field->upscroll = settings.field_upscroll;
@@ -246,8 +249,17 @@ namespace nascent {
 
         preview_time += elapsed_time;
         double position = std::fmod(preview_time * 1000.0, (double)PREVIEW_LOOP_BEATS * PREVIEW_BEAT_MS);
+
+        if (preview_attempt == nullptr || position < preview_position) {
+            preview_attempt = std::make_unique<Attempt>(preview_chart.get());
+            preview_field->set_attempt(preview_attempt.get());
+        }
+
+        preview_position = position;
+        uint32_t keys = preview_chart->held_lanes_at(position);
+        preview_attempt->set_keys(keys, (int32_t)position);
         preview_field->set_position(position);
-        preview_field->set_keys(preview_chart->held_lanes_at(position));
+        preview_field->set_keys(keys);
     }
 
     void SceneOptions::update_scroll(float elapsed_time) {

@@ -10,6 +10,7 @@
 #include <vector>
 
 namespace nascent {
+    class Attempt;
     class Chart;
     class ChoiceField;
     class EntityField;
@@ -45,7 +46,9 @@ namespace nascent {
 
         std::unique_ptr<Chart> preview_chart;
         std::unique_ptr<EntityField> preview_field;
+        std::unique_ptr<Attempt> preview_attempt;
         double preview_time = 0;
+        double preview_position = 0;
 
         std::vector<uint16_t> frame_rates;
         std::vector<SkinInfo> skins;
