@@ -240,7 +240,7 @@ namespace nascent {
         this->pitch = pitch;
 
         info = unpitched_info;
-        info.audio_lead_in = (int32_t)(unpitched_info.audio_lead_in / pitch);
+        info.audio_lead_in = (int32_t)std::lround(unpitched_info.audio_lead_in / pitch);
         pitched_timing(pitch, hits, timing_points);
     }
 
@@ -249,13 +249,13 @@ namespace nascent {
         out_timing_points = unpitched_timing_points;
 
         for (Hit& hit : out_hits) {
-            hit.time = (int32_t)(hit.time / pitch);
-            hit.end_time = (int32_t)(hit.end_time / pitch);
+            hit.time = (int32_t)std::lround(hit.time / pitch);
+            hit.end_time = (int32_t)std::lround(hit.end_time / pitch);
         }
 
         for (ChartTimingPoint& tp : out_timing_points) {
             tp.beat_length /= pitch;
-            tp.time = (int32_t)(tp.time / pitch);
+            tp.time = (int32_t)std::lround(tp.time / pitch);
         }
     }
 
