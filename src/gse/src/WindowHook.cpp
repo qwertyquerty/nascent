@@ -117,6 +117,7 @@ namespace nascent {
         }
     }
 
+    static constexpr LPARAM ALT_HELD_FLAG = 1 << 29;
     static std::atomic<KeyEventQueue*> hooked_queue = nullptr;
     static std::atomic<WNDPROC> original_window_proc = nullptr;
     static HWND hooked_window = nullptr;
@@ -133,6 +134,10 @@ namespace nascent {
     static LRESULT CALLBACK nascent_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         if (msg == WM_SETTEXT && !window_title.empty()) {
             lparam = (LPARAM)window_title.c_str();
+        }
+
+        if (msg == WM_SYSKEYDOWN && wparam == VK_F4 && (lparam & ALT_HELD_FLAG) != 0) {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
         }
 
         KeyEventQueue* queue = hooked_queue.load();
