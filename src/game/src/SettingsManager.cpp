@@ -3,6 +3,7 @@
 #include "Platform.h"
 #include "SettingsStore.h"
 #include "json.h"
+#include "Utf8Path.h"
 
 #include <iostream>
 #include <memory>
@@ -38,15 +39,6 @@ namespace nascent {
         return store;
     }
 
-    static std::filesystem::path utf8_path(const std::string& text) {
-        return std::filesystem::path(std::u8string(text.begin(), text.end()));
-    }
-
-    static std::string utf8_string(const std::filesystem::path& path) {
-        std::u8string text = path.u8string();
-        return std::string(text.begin(), text.end());
-    }
-
     static std::filesystem::path resolve_song_directory(const std::string& configured) {
         if (!configured.empty() && configured != SettingsManager::LEGACY_SONG_DIRECTORY) {
             return utf8_path(configured);
@@ -59,7 +51,7 @@ namespace nascent {
             std::filesystem::rename(SettingsManager::LEGACY_SONG_DIRECTORY, target, ec);
 
             if (ec) {
-                std::cerr << "Settings: could not move " << SettingsManager::LEGACY_SONG_DIRECTORY << " to " << utf8_string(target) << ": " << ec.message() << std::endl;
+                std::cerr << "Settings: could not move " << SettingsManager::LEGACY_SONG_DIRECTORY << " to " << path_utf8(target) << ": " << ec.message() << std::endl;
                 return SettingsManager::LEGACY_SONG_DIRECTORY;
             }
         }
@@ -91,7 +83,7 @@ namespace nascent {
         }
 
         settings = settings_store()->value;
-        settings.list_song_directory = utf8_string(resolve_song_directory(settings.list_song_directory));
+        settings.list_song_directory = path_utf8(resolve_song_directory(settings.list_song_directory));
         return status;
     }
 

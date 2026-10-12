@@ -10,6 +10,7 @@
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "Utf8Path.h"
 
 #include <algorithm>
 #include <cmath>
@@ -51,7 +52,7 @@ namespace nascent {
                 return chart;
             }
 
-            std::cerr << "Skipping title chart " << candidates[index].string() << ": " << (chart == nullptr ? error : "its audio is missing") << std::endl;
+            std::cerr << "Skipping title chart " << path_utf8(candidates[index]) << ": " << (chart == nullptr ? error : "its audio is missing") << std::endl;
             candidates.erase(candidates.begin() + (std::ptrdiff_t)index);
         }
 

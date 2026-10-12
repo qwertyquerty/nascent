@@ -1,4 +1,5 @@
 #include "Replay.h"
+#include "Utf8Path.h"
 
 #include <chrono>
 #include <ctime>
@@ -145,7 +146,7 @@ namespace nascent {
         std::filesystem::create_directories(chart_directory, ec);
 
         if (ec) {
-            error = std::format("could not create {}: {}", chart_directory.string(), ec.message());
+            error = std::format("could not create {}: {}", path_utf8(chart_directory), ec.message());
             return std::nullopt;
         }
 
@@ -166,14 +167,14 @@ namespace nascent {
         std::ofstream ofs(path, std::ios::trunc);
 
         if (!ofs) {
-            error = std::format("could not write {}", path.string());
+            error = std::format("could not write {}", path_utf8(path));
             return std::nullopt;
         }
 
         ofs << nlohmann::json(replay).dump() << std::endl;
 
         if (!ofs) {
-            error = std::format("could not write {}", path.string());
+            error = std::format("could not write {}", path_utf8(path));
             return std::nullopt;
         }
 
@@ -184,7 +185,7 @@ namespace nascent {
         std::ifstream ifs(path);
 
         if (!ifs) {
-            error = std::format("could not open {}", path.string());
+            error = std::format("could not open {}", path_utf8(path));
             return std::nullopt;
         }
 

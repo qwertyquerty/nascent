@@ -24,6 +24,7 @@
 #include "SettingsManager.h"
 #include "Sha256.h"
 #include "TextCache.h"
+#include "Utf8Path.h"
 
 #include <algorithm>
 #include <atomic>
@@ -231,13 +232,13 @@ namespace nascent {
                 std::error_code audio_ec;
 
                 if (chart != nullptr && !std::filesystem::is_regular_file(chart->audio_path, audio_ec)) {
-                    error = std::format("audio file {} is missing", chart->audio_path.string());
+                    error = std::format("audio file {} is missing", path_utf8(chart->audio_path));
                     chart.reset();
                 }
 
                 if (chart == nullptr) {
                     std::lock_guard<std::mutex> lock(log_mutex);
-                    std::cerr << "Skipping chart " << chart_files[index].path.string() << ": " << error << std::endl;
+                    std::cerr << "Skipping chart " << path_utf8(chart_files[index].path) << ": " << error << std::endl;
                     return;
                 }
 

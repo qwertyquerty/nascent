@@ -9,6 +9,7 @@
 #include "Skin.h"
 #include "Util.h"
 #include "TextCache.h"
+#include "Utf8Path.h"
 
 #include <algorithm>
 #include <cmath>
@@ -141,7 +142,7 @@ namespace nascent {
             game->get_audio().Play(click_audio_id, true);
         }
         else {
-            status_message = std::format("Could not write the click track to {}", click_path.string());
+            status_message = std::format("Could not write the click track to {}", path_utf8(click_path));
         }
 
         clock.max_error = SettingsManager::settings.field_audio_sync_max_error;

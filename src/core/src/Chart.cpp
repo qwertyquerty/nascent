@@ -4,6 +4,7 @@
 #include "Const.h"
 #include "OsuFormat.h"
 #include "Sha256.h"
+#include "Utf8Path.h"
 
 #include <algorithm>
 #include <cmath>
@@ -99,8 +100,8 @@ namespace nascent {
 
         try {
             chart->file_path = path;
-            chart->audio_path = path.parent_path() / chart->unpitched_info.audio_file;
-            chart->image_path = path.parent_path() / chart->unpitched_info.image_file;
+            chart->audio_path = path.parent_path() / utf8_path(chart->unpitched_info.audio_file);
+            chart->image_path = path.parent_path() / utf8_path(chart->unpitched_info.image_file);
             (void)chart->audio_path.string();
             (void)chart->image_path.string();
         }

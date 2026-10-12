@@ -1,6 +1,7 @@
 #pragma once
 
 #include "json.h"
+#include "Utf8Path.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -63,7 +64,7 @@ namespace nascent {
                 }
                 catch (const nlohmann::json::exception& e) {
                     file.back_up_invalid_file();
-                    error = std::string(e.what()) + ", the file was backed up to " + file.get_backup_path().string();
+                    error = std::string(e.what()) + ", the file was backed up to " + path_utf8(file.get_backup_path());
                     value = T();
                     status = SettingsLoadStatus::INVALID;
                 }

@@ -2,6 +2,7 @@
 
 #include "ServerClient.h"
 #include "SettingsManager.h"
+#include "Utf8Path.h"
 
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include <miniz.h>
@@ -49,10 +50,6 @@ namespace nascent {
         }
 
         return name;
-    }
-
-    static std::filesystem::path utf8_path(const std::string& text) {
-        return std::filesystem::path(std::u8string(text.begin(), text.end()));
     }
 
     static bool is_valid_utf8(const std::string& text) {

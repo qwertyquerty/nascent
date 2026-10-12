@@ -5,6 +5,7 @@
 #include "Results.h"
 #include "SettingsManager.h"
 #include "SettingsStore.h"
+#include "Utf8Path.h"
 
 #include <cmath>
 #include <format>
@@ -73,7 +74,7 @@ namespace nascent {
         std::error_code ec;
 
         for (const auto& folder : std::filesystem::directory_iterator(replay_directory, ec)) {
-            auto chart_hash = chart_hash_by_folder.find(folder.path().filename().string());
+            auto chart_hash = chart_hash_by_folder.find(path_utf8(folder.path().filename()));
 
             if (chart_hash == chart_hash_by_folder.end()) {
                 continue;
