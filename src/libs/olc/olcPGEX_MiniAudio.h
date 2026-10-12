@@ -58,6 +58,9 @@
 
 #include "miniaudio.h"
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -115,6 +118,11 @@ namespace olc
 
     public: // static variables
         static bool m_background_playback;
+        static std::atomic<double> m_callback_time_ms;
+        static std::atomic<double> m_callback_period_ms;
+        static constexpr double MAX_EXTRAPOLATION_MS = 100.0;
+        static constexpr double CALLBACK_PERIOD_SMOOTHING = 0.05;
+        static double steady_milliseconds();
 
     private:
         static std::vector<float> m_engine_buffer;
@@ -166,6 +174,8 @@ namespace olc
         bool IsPlaying(const int id);
         // gets the current position in the sound, in milliseconds
         ma_uint64 GetCursorMilliseconds(const int id);
+        double GetPositionMilliseconds(const int id);
+        double GetCallbackPeriodMilliseconds() const;
         // gets the current position in the sound, in frames
         ma_uint64 GetCursorFrames(const int id);
         // gets the current position in the sound, as a float between 0.0f and 1.0f
@@ -328,6 +338,13 @@ namespace olc
 #pragma region MiniAudio
 
     bool MiniAudio::m_background_playback = true;
+    std::atomic<double> MiniAudio::m_callback_time_ms = 0.0;
+    std::atomic<double> MiniAudio::m_callback_period_ms = 0.0;
+
+    double MiniAudio::steady_milliseconds()
+    {
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
     std::vector<float> MiniAudio::m_engine_buffer;
     std::vector<float> MiniAudio::m_capture_buffer;
     std::mutex MiniAudio::m_capture_mutex;
@@ -468,6 +485,18 @@ namespace olc
          * read pcm frames from the engine to the buffer
          */
         ma_engine_read_pcm_frames(&ma->m_engine, m_engine_buffer.data(), frameCount, NULL);
+
+        double callback_time = steady_milliseconds();
+        double previous_time = m_callback_time_ms.load();
+
+        if(previous_time > 0.0)
+        {
+            double period = m_callback_period_ms.load();
+            double interval = callback_time - previous_time;
+            m_callback_period_ms.store(period > 0.0 ? period + (interval - period) * CALLBACK_PERIOD_SMOOTHING : interval);
+        }
+
+        m_callback_time_ms.store(callback_time);
 
         //ma_lpf_process_pcm_frames(&lpf, m_engine_buffer.data(), m_engine_buffer.data(), frameCount);
         
@@ -744,6 +773,40 @@ namespace olc
         ma_uint64 cursor;
         ma_sound_get_cursor_in_pcm_frames(&m_sounds.at(id)->m_sound, &cursor);
         return (cursor * 1000) / DEVICE_SAMPLE_RATE;
+    }
+
+    double MiniAudio::GetPositionMilliseconds(const int id)
+    {
+        if(!IsLoaded(id))
+            return 0.0;
+
+        ma_sound* sound = &m_sounds.at(id)->m_sound;
+
+        for(int attempt = 0; attempt < 4; attempt++)
+        {
+            double before = m_callback_time_ms.load();
+            ma_uint64 cursor = 0;
+            ma_sound_get_cursor_in_pcm_frames(sound, &cursor);
+            double after = m_callback_time_ms.load();
+
+            if(before != after)
+                continue;
+
+            double position = (double)cursor * 1000.0 / DEVICE_SAMPLE_RATE;
+
+            if(!ma_sound_is_playing(sound) || after <= 0.0)
+                return position;
+
+            double elapsed = std::clamp(steady_milliseconds() - after, 0.0, MAX_EXTRAPOLATION_MS);
+            return position + elapsed * ma_sound_get_pitch(sound);
+        }
+
+        return (double)GetCursorMilliseconds(id);
+    }
+
+    double MiniAudio::GetCallbackPeriodMilliseconds() const
+    {
+        return m_callback_period_ms.load();
     }
 
     ma_uint64 MiniAudio::GetCursorFrames(const int id)

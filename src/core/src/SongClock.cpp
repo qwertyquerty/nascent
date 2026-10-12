@@ -15,6 +15,7 @@ namespace nascent {
         double drift = reported_position - predicted;
 
         if (!has_report || std::abs(drift) > max_error) {
+            snaps += has_report ? 1 : 0;
             reset(reported_position, now);
             return;
         }

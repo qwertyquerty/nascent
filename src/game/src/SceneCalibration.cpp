@@ -221,7 +221,7 @@ namespace nascent {
         double now = now_ms();
 
         if (click_audio_id != -1) {
-            clock.sync(game->get_audio().GetCursorMilliseconds(click_audio_id), now);
+            clock.sync(game->get_audio().GetPositionMilliseconds(click_audio_id), now);
         }
 
         bool coarse = window->GetKey(InputManager::keybind_mod1).bHeld;

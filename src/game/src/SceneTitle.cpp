@@ -223,7 +223,7 @@ namespace nascent {
         }
 
         if (logo_audio_id != -1) {
-            logo_clock.sync(game->get_audio().GetCursorMilliseconds(logo_audio_id), now);
+            logo_clock.sync(game->get_audio().GetPositionMilliseconds(logo_audio_id), now);
             logo_position = logo_clock.position_at(now);
         }
 
@@ -237,7 +237,7 @@ namespace nascent {
         logo_field->set_position(logo_position);
 
         if (bg_chart != nullptr) {
-            bg_clock.sync(game->get_audio().GetCursorMilliseconds(bg_audio_id), now);
+            bg_clock.sync(game->get_audio().GetPositionMilliseconds(bg_audio_id), now);
             bg_position = bg_clock.position_at(now);
 
             for (auto& field : bg_field) {

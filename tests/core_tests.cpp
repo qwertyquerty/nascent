@@ -7,9 +7,11 @@
 #include "Results.h"
 #include "SettingsStore.h"
 #include "Sha256.h"
+#include "SongClock.h"
 
 #include "json.h"
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -298,6 +300,39 @@ static void test_results() {
     CHECK(sha256_hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 }
 
+static void test_song_clock() {
+    for (double period : {10.0, 21.3, 33.3}) {
+        for (double frame : {2.0, 6.9, 16.7}) {
+            SongClock clock;
+            double callback_time = 0;
+            double cursor = 0;
+            double next_callback = 0;
+            double lowest = 1e9;
+            double highest = -1e9;
+            int32_t step = 0;
+
+            for (double now = 0; now < 30000; now += frame) {
+                while (next_callback <= now) {
+                    callback_time = next_callback;
+                    cursor = next_callback + period;
+                    next_callback += period + (step++ % 2 == 0 ? 0.5 : -0.5);
+                }
+
+                clock.sync(std::floor(cursor) + (now - callback_time), now);
+
+                if (now > 2000) {
+                    double error = clock.position_at(now) - now;
+                    lowest = std::min(lowest, error);
+                    highest = std::max(highest, error);
+                }
+            }
+
+            CHECK(clock.snaps == 0);
+            CHECK(highest - lowest < 2.0);
+        }
+    }
+}
+
 static void test_snap_pitch() {
     float pitch = 1.0f;
 
@@ -323,6 +358,7 @@ int main() {
         {"difficulty", test_difficulty},
         {"results", test_results},
         {"snap_pitch", test_snap_pitch},
+        {"song_clock", test_song_clock},
     };
 
     for (const auto& [name, test] : tests) {

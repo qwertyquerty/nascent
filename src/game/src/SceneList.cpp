@@ -527,7 +527,7 @@ namespace nascent {
         }
 
         if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart) {
-            preview_clock.sync(game->get_audio().GetCursorMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
+            preview_clock.sync(game->get_audio().GetPositionMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
         }
         else {
             preview_clock.reset(selected_chart->info.preview_time / selected_chart->pitch, now);
@@ -583,7 +583,7 @@ namespace nascent {
         if (selected_chart_audio_id != -1 && preview_audio_chart != nullptr && preview_audio_chart->audio_path == selected_chart->audio_path) {
             preview_audio_chart = selected_chart;
             game->get_audio().SetPitch(selected_chart_audio_id, selected_chart->pitch);
-            preview_clock.reset(game->get_audio().GetCursorMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
+            preview_clock.reset(game->get_audio().GetPositionMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
         }
         else {
             preview_clock.reset(selected_chart->info.preview_time / selected_chart->pitch, now);

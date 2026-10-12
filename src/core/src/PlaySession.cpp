@@ -47,6 +47,10 @@ namespace nascent {
         return attempt;
     }
 
+    unsigned int PlaySession::clock_snaps() const {
+        return clock.snaps;
+    }
+
     uint32_t PlaySession::get_held_keys() const {
         return attempt.held_keys;
     }

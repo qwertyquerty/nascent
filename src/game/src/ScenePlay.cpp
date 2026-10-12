@@ -214,7 +214,7 @@ namespace nascent {
             }
 
             if (chart_started && !audio_finished) {
-                session->sync_clock(game->get_audio().GetCursorMilliseconds(chart_audio_id) / chart->pitch, now);
+                session->sync_clock(game->get_audio().GetPositionMilliseconds(chart_audio_id) / chart->pitch, now);
             }
 
             for (const KeyEvent& event : game->get_frame_key_events()) {
