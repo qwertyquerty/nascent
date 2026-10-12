@@ -1,0 +1,12 @@
+- name: Refresh chart bests, profile bests and stats for every player
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, apply-play-changes]
+    chdir: "{{ nascent_compose_dir }}"
+  async: 7200
+  poll: 15
+  register: refreshed
+  changed_when: refreshed.rc == 0
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ refreshed.stdout_lines + (['the worker is processing the queued jobs in the background'] if refreshed.stdout is search('queued') else []) }}"

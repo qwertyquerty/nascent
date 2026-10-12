@@ -1,0 +1,9 @@
+- name: Refresh every player's chart bests, profile bests and stats
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Refresh the bests
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: refresh_bests

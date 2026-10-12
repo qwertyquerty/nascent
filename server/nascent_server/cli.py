@@ -13,7 +13,7 @@ from sqlalchemy import delete, func, select
 from . import tasks, timeutil
 from .errors import ApiError
 from .extensions import db
-from .models import AuthSession, Chart, ChartStatus, PlayTicket, Role, User
+from .models import AuthSession, Chart, ChartStatus, Play, PlayTicket, Role, User
 from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
@@ -249,6 +249,34 @@ def recalculate(resimulate: bool):
 
     if final:
         click.echo(f"queued {len(jobs)} jobs for {len(chart_ids)} charts")
+
+
+@nascent_cli.command("apply-play-changes")
+@click.option("--user", "username", default=None, help="Only this player's plays")
+@click.option("--chart", "chart_hash", default=None, help="Only plays on the chart with this hash")
+def apply_play_changes(username: str | None, chart_hash: str | None):
+    players = select(Play.user_id).distinct()
+    chart_id = None
+
+    if username:
+        players = players.where(Play.user_id == _get_user(username).id)
+
+    if chart_hash:
+        chart = get_chart(chart_hash)
+
+        if chart is None:
+            raise click.ClickException(f"no chart with hash {chart_hash}")
+
+        chart_id = chart.id
+        players = players.where(Play.chart_id == chart.id)
+
+    user_ids = sorted(db.session.scalars(players).all())
+    jobs = tasks.enqueue_play_changes(user_ids, chart_id)
+
+    if jobs:
+        click.echo(f"queued {len(jobs)} jobs for {len(user_ids)} players")
+    else:
+        click.echo(f"refreshed the bests and stats of {len(user_ids)} players")
 
 
 @nascent_cli.command("refresh-users")

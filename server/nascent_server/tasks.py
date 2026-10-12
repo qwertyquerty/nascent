@@ -82,6 +82,13 @@ def enqueue_recalculation(chart_ids: list[int], resimulate: bool) -> list[str]:
     return [job for job in jobs if job is not None]
 
 
+def enqueue_play_changes(user_ids: list[int], chart_id: int | None) -> list[str]:
+    size = current_app.config["TASK_BATCH_SIZE"]
+    timeout = current_app.config["RECALCULATE_JOB_TIMEOUT"]
+    jobs = [enqueue(apply_play_changes, batch, chart_id, job_timeout=timeout) for batch in _batches(user_ids, size)]
+    return [job for job in jobs if job is not None]
+
+
 def enqueue_user_refresh(user_ids: Iterable[int], chart_ids: list[int]) -> list[str]:
     ordered = sorted(set(user_ids))
     jobs = [enqueue(refresh_users, batch, chart_ids) for batch in _batches(ordered, current_app.config["TASK_BATCH_SIZE"])]
@@ -179,6 +186,35 @@ def recalculate_chart(chart_id: int, resimulate: bool) -> None:
         ranking.refresh_profile_best(user_id, chart.id)
 
     db.session.commit()
+
+
+@task
+def apply_play_changes(user_ids: list[int], chart_id: int | None) -> None:
+    from .services import ranking
+
+    for user_id in user_ids:
+        user = db.session.execute(select(User).where(User.id == user_id).with_for_update()).scalar_one_or_none()
+
+        if user is None:
+            db.session.rollback()
+            continue
+
+        played = select(Play.chart_id, Play.rate_key).where(Play.user_id == user_id).distinct()
+
+        if chart_id is not None:
+            played = played.where(Play.chart_id == chart_id)
+
+        pairs = db.session.execute(played).all()
+
+        for played_chart_id, rate_key in pairs:
+            ranking.refresh_chart_best(user_id, played_chart_id, rate_key)
+
+        for played_chart_id in {played_chart_id for played_chart_id, _ in pairs}:
+            ranking.refresh_profile_best(user_id, played_chart_id)
+
+        ranking.refresh_user_stats(user)
+        db.session.commit()
+        ranking.sync_leaderboard(user)
 
 
 @task
