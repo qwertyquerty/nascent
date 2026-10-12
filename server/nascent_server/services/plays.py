@@ -362,7 +362,8 @@ def chart_rank(play: Play) -> int | None:
 
 def review_play(play: Play, moderator: User, approve: bool, note: str) -> None:
     play.status = PlayStatus.VERIFIED if approve else PlayStatus.REJECTED
-    play.ranked = approve and play.eligible and play.chart.status == ChartStatus.RANKED
+    play.eligible = play.eligible or approve
+    play.ranked = approve and play.chart.status == ChartStatus.RANKED
     play.reviewed_by_id = moderator.id
     play.reviewed_at = timeutil.utcnow()
     play.review_note = note[:500]
