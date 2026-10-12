@@ -1,0 +1,79 @@
+- name: Turn on the database admin
+  when: nascent_db_admin | bool
+  block:
+    - name: Check the settings
+      ansible.builtin.assert:
+        that: nascent_db_admin_email | length > 0
+        fail_msg: set nascent_db_admin_email (or nascent_letsencrypt_email) to the email you will log in to pgAdmin with
+
+    - name: Create the database admin directory
+      ansible.builtin.file:
+        path: /opt/nascent/db-admin
+        state: directory
+        mode: "0700"
+
+    - name: Remember the login email
+      ansible.builtin.copy:
+        content: "{{ nascent_db_admin_email }}"
+        dest: /opt/nascent/db-admin/email
+        mode: "0600"
+        force: false
+
+    - name: Generate the login password
+      ansible.builtin.shell: umask 077 && openssl rand -hex 16 > /opt/nascent/db-admin/password
+      args:
+        creates: /opt/nascent/db-admin/password
+
+    - name: Read the login email
+      ansible.builtin.slurp:
+        src: /opt/nascent/db-admin/email
+      register: db_admin_email_file
+
+    - name: Read the database password
+      ansible.builtin.slurp:
+        src: /opt/nascent/postgres-password
+      register: db_admin_postgres_password
+
+    - name: Create the pgAdmin data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "5050"
+        group: "5050"
+        mode: "0700"
+      loop:
+        - /opt/nascent/data/pgadmin
+        - /opt/nascent/data/pgadmin/storage
+        - /opt/nascent/data/pgadmin/storage/{{ (db_admin_email_file.content | b64decode | trim) | replace('@', '_') }}
+
+    - name: Let pgAdmin connect to the database without asking for its password
+      ansible.builtin.copy:
+        content: "postgres:5432:*:nascent:{{ db_admin_postgres_password.content | b64decode | trim }}\n"
+        dest: /opt/nascent/data/pgadmin/storage/{{ (db_admin_email_file.content | b64decode | trim) | replace('@', '_') }}/pgpass
+        owner: "5050"
+        group: "5050"
+        mode: "0600"
+
+- name: Turn off the database admin
+  when: not nascent_db_admin | bool
+  block:
+    - name: Check for a compose file
+      ansible.builtin.stat:
+        path: "{{ nascent_compose_dir }}/docker-compose.yml"
+      register: db_admin_compose_file
+
+    - name: Stop and remove pgAdmin
+      when: db_admin_compose_file.stat.exists
+      ansible.builtin.command: docker compose --profile db-admin rm --stop --force pgadmin
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+      register: db_admin_removed
+      changed_when: db_admin_removed.stderr | regex_search('Removed|Stopped') is not none
+
+    - name: Delete the login and pgAdmin's data
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /opt/nascent/db-admin
+        - /opt/nascent/data/pgadmin

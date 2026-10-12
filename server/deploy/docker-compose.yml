@@ -132,6 +132,33 @@ services:
       retries: 6
     logging: *logging
 
+  pgadmin:
+    image: dpage/pgadmin4:9.1
+    profiles: [db-admin]
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${NASCENT_DB_ADMIN_EMAIL:-}
+      PGADMIN_DEFAULT_PASSWORD: ${NASCENT_DB_ADMIN_PASSWORD:-}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/nascent-servers.json
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+    ports:
+      - "127.0.0.1:${NASCENT_DB_ADMIN_PORT:-5050}:80"
+    volumes:
+      - ${NASCENT_DATA_DIR:-./data}/pgadmin:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/nascent-servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/misc/ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 6
+    logging: *logging
+
   certbot:
     image: certbot/certbot:v3.1.0
     restart: unless-stopped

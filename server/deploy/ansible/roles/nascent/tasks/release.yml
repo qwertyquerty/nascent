@@ -8,6 +8,26 @@
     src: /opt/nascent/postgres-password
   register: postgres_password
 
+- name: Check whether the database admin is on
+  ansible.builtin.stat:
+    path: /opt/nascent/db-admin/password
+  register: db_admin_password_file
+
+- name: Read the database admin login
+  when: db_admin_password_file.stat.exists
+  ansible.builtin.slurp:
+    src: /opt/nascent/db-admin/{{ item }}
+  loop: [email, password]
+  register: db_admin_login
+  no_log: true
+
+- name: Remember the database admin login
+  ansible.builtin.set_fact:
+    db_admin_enabled: "{{ db_admin_password_file.stat.exists }}"
+    db_admin_email: "{{ (db_admin_login.results[0].content | b64decode | trim) if db_admin_password_file.stat.exists else '' }}"
+    db_admin_password: "{{ (db_admin_login.results[1].content | b64decode | trim) if db_admin_password_file.stat.exists else '' }}"
+  no_log: true
+
 - name: Check out {{ nascent_ref }}
   ansible.builtin.git:
     repo: "{{ nascent_repo }}"
@@ -71,7 +91,7 @@
       changed_when: true
   rescue:
     - name: Collect the logs
-      ansible.builtin.command: docker compose logs --tail 50 api nginx
+      ansible.builtin.command: docker compose logs --tail 50 api nginx {{ 'pgadmin' if db_admin_enabled | bool else '' }}
       args:
         chdir: "{{ nascent_compose_dir }}"
       register: logs

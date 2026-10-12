@@ -1,0 +1,34 @@
+- name: Deploy the pgAdmin database admin
+  hosts: nascent
+  become: true
+  gather_facts: false
+  vars:
+    nascent_db_admin: true
+  tasks:
+    - name: Set up the database admin
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: db_admin
+
+    - name: Deploy the latest {{ nascent_ref }}
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: release
+
+    - name: Show how to log in
+      when: nascent_db_admin | bool
+      vars:
+        ssh_target: "{{ ansible_user ~ '@' if ansible_user is defined else '' }}{{ ansible_host | default(inventory_hostname) }}"
+        ssh_options: "{{ '-i ' ~ ansible_ssh_private_key_file ~ ' ' if ansible_ssh_private_key_file is defined else '' }}{{ '-p ' ~ ansible_port ~ ' ' if ansible_port is defined else '' }}"
+      ansible.builtin.debug:
+        msg:
+          - "pgAdmin only listens on the server itself, so open a tunnel to it and leave it running:"
+          - "  ssh -N {{ ssh_options }}-L {{ nascent_db_admin_port }}:127.0.0.1:{{ nascent_db_admin_port }} {{ ssh_target }}"
+          - "then browse to http://localhost:{{ nascent_db_admin_port }} and log in as {{ db_admin_email }}"
+          - "get the password with:"
+          - "  ssh {{ ssh_options }}{{ ssh_target }} sudo cat /opt/nascent/db-admin/password"
+
+    - name: Confirm the database admin is off
+      when: not nascent_db_admin | bool
+      ansible.builtin.debug:
+        msg: pgAdmin is stopped and its login and data are deleted

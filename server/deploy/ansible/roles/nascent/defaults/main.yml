@@ -12,3 +12,5 @@ nascent_uwsgi_threads: 4
 nascent_backup_keep_days: 14
 nascent_configure_firewall: true
 nascent_cloudflare: false
+nascent_db_admin_email: "{{ nascent_letsencrypt_email }}"
+nascent_db_admin_port: 5050
