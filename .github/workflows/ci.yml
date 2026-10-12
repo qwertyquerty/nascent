@@ -11,6 +11,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: pipx install clang-format==21.1.2
+
+      - name: Check formatting
+        run: bash scripts/format.sh --check
+
   game:
     name: Game (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
