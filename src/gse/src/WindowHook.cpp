@@ -1,7 +1,10 @@
 #include "WindowHook.h"
+#include "KeySource.h"
 
 #include <atomic>
+#include <future>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -122,6 +125,7 @@ namespace nascent {
     static constexpr LPARAM ALT_HELD_FLAG = 1 << 29;
     static constexpr LPARAM KEY_REPEAT_FLAG = 1 << 30;
     static std::atomic<KeyEventQueue*> hooked_queue = nullptr;
+    static std::atomic<bool> hook_key_events = true;
     static std::atomic<WNDPROC> original_window_proc = nullptr;
     static HWND hooked_window = nullptr;
     static std::wstring window_title;
@@ -174,9 +178,13 @@ namespace nascent {
                 case WM_SYSKEYDOWN:
                 case WM_KEYUP:
                 case WM_SYSKEYUP: {
-                    queue->push(key_from_virtual_key(wparam), msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN, now_ms());
+                    if (!hook_key_events) {
+                        break;
+                    }
 
-                    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && (lparam & KEY_REPEAT_FLAG) == 0) {
+                    bool pressed = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+
+                    if (queue->push(key_from_virtual_key(wparam), pressed, now_ms()) && pressed && (lparam & KEY_REPEAT_FLAG) == 0) {
                         queue->record_delay((double)(DWORD)(GetTickCount() - (DWORD)GetMessageTime()));
                     }
                     break;
@@ -270,12 +278,138 @@ namespace nascent {
 
         hooked_window = nullptr;
     }
+
+    void set_window_hook_key_events(bool enabled) {
+        hook_key_events = enabled;
+    }
+
+    static constexpr USHORT GENERIC_DESKTOP_USAGE_PAGE = 0x01;
+    static constexpr USHORT KEYBOARD_USAGE = 0x06;
+    static constexpr USHORT UNMAPPED_VIRTUAL_KEY = 0xFF;
+    static constexpr const wchar_t* RAW_INPUT_WINDOW_CLASS = L"NascentRawInput";
+    static std::thread raw_input_thread;
+    static std::atomic<DWORD> raw_input_thread_id = 0;
+    static std::atomic<KeyEventQueue*> raw_input_queue = nullptr;
+    static std::atomic<HWND> raw_input_target = nullptr;
+
+    static void handle_raw_input(HRAWINPUT handle) {
+        double time = now_ms();
+        RAWINPUT input = {};
+        UINT size = sizeof(input);
+
+        if (GetRawInputData(handle, RID_INPUT, &input, &size, sizeof(RAWINPUTHEADER)) == (UINT)-1 || input.header.dwType != RIM_TYPEKEYBOARD) {
+            return;
+        }
+
+        const RAWKEYBOARD& keyboard = input.data.keyboard;
+        KeyEventQueue* queue = raw_input_queue.load();
+
+        if (queue == nullptr || keyboard.VKey == UNMAPPED_VIRTUAL_KEY || GetForegroundWindow() != raw_input_target.load()) {
+            return;
+        }
+
+        bool pressed = (keyboard.Flags & RI_KEY_BREAK) == 0;
+
+        if (queue->push(key_from_virtual_key(keyboard.VKey), pressed, time) && pressed) {
+            queue->record_delay((double)(DWORD)(GetTickCount() - (DWORD)GetMessageTime()));
+        }
+    }
+
+    static LRESULT CALLBACK raw_input_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+        if (msg == WM_INPUT) {
+            handle_raw_input((HRAWINPUT)lparam);
+        }
+
+        return DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
+
+    static void run_raw_input(std::promise<bool> started) {
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+        raw_input_thread_id = GetCurrentThreadId();
+
+        HINSTANCE instance = GetModuleHandleW(nullptr);
+        WNDCLASSEXW window_class = {};
+        window_class.cbSize = sizeof(window_class);
+        window_class.lpfnWndProc = raw_input_window_proc;
+        window_class.hInstance = instance;
+        window_class.lpszClassName = RAW_INPUT_WINDOW_CLASS;
+        RegisterClassExW(&window_class);
+
+        HWND window = CreateWindowExW(0, RAW_INPUT_WINDOW_CLASS, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, nullptr);
+        RAWINPUTDEVICE device = {GENERIC_DESKTOP_USAGE_PAGE, KEYBOARD_USAGE, RIDEV_INPUTSINK, window};
+
+        if (window == nullptr || !RegisterRawInputDevices(&device, 1, sizeof(device))) {
+            if (window != nullptr) {
+                DestroyWindow(window);
+            }
+
+            started.set_value(false);
+            return;
+        }
+
+        started.set_value(true);
+        MSG message;
+
+        while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+            DispatchMessageW(&message);
+        }
+
+        device.dwFlags = RIDEV_REMOVE;
+        device.hwndTarget = nullptr;
+        RegisterRawInputDevices(&device, 1, sizeof(device));
+        DestroyWindow(window);
+    }
+
+    std::optional<InputMode> start_key_source(KeyEventQueue* queue) {
+        if (raw_input_thread.joinable()) {
+            raw_input_queue = queue;
+            return InputMode::RAW_INPUT;
+        }
+
+        HWND window = hooked_window;
+
+        if (window == nullptr) {
+            EnumWindows(find_olc_window, (LPARAM)&window);
+        }
+
+        if (window == nullptr) {
+            return std::nullopt;
+        }
+
+        raw_input_target = window;
+        raw_input_queue = queue;
+        std::promise<bool> started;
+        std::future<bool> result = started.get_future();
+        raw_input_thread = std::thread(run_raw_input, std::move(started));
+
+        if (!result.get()) {
+            raw_input_thread.join();
+            raw_input_queue = nullptr;
+            return std::nullopt;
+        }
+
+        return InputMode::RAW_INPUT;
+    }
+
+    void stop_key_source() {
+        raw_input_queue = nullptr;
+
+        if (!raw_input_thread.joinable()) {
+            return;
+        }
+
+        PostThreadMessageW(raw_input_thread_id.load(), WM_QUIT, 0, 0);
+        raw_input_thread.join();
+    }
 #else
     bool install_window_hook(KeyEventQueue*, const std::string&) {
         return false;
     }
 
     void uninstall_window_hook() {
+    }
+
+    void set_window_hook_key_events(bool) {
     }
 #endif
 }

@@ -32,7 +32,8 @@ namespace nascent {
         std::vector<KeyEvent> frame_key_events;
         std::vector<std::string> frame_dropped_files;
         std::string frame_text;
-        bool key_event_hook_active = false;
+        bool window_hook_active = false;
+        InputMode input_mode = InputMode::POLLING;
         bool quit_requested = false;
 
         void init_input();
@@ -74,6 +75,7 @@ namespace nascent {
         const std::string& get_frame_text();
         const std::vector<std::string>& get_frame_dropped_files() const;
         InputDelayStats input_delay() const;
+        InputMode get_input_mode() const;
         void reset_input_delay();
 
         void quit();

@@ -14,6 +14,16 @@ namespace nascent {
 
     inline constexpr size_t KEY_COUNT = (size_t)olc::Key::ENUM_END;
 
+    enum class InputMode {
+        POLLING,
+        WINDOW_MESSAGES,
+        RAW_INPUT,
+        X11_THREAD,
+        COCOA_EVENTS,
+    };
+
+    const char* input_mode_name(InputMode mode);
+
     struct KeyEvent {
         olc::Key key;
         bool pressed;
@@ -40,7 +50,7 @@ namespace nascent {
         InputDelayStats delay_stats;
 
         public:
-        void push(olc::Key key, bool pressed, double time);
+        bool push(olc::Key key, bool pressed, double time);
         void push_text(char32_t code_point);
         void release_all(double time);
         std::vector<KeyEvent> drain();

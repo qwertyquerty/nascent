@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "KeySource.h"
 #include "Platform.h"
 #include "TextInput.h"
 #include "WindowHook.h"
@@ -15,13 +16,26 @@ namespace nascent {
     };
 
     Game::~Game() {
-        if (key_event_hook_active) {
+        stop_key_source();
+
+        if (window_hook_active) {
             uninstall_window_hook();
         }
     }
 
     void Game::init_input() {
-        key_event_hook_active = install_window_hook(&key_event_queue, window->sAppName);
+        window_hook_active = install_window_hook(&key_event_queue, window->sAppName);
+        input_mode = window_hook_active ? InputMode::WINDOW_MESSAGES : InputMode::POLLING;
+
+        if (std::optional<InputMode> source = start_key_source(&key_event_queue)) {
+            input_mode = *source;
+        }
+
+        set_window_hook_key_events(input_mode == InputMode::WINDOW_MESSAGES);
+    }
+
+    InputMode Game::get_input_mode() const {
+        return input_mode;
     }
 
     void Game::make_layer_blank(uint32_t layer) {
@@ -43,12 +57,12 @@ namespace nascent {
     }
 
     void Game::begin_frame(float elapsed_time) {
-        if (!key_event_hook_active) {
+        if (input_mode == InputMode::POLLING) {
             poll_key_events();
         }
 
         frame_key_events = key_event_queue.drain();
-        frame_text = key_event_hook_active ? key_event_queue.drain_text() : us_layout_text(window);
+        frame_text = window_hook_active ? key_event_queue.drain_text() : us_layout_text(window);
         frame_dropped_files = key_event_queue.drain_dropped_files();
         update_transition(elapsed_time);
         apply_pending_scene();

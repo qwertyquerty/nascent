@@ -10,21 +10,37 @@ namespace nascent {
         return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
 
-    void KeyEventQueue::push(olc::Key key, bool pressed, double time) {
+    const char* input_mode_name(InputMode mode) {
+        switch (mode) {
+            case InputMode::WINDOW_MESSAGES:
+                return "window messages";
+            case InputMode::RAW_INPUT:
+                return "raw input";
+            case InputMode::X11_THREAD:
+                return "X11 thread";
+            case InputMode::COCOA_EVENTS:
+                return "Cocoa events";
+            default:
+                return "polling";
+        }
+    }
+
+    bool KeyEventQueue::push(olc::Key key, bool pressed, double time) {
         size_t index = (size_t)key;
 
         if (key == olc::Key::NONE || index >= KEY_COUNT) {
-            return;
+            return false;
         }
 
         std::lock_guard<std::mutex> lock(mutex);
 
         if (held[index] == pressed) {
-            return;
+            return false;
         }
 
         held[index] = pressed;
         events.push_back({key, pressed, time});
+        return true;
     }
 
     void KeyEventQueue::release_all(double time) {
