@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <map>
 #include <optional>
 #include <utility>
 
@@ -77,16 +76,10 @@ namespace nascent {
                 return 0.0;
             }
 
-            const ChartTimingPoint* point = &timing_points.front();
-
-            for (const ChartTimingPoint& tp : timing_points) {
-                if (tp.time <= time + 1) {
-                    point = &tp;
-                }
-                else {
-                    break;
-                }
-            }
+            auto after = std::partition_point(timing_points.begin(), timing_points.end(), [time](const ChartTimingPoint& tp) {
+                return tp.time <= time + 1;
+            });
+            const ChartTimingPoint* point = after == timing_points.begin() ? &timing_points.front() : &*std::prev(after);
 
             double beats = (time - point->time) / point->beat_length;
             double fraction = beats - std::floor(beats);
@@ -118,8 +111,9 @@ namespace nascent {
         }
 
         double median_of_smallest(std::vector<double> values, size_t count) {
-            std::sort(values.begin(), values.end());
-            values.resize(std::min(count, values.size()));
+            size_t kept = std::min(count, values.size());
+            std::partial_sort(values.begin(), values.begin() + (std::ptrdiff_t)kept, values.end());
+            values.resize(kept);
 
             size_t middle = values.size() / 2;
             return values.size() % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2.0;
@@ -256,6 +250,14 @@ namespace nascent {
         double aggregate = 0.0;
         size_t window_count = 0;
 
+        std::vector<double> onset_times;
+        std::vector<double> gaps;
+        std::vector<double> buckets;
+        std::vector<double> columns(keys);
+        std::vector<double> actions(hand_count);
+        std::vector<size_t> active_holds;
+        size_t next_coverage_hold = 0;
+
         Window window;
         window.columns.resize(keys);
         window.busy_columns.resize(keys);
@@ -283,8 +285,7 @@ namespace nascent {
             size_t first = std::lower_bound(note_times.begin(), note_times.end(), window_start) - note_times.begin();
             size_t last = std::lower_bound(note_times.begin(), note_times.end(), window_end) - note_times.begin();
 
-            std::map<std::pair<double, uint8_t>, int> groups;
-            std::vector<double> onset_times;
+            onset_times.clear();
             double hand_rate_total = 0.0;
             size_t hand_rate_count = 0;
             double snap_total = 0.0;
@@ -297,7 +298,14 @@ namespace nascent {
                     window.busy_columns[note.column] += 1;
                 }
 
-                groups[{note.time, hand_of(note.column, keys)}] += 1;
+                uint8_t hand = hand_of(note.column, keys);
+
+                if (i > first && notes[i - 1].time == note.time && hand_of(notes[i - 1].column, keys) == hand) {
+                    window.hand_chord_extra[hand] += 1;
+                }
+                else {
+                    window.hand_actions[hand] += 1;
+                }
 
                 if (onset_times.empty() || onset_times.back() != note.time) {
                     onset_times.push_back(note.time);
@@ -313,15 +321,10 @@ namespace nascent {
                 snap_total += note_snap[i];
             }
 
-            for (const auto& [group, size] : groups) {
-                window.hand_actions[group.second] += 1;
-                window.hand_chord_extra[group.second] += size - 1;
-            }
-
             window.onsets = (double)onset_times.size();
 
             if (onset_times.size() >= 2) {
-                std::vector<double> gaps;
+                gaps.clear();
 
                 for (size_t i = 1; i < onset_times.size(); i++) {
                     gaps.push_back(std::max(onset_times[i] - onset_times[i - 1], MIN_BURST_GAP));
@@ -329,7 +332,7 @@ namespace nascent {
 
                 window.burst = 1000.0 / median_of_smallest(gaps, 3);
 
-                std::vector<double> buckets;
+                buckets.clear();
 
                 for (double gap : gaps) {
                     buckets.push_back(std::nearbyint(gap / 10.0));
@@ -342,7 +345,7 @@ namespace nascent {
             window.tempo = (double)(std::lower_bound(timing_point_times.begin(), timing_point_times.end(), window_end) - std::lower_bound(timing_point_times.begin(), timing_point_times.end(), window_start));
 
             if (onset_times.size() >= 3) {
-                std::vector<double> gaps;
+                gaps.clear();
 
                 for (size_t i = 1; i < onset_times.size(); i++) {
                     double gap = onset_times[i] - onset_times[i - 1];
@@ -384,15 +387,21 @@ namespace nascent {
             if (p.hold_coverage_weight != 0.0) {
                 double covered = 0.0;
 
-                for (const auto& [hold_start, hold_end] : holds) {
+                while (next_coverage_hold < holds.size() && holds[next_coverage_hold].first < window_end) {
+                    active_holds.push_back(next_coverage_hold++);
+                }
+
+                std::erase_if(active_holds, [&](size_t index) {
+                    return holds[index].second <= window_start;
+                });
+
+                for (size_t index : active_holds) {
+                    const auto& [hold_start, hold_end] = holds[index];
                     covered += std::max(std::min(hold_end, window_end) - std::max(hold_start, window_start), 0.0);
                 }
 
                 window.coverage = covered / WINDOW;
             }
-
-            std::vector<double> columns(keys);
-            std::vector<double> actions(hand_count);
 
             for (uint8_t column = 0; column < keys; column++) {
                 columns[column] = window.columns[column] + p.hold_busy_weight * window.busy_columns[column] + p.release_weight * window.release_columns[column];
