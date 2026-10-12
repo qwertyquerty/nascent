@@ -1,0 +1,24 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - play | string is match('^[0-9]+$')
+      - decision in ['approve', 'reject']
+    fail_msg: pass the play's id with -e play=123 and -e decision=approve or -e decision=reject
+
+- name: Review play {{ play }}
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, review-play, "{{ play }}", "{{ decision }}", --note, "{{ note | default('') }}"]
+    chdir: "{{ nascent_compose_dir }}"
+  register: reviewed
+  changed_when: reviewed.rc == 0
+  failed_when: false
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ reviewed.stdout | trim }}"
+  when: reviewed.rc == 0
+
+- name: Fail with the reason
+  ansible.builtin.fail:
+    msg: "{{ reviewed.stderr | trim }}"
+  when: reviewed.rc != 0

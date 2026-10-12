@@ -360,11 +360,11 @@ def chart_rank(play: Play) -> int | None:
     return int(better or 0) + 1
 
 
-def review_play(play: Play, moderator: User, approve: bool, note: str) -> None:
+def review_play(play: Play, moderator: User | None, approve: bool, note: str) -> None:
     play.status = PlayStatus.VERIFIED if approve else PlayStatus.REJECTED
     play.eligible = play.eligible or approve
     play.ranked = approve and play.chart.status == ChartStatus.RANKED
-    play.reviewed_by_id = moderator.id
+    play.reviewed_by_id = moderator.id if moderator is not None else None
     play.reviewed_at = timeutil.utcnow()
     play.review_note = note[:500]
     db.session.flush()

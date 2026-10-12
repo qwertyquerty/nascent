@@ -1,0 +1,21 @@
+- name: Approve or reject a play
+  hosts: nascent
+  become: true
+  gather_facts: false
+  vars_prompt:
+    - name: play
+      prompt: Play id
+      private: false
+    - name: decision
+      prompt: approve or reject
+      private: false
+      default: approve
+    - name: note
+      prompt: Note (optional)
+      private: false
+      default: ""
+  tasks:
+    - name: Review the play
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: review_play

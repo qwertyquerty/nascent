@@ -18,7 +18,7 @@ from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
 from .services.charts import add_chart_source, get_chart, parse_chart, read_osu_file, register_chart, set_chart_status
-from .services.plays import submit_play
+from .services.plays import review_play, submit_play
 
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
 
@@ -237,6 +237,23 @@ def chart_status(chart_hash: str, status: str):
         return
 
     _report(tasks.enqueue(tasks.apply_chart_status, chart.id), f"{chart.title} is now {status}")
+
+
+@nascent_cli.command("review-play")
+@click.argument("play_id", type=int)
+@click.argument("decision", type=click.Choice(["approve", "reject"]))
+@click.option("--note", default="", help="Why, kept with the play")
+def review(play_id: int, decision: str, note: str):
+    play = db.session.get(Play, play_id)
+
+    if play is None:
+        raise click.ClickException(f"no play with id {play_id}")
+
+    review_play(play, None, decision == "approve", note)
+    db.session.commit()
+    ranking.sync_leaderboard(play.user)
+    ranked = "ranked" if play.ranked else "not ranked"
+    click.echo(f"play {play.id} by {play.user.username} on {play.chart.title} [{play.chart.difficulty_name}] is now {play.status} and {ranked}")
 
 
 @nascent_cli.command("recalculate")
