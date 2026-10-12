@@ -20,13 +20,24 @@ namespace nascent {
         double time;
     };
 
+    struct InputDelayStats {
+        uint32_t count = 0;
+        double total_ms = 0;
+        double max_ms = 0;
+
+        double average_ms() const {
+            return count > 0 ? total_ms / count : 0.0;
+        }
+    };
+
     class KeyEventQueue {
         protected:
-        std::mutex mutex;
+        mutable std::mutex mutex;
         std::vector<KeyEvent> events;
         std::array<bool, KEY_COUNT> held = {};
         std::string text;
         std::vector<std::string> dropped_files;
+        InputDelayStats delay_stats;
 
         public:
         void push(olc::Key key, bool pressed, double time);
@@ -36,6 +47,9 @@ namespace nascent {
         std::string drain_text();
         void push_dropped_files(std::vector<std::string> files);
         std::vector<std::string> drain_dropped_files();
+        void record_delay(double delay_ms);
+        InputDelayStats input_delay() const;
+        void reset_input_delay();
     };
 
 }

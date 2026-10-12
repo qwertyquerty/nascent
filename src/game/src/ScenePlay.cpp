@@ -32,6 +32,9 @@ namespace nascent {
     static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
     static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
     static constexpr float SONG_PROGRESS_TOP = 40.0f;
+    static constexpr float DIAGNOSTICS_RIGHT = 520.0f;
+    static constexpr float DIAGNOSTICS_TOP = 70.0f;
+    static constexpr float DIAGNOSTICS_LINE_HEIGHT = 24.0f;
 
     ScenePlay::ScenePlay(Chart* chart, Skin* skin, Scene* return_scene) {
         this->chart = chart;
@@ -62,6 +65,7 @@ namespace nascent {
         replay_settings.scroll_speed = field->scroll_speed;
 
         Replay replay = make_replay(attempt, summary, replay_chart, chart->pitch, replay_settings, current_utc_timestamp());
+        replay.diagnostics = timing_diagnostics();
         LocalBests::record(chart->gameplay_hash(), chart->pitch, summary, replay.played_at);
 
         std::string error;
@@ -122,6 +126,38 @@ namespace nascent {
         field->judge_height = lane_width / 2;
         field->draw_combo = true;
         timer = 0;
+        frames_played = 0;
+        frame_time_total = 0;
+        game->reset_input_delay();
+    }
+
+    nlohmann::json ScenePlay::timing_diagnostics() const {
+        InputDelayStats delay = game->input_delay();
+
+        return nlohmann::json{
+            {"audio_callback_period_ms", game->get_audio().GetCallbackPeriodMilliseconds()},
+            {"clock_snaps", session->clock_snaps()},
+            {"input_delay_average_ms", delay.average_ms()},
+            {"input_delay_max_ms", delay.max_ms},
+            {"input_delay_samples", delay.count},
+            {"average_frame_ms", frames_played > 0 ? frame_time_total * 1000.0 / frames_played : 0.0},
+        };
+    }
+
+    void ScenePlay::draw_timing_diagnostics(olc::PixelGameEngine* window) const {
+        InputDelayStats delay = game->input_delay();
+        double frame_ms = frames_played > 0 ? frame_time_total * 1000.0 / frames_played : 0.0;
+        const std::string lines[] = {
+            std::format("audio period   {:.1f} ms", game->get_audio().GetCallbackPeriodMilliseconds()),
+            std::format("clock snaps    {}", session->clock_snaps()),
+            std::format("input delay    {:.2f} ms avg of {}", delay.average_ms(), delay.count),
+            std::format("frame time     {:.2f} ms", frame_ms),
+        };
+        float x = (float)window->GetScreenSize().x - DIAGNOSTICS_RIGHT;
+
+        for (size_t index = 0; index < std::size(lines); index++) {
+            window->DrawStringDecal({x, DIAGNOSTICS_TOP + (float)index * DIAGNOSTICS_LINE_HEIGHT}, lines[index], olc::WHITE, {2.0f, 2.0f});
+        }
     }
 
     void ScenePlay::restart() {
@@ -234,6 +270,11 @@ namespace nascent {
 
             session->update(now);
 
+            if (chart_started) {
+                frames_played++;
+                frame_time_total += elapsed_time;
+            }
+
             timer += elapsed_time;
 
             if (chart_started && !finished && session->song_position(now) > chart->get_chart_end_ms() + RESULTS_DELAY_MS) {
@@ -267,6 +308,10 @@ namespace nascent {
         uint8_t l = 0;
         const double vspacing = 26;
         const uint8_t vlen = 35;
+        if (show_hit_log) {
+            draw_timing_diagnostics(window);
+        }
+
         for (int64_t i = attempt.soonest_scored_hit_index; show_hit_log && i >= 0 && i < (int64_t)attempt.judged_hits.size(); i--) {
             const JudgedHit& jhit = attempt.judged_hits[i];
 

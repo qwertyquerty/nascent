@@ -120,6 +120,7 @@ namespace nascent {
     }
 
     static constexpr LPARAM ALT_HELD_FLAG = 1 << 29;
+    static constexpr LPARAM KEY_REPEAT_FLAG = 1 << 30;
     static std::atomic<KeyEventQueue*> hooked_queue = nullptr;
     static std::atomic<WNDPROC> original_window_proc = nullptr;
     static HWND hooked_window = nullptr;
@@ -174,6 +175,10 @@ namespace nascent {
                 case WM_KEYUP:
                 case WM_SYSKEYUP: {
                     queue->push(key_from_virtual_key(wparam), msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN, now_ms());
+
+                    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && (lparam & KEY_REPEAT_FLAG) == 0) {
+                        queue->record_delay((double)(DWORD)(GetTickCount() - (DWORD)GetMessageTime()));
+                    }
                     break;
                 }
                 case WM_CHAR: {

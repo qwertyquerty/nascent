@@ -254,6 +254,14 @@ namespace nascent {
         return frame_text;
     }
 
+    InputDelayStats Game::input_delay() const {
+        return key_event_queue.input_delay();
+    }
+
+    void Game::reset_input_delay() {
+        key_event_queue.reset_input_delay();
+    }
+
     const std::vector<std::string>& Game::get_frame_dropped_files() const {
         return frame_dropped_files;
     }

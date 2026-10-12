@@ -44,6 +44,10 @@ namespace nascent {
                        }},
             {"inputs", inputs},
         };
+
+        if (!replay.diagnostics.is_null()) {
+            j["diagnostics"] = replay.diagnostics;
+        }
     }
 
     void from_json(const nlohmann::json& j, Replay& replay) {
@@ -76,6 +80,7 @@ namespace nascent {
         result.at("difficulty").get_to(replay.result.difficulty);
         result.at("performance").get_to(replay.result.performance);
 
+        replay.diagnostics = j.contains("diagnostics") ? j.at("diagnostics") : nlohmann::json();
         replay.inputs.clear();
 
         for (const nlohmann::json& input : j.at("inputs")) {

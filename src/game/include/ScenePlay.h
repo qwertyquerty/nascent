@@ -30,6 +30,8 @@ namespace nascent {
         double timer = 0;
         double paused_position = 0;
         float restart_hold = 0;
+        uint32_t frames_played = 0;
+        double frame_time_total = 0;
 
         bool chart_started = false;
         bool paused = false;
@@ -42,6 +44,8 @@ namespace nascent {
         void finish();
         void start_attempt();
         void restart();
+        nlohmann::json timing_diagnostics() const;
+        void draw_timing_diagnostics(olc::PixelGameEngine* window) const;
 
         public:
         static constexpr float RESTART_HOLD_TIME = 0.3f;

@@ -50,6 +50,7 @@ namespace nascent {
         std::vector<AttemptInput> inputs;
         int32_t end_time = 0;
         ReplayResult result;
+        nlohmann::json diagnostics;
     };
 
     void to_json(nlohmann::json& j, const Replay& replay);

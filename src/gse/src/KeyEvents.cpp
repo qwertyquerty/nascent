@@ -1,5 +1,6 @@
 #include "KeyEvents.h"
 
+#include <algorithm>
 #include <chrono>
 #include <iterator>
 #include <utility>
@@ -73,6 +74,23 @@ namespace nascent {
     void KeyEventQueue::push_dropped_files(std::vector<std::string> files) {
         std::lock_guard<std::mutex> lock(mutex);
         dropped_files.insert(dropped_files.end(), std::make_move_iterator(files.begin()), std::make_move_iterator(files.end()));
+    }
+
+    void KeyEventQueue::record_delay(double delay_ms) {
+        std::lock_guard<std::mutex> lock(mutex);
+        delay_stats.count++;
+        delay_stats.total_ms += delay_ms;
+        delay_stats.max_ms = std::max(delay_stats.max_ms, delay_ms);
+    }
+
+    InputDelayStats KeyEventQueue::input_delay() const {
+        std::lock_guard<std::mutex> lock(mutex);
+        return delay_stats;
+    }
+
+    void KeyEventQueue::reset_input_delay() {
+        std::lock_guard<std::mutex> lock(mutex);
+        delay_stats = InputDelayStats();
     }
 
     std::vector<std::string> KeyEventQueue::drain_dropped_files() {

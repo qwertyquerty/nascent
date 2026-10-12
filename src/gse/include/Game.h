@@ -73,6 +73,8 @@ namespace nascent {
         const std::vector<KeyEvent>& get_frame_key_events();
         const std::string& get_frame_text();
         const std::vector<std::string>& get_frame_dropped_files() const;
+        InputDelayStats input_delay() const;
+        void reset_input_delay();
 
         void quit();
         bool should_quit();
