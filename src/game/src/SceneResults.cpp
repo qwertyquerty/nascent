@@ -157,7 +157,7 @@ namespace nascent {
         }
 
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
-            game->play_sound(skin->hitsound_sfx);
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
             game->set_scene(return_scene);
         }
     }

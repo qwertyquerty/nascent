@@ -32,14 +32,14 @@ namespace nascent {
     }
 
     void SceneAccount::on_enter() {
-        game->play_music(skin->account_loop_sfx, true);
+        game->play_music(skin->sound(SkinSound::ACCOUNT_LOOP), true);
         status.clear();
         set_mode(Account::signed_in() ? Mode::SIGNED_IN : Mode::SIGN_IN);
     }
 
     void SceneAccount::on_exit() {
         form.set_enabled(game->window, false);
-        game->stop_sound(skin->account_loop_sfx);
+        game->stop_sound(skin->sound(SkinSound::ACCOUNT_LOOP));
     }
 
     void SceneAccount::play_menu_sound() {
@@ -107,7 +107,7 @@ namespace nascent {
 
         starfield->update(this, elapsed_time);
 
-        if (skin->account_loop_sfx != -1 && game->get_audio().IsPlaying(skin->account_loop_sfx)) {
+        if (skin->sound(SkinSound::ACCOUNT_LOOP) != -1 && game->get_audio().IsPlaying(skin->sound(SkinSound::ACCOUNT_LOOP))) {
             game->get_audio().CopyEngineBuffer(audio_buffer);
             fft->update_song_buffer(audio_buffer, elapsed_time);
         }
@@ -147,7 +147,7 @@ namespace nascent {
             submit();
         }
         else if (action == UiForm::Action::MOVED) {
-            game->play_sound(skin->hitsound_sfx);
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
         }
         else if (action == UiForm::Action::CHANGED) {
             play_menu_sound();

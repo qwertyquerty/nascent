@@ -21,6 +21,7 @@ namespace nascent {
         play_start_delay,
         scene_transition_time,
         list_preview_fade_in_time,
+        skin,
         frame_rate_limit,
         master_volume,
         music_volume,

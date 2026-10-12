@@ -458,7 +458,7 @@ namespace nascent {
             show_leaderboards = !show_leaderboards;
             status_bar.set_leaderboards_shown(show_leaderboards);
             leaderboard_delay = 0;
-            game->play_sound(skin->hitsound_sfx);
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
         }
 
         if (game->window->GetKey(InputManager::keybind_mod1).bHeld) {
@@ -568,7 +568,7 @@ namespace nascent {
         selected_chart_index = index;
 
         if (sound) {
-            game->play_sound(skin->hitsound_sfx);
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
         }
 
         olc::vi2d window_size = game->window->GetScreenSize();

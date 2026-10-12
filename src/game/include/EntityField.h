@@ -56,6 +56,8 @@ namespace nascent {
         void set_position(double position);
         double get_judge_bottom() const;
         olc::Pixel with_opacity(olc::Pixel color) const;
+        olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
+        void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
         void set_attempt(const Attempt* attempt);
 
         void set_keys(uint32_t keys);

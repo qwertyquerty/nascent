@@ -66,7 +66,7 @@ namespace nascent {
             status_is_error = true;
         }
 
-        game->play_sound(skin->hitsound_sfx);
+        game->play_sound(skin->sound(SkinSound::HITSOUND));
 
         if (capture_all && lane + 1 < key_count) {
             selected_lane++;
@@ -163,7 +163,7 @@ namespace nascent {
             color.a = (held >> lane) & 1 ? 255 : selected ? 170
                                                           : IDLE_NOTE_ALPHA;
 
-            if (olc::Decal* note = skin->note_decal(lane)) {
+            if (olc::Decal* note = skin->image(SkinImage::NOTE, lane, key_count)) {
                 float scale = size / note->sprite->width;
                 window->DrawDecal({lane_x, (float)top}, note, {scale, scale}, color);
             }

@@ -65,6 +65,14 @@ namespace olc {
 
         Font &operator=(const Font &other) = delete;
         Font &operator=(Font &&other) {
+            if (this == &other) {
+                return *this;
+            }
+
+            if (fontFace != nullptr) {
+                FT_Done_Face(fontFace);
+            }
+
             fontFace = other.fontFace;
             fontSize = other.fontSize;
             fallbacks = std::move(other.fallbacks);

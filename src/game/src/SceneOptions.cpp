@@ -49,6 +49,19 @@ namespace nascent {
             }
         }
 
+        skins = Skin::available_skins();
+        std::vector<std::string> skin_labels;
+        size_t skin_index = 0;
+
+        for (size_t index = 0; index < skins.size(); index++) {
+            skin_labels.push_back(skins[index].name);
+
+            if (skins[index].id == skin->get_id()) {
+                skin_index = index;
+            }
+        }
+
+        skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
         master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, VOLUME_STEP, "%");
         music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, VOLUME_STEP, "%");
         effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, VOLUME_STEP, "%");
@@ -60,6 +73,11 @@ namespace nascent {
 
     void SceneOptions::apply() {
         Settings& settings = SettingsManager::settings;
+        if (!skins.empty() && skins[skin_field->selected].id != skin->get_id()) {
+            settings.skin = skins[skin_field->selected].id;
+            skin->reload(settings.skin);
+        }
+
         settings.master_volume = (uint8_t)master_volume_field->value;
         settings.music_volume = (uint8_t)music_volume_field->value;
         settings.effects_volume = (uint8_t)effects_volume_field->value;
@@ -87,7 +105,7 @@ namespace nascent {
         }
 
         if (action == UiForm::Action::MOVED || action == UiForm::Action::CHANGED) {
-            game->play_sound(skin->hitsound_sfx);
+            game->play_sound(skin->sound(SkinSound::HITSOUND));
         }
     }
 

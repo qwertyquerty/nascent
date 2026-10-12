@@ -208,7 +208,7 @@ namespace nascent {
             }
 
             if (action == UiForm::Action::MOVED || action == UiForm::Action::CHANGED) {
-                game->play_sound(skin->hitsound_sfx);
+                game->play_sound(skin->sound(SkinSound::HITSOUND));
             }
             else if (action == UiForm::Action::SUBMIT) {
                 play_menu_sound();
@@ -236,7 +236,7 @@ namespace nascent {
             }
 
             if (selected != previous) {
-                game->play_sound(skin->hitsound_sfx);
+                game->play_sound(skin->sound(SkinSound::HITSOUND));
             }
         }
 

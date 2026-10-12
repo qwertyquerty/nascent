@@ -44,7 +44,7 @@ namespace nascent {
         start_time = time(nullptr);
         std::srand(start_time);
 
-        skin = std::make_unique<Skin>(this, Skin::DEFAULT_SKIN_NAME, 7);
+        skin = std::make_unique<Skin>(this, SettingsManager::settings.skin);
         scene_list = std::make_unique<SceneList>(skin.get());
 
         set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get()));

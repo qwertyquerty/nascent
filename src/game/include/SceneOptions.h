@@ -5,18 +5,21 @@
 #include "olcPixelGameEngine.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace nascent {
     class ChoiceField;
     class SliderField;
     class Skin;
+    struct SkinInfo;
 
     class SceneOptions : public Scene {
         protected:
         Skin* skin;
         UiForm form;
 
+        ChoiceField* skin_field = nullptr;
         ChoiceField* frame_rate_field = nullptr;
         ChoiceField* fps_counter_field = nullptr;
         ChoiceField* transition_field = nullptr;
@@ -25,6 +28,7 @@ namespace nascent {
         SliderField* effects_volume_field = nullptr;
 
         std::vector<uint16_t> frame_rates;
+        std::vector<SkinInfo> skins;
         bool changed = false;
 
         void apply();

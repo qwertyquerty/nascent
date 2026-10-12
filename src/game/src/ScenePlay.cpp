@@ -127,7 +127,7 @@ namespace nascent {
     void ScenePlay::restart() {
         game->get_audio().Stop(chart_audio_id);
         game->get_audio().Seek(chart_audio_id, 0);
-        game->stop_sound(skin->idle_loop_sfx);
+        game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
 
         if (Account::signed_in()) {
             ticket = ServerApi::request_ticket(*chart).share();
@@ -149,14 +149,14 @@ namespace nascent {
             chart_audio_id = -1;
         }
 
-        game->stop_sound(skin->idle_loop_sfx);
+        game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
     }
 
     void ScenePlay::pause(double now) {
         paused = true;
         paused_position = session->song_position(now);
         game->get_audio().Pause(chart_audio_id);
-        game->play_music(skin->idle_loop_sfx, true);
+        game->play_music(skin->sound(SkinSound::IDLE_LOOP), true);
     }
 
     void ScenePlay::resume(double now) {
@@ -166,7 +166,7 @@ namespace nascent {
             game->get_audio().Play(chart_audio_id);
         }
 
-        game->stop_sound(skin->idle_loop_sfx);
+        game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
         session->reset_clock(paused_position, now);
         session->set_keys(InputManager::get_lane_keys_held(game->window, lane_keys), now);
     }

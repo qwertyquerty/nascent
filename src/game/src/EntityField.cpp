@@ -21,8 +21,9 @@ namespace nascent {
 
         scroll_speed = SettingsManager::settings.field_scroll_speed;
 
-        note_size = (size.x) / (chart->info.key_count + chart->info.key_count * skin->field_key_spacing_ratio - skin->field_key_spacing_ratio);
-        note_x_spacing = note_size * skin->field_key_spacing_ratio;
+        double spacing = skin->manifest().key_spacing;
+        note_size = (size.x) / (chart->info.key_count + chart->info.key_count * spacing - spacing);
+        note_x_spacing = note_size * spacing;
 
         active_keys = 0;
     };
@@ -38,6 +39,7 @@ namespace nascent {
     void EntityField::draw(olc::PixelGameEngine* window) {
         int32_t screen_height = window->ScreenHeight();
         const uint8_t key_count = chart->info.key_count;
+        const SkinManifest& manifest = skin->manifest();
 
         // Draw judge line
         int32_t jl_y = pos.y + size.y - note_size - judge_height;
@@ -46,10 +48,12 @@ namespace nascent {
             for (uint8_t key = 0; key < key_count; key++) {
                 int32_t jl_x = pos.x + (key * (note_size + note_x_spacing));
 
-                olc::Pixel color = draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (double)(jl_y - pos.y) / size.y) : olc::Pixel(255, 255, 255);
-                color.a = get_key(key) ? 255 : judge_alpha;
+                bool held = get_key(key);
+                olc::Decal* receptor = skin->image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, key, key_count);
+                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (double)(jl_y - pos.y) / size.y) : olc::Pixel(255, 255, 255);
+                color.a = held ? 255 : manifest.receptor_alpha.value_or(judge_alpha);
 
-                window->DrawWarpedDecal(skin->note_decal(key), {{(float)jl_x, (float)jl_y}, {(float)jl_x, (float)(jl_y + note_size)}, {(float)jl_x + (float)note_size, (float)(jl_y + (float)note_size)}, {(float)jl_x + (float)note_size, (float)jl_y}}, with_opacity(color));
+                draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
             }
         }
 
@@ -65,7 +69,12 @@ namespace nascent {
         // Draw notes
         for (size_t i = (size_t)(first_hit - chart->hits.begin()); i < chart->hits.size(); i++) {
             const Hit& hit = chart->hits[i];
-            bool hit_played = attempt != nullptr && attempt->judged_hits[i].hit_played;
+            const JudgedHit* judged = attempt != nullptr ? &attempt->judged_hits[i] : nullptr;
+            bool hit_played = judged != nullptr && judged->hit_played;
+            bool holding = hit_played && hit.hit_type == HitType::HOLD && !judged->released;
+            bool dropped = hit_played && judged->released && judged->release_played && judged->release_err < 0 && judged->release_score == HitScore::MISS;
+            bool stops_at_cut = !draw_notes_past_judge || hit_played;
+            double cut_y = dropped ? jl_y - (judged->attempt_hit.end_time - position) * scroll_rate_px_per_ms : (double)jl_y;
 
             int32_t hit_y = (hit.time - position) * scroll_rate_px_per_ms;
             int32_t hit_x = pos.x + (hit.key * (note_size + note_x_spacing));
@@ -78,25 +87,50 @@ namespace nascent {
             }
 
             if ((screen_hit_y - hit_height) < pos.y + size.y) {
-                if (hit.hit_type == HitType::HOLD) {
+                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && manifest.hold_style == HoldStyle::STRETCH ? skin->image(SkinImage::HOLD_BODY, hit.key, key_count) : nullptr;
+
+                if (hold_body != nullptr) {
+                    double body_top = screen_hit_y - hit_height + note_size / 2;
+                    double body_bottom = screen_hit_y + note_size / 2;
+
+                    if (stops_at_cut) {
+                        body_bottom = std::min(body_bottom, cut_y + note_size / 2);
+                    }
+
+                    body_bottom = std::min(body_bottom, pos.y + size.y);
+
+                    if (body_bottom > body_top) {
+                        window->DrawWarpedDecal(hold_body, {{(float)hit_x, (float)body_top}, {(float)hit_x, (float)body_bottom}, {(float)(hit_x + note_size), (float)body_bottom}, {(float)(hit_x + note_size), (float)body_top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                    }
+
+                    olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, hit.key, key_count);
+
+                    if (cap != nullptr && body_top < body_bottom && cap->sprite->width > 0) {
+                        double cap_height = note_size * cap->sprite->height / cap->sprite->width;
+                        double cap_top = body_top - cap_height;
+                        window->DrawWarpedDecal(cap, {{(float)hit_x, (float)body_top}, {(float)hit_x, (float)cap_top}, {(float)(hit_x + note_size), (float)cap_top}, {(float)(hit_x + note_size), (float)body_top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                    }
+                }
+                else if (hit.hit_type == HitType::HOLD) {
                     for (double y_offset = 0; y_offset < hit_height; y_offset += (note_size / 4)) {
                         double hold_smear_y = screen_hit_y - hit_height + y_offset;
-                        olc::Pixel hold_color = skin->title_gradient_at((double)hit_x / window->GetScreenSize().x, (double)hold_smear_y / window->GetScreenSize().y);
-                        hold_color.a = skin->hold_alpha;
+                        olc::Pixel hold_color = note_color(hit_x, hold_smear_y, window);
+                        hold_color.a = manifest.hold_alpha;
 
-                        if ((
-                                (!draw_notes_past_judge || hit_played) && hold_smear_y > jl_y
-                            ) ||
-                            (hold_smear_y >= pos.y + size.y)) {
+                        if ((stops_at_cut && hold_smear_y > cut_y) || (hold_smear_y >= pos.y + size.y)) {
                             break;
                         }
 
-                        window->DrawWarpedDecal(skin->note_decal(hit.key), {{(float)hit_x, (float)hold_smear_y}, {(float)hit_x, (float)(hold_smear_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)(hold_smear_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)hold_smear_y}}, with_opacity(hold_color));
+                        draw_square(window, skin->image(SkinImage::NOTE, hit.key, key_count), hit_x, hold_smear_y, with_opacity(hold_color));
                     }
                 }
 
-                if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
-                    window->DrawWarpedDecal(skin->note_decal(hit.key), {{(float)hit_x, (float)screen_hit_y}, {(float)hit_x, (float)(screen_hit_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)(screen_hit_y + (float)note_size)}, {(float)hit_x + (float)note_size, (float)screen_hit_y}}, with_opacity(skin->title_gradient_at((double)hit_x / window->GetScreenSize().x, (double)screen_hit_y / window->GetScreenSize().y)));
+                if (hold_body != nullptr && holding) {
+                    draw_square(window, skin->image(SkinImage::HOLD_HEAD, hit.key, key_count), hit_x, std::min(screen_hit_y, jl_y), with_opacity(note_color(hit_x, jl_y, window)));
+                }
+                else if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
+                    olc::Decal* head = skin->image(hit.hit_type == HitType::HOLD ? SkinImage::HOLD_HEAD : SkinImage::NOTE, hit.key, key_count);
+                    draw_square(window, head, hit_x, screen_hit_y, with_opacity(note_color(hit_x, screen_hit_y, window)));
                 }
             }
         }
@@ -148,6 +182,22 @@ namespace nascent {
             window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 60)}, std::format("SB {}", chart->section_beat_at(position)), olc::WHITE, {2.0f, 2.0f});
         }
     };
+
+    olc::Pixel EntityField::note_color(double x, double y, olc::PixelGameEngine* window) const {
+        if (skin->manifest().tint == SkinTint::NONE) {
+            return olc::WHITE;
+        }
+
+        return skin->title_gradient_at(x / window->GetScreenSize().x, y / window->GetScreenSize().y);
+    }
+
+    void EntityField::draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const {
+        if (decal == nullptr) {
+            return;
+        }
+
+        window->DrawWarpedDecal(decal, {{(float)x, (float)y}, {(float)x, (float)(y + note_size)}, {(float)(x + note_size), (float)(y + note_size)}, {(float)(x + note_size), (float)y}}, tint);
+    }
 
     olc::Pixel EntityField::with_opacity(olc::Pixel color) const {
         color.a = (uint8_t)std::lround(color.a * std::clamp(opacity, 0.0f, 1.0f));

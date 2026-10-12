@@ -105,7 +105,7 @@ namespace nascent {
         load_background();
         start_hint = SpriteDecal::adopt(bg_skin->display_font_medium.RenderStringToDecal(START_HINT, olc::WHITE));
 
-        logo_skin = std::make_unique<Skin>(game, "logo", 7);
+        logo_skin = std::make_unique<Skin>(game, "logo");
         logo_attempt = std::make_unique<Attempt>(logo_chart.get());
 
         logo_field = std::make_unique<EntityField>(logo_chart.get(), logo_skin.get(), olc::vd2d{(double)window_size.x / 4, 0}, olc::vd2d{(double)window_size.x / 2, (double)window_size.y / 2 + ((double)window_size.x / 28)});

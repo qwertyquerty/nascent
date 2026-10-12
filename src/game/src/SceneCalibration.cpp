@@ -213,7 +213,7 @@ namespace nascent {
 
     void SceneCalibration::change_step(int32_t direction) {
         step = (Step)((int32_t)step + direction);
-        game->play_sound(skin->hitsound_sfx);
+        game->play_sound(skin->sound(SkinSound::HITSOUND));
     }
 
     void SceneCalibration::update(float) {

@@ -24,6 +24,7 @@ namespace nascent {
         float scene_transition_time = 0.2f; // s
         float list_preview_fade_in_time = 0.5; // s
 
+        std::string skin = "default";
         uint16_t frame_rate_limit = 0;
         uint8_t master_volume = 100;
         uint8_t music_volume = 100;
