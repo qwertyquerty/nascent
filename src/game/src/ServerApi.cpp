@@ -4,7 +4,6 @@
 #include "Chart.h"
 #include "SettingsManager.h"
 
-#include <chrono>
 #include <format>
 
 namespace nascent {
@@ -212,13 +211,12 @@ namespace nascent {
         std::string server_url = SettingsManager::settings.server_url;
 
         return run_detached([server_url] {
-            auto started = std::chrono::steady_clock::now();
             ApiResult<ServerHealth> result;
             result.response = ServerClient::request(server_url, "GET", "/health");
 
             if (result.response.error.empty() && result.response.body.is_object() && result.response.body.contains("status")) {
                 const json& body = result.response.body;
-                result.value = ServerHealth{get_string(body, "status") == "ok", get_bool(body, "database"), get_bool(body, "cache"), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count()};
+                result.value = ServerHealth{get_string(body, "status") == "ok", get_bool(body, "database"), get_bool(body, "cache"), result.response.latency_ms};
             }
 
             return result;

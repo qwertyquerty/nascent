@@ -13,6 +13,7 @@
 namespace nascent {
     struct ServerResponse {
         long status = 0;
+        double latency_ms = 0;
         nlohmann::json body;
         std::string error;
 

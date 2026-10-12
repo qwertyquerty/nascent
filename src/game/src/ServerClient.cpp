@@ -2,6 +2,7 @@
 
 #include <curl/curl.h>
 
+#include <algorithm>
 #include <cctype>
 #include <format>
 #include <mutex>
@@ -12,6 +13,51 @@ namespace nascent {
     static constexpr long CONNECT_TIMEOUT_S = 10;
     static constexpr long DOWNLOAD_LOW_SPEED_BYTES = 1024;
     static constexpr long DOWNLOAD_LOW_SPEED_TIME_S = 30;
+
+    struct CurlShare {
+        CURLSH* handle = nullptr;
+        std::mutex locks[CURL_LOCK_DATA_LAST];
+    };
+
+    static void lock_share(CURL*, curl_lock_data data, curl_lock_access, void* shared) {
+        static_cast<CurlShare*>(shared)->locks[data].lock();
+    }
+
+    static void unlock_share(CURL*, curl_lock_data data, void* shared) {
+        static_cast<CurlShare*>(shared)->locks[data].unlock();
+    }
+
+    static CURLSH* curl_share() {
+        static CurlShare* shared = [] {
+            curl_global_init(CURL_GLOBAL_DEFAULT);
+
+            CurlShare* created = new CurlShare();
+            created->handle = curl_share_init();
+            curl_share_setopt(created->handle, CURLSHOPT_LOCKFUNC, lock_share);
+            curl_share_setopt(created->handle, CURLSHOPT_UNLOCKFUNC, unlock_share);
+            curl_share_setopt(created->handle, CURLSHOPT_USERDATA, created);
+            curl_share_setopt(created->handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+            curl_share_setopt(created->handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+            curl_share_setopt(created->handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+            return created;
+        }();
+
+        return shared->handle;
+    }
+
+    static CURL* create_handle() {
+        CURLSH* share = curl_share();
+        CURL* curl = curl_easy_init();
+
+        if (curl != nullptr) {
+            curl_easy_setopt(curl, CURLOPT_SHARE, share);
+            curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
+        }
+
+        return curl;
+    }
 
     static size_t append_body(char* data, size_t size, size_t count, void* target) {
         static_cast<std::string*>(target)->append(data, size * count);
@@ -52,11 +98,8 @@ namespace nascent {
     }
 
     ServerResponse ServerClient::request(const std::string& base_url, const std::string& method, const std::string& path, const nlohmann::json& body, const std::string& access_token) {
-        static std::once_flag curl_ready;
-        std::call_once(curl_ready, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
-
         ServerResponse response;
-        CURL* curl = curl_easy_init();
+        CURL* curl = create_handle();
 
         if (curl == nullptr) {
             response.error = "could not start a request";
@@ -84,8 +127,6 @@ namespace nascent {
         curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, REQUEST_TIMEOUT_S);
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT_S);
-        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
 
         if (method != "GET") {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
@@ -103,6 +144,11 @@ namespace nascent {
         }
         else {
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.status);
+            curl_off_t sent_us = 0;
+            curl_off_t first_byte_us = 0;
+            curl_easy_getinfo(curl, CURLINFO_PRETRANSFER_TIME_T, &sent_us);
+            curl_easy_getinfo(curl, CURLINFO_STARTTRANSFER_TIME_T, &first_byte_us);
+            response.latency_ms = (double)std::max<curl_off_t>(first_byte_us - sent_us, 0) / 1000.0;
             response.body = nlohmann::json::parse(received, nullptr, false);
 
             if (response.body.is_discarded()) {
@@ -150,10 +196,7 @@ namespace nascent {
 
     std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable) {
         retryable = false;
-        static std::once_flag curl_ready;
-        std::call_once(curl_ready, [] { curl_global_init(CURL_GLOBAL_DEFAULT); });
-
-        CURL* curl = curl_easy_init();
+        CURL* curl = create_handle();
 
         if (curl == nullptr) {
             error = "could not start a download";
@@ -175,8 +218,6 @@ namespace nascent {
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT_S);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, DOWNLOAD_LOW_SPEED_BYTES);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, DOWNLOAD_LOW_SPEED_TIME_S);
-        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
 
 #ifdef _WIN32
         curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
