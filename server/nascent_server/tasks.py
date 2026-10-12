@@ -56,7 +56,7 @@ def queue():
     return queues[name]
 
 
-def enqueue(func: Callable, *args, depends_on: list[str] | None = None) -> str | None:
+def enqueue(func: Callable, *args, depends_on: list[str] | None = None, job_timeout: int | None = None) -> str | None:
     target = queue()
 
     if target is None:
@@ -66,13 +66,20 @@ def enqueue(func: Callable, *args, depends_on: list[str] | None = None) -> str |
     from rq import Retry
 
     retries = current_app.config["TASK_RETRIES"]
-    job = target.enqueue(func, *args, depends_on=depends_on or None, retry=Retry(max=len(retries), interval=list(retries)), failure_ttl=7 * 24 * 3600)
+    job = target.enqueue(func, *args, depends_on=depends_on or None, job_timeout=job_timeout, retry=Retry(max=len(retries), interval=list(retries)), failure_ttl=7 * 24 * 3600)
     return job.id
 
 
 def _batches(values: list[int], size: int) -> Iterable[list[int]]:
     for start in range(0, len(values), size):
         yield values[start : start + size]
+
+
+def enqueue_recalculation(chart_ids: list[int], resimulate: bool) -> list[str]:
+    size = current_app.config["RECALCULATE_BATCH_SIZE"]
+    timeout = current_app.config["RECALCULATE_JOB_TIMEOUT"]
+    jobs = [enqueue(recalculate_charts, batch, resimulate, job_timeout=timeout) for batch in _batches(chart_ids, size)]
+    return [job for job in jobs if job is not None]
 
 
 def enqueue_user_refresh(user_ids: Iterable[int], chart_ids: list[int]) -> list[str]:
@@ -172,6 +179,12 @@ def recalculate_chart(chart_id: int, resimulate: bool) -> None:
         ranking.refresh_profile_best(user_id, chart.id)
 
     db.session.commit()
+
+
+@task
+def recalculate_charts(chart_ids: list[int], resimulate: bool) -> None:
+    for chart_id in chart_ids:
+        recalculate_chart(chart_id, resimulate)
 
 
 @task

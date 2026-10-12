@@ -14,6 +14,8 @@ class Config:
     TASK_QUEUE = "nascent"
     TASK_RETRIES = (10, 60, 300)
     TASK_BATCH_SIZE = 200
+    RECALCULATE_BATCH_SIZE = 50
+    RECALCULATE_JOB_TIMEOUT = 3600
 
     STORAGE_PATH = os.environ.get("NASCENT_STORAGE_PATH", os.path.abspath("storage"))
     USE_X_ACCEL_REDIRECT = os.environ.get("NASCENT_USE_X_ACCEL_REDIRECT", "0") == "1"

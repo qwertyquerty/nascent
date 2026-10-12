@@ -1,0 +1,9 @@
+- name: Recalculate every play and every player's profile performance
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Recalculate
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: recalculate

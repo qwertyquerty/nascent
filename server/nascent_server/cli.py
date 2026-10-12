@@ -242,13 +242,13 @@ def chart_status(chart_hash: str, status: str):
 @nascent_cli.command("recalculate")
 @click.option("--resimulate", is_flag=True, help="Re-judge every stored replay too, for judge changes")
 def recalculate(resimulate: bool):
-    chart_ids = db.session.scalars(select(Chart.id).order_by(Chart.id)).all()
-    jobs = [job for job in (tasks.enqueue(tasks.recalculate_chart, chart_id, resimulate) for chart_id in chart_ids) if job]
+    chart_ids = list(db.session.scalars(select(Chart.id).order_by(Chart.id)).all())
+    jobs = tasks.enqueue_recalculation(chart_ids, resimulate)
     final = tasks.enqueue(tasks.refresh_all_users, depends_on=jobs)
     _report(final, f"recalculated {len(chart_ids)} charts with calculator {calculator_version()}")
 
     if final:
-        click.echo(f"queued {len(jobs)} chart jobs")
+        click.echo(f"queued {len(jobs)} jobs for {len(chart_ids)} charts")
 
 
 @nascent_cli.command("refresh-users")

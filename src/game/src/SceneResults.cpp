@@ -274,9 +274,6 @@ namespace nascent {
         if (result.play.ranked) {
             message("Ranked", POSITIVE_COLOR);
         }
-        else if (result.play.status == "pending_review") {
-            message("Pending review", BEST_COLOR);
-        }
         else if (result.chart.status != "ranked") {
             message("Unranked chart", olc::GREY);
         }
