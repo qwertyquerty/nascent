@@ -21,6 +21,8 @@ namespace nascent {
         play_start_delay,
         scene_transition_time,
         list_preview_fade_in_time,
+        frame_rate_limit,
+        show_fps,
         list_song_directory,
         discord_application_id,
         server_url,

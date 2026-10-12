@@ -136,7 +136,7 @@ namespace nascent {
                 break;
         }
 
-        const std::array<std::string_view, 6> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse", "F6  input"};
+        const std::array<std::string_view, 7> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F1  options", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse", "F6  input"};
         int32_t hint_x = screen.x - PADDING + SEGMENT_GAP;
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
@@ -150,9 +150,9 @@ namespace nascent {
         if (!dot) {
             auto sprite = std::make_unique<olc::Sprite>(DOT_RADIUS * 2 + 1, DOT_RADIUS * 2 + 1);
 
-            for (int32_t y = -DOT_RADIUS; y <= DOT_RADIUS; y++) {
-                for (int32_t x = -DOT_RADIUS; x <= DOT_RADIUS; x++) {
-                    sprite->SetPixel(x + DOT_RADIUS, y + DOT_RADIUS, x * x + y * y <= DOT_RADIUS * DOT_RADIUS ? olc::WHITE : olc::BLANK);
+            for (int32_t dy = -DOT_RADIUS; dy <= DOT_RADIUS; dy++) {
+                for (int32_t dx = -DOT_RADIUS; dx <= DOT_RADIUS; dx++) {
+                    sprite->SetPixel(dx + DOT_RADIUS, dy + DOT_RADIUS, dx * dx + dy * dy <= DOT_RADIUS * DOT_RADIUS ? olc::WHITE : olc::BLANK);
                 }
             }
 

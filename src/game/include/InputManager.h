@@ -13,6 +13,7 @@ namespace nascent {
         public:
         static const olc::Key pause_key = olc::Key::TAB;
 
+        static const olc::Key options_key = olc::Key::F1;
         static const olc::Key random_chart_key = olc::Key::F2;
         static const olc::Key calibration_key = olc::Key::F3;
         static const olc::Key account_key = olc::Key::F4;

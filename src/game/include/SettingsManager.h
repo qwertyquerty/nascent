@@ -24,6 +24,9 @@ namespace nascent {
         float scene_transition_time = 0.2f; // s
         float list_preview_fade_in_time = 0.5; // s
 
+        uint16_t frame_rate_limit = 0;
+        bool show_fps = true;
+
         std::string list_song_directory;
 
         std::string discord_application_id = "1360933253070061718";

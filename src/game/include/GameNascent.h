@@ -17,7 +17,6 @@ namespace nascent {
         int64_t start_time;
 
         public:
-        bool debug = true;
         GameNascent(olc::PixelGameEngine* window);
         ~GameNascent();
         void init() override;

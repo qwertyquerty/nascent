@@ -20,6 +20,7 @@
 #include "SceneBrowser.h"
 #include "SceneCalibration.h"
 #include "SceneInput.h"
+#include "SceneOptions.h"
 #include "ScenePlay.h"
 #include "SettingsManager.h"
 #include "Sha256.h"
@@ -436,6 +437,12 @@ namespace nascent {
         if (game->window->GetKey(InputManager::browse_key).bPressed) {
             game->play_sound(skin->get_random_menu_pluck());
             game->set_scene(std::make_unique<SceneBrowser>(skin, this));
+            return;
+        }
+
+        if (game->window->GetKey(InputManager::options_key).bPressed) {
+            game->play_sound(skin->get_random_menu_pluck());
+            game->set_scene(std::make_unique<SceneOptions>(skin));
             return;
         }
 

@@ -63,6 +63,7 @@ namespace nascent {
             set_scene(scene_list.get());
         }
 
+        limit_frame_rate(SettingsManager::settings.frame_rate_limit);
         begin_frame(elapsed_time);
         text_cache_begin_frame();
 
@@ -73,7 +74,7 @@ namespace nascent {
     void GameNascent::draw(olc::PixelGameEngine* window) {
         draw_scenes(window);
 
-        if (debug) {
+        if (SettingsManager::settings.show_fps) {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
             draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - 100, 30, olc::WHITE);
         }

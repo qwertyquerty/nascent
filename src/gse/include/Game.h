@@ -5,7 +5,10 @@
 #include "olcPixelGameEngine.h"
 #include "olcPGEX_MiniAudio.h"
 
+#include <chrono>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +24,7 @@ namespace nascent {
         std::unique_ptr<Scene> outgoing_owned_scene;
         float transition_time = 0;
         bool skip_transition_step = false;
+        std::optional<std::chrono::steady_clock::time_point> next_frame;
         int32_t transition_layer = -1;
         KeyEventQueue key_event_queue;
         std::vector<KeyEvent> frame_key_events;
@@ -42,6 +46,7 @@ namespace nascent {
         olc::PixelGameEngine* window;
         float scene_transition_time = 0.35f;
         static constexpr float MAX_TRANSITION_STEP = 1.0f / 30.0f;
+        static constexpr std::chrono::duration<double> FRAME_SPIN_TIME = std::chrono::milliseconds(1);
 
         Game(olc::PixelGameEngine* window);
         virtual ~Game();
@@ -52,6 +57,7 @@ namespace nascent {
         void set_scene(Scene* scene);
         void set_scene(std::unique_ptr<Scene> scene);
         bool is_transitioning() const;
+        void limit_frame_rate(uint16_t limit);
         olc::MiniAudio& get_audio();
 
         void play_sound(int id, bool looping = false);

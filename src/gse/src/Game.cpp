@@ -1,9 +1,12 @@
 #include "Game.h"
+#include "Platform.h"
 #include "TextInput.h"
 #include "WindowHook.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 #include <utility>
 
 namespace nascent {
@@ -117,6 +120,34 @@ namespace nascent {
     void Game::set_scene(std::unique_ptr<Scene> scene) {
         pending_scene = scene.get();
         pending_owned_scene = std::move(scene);
+    }
+
+    void Game::limit_frame_rate(uint16_t limit) {
+        if (limit == 0) {
+            next_frame.reset();
+            return;
+        }
+
+        using clock = std::chrono::steady_clock;
+        clock::duration period = std::chrono::duration_cast<clock::duration>(std::chrono::duration<double>(1.0 / limit));
+        clock::time_point now = clock::now();
+
+        if (!next_frame || now - *next_frame > period) {
+            next_frame = now + period;
+            return;
+        }
+
+        std::chrono::duration<double> remaining = *next_frame - now;
+
+        if (remaining > FRAME_SPIN_TIME) {
+            precise_sleep((remaining - FRAME_SPIN_TIME).count());
+        }
+
+        while (clock::now() < *next_frame) {
+            std::this_thread::yield();
+        }
+
+        *next_frame += period;
     }
 
     bool Game::is_transitioning() const {

@@ -16,6 +16,7 @@ add_library(game
     src/SceneCalibration.cpp
     src/SceneInput.cpp
     src/SceneList.cpp
+    src/SceneOptions.cpp
     src/ScenePlay.cpp
     src/SceneResults.cpp
     src/SceneTitle.cpp

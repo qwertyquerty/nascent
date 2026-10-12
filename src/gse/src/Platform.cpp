@@ -1,10 +1,12 @@
 #include "Platform.h"
 
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
@@ -16,6 +18,10 @@
 #endif
 #include <windows.h>
 #include <shlobj.h>
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
@@ -104,6 +110,30 @@ namespace nascent {
         }
 
         return base / lower_name;
+#endif
+    }
+
+    void precise_sleep(double seconds) {
+        if (seconds <= 0) {
+            return;
+        }
+
+#if defined(_WIN32)
+        static thread_local HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+
+        if (timer != nullptr) {
+            LARGE_INTEGER due;
+            due.QuadPart = -(LONGLONG)(seconds * 10000000.0);
+
+            if (SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE)) {
+                WaitForSingleObject(timer, INFINITE);
+                return;
+            }
+        }
+
+        Sleep((DWORD)(seconds * 1000.0));
+#else
+        std::this_thread::sleep_for(std::chrono::duration<double>(seconds));
 #endif
     }
 }
