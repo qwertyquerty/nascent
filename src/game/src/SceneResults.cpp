@@ -290,14 +290,9 @@ namespace nascent {
             segment("Chart", {{std::format("#{}", *result.chart_rank), olc::WHITE}});
         }
 
-        segment("Perf", performance_parts(result.combined));
-        segment("Global", rank_parts(result.combined.global_rank, result.combined.previous_global_rank));
-
         if (result.key_mode) {
-            std::vector<BarPart> parts = performance_parts(*result.key_mode);
-            std::vector<BarPart> rank = rank_parts(result.key_mode->global_rank, result.key_mode->previous_global_rank);
-            parts.insert(parts.end(), rank.begin(), rank.end());
-            segment(result.key_mode->key_count ? std::format("{}K", *result.key_mode->key_count) : std::string("Mode"), parts);
+            segment(std::format("{}K", result.key_mode->key_count), performance_parts(*result.key_mode));
+            segment("Rank", rank_parts(result.key_mode->global_rank, result.key_mode->previous_global_rank));
         }
 
         if (result.play.is_chart_best) {

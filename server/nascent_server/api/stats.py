@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
-from ..models import Chart, ChartStatus, Play, PlayStatus, User
+from ..models import Chart, ChartStatus, Play, PlayStatus, User, UserKeyStats
 from ..serializers import play_out
 from ..services import ranking
 
@@ -28,7 +28,12 @@ def stats():
 
     return {
         "players": db.session.scalar(select(func.count()).select_from(User).where(visible_user)) or 0,
-        "ranked_players": ranking.ranked_player_count(),
+        "ranked_players": db.session.scalar(
+            select(func.count(func.distinct(UserKeyStats.user_id)))
+            .join(User, User.id == UserKeyStats.user_id)
+            .where(visible_user, UserKeyStats.ranked_play_count > 0, UserKeyStats.key_count.in_(ranking.ranked_key_counts()))
+        )
+        or 0,
         "plays": db.session.scalar(visible_plays) or 0,
         "ranked_plays": db.session.scalar(visible_plays.where(Play.ranked.is_(True))) or 0,
         "charts": db.session.scalar(select(func.count()).select_from(Chart)) or 0,

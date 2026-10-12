@@ -12,7 +12,7 @@ from ..errors import ApiError
 from ..extensions import db
 from ..models import Play, PlayStatus, User, UserKeyStats
 
-COMBINED_BOARD = "performance"
+BOARD_PREFIX = "performance"
 
 
 @dataclass
@@ -52,16 +52,17 @@ def ranked_key_counts() -> tuple[int, ...]:
     return tuple(current_app.config["RANKED_KEY_COUNTS"])
 
 
-def check_key_count(key_count: int | None) -> int | None:
-    if key_count is not None and key_count not in ranked_key_counts():
-        counts = ranked_key_counts()
-        raise ApiError(400, "invalid_key_count", f"Leaderboards exist for {counts[0]}K to {counts[-1]}K")
+def check_key_count(key_count: int | None) -> int:
+    counts = ranked_key_counts()
+
+    if key_count not in counts:
+        raise ApiError(400, "invalid_key_count", f"key_count must be one of {counts[0]}K to {counts[-1]}K")
 
     return key_count
 
 
-def board_name(key_count: int | None) -> str:
-    return COMBINED_BOARD if key_count is None else f"{COMBINED_BOARD}:{key_count}k"
+def board_name(key_count: int) -> str:
+    return f"{BOARD_PREFIX}:{key_count}k"
 
 
 def visible_play_filter():
@@ -90,10 +91,8 @@ def refresh_profile_best(user_id: int, chart_id: int) -> None:
         db.session.execute(update(Play).where(Play.id == best_id).values(is_profile_best=True))
 
 
-def _top_plays(user_id: int, limit: int) -> tuple[list, dict[int, list]]:
+def _top_plays(user_id: int, limit: int) -> dict[int, list]:
     best = (Play.user_id == user_id, Play.is_profile_best.is_(True))
-    combined = db.session.execute(select(Play.performance, Play.accuracy).where(*best).order_by(Play.performance.desc(), Play.id.asc()).limit(limit)).all()
-
     position = func.row_number().over(partition_by=Play.key_count, order_by=(Play.performance.desc(), Play.id.asc())).label("position")
     ranked = select(Play.key_count, Play.performance, Play.accuracy, position).where(*best).subquery()
     per_key: dict[int, list] = defaultdict(list)
@@ -101,7 +100,7 @@ def _top_plays(user_id: int, limit: int) -> tuple[list, dict[int, list]]:
     for row in db.session.execute(select(ranked.c.key_count, ranked.c.performance, ranked.c.accuracy).where(ranked.c.position <= limit).order_by(ranked.c.key_count, ranked.c.position)):
         per_key[row.key_count].append(row)
 
-    return combined, per_key
+    return per_key
 
 
 def _totals(user_id: int) -> dict[int, Totals]:
@@ -136,12 +135,8 @@ def _apply_totals(target: User | UserKeyStats, totals: Totals) -> None:
 
 def refresh_user_stats(user: User) -> None:
     weights = current_weights()
-    combined, per_key = _top_plays(user.id, len(weights))
+    per_key = _top_plays(user.id, len(weights))
     by_key = _totals(user.id)
-
-    user.performance = profile_performance([row.performance for row in combined], weights)
-    user.accuracy = profile_accuracy([row.accuracy for row in combined], weights)
-
     overall = Totals()
 
     for totals in by_key.values():
@@ -183,22 +178,19 @@ def _key_stats(user: User, key_count: int) -> UserKeyStats | None:
     return next((row for row in user.key_stats if row.key_count == key_count), None)
 
 
-def standing(user: User, key_count: int | None) -> tuple[float, int]:
-    if key_count is None:
-        return user.performance, user.ranked_play_count
-
+def standing(user: User, key_count: int) -> tuple[float, int]:
     row = _key_stats(user, key_count)
     return (row.performance, row.ranked_play_count) if row is not None else (0.0, 0)
 
 
-def on_leaderboard(user: User, key_count: int | None = None) -> bool:
+def on_leaderboard(user: User, key_count: int) -> bool:
     return not user.is_banned and standing(user, key_count)[1] > 0
 
 
 def sync_leaderboard(user: User) -> None:
     changes = []
 
-    for key_count in (None, *ranked_key_counts()):
+    for key_count in ranked_key_counts():
         score = standing(user, key_count)[0] if on_leaderboard(user, key_count) else None
         changes.append((board_name(key_count), user.id, score))
 
@@ -208,10 +200,7 @@ def sync_leaderboard(user: User) -> None:
         current_app.logger.warning("could not update the leaderboards for user %s", user.id)
 
 
-def leaderboard_users_query(key_count: int | None):
-    if key_count is None:
-        return select(User.id.label("user_id"), User.performance.label("performance")).where(User.is_banned.is_(False), User.ranked_play_count > 0)
-
+def leaderboard_users_query(key_count: int):
     return (
         select(UserKeyStats.user_id.label("user_id"), UserKeyStats.performance.label("performance"))
         .join(User, User.id == UserKeyStats.user_id)
@@ -222,7 +211,7 @@ def leaderboard_users_query(key_count: int | None):
 def rebuild_leaderboard() -> dict[str, int]:
     sizes = {}
 
-    for key_count in (None, *ranked_key_counts()):
+    for key_count in ranked_key_counts():
         entries = [(row.user_id, row.performance) for row in db.session.execute(leaderboard_users_query(key_count))]
         store().leaderboard_replace(board_name(key_count), entries)
         sizes[board_name(key_count)] = len(entries)
@@ -230,7 +219,7 @@ def rebuild_leaderboard() -> dict[str, int]:
     return sizes
 
 
-def global_rank(user: User, key_count: int | None = None) -> int | None:
+def global_rank(user: User, key_count: int) -> int | None:
     if not on_leaderboard(user, key_count):
         return None
 
@@ -247,14 +236,14 @@ def global_rank(user: User, key_count: int | None = None) -> int | None:
     return int(above or 0) + 1
 
 
-def ranked_player_count(key_count: int | None = None) -> int:
+def ranked_player_count(key_count: int) -> int:
     try:
         return store().leaderboard_count(board_name(key_count))
     except redis.RedisError:
         return int(db.session.scalar(select(func.count()).select_from(leaderboard_users_query(key_count).subquery())) or 0)
 
 
-def leaderboard_page(offset: int, limit: int, key_count: int | None = None) -> tuple[list[tuple[int, int, float]], int]:
+def leaderboard_page(offset: int, limit: int, key_count: int) -> tuple[list[tuple[int, int, float]], int]:
     try:
         rows = store().leaderboard_page(board_name(key_count), offset, limit)
         total = store().leaderboard_count(board_name(key_count))

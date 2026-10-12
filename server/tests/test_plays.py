@@ -7,9 +7,8 @@ from .helpers import CHART, HASH, make_chart, make_replay, rank_chart, submit, t
 SEVEN = make_chart(key_count=7, title="Seven", note_count=260)
 
 
-def board(api, key_count=None):
-    suffix = f"?key_count={key_count}" if key_count is not None else ""
-    return [entry["user"]["username"] for entry in api.get(f"/api/v1/leaderboards/performance{suffix}").get_json()["entries"]]
+def board(api, key_count):
+    return [entry["user"]["username"] for entry in api.get(f"/api/v1/leaderboards/performance?key_count={key_count}").get_json()["entries"]]
 
 
 def test_ranked_play_flow(api, clock):
@@ -27,16 +26,26 @@ def test_ranked_play_flow(api, clock):
     bob = api.token("bob")
     submit(api, clock, bob, make_replay(CHART, seed=3, spread=40))
 
-    weights = profile_weights(50, 0.95)
-    performances = sorted([first["play"]["performance"], seven["play"]["performance"]], reverse=True)
-    profile = api.get("/api/v1/users/alice").get_json()["user"]
-    assert profile["stats"]["performance"] == pytest.approx((performances[0] * weights[0] + performances[1] * weights[1]) / sum(weights))
-    assert profile["stats"]["global_rank"] == 1
-    assert {mode["key_count"] for mode in profile["key_modes"]} == {4, 7}
+    assert "user" not in seven
+    assert seven["key_mode"]["key_count"] == 7
+    assert seven["key_mode"]["global_rank"] == 1
 
-    assert board(api) == ["alice", "bob"]
+    weights = profile_weights(50, 0.95)
+    profile = api.get("/api/v1/users/alice").get_json()["user"]
+    modes = {mode["key_count"]: mode for mode in profile["key_modes"]}
+    assert set(modes) == {4, 7}
+    assert "performance" not in profile["stats"]
+    assert "global_rank" not in profile["stats"]
+    assert modes[4]["performance"] == pytest.approx(first["play"]["performance"] * weights[0] / sum(weights))
+    assert modes[7]["performance"] == pytest.approx(seven["play"]["performance"] * weights[0] / sum(weights))
+    assert modes[4]["global_rank"] == 1
+    assert modes[7]["global_rank"] == 1
+
     assert board(api, 4) == ["alice", "bob"]
     assert board(api, 7) == ["alice"]
+    assert api.get("/api/v1/leaderboards/performance").get_json()["error"]["code"] == "invalid_key_count"
+    assert api.get("/api/v1/users/alice/plays/best").get_json()["error"]["code"] == "invalid_key_count"
+    assert [entry["play"]["key_count"] for entry in api.get("/api/v1/users/alice/plays/best?key_count=7").get_json()["plays"]] == [7]
 
     leaderboard = api.get(f"/api/v1/charts/{HASH}/leaderboard").get_json()
     assert [entry["play"]["user"]["username"] for entry in leaderboard["entries"]] == ["alice", "bob"]

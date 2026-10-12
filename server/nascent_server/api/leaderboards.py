@@ -25,7 +25,7 @@ def performance():
         if user is None:
             continue
 
-        stats = user if key_count is None else next((row for row in user.key_stats if row.key_count == key_count), None)
+        stats = next((row for row in user.key_stats if row.key_count == key_count), None)
         entries.append(
             {
                 "rank": rank,

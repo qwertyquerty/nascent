@@ -82,8 +82,6 @@ class User(db.Model):
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
 
-    performance: Mapped[float] = mapped_column(Float, default=0.0)
-    accuracy: Mapped[float] = mapped_column(Float, default=0.0)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
     ranked_play_count: Mapped[int] = mapped_column(Integer, default=0)
     total_hits: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -93,8 +91,6 @@ class User(db.Model):
     last_played_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     key_stats: Mapped[list["UserKeyStats"]] = relationship(back_populates="user", cascade="all, delete-orphan", order_by="UserKeyStats.key_count")
-
-    __table_args__ = (Index("ix_users_performance", "performance", "id"),)
 
     def has_role(self, role: Role) -> bool:
         return ROLE_LEVELS.get(Role(self.role), 0) >= ROLE_LEVELS[role]

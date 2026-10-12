@@ -84,9 +84,6 @@ namespace nascent {
 
         PlayerStats parse_stats(const json& j) {
             PlayerStats stats;
-            stats.global_rank = get_optional_int(j, "global_rank");
-            stats.performance = get_double(j, "performance");
-            stats.accuracy = get_double(j, "accuracy");
             stats.play_count = get_int(j, "play_count");
             stats.ranked_play_count = get_int(j, "ranked_play_count");
             stats.total_hits = get_int(j, "total_hits");
@@ -160,8 +157,7 @@ namespace nascent {
 
         Standing parse_standing(const json& j) {
             Standing standing;
-            std::optional<int64_t> key_count = get_optional_int(j, "key_count");
-            standing.key_count = key_count ? std::optional<uint8_t>((uint8_t)*key_count) : std::nullopt;
+            standing.key_count = (uint8_t)get_int(j, "key_count");
             standing.performance = get_double(j, "performance");
             standing.performance_change = get_double(j, "performance_change");
             standing.global_rank = get_optional_int(j, "global_rank");
@@ -255,19 +251,19 @@ namespace nascent {
             profile.restricted = get_bool(user, "is_restricted");
             profile.stats = parse_stats(field(user, "stats"));
             profile.key_modes = get_list<KeyModeStats>(user, "key_modes", [](const json& mode) {
-                return KeyModeStats{(uint8_t)get_int(mode, "key_count"), parse_stats(mode)};
+                return KeyModeStats{(uint8_t)get_int(mode, "key_count"), get_optional_int(mode, "global_rank"), get_double(mode, "performance"), get_double(mode, "accuracy"), parse_stats(mode)};
             });
             return profile;
         });
     }
 
-    std::future<ApiResult<Rank>> ServerApi::rank(const std::string& user, std::optional<uint8_t> key_count) {
+    std::future<ApiResult<Rank>> ServerApi::rank(const std::string& user, uint8_t key_count) {
         return call<Rank>(Auth::PUBLIC, "GET", user_path(user) + "/rank" + key_count_query(key_count, '?'), nullptr, [](const json& j) {
             return Rank{get_optional_int(j, "global_rank"), get_double(j, "performance"), get_int(j, "ranked_players")};
         });
     }
 
-    std::future<ApiResult<std::vector<BestPlay>>> ServerApi::best_plays(const std::string& user, std::optional<uint8_t> key_count, int32_t limit, int32_t offset) {
+    std::future<ApiResult<std::vector<BestPlay>>> ServerApi::best_plays(const std::string& user, uint8_t key_count, int32_t limit, int32_t offset) {
         std::string path = std::format("{}/plays/best?limit={}&offset={}{}", user_path(user), limit, offset, key_count_query(key_count, '&'));
 
         return call<std::vector<BestPlay>>(Auth::PUBLIC, "GET", path, nullptr, [](const json& j) {
@@ -418,7 +414,6 @@ namespace nascent {
                 submission.chart = parse_chart(field(j, "chart"));
                 submission.chart_created = get_bool(j, "chart_created");
                 submission.chart_rank = get_optional_int(j, "chart_rank");
-                submission.combined = parse_standing(field(j, "user"));
 
                 if (field(j, "key_mode").is_object()) {
                     submission.key_mode = parse_standing(j["key_mode"]);

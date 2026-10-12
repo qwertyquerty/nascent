@@ -34,7 +34,7 @@ class IssuedTicket:
 
 @dataclass
 class Standing:
-    key_count: int | None
+    key_count: int
     previous_performance: float
     previous_rank: int | None
     performance: float = 0.0
@@ -47,7 +47,6 @@ class SubmissionResult:
     chart: Chart
     chart_created: bool
     chart_rank: int | None
-    combined: Standing
     key_mode: Standing | None
 
 
@@ -266,11 +265,8 @@ def submit_play(user: User, chart_hash: str, raw_replay: dict, raw_chart: dict |
     replay_key = sharded_key("replays", fingerprint, ".json.gz")
     put_json_gz(replay_key, replay.to_json())
 
-    key_mode = native.key_count if native.key_count in ranking.ranked_key_counts() else None
-    standings = [Standing(None, user.performance, ranking.global_rank(user))]
-
-    if key_mode is not None:
-        standings.append(Standing(key_mode, ranking.standing(user, key_mode)[0], ranking.global_rank(user, key_mode)))
+    key_count = native.key_count
+    key_mode = Standing(key_count, ranking.standing(user, key_count)[0], ranking.global_rank(user, key_count)) if key_count in ranking.ranked_key_counts() else None
 
     db.session.execute(select(User).where(User.id == user.id).with_for_update()).scalar_one()
 
@@ -314,17 +310,16 @@ def submit_play(user: User, chart_hash: str, raw_replay: dict, raw_chart: dict |
     db.session.refresh(play)
     db.session.refresh(chart)
 
-    for entry in standings:
-        entry.performance = ranking.standing(user, entry.key_count)[0]
-        entry.rank = ranking.global_rank(user, entry.key_count)
+    if key_mode is not None:
+        key_mode.performance = ranking.standing(user, key_count)[0]
+        key_mode.rank = ranking.global_rank(user, key_count)
 
     return SubmissionResult(
         play=play,
         chart=chart,
         chart_created=chart_created,
         chart_rank=chart_rank(play),
-        combined=standings[0],
-        key_mode=standings[1] if len(standings) > 1 else None,
+        key_mode=key_mode,
     )
 
 

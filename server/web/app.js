@@ -40,17 +40,25 @@ function parseRoute() {
 }
 
 const loaders = {
-    async home() {
-        const [stats, board] = await Promise.all([api("/stats"), api("/leaderboards/performance", {limit: 10})]);
-        return {stats, board};
+    async home({params}, keyCounts) {
+        const keyCount = params.key_count ?? keyCounts[0];
+        const [stats, board] = await Promise.all([api("/stats"), api("/leaderboards/performance", {key_count: keyCount, limit: 10})]);
+        return {stats, board, keyCount};
     },
 
-    leaderboard: ({params}) => api("/leaderboards/performance", {key_count: params.key_count, ...paged(params)}),
+    async leaderboard({params}, keyCounts) {
+        const keyCount = params.key_count ?? keyCounts[0];
+        return {keyCount, ...(await api("/leaderboards/performance", {key_count: keyCount, ...paged(params)}))};
+    },
 
-    async user({id, params}) {
+    async user({id, params}, keyCounts) {
         const base = `/users/${encodeURIComponent(id)}`;
-        const [{user}, {plays}] = await Promise.all([api(base), api(`${base}/plays/${params.tab === "recent" ? "recent" : "best"}`, {limit: PAGE_SIZE})]);
-        return {user, plays};
+        const {user} = await api(base);
+        const modes = user.key_modes.filter((mode) => keyCounts.includes(mode.key_count) && mode.ranked_play_count > 0);
+        const recent = params.tab === "recent" || modes.length === 0;
+        const keyCount = Number(params.key_count ?? [...modes].sort((a, b) => b.performance - a.performance)[0]?.key_count);
+        const {plays} = await api(`${base}/plays/${recent ? "recent" : "best"}`, {key_count: recent ? null : keyCount, limit: PAGE_SIZE});
+        return {user, modes, recent, keyCount, plays};
     },
 
     charts: ({params}) => api("/charts", {q: params.q, key_count: params.key_count, status: params.status === "all" ? "" : "ranked", sort: "play_count", order: "desc", ...paged(params)}),
@@ -67,8 +75,8 @@ const app = Vue.createApp({
 
     async created() {
         addEventListener("hashchange", () => this.load());
-        this.load();
         this.keyCounts = (await api("/info").catch(() => ({ranked_key_counts: []}))).ranked_key_counts;
+        this.load();
     },
 
     methods: {
@@ -85,7 +93,7 @@ const app = Vue.createApp({
                     throw new Error("That doesn't exist.");
                 }
 
-                const view = await loader(route);
+                const view = await loader(route, this.keyCounts);
 
                 if (hash === location.hash) {
                     this.view = view;
@@ -98,6 +106,10 @@ const app = Vue.createApp({
             }
         },
 
+        go(hash) {
+            location.hash = hash;
+        },
+
         submit(event, path) {
             const fields = Object.fromEntries(new FormData(event.target));
             location.hash = path ? link.to(path, fields) : link.user(fields.player.trim());
@@ -108,6 +120,15 @@ const app = Vue.createApp({
 
 app.config.globalProperties.$f = format;
 app.config.globalProperties.$link = link;
+
+app.component("key-tabs", {
+    props: ["current", "path", "params", "counts"],
+    template: `<div class="tabs is-boxed"><ul>
+        <li v-for="count in counts ?? $root.keyCounts" :class="{'is-active': count == current}">
+            <a :href="$link.to(path, {...params, key_count: count})">{{ count }}K</a>
+        </li>
+    </ul></div>`,
+});
 
 app.component("pager", {
     props: ["total"],
@@ -159,19 +180,18 @@ app.component("play-table", {
             <th class="is-numeric">Rate</th><th>Grade</th><th class="is-numeric">Accuracy</th><th class="is-numeric">Combo</th>
             <th class="is-numeric">Performance</th><th v-if="weighted" class="is-numeric">Weighted</th><th class="is-numeric">Date</th>
         </tr></thead>
-        <tbody><tr v-for="{play, rank, weight, weighted_performance} in rows" :key="play.id">
+        <tbody><tr v-for="{play, rank, weight} in rows" :key="play.id">
             <td v-if="ranked" class="is-numeric">{{ $f.rank(rank) }}</td>
             <td v-if="showUser"><a :href="$link.user(play.user.username)">{{ play.user.username }}</a></td>
             <td v-if="showChart" class="chart-name">
-                <a :href="$link.chart(play.chart.hash, play.rate)">{{ play.chart.artist }} - {{ play.chart.title }}</a>
-                <span class="has-text-grey">[{{ play.chart.difficulty_name }}]</span>
+                <a :href="$link.chart(play.chart.hash, play.rate)">{{ play.chart.artist }} - {{ play.chart.title }}</a> <span class="has-text-grey">[{{ play.chart.difficulty_name }}]</span>
             </td>
-            <td class="is-numeric">{{ $f.rate(play.rate) }}</td>
-            <td><span class="tag grade" :class="'grade-' + play.grade">{{ play.grade }}</span></td>
+            <td class="is-numeric" :class="{'rate-changed': play.rate !== 1}">{{ $f.rate(play.rate) }}</td>
+            <td><span class="grade" :class="'grade-' + play.grade">{{ play.grade }}</span></td>
             <td class="is-numeric">{{ $f.accuracy(play.accuracy) }}</td>
             <td class="is-numeric">{{ $f.number(play.max_combo) }}</td>
             <td class="is-numeric">{{ play.ranked ? $f.performance(play.performance) : "unranked" }}</td>
-            <td v-if="weighted" class="is-numeric">{{ $f.performance(weighted_performance) }} ({{ Math.round(weight * 100) }}%)</td>
+            <td v-if="weighted" class="is-numeric">{{ Math.round(weight * 100) }}%</td>
             <td class="is-numeric">{{ $f.date(play.submitted_at) }}</td>
         </tr></tbody>
     </table></div>`,

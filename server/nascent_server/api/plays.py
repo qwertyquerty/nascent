@@ -46,7 +46,6 @@ def submit():
         "chart": chart_detail(result.chart),
         "chart_created": result.chart_created,
         "chart_rank": result.chart_rank,
-        "user": standing_out(result.combined),
         "key_mode": standing_out(result.key_mode) if result.key_mode is not None else None,
     }, 201
 

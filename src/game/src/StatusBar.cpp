@@ -195,27 +195,22 @@ namespace nascent {
         else {
             text(username, olc::WHITE);
 
-            if (profile) {
-                const PlayerStats& stats = profile->stats;
-                segment("Perf", std::format("{:.2f}", stats.performance));
-                segment("Global", format_rank(stats.global_rank));
+            if (profile && key_count > 0) {
+                auto mode_stats = std::find_if(profile->key_modes.begin(), profile->key_modes.end(), [this](const KeyModeStats& entry) {
+                    return entry.key_count == key_count;
+                });
+                std::string mode_label = std::format("{}K", key_count);
 
-                if (key_count > 0) {
-                    auto mode_stats = std::find_if(profile->key_modes.begin(), profile->key_modes.end(), [this](const KeyModeStats& entry) {
-                        return entry.key_count == key_count;
-                    });
-
-                    if (mode_stats != profile->key_modes.end()) {
-                        segment(std::format("{}K", key_count), std::format("{:.2f}  {}", mode_stats->stats.performance, format_rank(mode_stats->stats.global_rank)));
-                    }
-                    else {
-                        segment(std::format("{}K", key_count), "Unranked");
-                    }
+                if (mode_stats != profile->key_modes.end() && mode_stats->global_rank) {
+                    segment(mode_label, std::format("{:.2f}", mode_stats->performance));
+                    segment("Rank", format_rank(mode_stats->global_rank));
+                    segment("Accuracy", std::format("{:.2f}%", mode_stats->accuracy * 100));
                 }
-
-                segment("Accuracy", std::format("{:.2f}%", stats.accuracy * 100));
+                else {
+                    segment(mode_label, "Unranked");
+                }
             }
-            else {
+            else if (!profile) {
                 x += SEGMENT_GAP;
                 text(connection == Connection::OFFLINE ? "Profile unavailable" : "Loading profile", olc::GREY);
             }

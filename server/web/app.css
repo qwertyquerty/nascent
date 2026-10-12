@@ -12,20 +12,38 @@ main {
     flex: 1;
 }
 
-.grade {
-    color: #141414 !important;
-    font-weight: 700;
-    min-width: 2em;
+.title,
+.subtitle,
+.navbar-brand .navbar-item {
+    font-family: "Google Sans", sans-serif;
 }
 
-.grade-X { background-color: #fff0a0 !important; }
-.grade-S { background-color: #ffd250 !important; }
-.grade-A { background-color: #6edc78 !important; }
-.grade-B { background-color: #5aaaff !important; }
-.grade-C { background-color: #be78ff !important; }
-.grade-D { background-color: #ff9646 !important; }
-.grade-E { background-color: #f05a5a !important; }
-.grade-F { background-color: #969696 !important; }
+@font-face {
+    font-family: "Nascent Display";
+    src: url("/display_font.ttf") format("truetype");
+    font-display: swap;
+}
+
+.grade {
+    display: inline-block;
+    min-width: 1.8em;
+    padding: 0 0.4em;
+    border-radius: 4px;
+    background-color: #141414;
+    font-family: "Nascent Display", sans-serif;
+    font-size: 1.15em;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.grade-X { color: rgb(255, 240, 160); }
+.grade-S { color: rgb(255, 210, 80); }
+.grade-A { color: rgb(110, 220, 120); }
+.grade-B { color: rgb(90, 170, 255); }
+.grade-C { color: rgb(190, 120, 255); }
+.grade-D { color: rgb(255, 150, 70); }
+.grade-E { color: rgb(240, 90, 90); }
+.grade-F { color: rgb(150, 150, 150); }
 
 .table td,
 .table th {
@@ -36,6 +54,11 @@ main {
     font-variant-numeric: tabular-nums;
     text-align: right !important;
     white-space: nowrap;
+}
+
+.rate-changed {
+    color: rgb(240, 190, 70);
+    font-weight: 600;
 }
 
 .chart-name {

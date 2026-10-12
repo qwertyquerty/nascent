@@ -8,11 +8,8 @@ def user_summary(user: User) -> dict[str, Any]:
     return {"id": user.id, "username": user.username}
 
 
-def stats_out(stats: User | UserKeyStats, rank: int | None, grade_counts: dict[str, int]) -> dict[str, Any]:
+def totals_out(stats: User | UserKeyStats, grade_counts: dict[str, int]) -> dict[str, Any]:
     return {
-        "global_rank": rank,
-        "performance": stats.performance,
-        "accuracy": stats.accuracy,
         "play_count": stats.play_count,
         "ranked_play_count": stats.ranked_play_count,
         "total_hits": stats.total_hits,
@@ -20,6 +17,16 @@ def stats_out(stats: User | UserKeyStats, rank: int | None, grade_counts: dict[s
         "total_playtime_ms": stats.total_playtime_ms,
         "max_combo": stats.max_combo,
         "grade_counts": grade_counts,
+    }
+
+
+def key_mode_out(stats: UserKeyStats, rank: int | None, grade_counts: dict[str, int]) -> dict[str, Any]:
+    return {
+        "key_count": stats.key_count,
+        "global_rank": rank,
+        "performance": stats.performance,
+        "accuracy": stats.accuracy,
+        **totals_out(stats, grade_counts),
     }
 
 

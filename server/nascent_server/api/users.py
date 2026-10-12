@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from ..extensions import db
 from ..models import Play, PlayStatus
 from ..schemas import pagination, query_float, query_int
-from ..serializers import play_out, stats_out, user_profile
+from ..serializers import key_mode_out, play_out, totals_out, user_profile
 from ..services import ranking
 from ..services.calculator import require_rate_key
 from ..services.charts import get_chart_or_404
@@ -20,21 +20,21 @@ blueprint = Blueprint("users", __name__, url_prefix="/users")
 def profile(reference: str):
     user = get_user_or_404(reference)
     grades: dict[int, dict[str, int]] = defaultdict(dict)
-    combined_grades: dict[str, int] = defaultdict(int)
+    all_grades: dict[str, int] = defaultdict(int)
 
     for key_count, grade, count in db.session.execute(
         select(Play.key_count, Play.grade, func.count()).where(Play.user_id == user.id, Play.is_profile_best.is_(True)).group_by(Play.key_count, Play.grade)
     ):
         grades[key_count][grade] = count
-        combined_grades[grade] += count
+        all_grades[grade] += count
 
     key_modes = []
 
     for row in user.key_stats:
         rank_value = ranking.global_rank(user, row.key_count) if row.key_count in ranking.ranked_key_counts() else None
-        key_modes.append({"key_count": row.key_count, **stats_out(row, rank_value, grades.get(row.key_count, {}))})
+        key_modes.append(key_mode_out(row, rank_value, grades.get(row.key_count, {})))
 
-    return {"user": user_profile(user, stats_out(user, ranking.global_rank(user), dict(combined_grades)), key_modes)}
+    return {"user": user_profile(user, totals_out(user, dict(all_grades)), key_modes)}
 
 
 @blueprint.get("/<reference>/rank")
@@ -58,11 +58,7 @@ def best_plays(reference: str):
     weights = ranking.current_weights()
     total_weight = sum(weights)
 
-    query = select(Play).options(joinedload(Play.chart)).where(Play.user_id == user.id, Play.is_profile_best.is_(True))
-
-    if key_count is not None:
-        query = query.where(Play.key_count == key_count)
-
+    query = select(Play).options(joinedload(Play.chart)).where(Play.user_id == user.id, Play.is_profile_best.is_(True), Play.key_count == key_count)
     plays = db.session.scalars(query.order_by(Play.performance.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
 
     entries = []

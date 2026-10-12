@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="nascent-api" content="/api/v1">
     <title>Nascent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
     <link rel="stylesheet" href="app.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
@@ -44,7 +47,7 @@
                         ['Ranked players', $f.number(view.stats.ranked_players)],
                         ['Plays', $f.number(view.stats.plays)],
                         ['Ranked plays', $f.number(view.stats.ranked_plays)],
-                        ['Ranked charts', `${$f.number(view.stats.ranked_charts)} / ${$f.number(view.stats.charts)}`],
+                        ['Ranked charts', $f.number(view.stats.ranked_charts)],
                         ['Time played', $f.playtime(view.stats.total_playtime_ms)],
                     ]" class="column is-2-desktop is-4-tablet is-6-mobile">
                         <div class="box has-text-centered"><p class="is-size-7 is-uppercase has-text-grey">{{ label }}</p><p class="title is-4">{{ value }}</p></div>
@@ -53,8 +56,9 @@
                 <div class="columns">
                     <div class="column">
                         <h2 class="title is-4">Top players</h2>
+                        <key-tabs :current="view.keyCount" path="/"></key-tabs>
                         <player-table :entries="view.board.entries"></player-table>
-                        <a class="button is-small" href="#/leaderboard">Full leaderboard</a>
+                        <a class="button is-small" :href="$link.to('/leaderboard', {key_count: view.keyCount})">Full {{ view.keyCount }}K leaderboard</a>
                     </div>
                     <div class="column">
                         <h2 class="title is-4">Top plays</h2>
@@ -64,16 +68,9 @@
             </template>
 
             <template v-else-if="route.name === 'leaderboard'">
-                <h1 class="title">Leaderboard</h1>
+                <h1 class="title">{{ view.keyCount }}K leaderboard</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} ranked players</p>
-                <div class="tabs is-boxed">
-                    <ul>
-                        <li :class="{'is-active': !route.params.key_count}"><a href="#/leaderboard">Overall</a></li>
-                        <li v-for="count in keyCounts" :class="{'is-active': route.params.key_count == count}">
-                            <a :href="$link.to('/leaderboard', {key_count: count})">{{ count }}K</a>
-                        </li>
-                    </ul>
-                </div>
+                <key-tabs :current="view.keyCount" path="/leaderboard"></key-tabs>
                 <player-table :entries="view.entries" detailed></player-table>
                 <pager :total="view.total"></pager>
             </template>
@@ -87,10 +84,9 @@
                 <p class="subtitle is-6 has-text-grey">Joined {{ $f.date(view.user.created_at) }} &middot; last played {{ $f.date(view.user.last_played_at) }}</p>
                 <div class="columns is-multiline is-mobile">
                     <div v-for="[label, value] in [
-                        ['Performance', $f.performance(view.user.stats.performance)],
-                        ['Global rank', $f.rank(view.user.stats.global_rank)],
-                        ['Accuracy', $f.accuracy(view.user.stats.accuracy)],
+                        ['Plays', $f.number(view.user.stats.play_count)],
                         ['Ranked plays', $f.number(view.user.stats.ranked_play_count)],
+                        ['Notes hit', $f.number(view.user.stats.total_hits)],
                         ['Time played', $f.playtime(view.user.stats.total_playtime_ms)],
                         ['Max combo', $f.number(view.user.stats.max_combo)],
                     ]" class="column is-2-desktop is-4-tablet is-6-mobile">
@@ -99,7 +95,7 @@
                 </div>
                 <div class="tags mb-5">
                     <span v-for="grade in 'XSABCDEF'" class="tag is-medium">
-                        <span class="tag grade mr-2" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}
+                        <span class="grade mr-2" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}
                     </span>
                 </div>
 
@@ -123,8 +119,10 @@
 
                 <div class="tabs mt-5">
                     <ul>
-                        <li :class="{'is-active': route.params.tab !== 'recent'}"><a :href="$link.user(view.user.username)">Best plays</a></li>
-                        <li :class="{'is-active': route.params.tab === 'recent'}"><a :href="$link.user(view.user.username, {tab: 'recent'})">Recent plays</a></li>
+                        <li v-for="mode in view.modes" :class="{'is-active': !view.recent && mode.key_count === view.keyCount}">
+                            <a :href="$link.user(view.user.username, {key_count: mode.key_count})">{{ mode.key_count }}K best</a>
+                        </li>
+                        <li :class="{'is-active': view.recent}"><a :href="$link.user(view.user.username, {tab: 'recent'})">Recent plays</a></li>
                     </ul>
                 </div>
                 <play-table :plays="view.plays"></play-table>
@@ -157,8 +155,7 @@
                         </tr></thead>
                         <tbody><tr v-for="chart in view.charts" :key="chart.hash">
                             <td class="chart-name">
-                                <a :href="$link.chart(chart.hash)">{{ chart.artist }} - {{ chart.title }}</a>
-                                <span class="has-text-grey">[{{ chart.difficulty_name }}]</span>
+                                <a :href="$link.chart(chart.hash)">{{ chart.artist }} - {{ chart.title }}</a> <span class="has-text-grey">[{{ chart.difficulty_name }}]</span>
                             </td>
                             <td>{{ chart.mapper }}</td>
                             <td class="is-numeric">{{ chart.key_count }}K</td>
@@ -184,11 +181,17 @@
                     {{ $f.number(view.chart.play_count) }} plays
                     <a v-for="source in view.chart.sources.filter((source) => source.url?.startsWith('https://'))" class="ml-2" :href="source.url" target="_blank" rel="noopener">{{ source.source }}</a>
                 </p>
-                <div class="tags mb-4">
-                    <a v-for="entry in view.chart.difficulties" class="tag" :class="entry.rate === view.board.rate ? 'is-link' : 'is-light'"
-                        :href="$link.chart(view.chart.hash, entry.rate)">{{ $f.rate(entry.rate) }} &middot; {{ $f.performance(entry.difficulty) }}</a>
+                <div class="field is-grouped is-align-items-center mb-4">
+                    <h2 class="title is-4 mb-0 mr-3">Leaderboard at</h2>
+                    <div class="select">
+                        <select @change="go($event.target.value)">
+                            <option v-for="entry in view.chart.difficulties" :value="$link.chart(view.chart.hash, entry.rate)" :selected="entry.rate === view.board.rate">
+                                {{ $f.rate(entry.rate) }} &middot; {{ $f.performance(entry.difficulty) }} difficulty
+                            </option>
+                        </select>
+                    </div>
+                    <span class="has-text-grey ml-3">{{ $f.number(view.board.total) }} players</span>
                 </div>
-                <h2 class="title is-4">Leaderboard at {{ $f.rate(view.board.rate) }} <span class="has-text-grey is-size-6">{{ $f.number(view.board.total) }} players</span></h2>
                 <play-table :plays="view.board.entries" show-user :show-chart="false" empty="Nobody has played this rate yet."></play-table>
                 <pager :total="view.board.total"></pager>
             </template>

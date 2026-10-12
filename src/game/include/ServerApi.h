@@ -61,9 +61,6 @@ namespace nascent {
     };
 
     struct PlayerStats {
-        std::optional<int64_t> global_rank;
-        double performance = 0;
-        double accuracy = 0;
         int64_t play_count = 0;
         int64_t ranked_play_count = 0;
         int64_t total_hits = 0;
@@ -75,6 +72,9 @@ namespace nascent {
 
     struct KeyModeStats {
         uint8_t key_count = 0;
+        std::optional<int64_t> global_rank;
+        double performance = 0;
+        double accuracy = 0;
         PlayerStats stats;
     };
 
@@ -213,7 +213,7 @@ namespace nascent {
     };
 
     struct Standing {
-        std::optional<uint8_t> key_count;
+        uint8_t key_count = 0;
         double performance = 0;
         double performance_change = 0;
         std::optional<int64_t> global_rank;
@@ -225,7 +225,6 @@ namespace nascent {
         ServerChart chart;
         bool chart_created = false;
         std::optional<int64_t> chart_rank;
-        Standing combined;
         std::optional<Standing> key_mode;
     };
 
@@ -238,8 +237,8 @@ namespace nascent {
         static std::future<ApiResult<bool>> change_password(const std::string& current_password, const std::string& new_password);
 
         static std::future<ApiResult<Profile>> profile(const std::string& user);
-        static std::future<ApiResult<Rank>> rank(const std::string& user, std::optional<uint8_t> key_count = std::nullopt);
-        static std::future<ApiResult<std::vector<BestPlay>>> best_plays(const std::string& user, std::optional<uint8_t> key_count = std::nullopt, int32_t limit = 50, int32_t offset = 0);
+        static std::future<ApiResult<Rank>> rank(const std::string& user, uint8_t key_count);
+        static std::future<ApiResult<std::vector<BestPlay>>> best_plays(const std::string& user, uint8_t key_count, int32_t limit = 50, int32_t offset = 0);
         static std::future<ApiResult<RecentPlays>> recent_plays(const std::string& user, int32_t limit = 50, std::optional<int64_t> before = std::nullopt);
         static std::future<ApiResult<std::vector<ServerPlay>>> chart_plays(const std::string& user, const std::string& chart_hash, std::optional<float> rate = std::nullopt);
 
