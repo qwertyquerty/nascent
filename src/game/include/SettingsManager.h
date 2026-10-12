@@ -14,6 +14,10 @@ namespace nascent {
         uint8_t field_audio_sync_max_error = 20; // ms
         int16_t field_audio_visual_offset = 0; //ms
         int16_t field_audio_input_offset = 0; // ms
+        uint16_t field_lane_width = 128; // px
+        uint16_t field_judge_offset = 64; // px
+        int16_t field_lane_gap = -1; // px, -1 uses the skin's spacing
+        bool field_upscroll = false;
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;

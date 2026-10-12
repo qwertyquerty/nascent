@@ -127,13 +127,12 @@ namespace nascent {
         }
 
         olc::vi2d window_size = game->window->GetScreenSize();
-        const uint8_t max_lanes_per_screen = 15;
-        double lane_width = (double)window_size.x / max_lanes_per_screen;
-
         field = std::make_unique<EntityField>(chart.get(), skin, olc::vd2d{(double)window_size.x / 4 * 3 - (double)window_size.x / 24, 0.0}, olc::vd2d{(double)(window_size.x / 4), (double)window_size.y});
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
-        field->judge_height = lane_width / 2;
+        field->judge_height = SettingsManager::settings.field_judge_offset;
+        field->upscroll = SettingsManager::settings.field_upscroll;
+        field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(SettingsManager::settings.field_lane_gap) : std::nullopt);
 
         std::filesystem::path click_path = std::filesystem::temp_directory_path() / "nascent_calibration_click.wav";
 
@@ -345,7 +344,7 @@ namespace nascent {
         std::string footer = "↑/↓:  change step        ←/→:  adjust (Shift for bigger steps)        Enter:  save and exit        Esc:  exit";
 
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
-        int32_t footer_bottom = field != nullptr ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;
+        int32_t footer_bottom = field != nullptr && !field->upscroll ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;
 
         draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
     }

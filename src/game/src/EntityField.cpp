@@ -20,13 +20,23 @@ namespace nascent {
         this->size = size;
 
         scroll_speed = SettingsManager::settings.field_scroll_speed;
-
-        double spacing = skin->manifest().key_spacing;
-        note_size = (size.x) / (chart->info.key_count + chart->info.key_count * spacing - spacing);
-        note_x_spacing = note_size * spacing;
-
+        set_lane_gap(std::nullopt);
         active_keys = 0;
     };
+
+    void EntityField::set_lane_gap(std::optional<double> gap) {
+        double keys = chart->info.key_count;
+
+        if (gap) {
+            note_x_spacing = keys > 1 ? std::clamp(*gap, 0.0, size.x / (keys - 1)) : 0.0;
+            note_size = std::max(1.0, (size.x - note_x_spacing * (keys - 1)) / keys);
+            return;
+        }
+
+        double spacing = skin->manifest().key_spacing;
+        note_size = size.x / (keys + keys * spacing - spacing);
+        note_x_spacing = note_size * spacing;
+    }
 
     void EntityField::init(Scene*) {
 
@@ -50,7 +60,7 @@ namespace nascent {
 
                 bool held = get_key(key);
                 olc::Decal* receptor = skin->image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, key, key_count);
-                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (double)(jl_y - pos.y) / size.y) : olc::Pixel(255, 255, 255);
+                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
                 color.a = held ? 255 : manifest.receptor_alpha.value_or(judge_alpha);
 
                 draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
@@ -100,7 +110,9 @@ namespace nascent {
                     body_bottom = std::min(body_bottom, pos.y + size.y);
 
                     if (body_bottom > body_top) {
-                        window->DrawWarpedDecal(hold_body, {{(float)hit_x, (float)body_top}, {(float)hit_x, (float)body_bottom}, {(float)(hit_x + note_size), (float)body_bottom}, {(float)(hit_x + note_size), (float)body_top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                        float top = (float)flip_y(body_top);
+                        float bottom = (float)flip_y(body_bottom);
+                        window->DrawWarpedDecal(hold_body, {{(float)hit_x, top}, {(float)hit_x, bottom}, {(float)(hit_x + note_size), bottom}, {(float)(hit_x + note_size), top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
 
                     olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, hit.key, key_count);
@@ -108,7 +120,9 @@ namespace nascent {
                     if (cap != nullptr && body_top < body_bottom && cap->sprite->width > 0) {
                         double cap_height = note_size * cap->sprite->height / cap->sprite->width;
                         double cap_top = body_top - cap_height;
-                        window->DrawWarpedDecal(cap, {{(float)hit_x, (float)body_top}, {(float)hit_x, (float)cap_top}, {(float)(hit_x + note_size), (float)cap_top}, {(float)(hit_x + note_size), (float)body_top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                        float top = (float)flip_y(body_top);
+                        float end = (float)flip_y(cap_top);
+                        window->DrawWarpedDecal(cap, {{(float)hit_x, top}, {(float)hit_x, end}, {(float)(hit_x + note_size), end}, {(float)(hit_x + note_size), top}}, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
                 }
                 else if (hit.hit_type == HitType::HOLD) {
@@ -188,7 +202,7 @@ namespace nascent {
             return olc::WHITE;
         }
 
-        return skin->title_gradient_at(x / window->GetScreenSize().x, y / window->GetScreenSize().y);
+        return skin->title_gradient_at(x / window->GetScreenSize().x, flip_y(y) / window->GetScreenSize().y);
     }
 
     void EntityField::draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const {
@@ -196,7 +210,8 @@ namespace nascent {
             return;
         }
 
-        window->DrawWarpedDecal(decal, {{(float)x, (float)y}, {(float)x, (float)(y + note_size)}, {(float)(x + note_size), (float)(y + note_size)}, {(float)(x + note_size), (float)y}}, tint);
+        double top = upscroll ? flip_y(y + note_size) : y;
+        window->DrawWarpedDecal(decal, {{(float)x, (float)top}, {(float)x, (float)(top + note_size)}, {(float)(x + note_size), (float)(top + note_size)}, {(float)(x + note_size), (float)top}}, tint);
     }
 
     olc::Pixel EntityField::with_opacity(olc::Pixel color) const {
@@ -206,6 +221,10 @@ namespace nascent {
 
     double EntityField::get_judge_bottom() const {
         return pos.y + size.y - judge_height;
+    }
+
+    double EntityField::flip_y(double y) const {
+        return upscroll ? pos.y * 2 + size.y - y : y;
     }
 
     void EntityField::set_position(double position) {

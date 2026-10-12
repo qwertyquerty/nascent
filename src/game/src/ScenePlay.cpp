@@ -118,19 +118,22 @@ namespace nascent {
 
     void ScenePlay::start_attempt() {
         olc::vi2d window_size = game->window->GetScreenSize();
-        const uint8_t max_lanes_per_screen = 15;
-        double lane_width = (double)window_size.x / ((double)max_lanes_per_screen);
+        const Settings& settings = SettingsManager::settings;
+        double lane_width = std::min((double)settings.field_lane_width, (double)window_size.x / chart->info.key_count);
+        double field_width = lane_width * chart->info.key_count;
 
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
         session->reset_clock(-SettingsManager::settings.play_start_delay * 1000.0, now_ms());
 
-        field = std::make_unique<EntityField>(chart, skin, olc::vd2d{lane_width * (max_lanes_per_screen - chart->info.key_count) / 2, 0}, olc::vd2d{lane_width * chart->info.key_count, (double)window_size.y});
+        field = std::make_unique<EntityField>(chart, skin, olc::vd2d{((double)window_size.x - field_width) / 2, 0}, olc::vd2d{field_width, (double)window_size.y});
         field->set_attempt(&session->get_attempt());
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
-        field->judge_height = lane_width / 2;
+        field->judge_height = settings.field_judge_offset;
+        field->upscroll = settings.field_upscroll;
+        field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(settings.field_lane_gap) : std::nullopt);
         field->draw_combo = true;
         timer = 0;
         frames_played = 0;

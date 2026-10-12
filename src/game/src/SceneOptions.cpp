@@ -1,10 +1,14 @@
 #include "SceneOptions.h"
 
+#include "Chart.h"
+#include "EntityField.h"
 #include "Game.h"
 #include "RowField.h"
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "TextCache.h"
+
+#include <iostream>
 
 #include <algorithm>
 #include <array>
@@ -16,6 +20,18 @@
 namespace nascent {
     static constexpr int32_t VOLUME_STEP = 5;
     static constexpr int32_t OPTIONS_FIELD_SPACING = 12;
+    static constexpr int32_t LANE_WIDTH_MIN = 64;
+    static constexpr int32_t LANE_WIDTH_MAX = 192;
+    static constexpr int32_t LANE_WIDTH_STEP = 4;
+    static constexpr int16_t LANE_GAP_MAX = 48;
+    static constexpr int16_t LANE_GAP_STEP = 4;
+    static constexpr int32_t JUDGE_OFFSET_MAX = 400;
+    static constexpr int32_t JUDGE_OFFSET_STEP = 4;
+    static constexpr uint8_t PREVIEW_KEY_COUNT = 4;
+    static constexpr int32_t PREVIEW_BEAT_MS = 250;
+    static constexpr int32_t PREVIEW_LOOP_BEATS = 32;
+    static constexpr int32_t PREVIEW_HOLD_BEATS = 2;
+    static constexpr int32_t PREVIEW_HOLD_EVERY = 8;
     static constexpr int32_t HEADER_HEIGHT = 156;
     static constexpr int32_t FOOTER_GAP = 40;
     static constexpr int32_t STATUS_OFFSET = 8;
@@ -85,6 +101,31 @@ namespace nascent {
         music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, VOLUME_STEP, "%");
         effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, VOLUME_STEP, "%");
 
+        form.add<SectionField>("Playfield");
+        lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width, LANE_WIDTH_MIN, LANE_WIDTH_MAX, LANE_WIDTH_STEP, " px");
+
+        lane_gaps = {-1};
+
+        for (int16_t gap = 0; gap <= LANE_GAP_MAX; gap += LANE_GAP_STEP) {
+            lane_gaps.push_back(gap);
+        }
+
+        if (std::find(lane_gaps.begin(), lane_gaps.end(), settings.field_lane_gap) == lane_gaps.end()) {
+            lane_gaps.push_back(settings.field_lane_gap);
+            std::sort(lane_gaps.begin(), lane_gaps.end());
+        }
+
+        std::vector<std::string> lane_gap_labels;
+
+        for (int16_t gap : lane_gaps) {
+            lane_gap_labels.push_back(gap < 0 ? std::string("Skin") : std::format("{} px", gap));
+        }
+
+        size_t lane_gap_index = (size_t)(std::find(lane_gaps.begin(), lane_gaps.end(), settings.field_lane_gap) - lane_gaps.begin());
+        lane_gap_field = &form.add<ChoiceField>("Lane separation", lane_gap_labels, lane_gap_index);
+        judge_offset_field = &form.add<SliderField>("Judgement line height", settings.field_judge_offset, 0, JUDGE_OFFSET_MAX, JUDGE_OFFSET_STEP, " px");
+        scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
+
         form.add<SectionField>("Gameplay keys");
 
         for (size_t index = 0; index < KEY_BINDINGS.size(); index++) {
@@ -93,6 +134,9 @@ namespace nascent {
 
         form.spacing = OPTIONS_FIELD_SPACING;
         form.focus_field(game->window, 0);
+
+        build_preview_chart();
+        rebuild_preview();
     }
 
     void SceneOptions::apply() {
@@ -110,6 +154,11 @@ namespace nascent {
         settings.show_fps = fps_counter_field->selected == 1;
         settings.scene_transition_time = TRANSITION_OPTIONS[transition_field->selected].second;
         game->scene_transition_time = settings.scene_transition_time;
+        settings.field_lane_width = (uint16_t)lane_width_field->value;
+        settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
+        settings.field_judge_offset = (uint16_t)judge_offset_field->value;
+        settings.field_upscroll = scroll_direction_field->selected == 1;
+        rebuild_preview();
         status.clear();
 
         for (KeyBindField* field : key_fields) {
@@ -141,6 +190,64 @@ namespace nascent {
         }
 
         update_scroll(elapsed_time);
+        update_preview(elapsed_time);
+    }
+
+    void SceneOptions::build_preview_chart() {
+        ChartInfo info;
+        info.title = "Options Preview";
+        info.key_count = PREVIEW_KEY_COUNT;
+        info.hit_accuracy = MAX_HIT_ACC_DIFFICULTY;
+
+        std::vector<Hit> hits;
+
+        for (int32_t beat = 0; beat < PREVIEW_LOOP_BEATS * 2; beat++) {
+            uint8_t lane = (uint8_t)(beat % PREVIEW_KEY_COUNT);
+            int32_t time = beat * PREVIEW_BEAT_MS;
+
+            if (beat % PREVIEW_HOLD_EVERY == PREVIEW_KEY_COUNT / 2) {
+                hits.push_back({lane, HitType::HOLD, time, time + PREVIEW_HOLD_BEATS * PREVIEW_BEAT_MS});
+            }
+            else {
+                hits.push_back({lane, HitType::HIT, time, time});
+            }
+        }
+
+        std::string error;
+        preview_chart = Chart::create(info, std::move(hits), {{0, (float)PREVIEW_BEAT_MS, 4}}, error);
+
+        if (preview_chart == nullptr) {
+            std::cerr << "Options preview: " << error << std::endl;
+        }
+    }
+
+    void SceneOptions::rebuild_preview() {
+        if (preview_chart == nullptr) {
+            return;
+        }
+
+        const Settings& settings = SettingsManager::settings;
+        olc::vi2d screen = game->window->GetScreenSize();
+        double width = (double)settings.field_lane_width * PREVIEW_KEY_COUNT;
+
+        preview_field = std::make_unique<EntityField>(preview_chart.get(), skin, olc::vd2d{(double)screen.x * 3 / 4 - width / 2, 0.0}, olc::vd2d{width, (double)screen.y});
+        preview_field->draw_judge_colors = true;
+        preview_field->draw_notes_past_judge = false;
+        preview_field->judge_alpha = 64;
+        preview_field->judge_height = settings.field_judge_offset;
+        preview_field->upscroll = settings.field_upscroll;
+        preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(settings.field_lane_gap) : std::nullopt);
+    }
+
+    void SceneOptions::update_preview(float elapsed_time) {
+        if (preview_field == nullptr) {
+            return;
+        }
+
+        preview_time += elapsed_time;
+        double position = std::fmod(preview_time * 1000.0, (double)PREVIEW_LOOP_BEATS * PREVIEW_BEAT_MS);
+        preview_field->set_position(position);
+        preview_field->set_keys(preview_chart->held_lanes_at(position));
     }
 
     void SceneOptions::update_scroll(float elapsed_time) {
@@ -216,6 +323,10 @@ namespace nascent {
         }
 
         draw_scrollbar(window, x);
+
+        if (preview_field != nullptr) {
+            preview_field->draw(window);
+        }
 
         draw_text(skin->display_font_large, "Options", {x, y}, olc::WHITE);
         y += 90;

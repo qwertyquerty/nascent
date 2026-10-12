@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "Entity.h"
 #include "Util.h"
@@ -36,6 +37,7 @@ namespace nascent {
         bool draw_hit_score = true;
         bool draw_combo = false;
         double judge_height = 0;
+        bool upscroll = false;
 
         uint8_t judge_alpha = 64;
 
@@ -54,7 +56,9 @@ namespace nascent {
         void draw(olc::PixelGameEngine*) override;
 
         void set_position(double position);
+        void set_lane_gap(std::optional<double> gap);
         double get_judge_bottom() const;
+        double flip_y(double y) const;
         olc::Pixel with_opacity(olc::Pixel color) const;
         olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
         void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
