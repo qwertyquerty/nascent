@@ -14,20 +14,20 @@
 namespace nascent {
     class Skin;
 
-    class LeaderboardPanel {
-        template <typename T>
-        struct Request {
-            std::string key;
-            uint64_t generation = 0;
-            std::future<T> result;
-        };
+    template <typename T>
+    struct LeaderboardRequest {
+        std::string key;
+        uint64_t generation = 0;
+        std::future<T> result;
+    };
 
+    class LeaderboardPanel {
         uint64_t generation = 0;
         float delay = 0;
         std::unordered_map<std::string, std::vector<LocalScore>> local_scores;
         std::unordered_map<std::string, ApiResult<ChartLeaderboard>> online_scores;
-        std::optional<Request<std::vector<LocalScore>>> local_request;
-        std::optional<Request<ApiResult<ChartLeaderboard>>> online_request;
+        std::optional<LeaderboardRequest<std::vector<LocalScore>>> local_request;
+        std::optional<LeaderboardRequest<ApiResult<ChartLeaderboard>>> online_request;
 
         public:
         static constexpr float SELECTION_DELAY = 0.25f;

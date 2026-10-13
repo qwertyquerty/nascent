@@ -67,13 +67,13 @@ namespace nascent {
 
         if (!local_request && !local_scores.contains(board_key)) {
             long rate = std::lround(pitch * 100.0f);
-            local_request = Request<std::vector<LocalScore>>{board_key, generation, std::async(std::launch::async, [gameplay_hash, rate] {
-                                                                 return LocalReplays::scores(gameplay_hash, rate);
-                                                             })};
+            local_request = LeaderboardRequest<std::vector<LocalScore>>{board_key, generation, std::async(std::launch::async, [gameplay_hash, rate] {
+                                                                            return LocalReplays::scores(gameplay_hash, rate);
+                                                                        })};
         }
 
         if (!online_request && !online_scores.contains(board_key)) {
-            online_request = Request<ApiResult<ChartLeaderboard>>{board_key, generation, ServerApi::chart_leaderboard(gameplay_hash, pitch, ONLINE_LIMIT)};
+            online_request = LeaderboardRequest<ApiResult<ChartLeaderboard>>{board_key, generation, ServerApi::chart_leaderboard(gameplay_hash, pitch, ONLINE_LIMIT)};
         }
     }
 
