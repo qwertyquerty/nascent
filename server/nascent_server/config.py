@@ -34,7 +34,7 @@ class Config:
     TICKET_GRACE = timedelta(hours=2)
     TICKET_MIN_ELAPSED_RATIO = 0.95
 
-    PROFILE_TOP_PLAYS = 50
+    PROFILE_TOP_PLAYS = 40
     PROFILE_DECAY = 0.9
     RANKED_KEY_COUNTS = tuple(range(4, 11))
 
