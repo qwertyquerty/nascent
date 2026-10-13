@@ -84,6 +84,25 @@ namespace nascent {
         }
     }
 
+    void attach_parent_console() {
+#if defined(_WIN32)
+        bool missing_out = _fileno(stdout) < 0;
+        bool missing_err = _fileno(stderr) < 0;
+
+        if (!(missing_out || missing_err) || !AttachConsole(ATTACH_PARENT_PROCESS)) {
+            return;
+        }
+
+        if (missing_out) {
+            std::freopen("CONOUT$", "w", stdout);
+        }
+
+        if (missing_err) {
+            std::freopen("CONOUT$", "w", stderr);
+        }
+#endif
+    }
+
     std::filesystem::path user_config_directory(const std::string& app_name) {
         std::filesystem::path base;
 

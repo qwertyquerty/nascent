@@ -40,6 +40,7 @@ class NascentMain : public olc::PixelGameEngine {
 };
 
 int main() {
+    attach_parent_console();
     use_executable_directory_for_assets();
     SettingsManager::load();
 
