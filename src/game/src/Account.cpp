@@ -190,6 +190,23 @@ namespace nascent {
         clear_locked();
     }
 
+    void Account::use_server(const std::string& server_url) {
+        std::lock_guard<std::mutex> lock(state_mutex);
+
+        if (session.server_url == server_url) {
+            return;
+        }
+
+        if (!access.empty()) {
+            ServerClient::request_async(session.server_url, "POST", "/auth/logout", nullptr, access);
+        }
+
+        session = AccountFile();
+        session.server_url = server_url;
+        access.clear();
+        save_locked();
+    }
+
     ServerResponse Account::authorized(const std::string& method, const std::string& path, const nlohmann::json& body) {
         std::string token;
         std::string server_url;

@@ -228,8 +228,10 @@ namespace nascent {
     }
 
     std::future<ApiResult<ServerHealth>> ServerApi::health() {
-        std::string server_url = SettingsManager::settings.server_url;
+        return health(SettingsManager::settings.server_url);
+    }
 
+    std::future<ApiResult<ServerHealth>> ServerApi::health(const std::string& server_url) {
         return run_detached([server_url] {
             ApiResult<ServerHealth> result;
             result.response = ServerClient::request(server_url, "GET", "/health");

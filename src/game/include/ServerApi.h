@@ -235,6 +235,7 @@ namespace nascent {
         static std::string profile_page_url(const std::string& user);
 
         static std::future<ApiResult<ServerHealth>> health();
+        static std::future<ApiResult<ServerHealth>> health(const std::string& server_url);
         static std::future<ApiResult<ServerInfo>> info();
 
         static std::future<ApiResult<AccountUser>> me();

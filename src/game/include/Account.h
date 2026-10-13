@@ -20,6 +20,7 @@ namespace nascent {
         static std::future<ServerResponse> sign_in(const std::string& login, const std::string& password);
         static std::future<ServerResponse> create(const std::string& username, const std::string& email, const std::string& password);
         static void sign_out();
+        static void use_server(const std::string& server_url);
 
         static ServerResponse authorized(const std::string& method, const std::string& path, const nlohmann::json& body = nullptr);
     };

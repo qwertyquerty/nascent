@@ -1,10 +1,12 @@
 #pragma once
 
 #include "Scene.h"
+#include "ServerApi.h"
 #include "UiForm.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -15,6 +17,7 @@ namespace nascent {
     class ChoiceField;
     class EntityField;
     class SliderField;
+    class TextField;
     class KeyBindField;
     class Skin;
     struct SkinInfo;
@@ -49,7 +52,15 @@ namespace nascent {
         SliderField* music_volume_field = nullptr;
         SliderField* effects_volume_field = nullptr;
         std::vector<KeyBindField*> key_fields;
+        TextField* server_field = nullptr;
         std::string status;
+        bool status_is_error = false;
+
+        std::string server_typed;
+        std::string server_checked;
+        std::string server_checking;
+        float server_check_delay = 0;
+        std::future<ApiResult<ServerHealth>> server_check;
 
         float scroll = 0;
         float scroll_target = 0;
@@ -67,6 +78,8 @@ namespace nascent {
         bool changed = false;
 
         void apply();
+        void update_server(float elapsed_time);
+        void commit_server();
         void update_scroll(float elapsed_time);
         void build_preview_chart();
         void rebuild_preview();

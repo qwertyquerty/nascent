@@ -1,6 +1,7 @@
 #include "SceneOptions.h"
 #include "RichPresence.h"
 
+#include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
 #include "EntityField.h"
@@ -9,6 +10,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "TextCache.h"
+#include "TextField.h"
 #include "TimingBar.h"
 #include "Ui.h"
 
@@ -16,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <format>
 #include <string>
@@ -50,6 +53,7 @@ namespace nascent {
     static constexpr uint8_t SCROLLBAR_TRACK_ALPHA = 24;
     static constexpr uint8_t SCROLLBAR_THUMB_ALPHA = 120;
     static constexpr std::array<uint16_t, 9> FRAME_RATE_OPTIONS = {0, 60, 120, 144, 165, 240, 360, 480, 1000};
+    static constexpr float SERVER_CHECK_DELAY = 0.6f;
     static constexpr std::array<std::pair<const char*, float>, 4> TRANSITION_OPTIONS = {{{"Off", 0.0f}, {"Fast", 0.1f}, {"Normal", 0.2f}, {"Slow", 0.35f}}};
 
     static uint32_t autoplay_keys(const Chart& chart, double time) {
@@ -66,6 +70,30 @@ namespace nascent {
         }
 
         return keys;
+    }
+
+    static std::string normalize_server_url(std::string url) {
+        size_t start = url.find_first_not_of(" \t");
+        size_t end = url.find_last_not_of(" \t");
+        url = start == std::string::npos ? std::string() : url.substr(start, end - start + 1);
+
+        if (url.empty()) {
+            return url;
+        }
+
+        if (url.find("://") == std::string::npos) {
+            url = "https://" + url;
+        }
+
+        while (!url.empty() && url.back() == '/') {
+            url.pop_back();
+        }
+
+        if (url.ends_with("/api/v1")) {
+            url.erase(url.size() - std::string_view("/api/v1").size());
+        }
+
+        return url;
     }
 
     SceneOptions::SceneOptions(Skin* skin) : skin(skin) {}
@@ -168,6 +196,11 @@ namespace nascent {
             key_fields.push_back(&form.add<KeyBindField>((KeyBinding)index));
         }
 
+        form.add<SectionField>("Online");
+        server_field = &form.add<TextField>("Server address", settings.server_url);
+        server_typed = settings.server_url;
+        server_checked = settings.server_url;
+
         form.spacing = OPTIONS_FIELD_SPACING;
         form.focus_field(game->window, 0);
 
@@ -209,6 +242,7 @@ namespace nascent {
         settings.field_timing_bar_width = (uint8_t)timing_bar_width_field->value;
         rebuild_preview();
         status.clear();
+        status_is_error = false;
 
         for (KeyBindField* field : key_fields) {
             if (std::optional<KeyBinding> swapped = std::exchange(field->swapped, std::nullopt)) {
@@ -221,6 +255,7 @@ namespace nascent {
 
     void SceneOptions::on_exit() {
         form.set_enabled(game->window, false);
+        commit_server();
 
         if (std::exchange(changed, false)) {
             SettingsManager::save();
@@ -238,8 +273,78 @@ namespace nascent {
             game->play_sound(skin->sound(SkinSound::HITSOUND));
         }
 
+        update_server(elapsed_time);
         update_scroll(elapsed_time);
         update_preview(elapsed_time);
+    }
+
+    void SceneOptions::update_server(float elapsed_time) {
+        if (server_field == nullptr) {
+            return;
+        }
+
+        if (server_field->value != server_typed) {
+            server_typed = server_field->value;
+            server_check_delay = SERVER_CHECK_DELAY;
+        }
+
+        server_check_delay = std::max(0.0f, server_check_delay - elapsed_time);
+        std::string url = normalize_server_url(server_typed);
+
+        if (server_check.valid() && server_check.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            ApiResult<ServerHealth> result = server_check.get();
+            server_checked = server_checking;
+
+            if (server_checked == url) {
+                if (!result.ok()) {
+                    status = std::format("Couldn't reach {}: {}", server_checked, result.error());
+                    status_is_error = true;
+                }
+                else if (!result.value->healthy) {
+                    status = std::format("{} answered but isn't healthy right now", server_checked);
+                    status_is_error = true;
+                }
+                else {
+                    status = std::format("{} is online ({:.0f} ms)", server_checked, result.value->latency_ms);
+                    status_is_error = false;
+                }
+            }
+        }
+
+        if (!server_check.valid() && server_check_delay <= 0 && !url.empty() && url != server_checked) {
+            server_checking = url;
+            server_check = ServerApi::health(url);
+            status = std::format("Checking {}...", url);
+            status_is_error = false;
+        }
+
+        if (form.focused_field() != server_field) {
+            commit_server();
+        }
+    }
+
+    void SceneOptions::commit_server() {
+        if (server_field == nullptr) {
+            return;
+        }
+
+        Settings& settings = SettingsManager::settings;
+        std::string url = normalize_server_url(server_field->value);
+
+        if (url.empty()) {
+            url = settings.server_url;
+        }
+
+        server_field->value = url;
+        server_typed = url;
+
+        if (url == settings.server_url) {
+            return;
+        }
+
+        settings.server_url = url;
+        Account::use_server(url);
+        changed = true;
     }
 
     void SceneOptions::build_preview_chart() {
@@ -363,6 +468,10 @@ namespace nascent {
             return "↑/↓:  choose        Enter:  rebind        Delete:  reset        Esc:  back";
         }
 
+        if (server_field != nullptr && form.focused_field() == server_field) {
+            return "Type an address        ↑/↓:  choose        Esc:  save and go back";
+        }
+
         return "↑/↓:  choose        ←/→:  change        Esc:  back";
     }
 
@@ -427,7 +536,7 @@ namespace nascent {
         draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, olc::GREY);
 
         if (!status.empty()) {
-            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, olc::GREY);
+            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, status_is_error ? olc::RED : olc::GREY);
         }
 
         draw_text(skin->display_font_small, footer, {x, footer_top}, olc::GREY);
