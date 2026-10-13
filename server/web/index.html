@@ -195,6 +195,9 @@
                         <div class="control">
                             <input class="input range-input" name="max_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Max m:ss" :value="route.params.max_length">
                         </div>
+                        <div class="control"><button class="button is-link">Search</button></div>
+                    </div>
+                    <div class="field is-grouped is-grouped-multiline is-align-items-center">
                         <div class="control"><span class="has-text-grey">Sort by</span></div>
                         <div class="control">
                             <div class="select">
@@ -212,7 +215,6 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="control"><button class="button is-link">Search</button></div>
                     </div>
                 </form>
                 <pager :total="view.total" top></pager>
