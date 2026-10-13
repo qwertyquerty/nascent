@@ -1,3 +1,12 @@
+:root[data-theme=dark] {
+    --bulma-scheme-main-l: 6%;
+    --bulma-scheme-main-bis-l: 8%;
+    --bulma-scheme-main-ter-l: 10%;
+    --bulma-background-l: 11%;
+    --bulma-border-weak-l: 17%;
+    --bulma-border-l: 20%;
+}
+
 [v-cloak] {
     display: none;
 }
