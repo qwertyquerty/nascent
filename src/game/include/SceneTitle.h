@@ -54,6 +54,7 @@ namespace nascent {
         uint8_t get_field_count();
         std::unique_ptr<Chart> load_random_chart();
         bool load_background();
+        void layout_background();
         bool logo_playing();
         bool logo_finished();
 
@@ -76,6 +77,7 @@ namespace nascent {
         ~SceneTitle();
         void init(Game*) override;
         void on_exit() override;
+        void on_resize() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };

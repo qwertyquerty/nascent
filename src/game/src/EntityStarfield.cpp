@@ -1,4 +1,5 @@
 #include "EntityStarfield.h"
+#include "Ui.h"
 #include "Skin.h"
 #include "Util.h"
 
@@ -194,14 +195,14 @@ namespace nascent {
 
     void EntityStarfield::spawn_shooting_star() {
         double angle = random(0.22, 0.5);
-        double speed = random(900, 1500);
+        double speed = random(900, 1500) * Ui::scale();
 
         ShootingStar shooting;
         shooting.pos = {random(size.x * 0.3, size.x * 1.1), random(-size.y * 0.1, size.y * 0.45)};
         shooting.velocity = {-std::cos(angle) * speed, std::sin(angle) * speed};
         shooting.age = 0;
         shooting.life = random(0.55, 1.1);
-        shooting.length = random(140, 300);
+        shooting.length = random(140, 300) * Ui::scale();
         shooting.tint = star_tint();
         shooting_stars.push_back(shooting);
     }
@@ -470,7 +471,7 @@ namespace nascent {
 
         double twinkle = 0.5 + 0.5 * std::sin(time * star.twinkle_rate + star.phase);
         double brightness = (0.12 + 0.6 * star.brightness) * (1 - 0.45 * twinkle * (1.1 - star.brightness));
-        double star_size = std::lerp(STARFIELD_MIN_STAR_SIZE, STARFIELD_MAX_STAR_SIZE, star.brightness);
+        double star_size = std::lerp(STARFIELD_MIN_STAR_SIZE, STARFIELD_MAX_STAR_SIZE, star.brightness) * Ui::scale();
 
         olc::Pixel color = star.tint;
         color.a = alpha_of(brightness * light_level);
@@ -485,7 +486,7 @@ namespace nascent {
     void EntityStarfield::draw_shooting_star(olc::PixelGameEngine* window, const ShootingStar& shooting) const {
         double envelope = std::sin(3.14159265 * std::clamp(shooting.age / shooting.life, 0.0, 1.0));
         olc::vd2d direction = shooting.velocity.norm();
-        olc::vd2d side = olc::vd2d{-direction.y, direction.x} * 1.2;
+        olc::vd2d side = olc::vd2d{-direction.y, direction.x} * (1.2 * Ui::scale());
         olc::vd2d tail = shooting.pos - direction * shooting.length;
 
         olc::Pixel head_color = shooting.tint;
@@ -497,7 +498,7 @@ namespace nascent {
 
         olc::Pixel glow_color = olc::WHITE;
         glow_color.a = alpha_of(envelope * 0.75 * light_level);
-        draw_sprite(window, glow, shooting.pos, 14, glow_color);
+        draw_sprite(window, glow, shooting.pos, 14 * Ui::scale(), glow_color);
     }
 
     void EntityStarfield::draw_planet(olc::PixelGameEngine* window, const Planet& planet) const {

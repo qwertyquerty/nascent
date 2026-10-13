@@ -16,6 +16,8 @@ namespace nascent {
         static constexpr int32_t HEIGHT = 46;
         static constexpr int32_t PADDING = 12;
 
+        static int32_t width();
+
         std::string label;
         std::string value;
         bool secret = false;

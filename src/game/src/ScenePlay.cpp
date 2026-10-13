@@ -22,6 +22,7 @@
 #include "Utf8Path.h"
 #include "TextCache.h"
 #include "TimingBar.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <cmath>
@@ -73,6 +74,7 @@ namespace nascent {
         replay_settings.audio_input_offset = session->audio_input_offset;
         replay_settings.audio_visual_offset = session->audio_visual_offset;
         replay_settings.scroll_speed = field->scroll_speed;
+        replay_settings.mirror = mirror;
 
         Replay replay = make_replay(attempt, summary, replay_chart, chart->pitch, replay_settings, current_utc_timestamp());
         replay.diagnostics = timing_diagnostics();
@@ -130,6 +132,7 @@ namespace nascent {
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
         session->reset_clock(-SettingsManager::settings.play_start_delay * 1000.0, now_ms());
+        mirror = settings.field_mirror;
 
         field = std::make_unique<EntityField>(chart, skin, olc::vd2d{((double)window_size.x - field_width) / 2, 0}, olc::vd2d{field_width, (double)window_size.y});
         field->set_attempt(&session->get_attempt());
@@ -137,7 +140,8 @@ namespace nascent {
         field->judge_alpha = 64;
         field->judge_height = window_size.y * settings.field_judge_line_percent / 100.0;
         field->upscroll = settings.field_upscroll;
-        field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(settings.field_lane_gap) : std::nullopt);
+        field->mirror = mirror;
+        field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
         field->draw_hit_score = settings.field_show_judgement;
         field->draw_combo = settings.field_show_combo;
         field->judgement_height = settings.field_judgement_height / 100.0;
@@ -151,6 +155,34 @@ namespace nascent {
         closest_press_gap.reset();
         simultaneous_presses = 0;
         game->reset_input_delay();
+    }
+
+    uint8_t ScenePlay::chart_lane(uint8_t lane) const {
+        return mirror ? (uint8_t)(chart->info.key_count - 1 - lane) : lane;
+    }
+
+    uint32_t ScenePlay::chart_lanes(uint32_t lanes) const {
+        uint32_t mapped = 0;
+
+        for (uint8_t lane = 0; lane < chart->info.key_count; lane++) {
+            if (lanes & (1u << lane)) {
+                mapped |= 1u << chart_lane(lane);
+            }
+        }
+
+        return mapped;
+    }
+
+    void ScenePlay::on_resize() {
+        olc::vi2d window_size = game->window->GetScreenSize();
+        const Settings& settings = SettingsManager::settings;
+        double lane_width = std::min(window_size.y * settings.field_lane_width_percent / 100.0, (double)window_size.x / chart->info.key_count);
+        double field_width = lane_width * chart->info.key_count;
+
+        field->pos = {((double)window_size.x - field_width) / 2, 0};
+        field->size = {field_width, (double)window_size.y};
+        field->judge_height = window_size.y * settings.field_judge_line_percent / 100.0;
+        field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
     }
 
     void ScenePlay::record_frame(float elapsed_time) {
@@ -317,12 +349,16 @@ namespace nascent {
 
     void ScenePlay::draw_timing_diagnostics(olc::PixelGameEngine* window) const {
         std::vector<std::string> lines = diagnostics_lines(false);
-        float x = (float)window->GetScreenSize().x - DIAGNOSTICS_RIGHT;
-        float char_size = DIAGNOSTICS_SCALE * 8.0f;
-        float width = char_size * DIAGNOSTICS_MAX_CHARS + DIAGNOSTICS_PADDING * 2;
-        float height = DIAGNOSTICS_LINE_HEIGHT * (float)(lines.size() - 1) + char_size + DIAGNOSTICS_PADDING * 2;
+        float scale = Ui::pxf(DIAGNOSTICS_SCALE);
+        float padding = Ui::pxf(DIAGNOSTICS_PADDING);
+        float line_height = Ui::pxf(DIAGNOSTICS_LINE_HEIGHT);
+        float top = Ui::pxf(DIAGNOSTICS_TOP);
+        float x = (float)window->GetScreenSize().x - Ui::pxf(DIAGNOSTICS_RIGHT);
+        float char_size = scale * 8.0f;
+        float width = char_size * DIAGNOSTICS_MAX_CHARS + padding * 2;
+        float height = line_height * (float)(lines.size() - 1) + char_size + padding * 2;
 
-        window->FillRectDecal({x - DIAGNOSTICS_PADDING, DIAGNOSTICS_TOP - DIAGNOSTICS_PADDING}, {width, height}, olc::Pixel(0, 0, 0, DIAGNOSTICS_BACKGROUND_ALPHA));
+        window->FillRectDecal({x - padding, top - padding}, {width, height}, olc::Pixel(0, 0, 0, DIAGNOSTICS_BACKGROUND_ALPHA));
 
         for (size_t index = 0; index < lines.size(); index++) {
             std::string line = lines[index];
@@ -335,7 +371,7 @@ namespace nascent {
                 line = line.substr(0, DIAGNOSTICS_MAX_CHARS - 3) + "...";
             }
 
-            window->DrawStringDecal({x, DIAGNOSTICS_TOP + (float)index * DIAGNOSTICS_LINE_HEIGHT}, line, olc::WHITE, {DIAGNOSTICS_SCALE, DIAGNOSTICS_SCALE});
+            window->DrawStringDecal({x, top + (float)index * line_height}, line, olc::WHITE, {scale, scale});
         }
     }
 
@@ -404,7 +440,7 @@ namespace nascent {
 
         game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
         session->reset_clock(paused_position, now);
-        session->set_keys(InputManager::get_lane_keys_held(game->window, lane_keys), now);
+        session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->window, lane_keys)), now);
     }
 
     void ScenePlay::update(float elapsed_time) {
@@ -470,10 +506,14 @@ namespace nascent {
 
                 if (event.pressed) {
                     record_press(event.time);
-                    session->press(*lane, event.time);
+                    session->press(chart_lane(*lane), event.time);
+
+                    if (SettingsManager::settings.field_hitsounds) {
+                        game->play_sound(skin->sound(SkinSound::HITSOUND));
+                    }
                 }
                 else {
-                    session->release(*lane, event.time);
+                    session->release(chart_lane(*lane), event.time);
                 }
             }
 
@@ -506,10 +546,10 @@ namespace nascent {
         int32_t chart_start = chart->get_chart_start_ms();
         int32_t chart_length = std::max(1, chart->get_chart_end_ms() - chart_start);
         float progress = (float)((position - chart_start) / chart_length);
-        ProgressBar({SONG_PROGRESS_WIDTH, SONG_PROGRESS_HEIGHT}).draw(window, {screensize.x - SONG_PROGRESS_RIGHT, SONG_PROGRESS_TOP}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+        ProgressBar({Ui::pxf(SONG_PROGRESS_WIDTH), std::max(1.0f, Ui::pxf(SONG_PROGRESS_HEIGHT))}).draw(window, {screensize.x - Ui::pxf(SONG_PROGRESS_RIGHT), Ui::pxf(SONG_PROGRESS_TOP)}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
 
-        draw_text(skin->display_font_medium, std::format("{:.2f}%", attempt.get_accuracy() * 100), 20, 40, olc::WHITE);
-        draw_text(skin->display_font_medium, std::format("{:.1f}ms", attempt.get_avg_err()), 20, 80, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{:.2f}%", attempt.get_accuracy() * 100), Ui::px(20), Ui::px(40), olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{:.1f}ms", attempt.get_avg_err()), Ui::px(20), Ui::px(80), olc::WHITE);
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
@@ -522,7 +562,11 @@ namespace nascent {
         }
 
         uint8_t l = 0;
-        const double vspacing = 26;
+        const float vspacing = Ui::pxf(26);
+        const float log_top = Ui::pxf(160);
+        const float log_scale = Ui::pxf(2);
+        const float score_x = Ui::pxf(20);
+        const float error_x = Ui::pxf(80);
         const uint8_t vlen = 35;
         if (show_hit_log) {
             draw_timing_diagnostics(window);
@@ -532,8 +576,8 @@ namespace nascent {
             const JudgedHit& jhit = attempt.judged_hits[i];
 
             if (jhit.hit) {
-                window->DrawStringDecal({20.0, (float)(160.0 + vspacing * l)}, std::format("{}", hit_score_acc(jhit.hit_score)), olc::Pixel(hit_score_color(jhit.hit_score)), {2, 2});
-                window->DrawStringDecal({80.0, (float)(160.0 + vspacing * l)}, std::format("  {:+}ms", jhit.hit_err), olc::WHITE, {2, 2});
+                window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.hit_score)), olc::Pixel(hit_score_color(jhit.hit_score)), {log_scale, log_scale});
+                window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("  {:+}ms", jhit.hit_err), olc::WHITE, {log_scale, log_scale});
 
                 l += 1;
                 if (l >= vlen) {
@@ -542,11 +586,11 @@ namespace nascent {
 
                 if (jhit.chart_hit.hit_type == HitType::HOLD) {
                     if (jhit.released) {
-                        window->DrawStringDecal({20.0, (float)(160.0 + vspacing * l)}, std::format("{}", hit_score_acc(jhit.release_score)), olc::Pixel(hit_score_color(jhit.release_score)), {2, 2});
-                        window->DrawStringDecal({80.0, (float)(160.0 + vspacing * l)}, std::format("R {:+}ms", jhit.release_err), olc::WHITE, {2, 2});
+                        window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.release_score)), olc::Pixel(hit_score_color(jhit.release_score)), {log_scale, log_scale});
+                        window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("R {:+}ms", jhit.release_err), olc::WHITE, {log_scale, log_scale});
                     }
                     else {
-                        window->DrawStringDecal({20.0, (float)(160.0 + vspacing * l)}, "...", olc::GREY, {2, 2});
+                        window->DrawStringDecal({score_x, log_top + vspacing * l}, "...", olc::GREY, {log_scale, log_scale});
                     }
                     l += 1;
                 }

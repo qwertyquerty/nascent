@@ -38,6 +38,7 @@ namespace nascent {
         bool draw_combo = false;
         double judge_height = 0;
         bool upscroll = false;
+        bool mirror = false;
         double judgement_height = 0.45;
         double combo_height = 0.41;
 
@@ -73,5 +74,6 @@ namespace nascent {
         void clear_keys();
         bool get_key(uint8_t key);
         uint8_t get_key_count();
+        uint8_t display_column(uint8_t key) const;
     };
 }

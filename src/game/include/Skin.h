@@ -84,8 +84,12 @@ namespace nascent {
         std::array<SpriteDecal, HIT_SCORE_COUNT> hit_score_decals;
         std::unique_ptr<olc::Sprite> title_gradient;
 
+        double font_scale = 1.0;
+
         void load();
         void unload();
+        void load_fonts();
+        void unload_fonts();
         std::filesystem::path find(const std::string& file) const;
         std::optional<std::filesystem::path> find_sound(const std::string& stem) const;
         const std::vector<SpriteDecal>& lane_images(SkinImage image);
@@ -119,6 +123,7 @@ namespace nascent {
         Skin& operator=(const Skin&) = delete;
 
         void reload(const std::string& id);
+        void set_font_scale(double scale);
         const std::string& get_id() const;
         const SkinManifest& manifest() const;
 

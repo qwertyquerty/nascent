@@ -24,6 +24,9 @@ namespace nascent {
         static constexpr int32_t HEIGHT = 40;
         static constexpr int32_t PADDING = 14;
 
+        static int32_t width();
+        static int32_t height();
+
         std::string label;
 
         RowField(std::string label);

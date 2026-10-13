@@ -3,6 +3,7 @@
 #include "Account.h"
 #include "Skin.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <array>
@@ -98,17 +99,29 @@ namespace nascent {
         }
     }
 
+    int32_t StatusBar::height() {
+        return Ui::px(HEIGHT);
+    }
+
+    int32_t StatusBar::padding() {
+        return Ui::px(PADDING);
+    }
+
     void StatusBar::draw(olc::PixelGameEngine* window, Skin* skin) const {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t top = screen.y - HEIGHT;
+        int32_t bar_height = height();
+        int32_t top = screen.y - bar_height;
+        int32_t segment_gap = Ui::px(SEGMENT_GAP);
+        int32_t label_gap = Ui::px(LABEL_GAP);
+        int32_t radius = std::max(1, Ui::px(DOT_RADIUS));
         olc::Font& font = skin->display_font_small;
 
-        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)HEIGHT}, BACKGROUND);
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, BACKGROUND);
         window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, EDGE);
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t baseline = top + (HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
-        int32_t x = PADDING;
+        int32_t baseline = top + (bar_height - metrics.size.y) / 2 - metrics.offset.y;
+        int32_t x = padding();
 
         auto width = [&](std::string_view text) {
             return text.empty() ? 0 : text_bounds(font, text).size.x;
@@ -137,36 +150,38 @@ namespace nascent {
         }
 
         const std::array<std::string_view, 8> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F1  options", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse", "F6  input", "F7  chart"};
-        int32_t hint_x = screen.x - PADDING + SEGMENT_GAP;
+        int32_t hint_x = screen.x - padding() + segment_gap;
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
-            hint_x -= SEGMENT_GAP + width(*hint);
+            hint_x -= segment_gap + width(*hint);
             draw_text(font, *hint, {hint_x, baseline}, olc::GREY);
         }
 
-        int32_t status_x = hint_x - SEGMENT_GAP - width(status);
-        int32_t dot_x = status_x - LABEL_GAP - DOT_RADIUS * 2;
+        int32_t status_x = hint_x - segment_gap - width(status);
+        int32_t dot_x = status_x - label_gap - radius * 2;
         draw_text(font, status, {status_x, baseline}, olc::WHITE);
-        if (!dot) {
-            auto sprite = std::make_unique<olc::Sprite>(DOT_RADIUS * 2 + 1, DOT_RADIUS * 2 + 1);
 
-            for (int32_t dy = -DOT_RADIUS; dy <= DOT_RADIUS; dy++) {
-                for (int32_t dx = -DOT_RADIUS; dx <= DOT_RADIUS; dx++) {
-                    sprite->SetPixel(dx + DOT_RADIUS, dy + DOT_RADIUS, dx * dx + dy * dy <= DOT_RADIUS * DOT_RADIUS ? olc::WHITE : olc::BLANK);
+        if (!dot || dot_radius != radius) {
+            auto sprite = std::make_unique<olc::Sprite>(radius * 2 + 1, radius * 2 + 1);
+
+            for (int32_t dy = -radius; dy <= radius; dy++) {
+                for (int32_t dx = -radius; dx <= radius; dx++) {
+                    sprite->SetPixel(dx + radius, dy + radius, dx * dx + dy * dy <= radius * radius ? olc::WHITE : olc::BLANK);
                 }
             }
 
             dot = SpriteDecal(std::move(sprite), true);
+            dot_radius = radius;
         }
 
-        window->DrawDecal({(float)(dot_x - DOT_RADIUS), (float)(top + HEIGHT / 2 - DOT_RADIUS)}, dot.get(), {1.0f, 1.0f}, status_color);
+        window->DrawDecal({(float)(dot_x - radius), (float)(top + bar_height / 2 - radius)}, dot.get(), {1.0f, 1.0f}, status_color);
 
         std::string rate_value = std::format("{:.2f}x", rate);
-        int32_t rate_value_x = dot_x - DOT_RADIUS - SEGMENT_GAP - width(rate_value);
-        int32_t rate_label_x = rate_value_x - LABEL_GAP - width("Rate");
+        int32_t rate_value_x = dot_x - radius - segment_gap - width(rate_value);
+        int32_t rate_label_x = rate_value_x - label_gap - width("Rate");
         draw_text(font, "Rate", {rate_label_x, baseline}, olc::GREY);
         draw_text(font, rate_value, {rate_value_x, baseline}, std::abs(rate - 1.0f) < 0.001f ? olc::WHITE : RATE_CHANGED_COLOR);
-        int32_t left_limit = rate_label_x - SEGMENT_GAP;
+        int32_t left_limit = rate_label_x - segment_gap;
         bool left_full = false;
 
         auto text = [&](const std::string& value, olc::Pixel color) {
@@ -175,21 +190,21 @@ namespace nascent {
         };
 
         auto segment = [&](const std::string& label, const std::string& value) {
-            left_full = left_full || x + SEGMENT_GAP + width(label) + LABEL_GAP + width(value) > left_limit;
+            left_full = left_full || x + segment_gap + width(label) + label_gap + width(value) > left_limit;
 
             if (left_full) {
                 return;
             }
 
-            x += SEGMENT_GAP;
+            x += segment_gap;
             text(label, olc::GREY);
-            x += LABEL_GAP;
+            x += label_gap;
             text(value, olc::WHITE);
         };
 
         if (username.empty()) {
             text("Guest", olc::WHITE);
-            x += SEGMENT_GAP;
+            x += segment_gap;
             text("Scores are not submitted while signed out", olc::GREY);
         }
         else {
@@ -211,7 +226,7 @@ namespace nascent {
                 }
             }
             else if (!profile) {
-                x += SEGMENT_GAP;
+                x += segment_gap;
                 text(connection == Connection::OFFLINE ? "Profile unavailable" : "Loading profile", olc::GREY);
             }
         }

@@ -5,6 +5,7 @@
 #include "WindowHook.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <thread>
@@ -47,6 +48,33 @@ namespace nascent {
         window->SetDrawTarget(nullptr);
     }
 
+    void Game::track_screen_size() {
+        olc::vi2d size = window->GetScreenSize();
+
+        if (size == screen_size) {
+            return;
+        }
+
+        screen_size = size;
+        use_blank_canvas();
+
+        if (transition_layer >= 0) {
+            make_layer_blank((uint32_t)transition_layer);
+        }
+
+        on_screen_resize();
+
+        std::array<Scene*, 3> resized = {scene, outgoing_scene, pending_scene};
+
+        for (size_t index = 0; index < resized.size(); index++) {
+            bool repeated = std::find(resized.begin(), resized.begin() + index, resized[index]) != resized.begin() + index;
+
+            if (resized[index] != nullptr && resized[index]->initialized && !repeated) {
+                resized[index]->on_resize();
+            }
+        }
+    }
+
     void Game::poll_key_events() {
         double now = now_ms();
 
@@ -64,6 +92,7 @@ namespace nascent {
         frame_key_events = key_event_queue.drain();
         frame_text = window_hook_active ? key_event_queue.drain_text() : us_layout_text(window);
         frame_dropped_files = key_event_queue.drain_dropped_files();
+        track_screen_size();
         update_transition(elapsed_time);
         apply_pending_scene();
     }

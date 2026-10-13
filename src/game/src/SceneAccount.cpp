@@ -12,6 +12,7 @@
 #include "Skin.h"
 #include "TextField.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <chrono>
 #include <format>
@@ -201,16 +202,16 @@ namespace nascent {
         const char* title = mode == Mode::SIGN_IN ? "Sign in" : mode == Mode::REGISTER ? "Create an account"
                                                                                        : "Account";
         draw_text(skin->display_font_large, title, {x, y}, olc::WHITE);
-        y += 90;
+        y += Ui::px(90);
 
         draw_text(skin->display_font_small, "Signing in lets your plays count towards the leaderboards.", {x, y}, olc::GREY);
-        y += 26;
+        y += Ui::px(26);
         draw_text(skin->display_font_small, SettingsManager::settings.server_url, {x, y}, olc::DARK_GREY);
-        y += 60;
+        y += Ui::px(60);
 
         if (mode == Mode::SIGNED_IN) {
             draw_text(skin->display_font_medium, std::format("Signed in as {}", Account::username()), {x, y}, olc::WHITE);
-            y += 60;
+            y += Ui::px(60);
         }
 
         y += form.draw(window, skin, {x, y});

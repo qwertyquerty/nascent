@@ -29,6 +29,9 @@ namespace nascent {
         ChoiceField* fps_counter_field = nullptr;
         ChoiceField* rich_presence_field = nullptr;
         ChoiceField* transition_field = nullptr;
+        ChoiceField* fullscreen_field = nullptr;
+        ChoiceField* mirror_field = nullptr;
+        ChoiceField* hitsounds_field = nullptr;
         SliderField* lane_width_field = nullptr;
         ChoiceField* lane_gap_field = nullptr;
         std::vector<int16_t> lane_gaps;
@@ -76,6 +79,7 @@ namespace nascent {
         ~SceneOptions() override;
         void init(Game*) override;
         void on_exit() override;
+        void on_resize() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };

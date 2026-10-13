@@ -1,6 +1,7 @@
 #include "UiForm.h"
 
 #include "InputManager.h"
+#include "Ui.h"
 
 #include <algorithm>
 
@@ -162,7 +163,7 @@ namespace nascent {
             field_tops[i] = y - position.y;
             y += fields[i]->draw(window, skin, {position.x, y}, enabled && i == focus);
             field_bottoms[i] = y - position.y;
-            y += spacing;
+            y += Ui::px(spacing);
         }
 
         return y - position.y;

@@ -37,6 +37,7 @@ namespace nascent {
         bool leaderboards_shown = false;
 
         mutable SpriteDecal dot;
+        mutable int32_t dot_radius = 0;
 
         void poll_heartbeat();
         void poll_profile();
@@ -51,6 +52,9 @@ namespace nascent {
         static constexpr int32_t DOT_RADIUS = 4;
         static inline const olc::Pixel BACKGROUND = olc::Pixel(0, 0, 0, 213);
         static inline const olc::Pixel EDGE = olc::Pixel(255, 255, 255, 30);
+
+        static int32_t height();
+        static int32_t padding();
 
         void refresh();
         void set_key_count(uint8_t key_count);

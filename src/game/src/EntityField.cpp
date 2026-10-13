@@ -58,11 +58,11 @@ namespace nascent {
         int32_t jl_y = pos.y + size.y - note_size - judge_height;
 
         if (draw_judge) {
-            for (uint8_t key = 0; key < key_count; key++) {
-                int32_t jl_x = pos.x + (key * (note_size + note_x_spacing));
+            for (uint8_t column = 0; column < key_count; column++) {
+                int32_t jl_x = pos.x + (column * (note_size + note_x_spacing));
 
-                bool held = get_key(key);
-                olc::Decal* receptor = skin->image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, key, key_count);
+                bool held = get_key(display_column(column));
+                olc::Decal* receptor = skin->image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
                 olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
                 color.a = held ? 255 : manifest.receptor_alpha.value_or(judge_alpha);
 
@@ -90,7 +90,8 @@ namespace nascent {
             double cut_y = dropped ? jl_y - (judged->attempt_hit.end_time - position) * scroll_rate_px_per_ms : (double)jl_y;
 
             int32_t hit_y = (hit.time - position) * scroll_rate_px_per_ms;
-            int32_t hit_x = pos.x + (hit.key * (note_size + note_x_spacing));
+            uint8_t column = display_column(hit.key);
+            int32_t hit_x = pos.x + (column * (note_size + note_x_spacing));
             int32_t hit_height = hit.hit_type == HitType::HOLD ? (hit.end_time - hit.time) * scroll_rate_px_per_ms : 0;
 
             int32_t screen_hit_y = jl_y - hit_y;
@@ -101,7 +102,7 @@ namespace nascent {
 
             if ((screen_hit_y - hit_height) < pos.y + size.y) {
                 bool textured_body = manifest.hold_style == HoldStyle::STRETCH || manifest.hold_style == HoldStyle::TILE;
-                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && textured_body ? skin->image(SkinImage::HOLD_BODY, hit.key, key_count) : nullptr;
+                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && textured_body ? skin->image(SkinImage::HOLD_BODY, column, key_count) : nullptr;
 
                 if (hold_body != nullptr) {
                     double tail_y = screen_hit_y - hit_height + note_size / 2;
@@ -118,7 +119,7 @@ namespace nascent {
                         draw_hold_body(window, hold_body, hit_x, body_top, body_bottom, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
 
-                    olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, hit.key, key_count);
+                    olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, column, key_count);
 
                     if (cap != nullptr && tail_y < body_bottom && cap->sprite->width > 0) {
                         double cap_height = note_size * cap->sprite->height / cap->sprite->width;
@@ -140,15 +141,15 @@ namespace nascent {
                             break;
                         }
 
-                        draw_square(window, skin->image(SkinImage::NOTE, hit.key, key_count), hit_x, hold_smear_y, with_opacity(hold_color));
+                        draw_square(window, skin->image(SkinImage::NOTE, column, key_count), hit_x, hold_smear_y, with_opacity(hold_color));
                     }
                 }
 
                 if (hold_body != nullptr && holding) {
-                    draw_square(window, skin->image(SkinImage::HOLD_HEAD, hit.key, key_count), hit_x, std::min(screen_hit_y, jl_y), with_opacity(note_color(hit_x, jl_y, window)));
+                    draw_square(window, skin->image(SkinImage::HOLD_HEAD, column, key_count), hit_x, std::min(screen_hit_y, jl_y), with_opacity(note_color(hit_x, jl_y, window)));
                 }
                 else if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
-                    olc::Decal* head = skin->image(hit.hit_type == HitType::HOLD ? SkinImage::HOLD_HEAD : SkinImage::NOTE, hit.key, key_count);
+                    olc::Decal* head = skin->image(hit.hit_type == HitType::HOLD ? SkinImage::HOLD_HEAD : SkinImage::NOTE, column, key_count);
                     draw_square(window, head, hit_x, screen_hit_y, with_opacity(note_color(hit_x, screen_hit_y, window)));
                 }
             }
@@ -296,6 +297,10 @@ namespace nascent {
 
     bool EntityField::get_key(uint8_t key) {
         return active_keys & (1u << key);
+    }
+
+    uint8_t EntityField::display_column(uint8_t key) const {
+        return mirror ? (uint8_t)(chart->info.key_count - 1 - key) : key;
     }
 
     uint8_t EntityField::get_key_count() {

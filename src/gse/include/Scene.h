@@ -17,6 +17,7 @@ namespace nascent {
         virtual void init(Game*) = 0;
         virtual void on_enter() {}
         virtual void on_exit() {}
+        virtual void on_resize() {}
         virtual void update(float) = 0;
         virtual void draw(olc::PixelGameEngine*) = 0;
 

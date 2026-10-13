@@ -10,6 +10,7 @@
 #include "Skin.h"
 #include "TextCache.h"
 #include "TimingBar.h"
+#include "Ui.h"
 
 #include <iostream>
 
@@ -119,11 +120,13 @@ namespace nascent {
         fps_counter_field = &form.add<ChoiceField>("FPS counter", std::vector<std::string>{"Off", "On"}, settings.show_fps ? 1 : 0);
         rich_presence_field = &form.add<ChoiceField>("Discord rich presence", std::vector<std::string>{"Off", "On"}, settings.discord_rich_presence ? 1 : 0);
         transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
+        fullscreen_field = &form.add<ChoiceField>("Fullscreen (applies on restart)", std::vector<std::string>{"Off", "On"}, settings.display_fullscreen ? 1 : 0);
 
         form.add<SectionField>("Audio");
         master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, PERCENT_STEP, "%");
         music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, PERCENT_STEP, "%");
         effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, PERCENT_STEP, "%");
+        hitsounds_field = &form.add<ChoiceField>("Hitsounds", std::vector<std::string>{"Off", "On"}, settings.field_hitsounds ? 1 : 0);
 
         form.add<SectionField>("Playfield");
         lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width_percent, LANE_WIDTH_MIN, LANE_WIDTH_MAX, PERCENT_STEP, "%");
@@ -149,6 +152,7 @@ namespace nascent {
         lane_gap_field = &form.add<ChoiceField>("Lane separation", lane_gap_labels, lane_gap_index);
         judge_offset_field = &form.add<SliderField>("Judgement line height", settings.field_judge_line_percent, 0, JUDGE_LINE_MAX, PERCENT_STEP, "%");
         scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
+        mirror_field = &form.add<ChoiceField>("Mirror", std::vector<std::string>{"Off", "On"}, settings.field_mirror ? 1 : 0);
         judgement_field = &form.add<ChoiceField>("Judgement", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement ? 1 : 0);
         judgement_height_field = &form.add<SliderField>("Judgement height", settings.field_judgement_height, 0, 100, PERCENT_STEP, "%");
         combo_field = &form.add<ChoiceField>("Combo", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_combo ? 1 : 0);
@@ -188,6 +192,9 @@ namespace nascent {
         RichPresence::set_enabled(settings.discord_rich_presence);
         settings.scene_transition_time = TRANSITION_OPTIONS[transition_field->selected].second;
         game->scene_transition_time = settings.scene_transition_time;
+        settings.display_fullscreen = fullscreen_field->selected == 1;
+        settings.field_hitsounds = hitsounds_field->selected == 1;
+        settings.field_mirror = mirror_field->selected == 1;
         settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
         settings.field_judge_line_percent = (uint8_t)judge_offset_field->value;
@@ -283,7 +290,12 @@ namespace nascent {
         preview_field->judge_alpha = 64;
         preview_field->judge_height = screen.y * settings.field_judge_line_percent / 100.0;
         preview_field->upscroll = settings.field_upscroll;
-        preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(settings.field_lane_gap) : std::nullopt);
+        preview_field->mirror = settings.field_mirror;
+        preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
+    }
+
+    void SceneOptions::on_resize() {
+        rebuild_preview();
     }
 
     void SceneOptions::update_preview(float elapsed_time) {
@@ -333,8 +345,8 @@ namespace nascent {
         }
 
         float max_scroll = (float)std::max(0, form.height() - view_height);
-        float top = (float)(form.focused_top() - SCROLL_MARGIN);
-        float bottom = (float)(form.focused_bottom() + SCROLL_MARGIN - view_height);
+        float top = (float)(form.focused_top() - Ui::px(SCROLL_MARGIN));
+        float bottom = (float)(form.focused_bottom() + Ui::px(SCROLL_MARGIN) - view_height);
 
         scroll_target = std::clamp(std::clamp(scroll_target, bottom, std::max(top, bottom)), 0.0f, max_scroll);
         scroll += (scroll_target - scroll) * std::min(1.0f, elapsed_time * SCROLL_SPEED);
@@ -362,12 +374,13 @@ namespace nascent {
             return;
         }
 
-        float track_x = (float)(x + RowField::WIDTH + SCROLLBAR_GAP);
+        float track_x = (float)(x + RowField::width() + Ui::px(SCROLLBAR_GAP));
+        float track_width = std::max(1.0f, Ui::pxf(SCROLLBAR_WIDTH));
         float thumb_height = (float)view_height * (float)view_height / (float)content_height;
         float thumb_top = (float)viewport_top + ((float)view_height - thumb_height) * (scroll / (float)(content_height - view_height));
 
-        window->FillRectDecal({track_x, (float)viewport_top}, {(float)SCROLLBAR_WIDTH, (float)view_height}, olc::Pixel(255, 255, 255, SCROLLBAR_TRACK_ALPHA));
-        window->FillRectDecal({track_x, thumb_top}, {(float)SCROLLBAR_WIDTH, thumb_height}, olc::Pixel(255, 255, 255, SCROLLBAR_THUMB_ALPHA));
+        window->FillRectDecal({track_x, (float)viewport_top}, {track_width, (float)view_height}, olc::Pixel(255, 255, 255, SCROLLBAR_TRACK_ALPHA));
+        window->FillRectDecal({track_x, thumb_top}, {track_width, thumb_height}, olc::Pixel(255, 255, 255, SCROLLBAR_THUMB_ALPHA));
     }
 
     void SceneOptions::draw(olc::PixelGameEngine* window) {
@@ -380,8 +393,9 @@ namespace nascent {
         int32_t footer_bottom = screen.y - screen.y / 12;
         int32_t footer_top = footer_bottom - (footer_metrics.offset.y + footer_metrics.size.y);
 
-        viewport_top = y + HEADER_HEIGHT;
-        viewport_bottom = footer_top - FOOTER_GAP;
+        viewport_top = y + Ui::px(HEADER_HEIGHT);
+        viewport_bottom = footer_top - Ui::px(FOOTER_GAP);
+        float edge_fade = Ui::pxf(EDGE_FADE);
         form.draw(window, skin, {x, viewport_top - (int32_t)std::lround(scroll)});
 
         float max_scroll = (float)std::max(0, form.height() - (viewport_bottom - viewport_top));
@@ -390,11 +404,11 @@ namespace nascent {
         window->FillRectDecal({0.0f, (float)viewport_bottom}, {(float)screen.x, (float)(screen.y - viewport_bottom)}, olc::BLACK);
 
         if (scroll > 0.5f) {
-            window->GradientFillRectDecal({0.0f, (float)viewport_top}, {(float)screen.x, (float)EDGE_FADE}, olc::BLACK, clear, clear, olc::BLACK);
+            window->GradientFillRectDecal({0.0f, (float)viewport_top}, {(float)screen.x, edge_fade}, olc::BLACK, clear, clear, olc::BLACK);
         }
 
         if (scroll < max_scroll - 0.5f) {
-            window->GradientFillRectDecal({0.0f, (float)(viewport_bottom - EDGE_FADE)}, {(float)screen.x, (float)EDGE_FADE}, clear, olc::BLACK, olc::BLACK, clear);
+            window->GradientFillRectDecal({0.0f, (float)viewport_bottom - edge_fade}, {(float)screen.x, edge_fade}, clear, olc::BLACK, olc::BLACK, clear);
         }
 
         draw_scrollbar(window, x);
@@ -409,11 +423,11 @@ namespace nascent {
         }
 
         draw_text(skin->display_font_large, "Options", {x, y}, olc::WHITE);
-        y += 90;
+        y += Ui::px(90);
         draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, olc::GREY);
 
         if (!status.empty()) {
-            draw_text(skin->display_font_small, status, {x, viewport_bottom + STATUS_OFFSET}, olc::GREY);
+            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, olc::GREY);
         }
 
         draw_text(skin->display_font_small, footer, {x, footer_top}, olc::GREY);

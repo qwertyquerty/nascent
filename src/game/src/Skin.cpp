@@ -7,6 +7,7 @@
 #include "Utf8Path.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <format>
 #include <fstream>
@@ -256,11 +257,18 @@ namespace nascent {
         skin_manifest.inherits = own.inherits;
 
         title_gradient = std::make_unique<olc::Sprite>(find(GRADIENT_FILE).string());
+        load_fonts();
+    }
+
+    void Skin::load_fonts() {
+        auto size = [&](uint16_t reference) {
+            return (uint16_t)std::max<long>(1, std::lround(reference * font_scale));
+        };
 
         std::string font_path = find(DISPLAY_FONT_FILE).string();
-        display_font_small = {font_path, DISPLAY_FONT_SMALL_SIZE};
-        display_font_medium = {font_path, DISPLAY_FONT_MEDIUM_SIZE};
-        display_font_large = {font_path, DISPLAY_FONT_LARGE_SIZE};
+        display_font_small = {font_path, size(DISPLAY_FONT_SMALL_SIZE)};
+        display_font_medium = {font_path, size(DISPLAY_FONT_MEDIUM_SIZE)};
+        display_font_large = {font_path, size(DISPLAY_FONT_LARGE_SIZE)};
 
         if (std::filesystem::exists(SYMBOL_FONT_PATH)) {
             display_font_small.AddFallbackFont(SYMBOL_FONT_PATH);
@@ -277,10 +285,24 @@ namespace nascent {
         game_paused_decal = SpriteDecal::adopt(display_font_large.RenderStringToDecal("Game Paused", olc::WHITE));
     }
 
-    void Skin::unload() {
+    void Skin::unload_fonts() {
         for (const olc::Font* font : {&display_font_large, &display_font_medium, &display_font_small}) {
             text_cache_forget(*font);
         }
+    }
+
+    void Skin::set_font_scale(double scale) {
+        if (scale == font_scale) {
+            return;
+        }
+
+        font_scale = scale;
+        unload_fonts();
+        load_fonts();
+    }
+
+    void Skin::unload() {
+        unload_fonts();
 
         for (std::optional<int32_t>& sound : sounds) {
             if (sound && *sound != -1) {

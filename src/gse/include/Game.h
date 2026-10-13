@@ -35,6 +35,7 @@ namespace nascent {
         bool window_hook_active = false;
         InputMode input_mode = InputMode::POLLING;
         bool quit_requested = false;
+        olc::vi2d screen_size = {0, 0};
 
         void init_input();
         void use_blank_canvas();
@@ -45,6 +46,8 @@ namespace nascent {
         void update_transition(float elapsed_time);
         void draw_scenes(olc::PixelGameEngine* window);
         void release_scenes();
+        void track_screen_size();
+        virtual void on_screen_resize() {}
 
         public:
         olc::PixelGameEngine* window;

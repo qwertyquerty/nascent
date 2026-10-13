@@ -53,6 +53,7 @@ namespace nascent {
         ~SceneCalibration();
         void init(Game*) override;
         void on_exit() override;
+        void on_resize() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };

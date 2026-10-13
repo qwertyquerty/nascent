@@ -24,6 +24,7 @@ namespace nascent {
         std::unique_ptr<PlaySession> session;
         std::unique_ptr<EntityField> field;
         std::vector<olc::Key> lane_keys;
+        bool mirror = false;
 
         int chart_audio_id = -1;
         std::shared_future<ApiResult<PlayTicket>> ticket;
@@ -55,6 +56,8 @@ namespace nascent {
         void resume(double now);
         void finish();
         void start_attempt();
+        uint8_t chart_lane(uint8_t lane) const;
+        uint32_t chart_lanes(uint32_t lanes) const;
         void restart();
         bool can_skip_intro(double now) const;
         void skip_intro(double now);
@@ -67,6 +70,7 @@ namespace nascent {
         void draw_timing_diagnostics(olc::PixelGameEngine* window) const;
 
         public:
+        void on_resize() override;
         static constexpr float RESTART_HOLD_TIME = 0.3f;
         static constexpr double PAUSE_COOLDOWN_MS = 1000.0;
 

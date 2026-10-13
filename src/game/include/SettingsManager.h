@@ -26,6 +26,8 @@ namespace nascent {
         uint8_t field_timing_bar_height = 0; // % of the screen above its bottom edge
         uint8_t field_timing_bar_length = 33; // % of the screen width
         uint8_t field_timing_bar_width = 5; // % of the screen height
+        bool field_mirror = false;
+        bool field_hitsounds = false;
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;
@@ -37,6 +39,9 @@ namespace nascent {
         float list_preview_fade_in_time = 0.5; // s
 
         std::string skin = "default";
+        bool display_fullscreen = true;
+        uint16_t display_window_width = 1600;
+        uint16_t display_window_height = 900;
         uint16_t frame_rate_limit = 1000;
         uint8_t master_volume = 50;
         uint8_t music_volume = 75;

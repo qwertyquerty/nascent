@@ -13,6 +13,7 @@
 #include "Skin.h"
 #include "Utf8Path.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <cctype>
@@ -37,7 +38,6 @@ namespace nascent {
     };
 
     void GameNascent::init() {
-        SettingsManager::load();
         Account::load();
         LocalBests::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
@@ -51,7 +51,9 @@ namespace nascent {
         start_time = time(nullptr);
         std::srand(start_time);
 
+        Ui::set_screen(window->GetScreenSize());
         skin = std::make_unique<Skin>(this, SettingsManager::settings.skin);
+        skin->set_font_scale(Ui::scale());
         olc::vi2d screen = window->GetScreenSize();
         sky = std::make_unique<EntityStarfield>(skin.get(), olc::vd2d{(double)screen.x, (double)screen.y});
         sky->init(nullptr);
@@ -61,6 +63,23 @@ namespace nascent {
         set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get(), sky.get()));
 
         RichPresence::set_enabled(SettingsManager::settings.discord_rich_presence);
+    }
+
+    void GameNascent::on_screen_resize() {
+        Ui::set_screen(window->GetScreenSize());
+
+        if (skin != nullptr) {
+            skin->set_font_scale(Ui::scale());
+        }
+
+        if (sky != nullptr) {
+            olc::vi2d screen = window->GetScreenSize();
+            sky->size = {(double)screen.x, (double)screen.y};
+        }
+
+        if (scene_list != nullptr && scene_list->initialized && scene != scene_list.get()) {
+            scene_list->on_resize();
+        }
     }
 
     void GameNascent::update(float elapsed_time) {
@@ -90,7 +109,7 @@ namespace nascent {
 
         if (SettingsManager::settings.show_fps) {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
-            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - 100, 30, olc::WHITE);
+            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(100), Ui::px(30), olc::WHITE);
         }
 
         draw_toast(window);
@@ -191,21 +210,23 @@ namespace nascent {
         olc::Font& font = skin->display_font_small;
         olc::FontRect bounds = text_bounds(font, toast);
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t width = bounds.size.x + TOAST_PADDING * 2;
-        int32_t height = metrics.size.y + TOAST_PADDING * 2;
+        int32_t padding = Ui::px(TOAST_PADDING);
+        int32_t toast_top = Ui::px(TOAST_TOP);
+        int32_t width = bounds.size.x + padding * 2;
+        int32_t height = metrics.size.y + padding * 2;
         int32_t x = (window->GetScreenSize().x - width) / 2;
         float fade = std::min(1.0f, toast_timer / TOAST_FADE_TIME);
 
         olc::Pixel border = toast_is_error ? olc::Pixel(235, 80, 80, (uint8_t)(255 * fade)) : olc::Pixel(90, 220, 120, (uint8_t)(255 * fade));
         float left = (float)x;
-        float top = (float)TOAST_TOP;
-        float edge = (float)TOAST_BORDER;
+        float top = (float)toast_top;
+        float edge = std::max(1.0f, Ui::pxf(TOAST_BORDER));
 
         window->FillRectDecal({left, top}, {(float)width, (float)height}, olc::Pixel(0, 0, 0, (uint8_t)(220 * fade)));
         window->FillRectDecal({left, top}, {(float)width, edge}, border);
         window->FillRectDecal({left, top + height - edge}, {(float)width, edge}, border);
         window->FillRectDecal({left, top + edge}, {edge, height - edge * 2}, border);
         window->FillRectDecal({left + width - edge, top + edge}, {edge, height - edge * 2}, border);
-        draw_text(font, toast, {x + TOAST_PADDING, TOAST_TOP + TOAST_PADDING - metrics.offset.y}, olc::Pixel(255, 255, 255, (uint8_t)(255 * fade)));
+        draw_text(font, toast, {x + padding, toast_top + padding - metrics.offset.y}, olc::Pixel(255, 255, 255, (uint8_t)(255 * fade)));
     }
 }

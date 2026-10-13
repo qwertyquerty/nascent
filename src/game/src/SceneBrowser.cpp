@@ -11,6 +11,7 @@
 #include "Skin.h"
 #include "TextField.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <chrono>
@@ -217,7 +218,7 @@ namespace nascent {
             }
         }
         else {
-            size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / ROW_HEIGHT);
+            size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / std::max(1, Ui::px(ROW_HEIGHT)));
             int32_t wheel = window->GetMouseWheel();
             size_t previous = selected;
 
@@ -263,7 +264,7 @@ namespace nascent {
             }
         }
 
-        scroll += ((float)selected * ROW_HEIGHT - scroll) * std::min(1.0f, elapsed_time * SCROLL_SPEED);
+        scroll += ((float)selected * Ui::px(ROW_HEIGHT) - scroll) * std::min(1.0f, elapsed_time * SCROLL_SPEED);
     }
 
     void SceneBrowser::draw(olc::PixelGameEngine* window) {
@@ -272,7 +273,7 @@ namespace nascent {
         int32_t y = screen.y / 10;
 
         draw_text(skin->display_font_large, "Browse Charts", {x, y}, olc::WHITE);
-        y += 90;
+        y += Ui::px(90);
 
         std::string subtitle;
 
@@ -287,15 +288,18 @@ namespace nascent {
         }
 
         draw_text(skin->display_font_small, subtitle, {x, y}, error.empty() ? olc::GREY : olc::RED);
-        y += 60;
+        y += Ui::px(60);
 
         form.draw(window, skin, {x, y});
 
-        int32_t panel_x = x + TextField::WIDTH + FORM_GAP;
+        int32_t row_height = Ui::px(ROW_HEIGHT);
+        int32_t row_padding = Ui::px(ROW_PADDING);
+        int32_t status_width = Ui::px(STATUS_WIDTH);
+        int32_t panel_x = x + TextField::width() + Ui::px(FORM_GAP);
         int32_t panel_width = screen.x - panel_x - x;
         int32_t top = screen.y / 24;
         int32_t bottom = screen.y - screen.y / 24;
-        float first = std::max(0.0f, scroll - (float)(screen.y / 2 - top - ROW_HEIGHT / 2));
+        float first = std::max(0.0f, scroll - (float)(screen.y / 2 - top - row_height / 2));
 
         olc::Font& title_font = skin->display_font_medium;
         olc::Font& detail_font = skin->display_font_small;
@@ -303,13 +307,13 @@ namespace nascent {
         olc::FontRect detail_metrics = text_bounds(detail_font, "Hgjy");
 
         if (shown && results.empty() && error.empty()) {
-            draw_text(detail_font, "No charts match these filters", {panel_x + ROW_PADDING, top - detail_metrics.offset.y}, olc::GREY);
+            draw_text(detail_font, "No charts match these filters", {panel_x + row_padding, top - detail_metrics.offset.y}, olc::GREY);
         }
 
         for (size_t index = 0; index < results.size(); index++) {
-            float row_top = top + (float)index * ROW_HEIGHT - first;
+            float row_top = top + (float)index * row_height - first;
 
-            if (row_top + ROW_HEIGHT <= 0 || row_top >= screen.y) {
+            if (row_top + row_height <= 0 || row_top >= screen.y) {
                 continue;
             }
 
@@ -325,7 +329,7 @@ namespace nascent {
             BeatmapDownloads::State download_state = download != nullptr ? download->state.load() : BeatmapDownloads::State::FAILED;
             bool downloading = download != nullptr && (download_state == BeatmapDownloads::State::DOWNLOADING || download_state == BeatmapDownloads::State::EXTRACTING);
             olc::vf2d box_position = {(float)panel_x, row_top};
-            olc::vf2d box_size = {(float)panel_width, (float)ROW_HEIGHT - 6};
+            olc::vf2d box_size = {(float)panel_width, (float)row_height - Ui::pxf(6)};
             uint8_t highlight = is_selected ? (results_focused ? 36 : 16) : 0;
 
             if (downloading) {
@@ -357,7 +361,7 @@ namespace nascent {
                 status_color = DOWNLOADED_COLOR;
             }
             else if (download != nullptr && download_state == BeatmapDownloads::State::FAILED) {
-                status = fit_text(detail_font, "Failed: " + download->error(), STATUS_WIDTH);
+                status = fit_text(detail_font, "Failed: " + download->error(), status_width);
                 status_color = olc::RED;
             }
             else if (!set_id) {
@@ -369,8 +373,8 @@ namespace nascent {
             }
 
             std::string title = std::format("{} - {} [{}]", chart.artist, chart.title, chart.difficulty_name);
-            int32_t title_baseline = row_y + 8 - title_metrics.offset.y;
-            draw_text(title_font, fit_text(title_font, title, panel_width - STATUS_WIDTH - ROW_PADDING * 3), {panel_x + ROW_PADDING, title_baseline}, color);
+            int32_t title_baseline = row_y + Ui::px(8) - title_metrics.offset.y;
+            draw_text(title_font, fit_text(title_font, title, panel_width - status_width - row_padding * 3), {panel_x + row_padding, title_baseline}, color);
 
             std::string details = std::format(
                 "{}K      {:.2f}      {}      {} notes      {}      mapped by {}",
@@ -381,20 +385,21 @@ namespace nascent {
                 chart.status,
                 chart.mapper
             );
-            int32_t detail_baseline = row_y + ROW_HEIGHT - 16 - (detail_metrics.size.y + detail_metrics.offset.y);
-            draw_text(detail_font, fit_text(detail_font, details, panel_width - STATUS_WIDTH - ROW_PADDING * 3), {panel_x + ROW_PADDING, detail_baseline}, olc::GREY);
+            int32_t detail_baseline = row_y + row_height - Ui::px(16) - (detail_metrics.size.y + detail_metrics.offset.y);
+            draw_text(detail_font, fit_text(detail_font, details, panel_width - status_width - row_padding * 3), {panel_x + row_padding, detail_baseline}, olc::GREY);
 
-            int32_t status_x = panel_x + panel_width - ROW_PADDING - text_width(detail_font, status);
+            int32_t status_x = panel_x + panel_width - row_padding - text_width(detail_font, status);
             draw_text(detail_font, status, {status_x, title_baseline}, status_color);
         }
 
         std::vector<std::string> hints = results_focused ? std::vector<std::string>{"↑/↓:  chart", "Enter:  download", "Ctrl+Tab:  filters", "Esc:  back"}
                                                          : std::vector<std::string>{"Tab, ↑/↓:  filter", "←/→:  change", "Enter:  next", "Ctrl+Tab:  results", "Esc:  back"};
-        int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * HINT_LINE_HEIGHT;
+        int32_t hint_line_height = Ui::px(HINT_LINE_HEIGHT);
+        int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * hint_line_height;
 
         for (const std::string& hint : hints) {
             draw_text(detail_font, hint, {x, hint_baseline}, olc::GREY);
-            hint_baseline += HINT_LINE_HEIGHT;
+            hint_baseline += hint_line_height;
         }
     }
 }

@@ -10,6 +10,7 @@
 #include "Skin.h"
 #include "Util.h"
 #include "TextCache.h"
+#include "Ui.h"
 #include "Utf8Path.h"
 
 #include <algorithm>
@@ -128,13 +129,12 @@ namespace nascent {
             return;
         }
 
-        olc::vi2d window_size = game->window->GetScreenSize();
-        field = std::make_unique<EntityField>(chart.get(), skin, olc::vd2d{(double)window_size.x / 4 * 3 - (double)window_size.x / 24, 0.0}, olc::vd2d{(double)(window_size.x / 4), (double)window_size.y});
+        field = std::make_unique<EntityField>(chart.get(), skin, olc::vd2d{0.0, 0.0}, olc::vd2d{1.0, 1.0});
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
-        field->judge_height = window_size.y * SettingsManager::settings.field_judge_line_percent / 100.0;
         field->upscroll = SettingsManager::settings.field_upscroll;
-        field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(SettingsManager::settings.field_lane_gap) : std::nullopt);
+        field->mirror = SettingsManager::settings.field_mirror;
+        on_resize();
 
         std::filesystem::path click_path = std::filesystem::temp_directory_path() / "nascent_calibration_click.wav";
 
@@ -265,6 +265,18 @@ namespace nascent {
         }
     }
 
+    void SceneCalibration::on_resize() {
+        if (field == nullptr) {
+            return;
+        }
+
+        olc::vi2d window_size = game->window->GetScreenSize();
+        field->pos = {(double)window_size.x / 4 * 3 - (double)window_size.x / 24, 0.0};
+        field->size = {(double)(window_size.x / 4), (double)window_size.y};
+        field->judge_height = window_size.y * SettingsManager::settings.field_judge_line_percent / 100.0;
+        field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(SettingsManager::settings.field_lane_gap)) : std::nullopt);
+    }
+
     void SceneCalibration::draw(olc::PixelGameEngine* window) {
         if (field != nullptr) {
             field->draw(window);
@@ -295,24 +307,24 @@ namespace nascent {
         int step_index = (int)step;
 
         draw_text(skin->display_font_large, "Offset Calibration", {x, y}, olc::WHITE);
-        y += 90;
+        y += Ui::px(90);
 
         draw_text(skin->display_font_medium, std::format("Step {} of 3: {}", step_index + 1, step_names[step_index]), {x, y}, olc::WHITE);
-        y += 50;
+        y += Ui::px(50);
 
         for (const char* line : step_descriptions[step_index]) {
             draw_text(skin->display_font_small, line, {x, y}, olc::GREY);
-            y += 26;
+            y += Ui::px(26);
         }
 
-        y += 20;
+        y += Ui::px(20);
 
         for (const char* line : step_instructions[step_index]) {
             draw_text(skin->display_font_small, line, {x, y}, olc::WHITE);
-            y += 26;
+            y += Ui::px(26);
         }
 
-        y += 34;
+        y += Ui::px(34);
 
         std::string values[] = {
             std::format("{:+} ms", visual_offset),
@@ -323,20 +335,20 @@ namespace nascent {
         for (int i = 0; i < 3; i++) {
             olc::Pixel color = i == step_index ? olc::WHITE : olc::DARK_GREY;
             draw_text(skin->display_font_medium, std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
-            draw_text(skin->display_font_medium, values[i], {x + 380, y}, color);
-            y += 48;
+            draw_text(skin->display_font_medium, values[i], {x + Ui::px(380), y}, color);
+            y += Ui::px(48);
         }
 
-        y += 30;
+        y += Ui::px(30);
 
         if (step == Step::INPUT_OFFSET) {
             std::string taps = tap_errors.empty()
                 ? std::string("No taps yet")
                 : std::format("{} taps, average error {:+.1f} ms{}", tap_errors.size(), get_average_tap_error(), tap_errors.size() < MIN_TAPS_FOR_SUGGESTION ? " (keep tapping)" : "");
             draw_text(skin->display_font_small, taps, {x, y}, olc::WHITE);
-            y += 26;
+            y += Ui::px(26);
             draw_text(skin->display_font_small, "Ctrl+R: clear taps", {x, y}, olc::GREY);
-            y += 40;
+            y += Ui::px(40);
         }
 
         if (!status_message.empty()) {

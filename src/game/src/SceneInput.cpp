@@ -6,6 +6,7 @@
 #include "KeyEvents.h"
 #include "Skin.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <cmath>
@@ -148,7 +149,7 @@ namespace nascent {
         int32_t margin = screen.x / 24;
 
         float available = (float)(screen.x - margin * 2);
-        float size = std::min(MAX_LANE_SIZE, available / (key_count + (key_count - 1) * LANE_GAP_RATIO));
+        float size = std::min(Ui::pxf(MAX_LANE_SIZE), available / (key_count + (key_count - 1) * LANE_GAP_RATIO));
         float gap = size * LANE_GAP_RATIO;
         float total = size * key_count + gap * (key_count - 1);
         float left = (screen.x - total) / 2;
@@ -170,13 +171,13 @@ namespace nascent {
                 window->DrawDecal({lane_x, (float)top}, note, {scale, scale}, color);
             }
 
-            float label_top = top + size + 16;
-            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + 24}, LANE_BACKGROUND);
+            float label_top = top + size + Ui::pxf(16);
+            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + Ui::pxf(24)}, LANE_BACKGROUND);
 
             std::string label = waiting ? "?" : InputManager::key_label(lane_keys[lane]);
             olc::Font* font = &skin->display_font_medium;
 
-            if (text_bounds(*font, label).size.x > size - 12) {
+            if (text_bounds(*font, label).size.x > size - Ui::pxf(12)) {
                 font = &skin->display_font_small;
             }
 
@@ -188,18 +189,18 @@ namespace nascent {
             }
 
             int32_t label_x = (int32_t)std::lround(lane_x + size / 2 - bounds.size.x / 2.0f - bounds.offset.x);
-            int32_t label_y = (int32_t)std::lround(label_top + 12 + (metrics.size.y - bounds.size.y) / 2.0f - bounds.offset.y);
+            int32_t label_y = (int32_t)std::lround(label_top + Ui::pxf(12) + (metrics.size.y - bounds.size.y) / 2.0f - bounds.offset.y);
             draw_text(*font, label, {label_x, label_y}, label_color);
 
             if (selected) {
                 olc::Pixel underline = skin->title_gradient_at(key_count > 1 ? (double)lane / (key_count - 1) : 0.5, 0.5);
-                window->FillRectDecal({lane_x, label_top + metrics.size.y + 24}, {size, 3.0f}, underline);
+                window->FillRectDecal({lane_x, label_top + metrics.size.y + Ui::pxf(24)}, {size, std::max(1.0f, Ui::pxf(3))}, underline);
             }
 
             std::string number = std::format("{}", lane + 1);
             olc::FontRect number_bounds = text_bounds(skin->display_font_small, number);
             int32_t number_x = (int32_t)std::lround(lane_x + size / 2 - number_bounds.size.x / 2.0f - number_bounds.offset.x);
-            draw_text(skin->display_font_small, number, {number_x, (int32_t)(label_top + metrics.size.y + 52)}, olc::DARK_GREY);
+            draw_text(skin->display_font_small, number, {number_x, (int32_t)(label_top + metrics.size.y + Ui::pxf(52))}, olc::DARK_GREY);
         }
     }
 
@@ -209,16 +210,16 @@ namespace nascent {
         int32_t y = screen.y / 10;
 
         draw_text(skin->display_font_large, "Input", {x, y}, olc::WHITE);
-        y += 90;
+        y += Ui::px(90);
 
         draw_text(skin->display_font_small, "Lane keys used while playing. Changes are saved as you make them.", {x, y}, olc::GREY);
-        y += 70;
+        y += Ui::px(70);
 
         draw_text(skin->display_font_medium, "Key mode", {x, y}, olc::GREY);
-        draw_text(skin->display_font_medium, std::format("{}K", key_count), {x + 300, y}, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{}K", key_count), {x + Ui::px(300), y}, olc::WHITE);
 
         bool custom = InputManager::is_custom_lane_keys(key_count);
-        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + 400, y}, custom ? CUSTOM_COLOR : olc::DARK_GREY);
+        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::px(400), y}, custom ? CUSTOM_COLOR : olc::DARK_GREY);
 
         draw_lanes(window, (int32_t)(screen.y * 0.38));
 

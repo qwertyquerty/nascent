@@ -14,6 +14,7 @@
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "Ui.h"
 #include "Utf8Path.h"
 
 #include <algorithm>
@@ -80,16 +81,17 @@ namespace nascent {
         bg_field.clear();
         bg_chart = std::move(chart);
 
-        olc::vi2d window_size = game->window->GetScreenSize();
         uint8_t field_count = get_field_count();
 
         for (uint8_t i = 0; i < field_count; i++) {
-            auto field = std::make_unique<EntityField>(bg_chart.get(), bg_skin, olc::vd2d{(double)window_size.x / (field_count - 1) * i, 0}, olc::vd2d{(double)window_size.x / (field_count - 1), (double)window_size.y});
+            auto field = std::make_unique<EntityField>(bg_chart.get(), bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1});
             field->init(this);
             field->draw_judge = false;
             field->scroll_speed = SettingsManager::settings.field_scroll_speed;
             bg_field.push_back(std::move(field));
         }
+
+        layout_background();
 
         bg_audio_id = load_song_audio(game->get_audio(), bg_chart->audio_path);
         game->apply_music_volume(bg_audio_id);
@@ -97,9 +99,41 @@ namespace nascent {
         return true;
     }
 
+    void SceneTitle::layout_background() {
+        olc::vi2d window_size = game->window->GetScreenSize();
+        size_t count = bg_field.size();
+
+        for (size_t i = 0; i < count; i++) {
+            double width = (double)window_size.x / (double)(count - 1);
+            bg_field[i]->pos = {width * (double)i, 0};
+            bg_field[i]->size = {width, (double)window_size.y};
+            bg_field[i]->set_lane_gap(std::nullopt);
+        }
+    }
+
+    void SceneTitle::on_resize() {
+        if (!loaded) {
+            return;
+        }
+
+        olc::vi2d window_size = game->window->GetScreenSize();
+        double content = std::min((double)window_size.x, window_size.y * Ui::REFERENCE_WIDTH / Ui::REFERENCE_HEIGHT);
+
+        logo_field->pos = {((double)window_size.x - content / 2) / 2, 0};
+        logo_field->size = {content / 2, (double)window_size.y / 2 + content / 28};
+        logo_field->set_lane_gap(std::nullopt);
+        fft_l->pos = {0, 0};
+        fft_l->size = {(double)window_size.x, (double)window_size.y * 0.28};
+        fft_r->pos = {0, (double)window_size.y - (double)window_size.y * 0.28};
+        fft_r->size = {(double)window_size.x, (double)window_size.y * 0.28};
+        layout_background();
+
+        logo_skin->set_font_scale(Ui::scale());
+        start_hint = SpriteDecal::adopt(bg_skin->display_font_medium.RenderStringToDecal(START_HINT, olc::WHITE));
+    }
+
     void SceneTitle::init(Game* game) {
         RichPresence::in_menu("On the title screen");
-        olc::vi2d window_size = game->window->GetScreenSize();
         std::string error;
         sky->show(SkyView::TITLE);
 
@@ -110,12 +144,11 @@ namespace nascent {
         }
 
         load_background();
-        start_hint = SpriteDecal::adopt(bg_skin->display_font_medium.RenderStringToDecal(START_HINT, olc::WHITE));
 
         logo_skin = std::make_unique<Skin>(game, "logo");
         logo_attempt = std::make_unique<Attempt>(logo_chart.get());
 
-        logo_field = std::make_unique<EntityField>(logo_chart.get(), logo_skin.get(), olc::vd2d{(double)window_size.x / 4, 0}, olc::vd2d{(double)window_size.x / 2, (double)window_size.y / 2 + ((double)window_size.x / 28)});
+        logo_field = std::make_unique<EntityField>(logo_chart.get(), logo_skin.get(), olc::vd2d{0, 0}, olc::vd2d{1, 1});
         logo_field->set_attempt(logo_attempt.get());
         logo_field->draw_notes_past_judge = false;
         logo_field->draw_judge_colors = true;
@@ -124,11 +157,11 @@ namespace nascent {
         logo_field->scroll_speed = SettingsManager::settings.field_scroll_speed;
         logo_field->opacity = PLAY_LOGO_INTRO ? 1.0f : 0.0f;
 
-        fft_l = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{(double)window_size.x, (double)window_size.y * 0.28}, 0);
+        fft_l = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1}, 0);
         fft_l->opacity = BACKGROUND_DIM;
         fft_l->init(this);
 
-        fft_r = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, (double)window_size.y - (double)window_size.y * 0.28}, olc::vd2d{(double)window_size.x, (double)window_size.y * 0.28}, 1);
+        fft_r = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1}, 1);
         fft_r->flipped = true;
         fft_r->mirrored = true;
         fft_r->opacity = BACKGROUND_DIM;
@@ -146,6 +179,7 @@ namespace nascent {
         bg_clock.max_error = SettingsManager::settings.field_audio_sync_max_error;
 
         loaded = true;
+        on_resize();
     };
 
     bool SceneTitle::logo_playing() {
@@ -243,7 +277,7 @@ namespace nascent {
             bg_position = bg_clock.position_at(now);
 
             for (auto& field : bg_field) {
-                field->pos.x -= step * SettingsManager::settings.title_h_scroll_rate;
+                field->pos.x -= step * SettingsManager::settings.title_h_scroll_rate * Ui::scale();
                 field->set_position(bg_position);
                 field->opacity = bg_fade * BACKGROUND_DIM;
             }
@@ -255,11 +289,7 @@ namespace nascent {
             }
 
             if (bg_field.size() > 1 && bg_field[1]->pos.x <= 0) {
-                double window_width = game->window->GetScreenSize().x;
-
-                for (size_t i = 0; i < bg_field.size(); i++) {
-                    bg_field[i]->pos.x = window_width / (bg_field.size() - 1) * i;
-                }
+                layout_background();
             }
         }
 
@@ -293,7 +323,7 @@ namespace nascent {
             olc::vi2d screen = window->GetScreenSize();
             float pulse = 0.5f + 0.5f * std::sin((float)timer * START_HINT_PULSE_SPEED);
             float visibility = bg_chart != nullptr ? bg_fade : 1.0f;
-            float y = (float)(logo_field->pos.y + logo_field->size.y + START_HINT_GAP);
+            float y = (float)(logo_field->pos.y + logo_field->size.y + Ui::px(START_HINT_GAP));
             window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, olc::Pixel(255, 255, 255, (uint8_t)((110 + 145 * pulse) * visibility)));
         }
     };

@@ -8,6 +8,7 @@
 #include "Skin.h"
 #include "StatusBar.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <chrono>
@@ -45,13 +46,9 @@ namespace nascent {
         this->song_audio_id = song_audio_id;
     }
 
-    void SceneResults::init(Game* game) {
+    void SceneResults::init(Game*) {
         RichPresence::viewing_results(*chart, summary.accuracy, grade_name(summary.grade));
-        olc::vi2d screen = game->window->GetScreenSize();
-        int32_t margin = screen.x / 24;
-
-        error_graph_pos = {margin, (int32_t)(screen.y * 0.56)};
-        build_error_graph({screen.x - margin * 2, (int32_t)(screen.y * 0.32)});
+        layout_error_graph();
 
         if (!chart->info.image_file.empty()) {
             auto sprite = std::make_unique<olc::Sprite>();
@@ -60,6 +57,18 @@ namespace nascent {
                 background_image = SpriteDecal(std::move(sprite), true);
             }
         }
+    }
+
+    void SceneResults::layout_error_graph() {
+        olc::vi2d screen = game->window->GetScreenSize();
+        int32_t margin = screen.x / 24;
+
+        error_graph_pos = {margin, (int32_t)(screen.y * 0.56)};
+        build_error_graph({std::max(1, screen.x - margin * 2), std::max(1, (int32_t)(screen.y * 0.32))});
+    }
+
+    void SceneResults::on_resize() {
+        layout_error_graph();
     }
 
     void SceneResults::build_error_graph(olc::vi2d size) {
@@ -124,9 +133,11 @@ namespace nascent {
             color.a = point.release ? 150 : 230;
             int32_t x = time_to_x(point.time);
             int32_t y = error_to_y(point.error);
+            int32_t radius = std::max(1, Ui::px(1));
+            int32_t dot_width = std::max(2, Ui::px(2));
 
-            for (int32_t dy = -1; dy <= 1; dy++) {
-                for (int32_t dx = 0; dx <= 1; dx++) {
+            for (int32_t dy = -radius; dy <= radius; dy++) {
+                for (int32_t dx = 0; dx < dot_width; dx++) {
                     if (x + dx >= 0 && x + dx < size.x && y + dy >= 0 && y + dy < size.y) {
                         sprite->SetPixel(x + dx, y + dy, blend(sprite->GetPixel(x + dx, y + dy), color));
                     }
@@ -198,28 +209,32 @@ namespace nascent {
 
     void SceneResults::draw_bottom_bar(olc::PixelGameEngine* window) const {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t top = screen.y - StatusBar::HEIGHT;
+        int32_t bar_height = StatusBar::height();
+        int32_t padding = StatusBar::padding();
+        int32_t segment_gap = Ui::px(StatusBar::SEGMENT_GAP);
+        int32_t label_gap = Ui::px(StatusBar::LABEL_GAP);
+        int32_t top = screen.y - bar_height;
         olc::Font& font = skin->display_font_small;
 
-        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)StatusBar::HEIGHT}, StatusBar::BACKGROUND);
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, StatusBar::BACKGROUND);
         window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, StatusBar::EDGE);
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t baseline = top + (StatusBar::HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
+        int32_t baseline = top + (bar_height - metrics.size.y) / 2 - metrics.offset.y;
 
         auto width = [&](std::string_view text) {
             return text.empty() ? 0 : text_bounds(font, text).size.x;
         };
 
-        int32_t right = screen.x - StatusBar::PADDING - width(BACK_HINT);
+        int32_t right = screen.x - padding - width(BACK_HINT);
         draw_text(font, BACK_HINT, {right, baseline}, olc::GREY);
 
-        int32_t left_limit = right - StatusBar::SEGMENT_GAP;
-        int32_t x = StatusBar::PADDING;
+        int32_t left_limit = right - segment_gap;
+        int32_t x = padding;
         bool left_full = false;
 
         auto place = [&](int32_t needed) {
-            int32_t gap = x > StatusBar::PADDING ? StatusBar::SEGMENT_GAP : 0;
+            int32_t gap = x > padding ? segment_gap : 0;
             left_full = left_full || x + gap + needed > left_limit;
 
             if (!left_full) {
@@ -240,7 +255,7 @@ namespace nascent {
             int32_t needed = width(label);
 
             for (const BarPart& part : parts) {
-                needed += StatusBar::LABEL_GAP + width(part.first);
+                needed += label_gap + width(part.first);
             }
 
             if (!place(needed)) {
@@ -251,7 +266,7 @@ namespace nascent {
             x += width(label);
 
             for (const BarPart& part : parts) {
-                x += StatusBar::LABEL_GAP;
+                x += label_gap;
                 draw_text(font, part.first, {x, baseline}, part.second);
                 x += width(part.first);
             }
@@ -312,13 +327,13 @@ namespace nascent {
         int32_t y = screen.y / 10;
 
         draw_text(skin->display_font_medium, std::format("{} - {}", chart->info.artist, chart->info.title), {x, y}, olc::WHITE);
-        y += 36;
+        y += Ui::px(36);
         draw_text(skin->display_font_small, std::format("[{}] // {}    {:.2f}x", chart->info.difficulty_name, chart->info.mapper, chart->pitch), {x, y}, olc::GREY);
-        y += 110;
+        y += Ui::px(110);
 
-        draw_text(skin->display_font_large, std::string(grade_name(summary.grade)), {x, y + 20}, grade_color(summary.grade));
-        draw_text(skin->display_font_large, std::format("{:.2f}%", std::floor(summary.accuracy * 10000.0) / 100.0), {x + 110, y + 20}, olc::WHITE);
-        y += 80;
+        draw_text(skin->display_font_large, std::string(grade_name(summary.grade)), {x, y + Ui::px(20)}, grade_color(summary.grade));
+        draw_text(skin->display_font_large, std::format("{:.2f}%", std::floor(summary.accuracy * 10000.0) / 100.0), {x + Ui::px(110), y + Ui::px(20)}, olc::WHITE);
+        y += Ui::px(80);
 
         const std::pair<const char*, std::string> stats[] = {
             {"Max combo", std::format("{}", summary.max_combo)},
@@ -329,12 +344,12 @@ namespace nascent {
 
         for (const auto& [label, value] : stats) {
             draw_text(skin->display_font_medium, label, {x, y}, olc::GREY);
-            draw_text(skin->display_font_medium, value, {x + 300, y}, olc::WHITE);
-            y += 44;
+            draw_text(skin->display_font_medium, value, {x + Ui::px(300), y}, olc::WHITE);
+            y += Ui::px(44);
         }
 
         int32_t counts_x = screen.x / 2 + screen.x / 12;
-        int32_t counts_y = screen.y / 10 + 146;
+        int32_t counts_y = screen.y / 10 + Ui::px(146);
 
         for (HitScore score : ALL_HIT_SCORES) {
             if (score == HitScore::NONE) {
@@ -342,12 +357,12 @@ namespace nascent {
             }
 
             draw_text(skin->display_font_medium, std::string(hit_score_name(score)), {counts_x, counts_y}, olc::Pixel(hit_score_color(score)));
-            draw_text(skin->display_font_medium, std::format("{}", summary.score_counts[(size_t)score]), {counts_x + 260, counts_y}, olc::WHITE);
-            counts_y += 44;
+            draw_text(skin->display_font_medium, std::format("{}", summary.score_counts[(size_t)score]), {counts_x + Ui::px(260), counts_y}, olc::WHITE);
+            counts_y += Ui::px(44);
         }
 
         if (error_graph) {
-            draw_text(skin->display_font_small, "Hit error over the song", {error_graph_pos.x, error_graph_pos.y - 12}, olc::GREY);
+            draw_text(skin->display_font_small, "Hit error over the song", {error_graph_pos.x, error_graph_pos.y - Ui::px(12)}, olc::GREY);
             window->DrawDecal(error_graph_pos, error_graph.get());
         }
 

@@ -31,12 +31,14 @@ namespace nascent {
         olc::vi2d error_graph_pos;
 
         void build_error_graph(olc::vi2d size);
+        void layout_error_graph();
         void draw_bottom_bar(olc::PixelGameEngine* window) const;
 
         public:
         SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id = -1);
         void init(Game*) override;
         void on_exit() override;
+        void on_resize() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
     };

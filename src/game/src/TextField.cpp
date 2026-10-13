@@ -2,6 +2,7 @@
 
 #include "Skin.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <cmath>
@@ -119,14 +120,18 @@ namespace nascent {
         olc::FontRect label_metrics = text_bounds(label_font, "Hgjy");
         draw_text(label_font, label, {position.x, position.y - label_metrics.offset.y}, color);
 
-        int32_t box_top = position.y + label_metrics.size.y + LABEL_GAP;
-        window->FillRectDecal({(float)position.x, (float)box_top}, {(float)WIDTH, (float)HEIGHT}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
+        int32_t box_width = width();
+        int32_t box_height = Ui::px(HEIGHT);
+        int32_t padding = Ui::px(PADDING);
+        int32_t caret_inset = Ui::px(CARET_INSET);
+        int32_t box_top = position.y + label_metrics.size.y + Ui::px(LABEL_GAP);
+        window->FillRectDecal({(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
 
         size_t end = focused ? std::min(cursor, value.size()) : value.size();
         std::string shown = secret ? std::string(character_count(value, value.size()), '*') : value;
         size_t caret_index = secret ? character_count(value, end) : end;
         size_t first = 0;
-        int32_t room = WIDTH - PADDING * 2;
+        int32_t room = box_width - padding * 2;
 
         while (first < caret_index && text_width(text_font, shown.substr(first, caret_index - first)) > room) {
             first = next_character(shown, first);
@@ -139,16 +144,20 @@ namespace nascent {
         }
 
         olc::FontRect text_metrics = text_bounds(text_font, "Hgjy");
-        int32_t baseline = box_top + (HEIGHT - text_metrics.size.y) / 2 - text_metrics.offset.y;
-        int32_t text_left = position.x + PADDING;
+        int32_t baseline = box_top + (box_height - text_metrics.size.y) / 2 - text_metrics.offset.y;
+        int32_t text_left = position.x + padding;
         draw_text(text_font, visible, {text_left, baseline}, color);
 
         if (focused && std::fmod(blink_timer, 1.0f) < 0.5f) {
             int32_t caret = text_left + text_width(text_font, shown.substr(first, caret_index - first)) + 1;
-            window->FillRectDecal({(float)caret, (float)(box_top + CARET_INSET)}, {2.0f, (float)(HEIGHT - CARET_INSET * 2)}, olc::WHITE);
+            window->FillRectDecal({(float)caret, (float)(box_top + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(box_height - caret_inset * 2)}, olc::WHITE);
         }
 
-        return box_top + HEIGHT - position.y;
+        return box_top + box_height - position.y;
+    }
+
+    int32_t TextField::width() {
+        return Ui::px(WIDTH);
     }
 
     bool TextField::is_filled() const {

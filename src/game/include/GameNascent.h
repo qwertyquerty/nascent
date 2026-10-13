@@ -30,6 +30,7 @@ namespace nascent {
         bool toast_is_error = false;
 
         void handle_dropped_files();
+        void on_screen_resize() override;
         void show_toast(std::string message, bool is_error, float duration = TOAST_TIME);
         void draw_toast(olc::PixelGameEngine* window);
 

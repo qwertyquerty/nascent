@@ -4,6 +4,7 @@
 #include "ProgressBar.h"
 #include "Skin.h"
 #include "TextCache.h"
+#include "Ui.h"
 
 #include <algorithm>
 #include <cmath>
@@ -64,22 +65,34 @@ namespace nascent {
         olc::Font& font = skin->display_font_small;
         olc::Pixel color = focused ? olc::WHITE : olc::GREY;
 
-        window->FillRectDecal({(float)position.x, (float)position.y}, {(float)WIDTH, (float)HEIGHT}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
+        int32_t row_width = width();
+        int32_t row_height = height();
+        int32_t padding = Ui::px(PADDING);
+        int32_t caret_inset = Ui::px(CARET_INSET);
+        window->FillRectDecal({(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t baseline = position.y + (HEIGHT - metrics.size.y) / 2 - metrics.offset.y;
-        draw_text(font, label, {position.x + PADDING, baseline}, color);
+        int32_t baseline = position.y + (row_height - metrics.size.y) / 2 - metrics.offset.y;
+        draw_text(font, label, {position.x + padding, baseline}, color);
 
         std::string value = display_value(focused);
-        int32_t value_x = position.x + WIDTH - PADDING - text_width(font, value);
+        int32_t value_x = position.x + row_width - padding - text_width(font, value);
         draw_text(font, value, {value_x, baseline}, value_color(skin, focused));
 
         if (focused && shows_caret() && std::fmod(blink_timer, 1.0f) < 0.5f) {
-            int32_t caret = is_placeholder() ? position.x + WIDTH - PADDING : value_x + text_width(font, value) + 1;
-            window->FillRectDecal({(float)caret, (float)(position.y + CARET_INSET)}, {2.0f, (float)(HEIGHT - CARET_INSET * 2)}, olc::WHITE);
+            int32_t caret = is_placeholder() ? position.x + row_width - padding : value_x + text_width(font, value) + 1;
+            window->FillRectDecal({(float)caret, (float)(position.y + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(row_height - caret_inset * 2)}, olc::WHITE);
         }
 
-        return HEIGHT;
+        return row_height;
+    }
+
+    int32_t RowField::width() {
+        return Ui::px(WIDTH);
+    }
+
+    int32_t RowField::height() {
+        return Ui::px(HEIGHT);
     }
 
     ChoiceField::ChoiceField(std::string label, std::vector<std::string> options, size_t selected) : RowField(std::move(label)), options(std::move(options)), selected(selected) {}
@@ -133,14 +146,15 @@ namespace nascent {
     }
 
     int32_t SliderField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const {
-        int32_t height = RowField::draw(window, skin, position, focused);
-        float width = (float)(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
+        int32_t row_height = RowField::draw(window, skin, position, focused);
+        float bar_width = Ui::pxf(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
+        float bar_height = std::max(1.0f, Ui::pxf(BAR_HEIGHT));
         float fill = maximum > minimum ? (float)(value - minimum) / (float)(maximum - minimum) : 0.0f;
         olc::Pixel color = skin->title_gradient_at(fill, 0.5);
         color.a = focused ? 255 : 140;
 
-        ProgressBar({width, (float)BAR_HEIGHT}).draw(window, {(float)(position.x + BAR_LEFT), (float)(position.y + (HEIGHT - BAR_HEIGHT) / 2)}, fill, color);
-        return height;
+        ProgressBar({bar_width, bar_height}).draw(window, {(float)position.x + Ui::pxf(BAR_LEFT), (float)position.y + (row_height - bar_height) / 2}, fill, color);
+        return row_height;
     }
 
     KeyBindField::KeyBindField(KeyBinding binding) : RowField(KEY_BINDINGS[(size_t)binding].label), binding(binding) {}
@@ -231,12 +245,13 @@ namespace nascent {
     int32_t SectionField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool) const {
         olc::Font& font = skin->display_font_small;
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t text_top = position.y + TOP_GAP;
+        int32_t text_top = position.y + Ui::px(TOP_GAP);
         draw_text(font, title, {position.x, text_top - metrics.offset.y}, olc::WHITE);
 
-        int32_t line_top = text_top + metrics.size.y + LINE_GAP;
-        window->FillRectDecal({(float)position.x, (float)line_top}, {(float)RowField::WIDTH, (float)LINE_HEIGHT}, olc::Pixel(255, 255, 255, LINE_ALPHA));
-        return line_top + LINE_HEIGHT - position.y;
+        int32_t line_top = text_top + metrics.size.y + Ui::px(LINE_GAP);
+        int32_t line_height = std::max(1, Ui::px(LINE_HEIGHT));
+        window->FillRectDecal({(float)position.x, (float)line_top}, {(float)RowField::width(), (float)line_height}, olc::Pixel(255, 255, 255, LINE_ALPHA));
+        return line_top + line_height - position.y;
     }
 
     bool SectionField::focusable() const {
