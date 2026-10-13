@@ -18,7 +18,7 @@
     <nav class="navbar has-shadow">
         <div class="container">
             <div class="navbar-brand">
-                <a class="navbar-item" href="#/"><img class="nav-logo" src="/logo/logo_n.png" alt="Nascent"></a>
+                <a class="navbar-item" href="#/"><img class="nav-logo" src="/logo_n.png" alt="Nascent"></a>
                 <a class="navbar-burger" :class="{'is-active': menuOpen}" @click="menuOpen = !menuOpen"><span></span><span></span><span></span><span></span></a>
             </div>
             <div class="navbar-menu" :class="{'is-active': menuOpen}">
@@ -41,7 +41,7 @@
             <progress v-else-if="!view" class="progress is-small is-link"></progress>
 
             <template v-else-if="route.name === 'home'">
-                <h1 class="title"><img class="home-logo" src="/logo/logo.png" alt="Nascent"></h1>
+                <h1 class="title"><img class="home-logo" src="/logo.png" alt="Nascent"></h1>
                 <div class="columns is-multiline is-mobile">
                     <div v-for="[label, value] in [
                         ['Players', $f.number(view.stats.players)],
