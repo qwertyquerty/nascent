@@ -65,6 +65,18 @@ main {
     min-width: 16rem;
 }
 
+.nav-logo {
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+.home-logo {
+    display: block;
+    width: 100%;
+    max-width: 32rem;
+    height: auto;
+}
+
 .range-input {
     width: 6.5rem;
 }

@@ -121,6 +121,8 @@ services:
       - ./nginx:/etc/nginx/nascent:ro
       - ../web:/srv/web:ro
       - ../../assets/skins/default/display_font.ttf:/srv/fonts/display_font.ttf:ro
+      - ../../assets/logo/logo.png:/srv/logo/logo.png:ro
+      - ../../assets/logo/logo_n.png:/srv/logo/logo_n.png:ro
       - ${NASCENT_DATA_DIR:-./data}/storage:/storage:ro
       - ${NASCENT_DATA_DIR:-./data}/letsencrypt:/etc/letsencrypt:ro
       - ${NASCENT_DATA_DIR:-./data}/certbot-www:/var/www/certbot:ro
