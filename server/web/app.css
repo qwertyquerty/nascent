@@ -107,6 +107,14 @@ main:focus {
     border-bottom-color: transparent;
 }
 
+a.navbar-item.is-active,
+a.navbar-item.is-active:hover,
+a.navbar-item.is-active:focus,
+a.navbar-item.is-active:focus-within {
+    background-color: transparent;
+    color: var(--bulma-navbar-item-color);
+}
+
 .button.is-primary {
     background-image: var(--nascent-gradient);
     border: none;
