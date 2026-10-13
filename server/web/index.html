@@ -138,7 +138,7 @@
                     <span v-for="[score, count] in Object.entries(view.play.score_counts).filter(([score]) => score !== 'NONE')" :key="score" class="tag is-medium judgement-count">
                         <span class="judgement-name" :class="'judgement-' + score.toLowerCase()">{{ score }}</span>{{ $f.number(count) }}
                     </span>
-                    <span v-if="view.play.status !== 'verified'" class="tag is-medium is-warning is-light">{{ view.play.status.replace('_', ' ') }}</span>
+                    <span v-if="view.play.status === 'rejected'" class="tag is-medium is-warning is-light">rejected</span>
                     <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Personal best</span>
                 </div>
 
