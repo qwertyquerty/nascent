@@ -34,6 +34,16 @@ const format = {
     playtime: (ms) => `${Math.floor(ms / 3600000).toLocaleString()}h ${Math.floor(ms / 60000) % 60}m`,
 };
 
+function seconds(length) {
+    if (!length) {
+        return null;
+    }
+
+    const [minutes, rest] = String(length).trim().split(":");
+    const total = rest === undefined ? Number(minutes) * 60 : Number(minutes) * 60 + Number(rest);
+    return Number.isFinite(total) ? total : null;
+}
+
 function parseRoute() {
     const [path, search] = (location.hash.slice(1) || "/").split("?");
     const [section = "home", id] = path.split("/").filter(Boolean).map(decodeURIComponent);
@@ -43,8 +53,13 @@ function parseRoute() {
 const loaders = {
     async home({params}, keyCounts) {
         const keyCount = params.key_count ?? keyCounts[0];
-        const [stats, board] = await Promise.all([api("/stats"), api("/leaderboards/performance", {key_count: keyCount, limit: 10})]);
-        return {stats, board, keyCount};
+        const playsKeyCount = params.plays_key_count ?? keyCounts[0];
+        const [stats, board, {plays}] = await Promise.all([
+            api("/stats"),
+            api("/leaderboards/performance", {key_count: keyCount, limit: 10}),
+            api("/plays", {sort: "performance", key_count: playsKeyCount, limit: 10}),
+        ]);
+        return {stats, board, keyCount, playsKeyCount, topPlays: plays};
     },
 
     async leaderboard({params}, keyCounts) {
@@ -52,11 +67,12 @@ const loaders = {
         return {keyCount, ...(await api("/leaderboards/performance", {key_count: keyCount, sort: params.sort, ...paged(params)}))};
     },
 
-    async plays({params}) {
+    async plays({params}, keyCounts) {
+        const keyCount = params.key_count ?? keyCounts[0];
         const performance = params.sort === "performance";
         const page = paged(params);
-        const {plays, total} = await api("/plays", {sort: params.sort, key_count: params.key_count, ...page});
-        return {total, performance, plays: performance ? plays.map((play, index) => ({rank: page.offset + index + 1, play})) : plays};
+        const {plays, total} = await api("/plays", {sort: params.sort, key_count: keyCount, ...page});
+        return {total, keyCount, performance, plays: performance ? plays.map((play, index) => ({rank: page.offset + index + 1, play})) : plays};
     },
 
     async user({id, params}, keyCounts) {
@@ -69,7 +85,19 @@ const loaders = {
         return {user, modes, recent, keyCount, plays};
     },
 
-    charts: ({params}) => api("/charts", {q: params.q, key_count: params.key_count, status: params.status === "all" ? "" : "ranked", sort: "play_count", order: "desc", ...paged(params)}),
+    charts: ({params}) =>
+        api("/charts", {
+            q: params.q,
+            key_count: params.key_count,
+            status: params.status === "all" ? "" : "ranked",
+            min_difficulty: params.min_difficulty,
+            max_difficulty: params.max_difficulty,
+            min_duration: seconds(params.min_length),
+            max_duration: seconds(params.max_length),
+            sort: params.sort || "play_count",
+            order: params.order || "desc",
+            ...paged(params),
+        }),
 
     async chart({id, params}) {
         const base = `/charts/${encodeURIComponent(id)}`;
@@ -132,16 +160,16 @@ app.config.globalProperties.$f = format;
 app.config.globalProperties.$link = link;
 
 app.component("key-tabs", {
-    props: ["current", "path", "params", "counts"],
+    props: {current: [Number, String], path: String, params: Object, counts: Array, param: {type: String, default: "key_count"}},
     template: `<div class="tabs is-boxed"><ul>
         <li v-for="count in counts ?? $root.keyCounts" :class="{'is-active': count == current}">
-            <a :href="$link.to(path, {...params, key_count: count})">{{ count }}K</a>
+            <a :href="$link.to(path, {...params, [param]: count})">{{ count }}K</a>
         </li>
     </ul></div>`,
 });
 
 app.component("pager", {
-    props: ["total"],
+    props: {total: Number, top: Boolean},
     computed: {
         page: (self) => pageOf(self.$root.route.params),
         pages: (self) => Math.ceil(self.total / PAGE_SIZE),
@@ -151,7 +179,7 @@ app.component("pager", {
             return page >= 1 && page <= this.pages ? link.to(this.$root.route.path, {...this.$root.route.params, page}) : undefined;
         },
     },
-    template: `<nav v-if="pages > 1" class="pagination is-centered mt-4">
+    template: `<nav v-if="pages > 1" class="pagination is-centered" :class="top ? 'mb-4' : 'mt-4'">
         <a class="pagination-previous" :class="{'is-disabled': !href(page - 1)}" :href="href(page - 1)">Previous</a>
         <a class="pagination-next" :class="{'is-disabled': !href(page + 1)}" :href="href(page + 1)">Next</a>
         <ul class="pagination-list"><li><span class="pagination-ellipsis">Page {{ page }} of {{ pages }}</span></li></ul>

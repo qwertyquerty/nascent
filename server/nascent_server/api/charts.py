@@ -23,6 +23,7 @@ SORTS = {
     "created_at": Chart.created_at,
     "ranked_at": Chart.ranked_at,
     "play_count": Chart.play_count,
+    "length": Chart.duration_ms,
 }
 
 

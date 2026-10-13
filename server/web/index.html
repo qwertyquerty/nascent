@@ -7,7 +7,7 @@
     <title>Nascent</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tomorrow:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
     <link rel="stylesheet" href="app.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
@@ -57,13 +57,15 @@
                 <div class="columns">
                     <div class="column">
                         <h2 class="title is-4">Top players</h2>
-                        <key-tabs :current="view.keyCount" path="/"></key-tabs>
+                        <key-tabs :current="view.keyCount" path="/" :params="{plays_key_count: route.params.plays_key_count}"></key-tabs>
                         <player-table :entries="view.board.entries"></player-table>
                         <a class="button is-small" :href="$link.to('/leaderboard', {key_count: view.keyCount})">Full {{ view.keyCount }}K leaderboard</a>
                     </div>
                     <div class="column">
                         <h2 class="title is-4">Top plays</h2>
-                        <play-table :plays="view.stats.top_plays" show-user empty="No ranked plays yet."></play-table>
+                        <key-tabs :current="view.playsKeyCount" path="/" param="plays_key_count" :params="{key_count: route.params.key_count}"></key-tabs>
+                        <play-table :plays="view.topPlays" show-user empty="No ranked plays yet."></play-table>
+                        <a class="button is-small" :href="$link.to('/plays', {key_count: view.playsKeyCount, sort: 'performance'})">All top {{ view.playsKeyCount }}K plays</a>
                     </div>
                 </div>
             </template>
@@ -80,27 +82,22 @@
                             :href="$link.to('/leaderboard', {key_count: view.keyCount, sort: sort === 'performance' ? null : sort})">{{ label }}</a>
                     </div>
                 </div>
+                <pager :total="view.total" top></pager>
                 <player-table :entries="view.entries" detailed></player-table>
                 <pager :total="view.total"></pager>
             </template>
 
             <template v-else-if="route.name === 'plays'">
                 <h1 class="title">Plays</h1>
-                <p class="subtitle">{{ $f.number(view.total) }} {{ view.performance ? 'ranked plays' : 'plays' }}</p>
+                <p class="subtitle">{{ $f.number(view.total) }} {{ view.keyCount }}K {{ view.performance ? 'ranked plays' : 'plays' }}</p>
                 <div class="tabs">
                     <ul>
-                        <li :class="{'is-active': !view.performance}"><a :href="$link.to('/plays', {key_count: route.params.key_count})">Recent</a></li>
-                        <li :class="{'is-active': view.performance}"><a :href="$link.to('/plays', {key_count: route.params.key_count, sort: 'performance'})">Top performance</a></li>
+                        <li :class="{'is-active': !view.performance}"><a :href="$link.to('/plays', {key_count: view.keyCount})">Recent</a></li>
+                        <li :class="{'is-active': view.performance}"><a :href="$link.to('/plays', {key_count: view.keyCount, sort: 'performance'})">Top performance</a></li>
                     </ul>
                 </div>
-                <div class="field is-grouped is-align-items-center mb-4">
-                    <div class="select">
-                        <select @change="go($link.to('/plays', {sort: route.params.sort, key_count: $event.target.value}))">
-                            <option value="">Any keys</option>
-                            <option v-for="count in keyCounts" :value="count" :selected="route.params.key_count == count">{{ count }}K</option>
-                        </select>
-                    </div>
-                </div>
+                <key-tabs :current="view.keyCount" path="/plays" :params="{sort: route.params.sort}"></key-tabs>
+                <pager :total="view.total" top></pager>
                 <play-table :plays="view.plays" show-user :empty="view.performance ? 'No ranked plays yet.' : 'No plays yet.'"></play-table>
                 <pager :total="view.total"></pager>
             </template>
@@ -161,22 +158,64 @@
             <template v-else-if="route.name === 'charts'">
                 <h1 class="title">Charts</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} {{ route.params.status === 'all' ? 'charts' : 'ranked charts' }}</p>
-                <form class="field is-grouped mb-5" @submit.prevent="submit($event, '/charts')">
-                    <input class="input" name="q" type="search" placeholder="Search title, artist or mapper" :value="route.params.q">
-                    <div class="select ml-2">
-                        <select name="key_count">
-                            <option value="">Any keys</option>
-                            <option v-for="count in keyCounts" :value="count" :selected="route.params.key_count == count">{{ count }}K</option>
-                        </select>
+                <form class="mb-5" @submit.prevent="submit($event, '/charts')">
+                    <div class="field is-grouped is-grouped-multiline">
+                        <div class="control is-expanded">
+                            <input class="input" name="q" type="search" placeholder="Search title, artist or mapper" :value="route.params.q">
+                        </div>
+                        <div class="control">
+                            <div class="select">
+                                <select name="key_count" @change="$event.target.form.requestSubmit()">
+                                    <option value="">Any keys</option>
+                                    <option v-for="count in keyCounts" :value="count" :selected="route.params.key_count == count">{{ count }}K</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control">
+                            <div class="select">
+                                <select name="status" @change="$event.target.form.requestSubmit()">
+                                    <option value="">Ranked</option>
+                                    <option value="all" :selected="route.params.status === 'all'">All charts</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
-                    <div class="select ml-2">
-                        <select name="status">
-                            <option value="">Ranked</option>
-                            <option value="all" :selected="route.params.status === 'all'">All charts</option>
-                        </select>
+                    <div class="field is-grouped is-grouped-multiline is-align-items-center">
+                        <div class="control"><span class="has-text-grey">Difficulty</span></div>
+                        <div class="control">
+                            <input class="input range-input" name="min_difficulty" type="number" min="0" step="any" placeholder="Min" :value="route.params.min_difficulty">
+                        </div>
+                        <div class="control">
+                            <input class="input range-input" name="max_difficulty" type="number" min="0" step="any" placeholder="Max" :value="route.params.max_difficulty">
+                        </div>
+                        <div class="control"><span class="has-text-grey">Length</span></div>
+                        <div class="control">
+                            <input class="input range-input" name="min_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Min m:ss" :value="route.params.min_length">
+                        </div>
+                        <div class="control">
+                            <input class="input range-input" name="max_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Max m:ss" :value="route.params.max_length">
+                        </div>
+                        <div class="control"><span class="has-text-grey">Sort by</span></div>
+                        <div class="control">
+                            <div class="select">
+                                <select name="sort" @change="$event.target.form.requestSubmit()">
+                                    <option v-for="[sort, label] in [['play_count', 'Plays'], ['difficulty', 'Difficulty'], ['length', 'Length']]"
+                                        :value="sort" :selected="(route.params.sort || 'play_count') === sort">{{ label }}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control">
+                            <div class="select">
+                                <select name="order" @change="$event.target.form.requestSubmit()">
+                                    <option value="desc">Highest first</option>
+                                    <option value="asc" :selected="route.params.order === 'asc'">Lowest first</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control"><button class="button is-link">Search</button></div>
                     </div>
-                    <button class="button is-link ml-2">Search</button>
                 </form>
+                <pager :total="view.total" top></pager>
                 <div class="table-container">
                     <table class="table is-fullwidth is-hoverable is-striped">
                         <thead><tr>
@@ -221,6 +260,7 @@
                     <p class="mb-4 has-text-grey">
                         Each player's best performance across every rate &middot; {{ $f.number(view.board.total) }} players
                     </p>
+                    <pager :total="view.board.total" top></pager>
                     <play-table :plays="view.board.entries" show-user :show-chart="false"
                         :empty="view.chart.status === 'ranked' ? 'Nobody has a ranked play on this chart yet.' : 'Only ranked charts give performance.'"></play-table>
                     <pager :total="view.board.total"></pager>
@@ -237,6 +277,7 @@
                     </div>
                     <span class="has-text-grey ml-3">{{ $f.number(view.board.total) }} players</span>
                 </div>
+                <pager :total="view.board.total" top></pager>
                 <play-table :plays="view.board.entries" show-user :show-chart="false" empty="Nobody has played this rate yet."></play-table>
                 <pager :total="view.board.total"></pager>
                 </template>

@@ -15,7 +15,7 @@ main {
 .title,
 .subtitle,
 .navbar-brand .navbar-item {
-    font-family: "Google Sans", sans-serif;
+    font-family: "Tomorrow", sans-serif;
 }
 
 @font-face {
@@ -63,4 +63,8 @@ main {
 
 .chart-name {
     min-width: 16rem;
+}
+
+.range-input {
+    width: 6.5rem;
 }
