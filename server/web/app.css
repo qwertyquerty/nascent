@@ -125,31 +125,13 @@ main:focus {
 }
 
 .hero {
-    position: relative;
-    overflow: hidden;
-    margin: -1.5rem -1.5rem 2rem;
+    margin-bottom: 2rem;
     border-radius: 12px;
     background: radial-gradient(ellipse at 20% 0%, rgba(0, 177, 225, 0.18), transparent 60%), radial-gradient(ellipse at 90% 100%, rgba(0, 245, 154, 0.12), transparent 55%), #070a0e;
 }
 
-.hero::before {
-    content: "";
-    position: absolute;
-    inset: -50%;
-    background-image:
-        radial-gradient(1px 1px at 20px 30px, rgba(255, 255, 255, 0.8), transparent),
-        radial-gradient(1px 1px at 90px 120px, rgba(255, 255, 255, 0.5), transparent),
-        radial-gradient(1.5px 1.5px at 160px 60px, rgba(180, 240, 255, 0.7), transparent),
-        radial-gradient(1px 1px at 230px 180px, rgba(255, 255, 255, 0.4), transparent),
-        radial-gradient(1px 1px at 300px 20px, rgba(200, 255, 230, 0.6), transparent);
-    background-size: 320px 220px;
-    animation: drift 120s linear infinite;
-    pointer-events: none;
-}
-
 .hero-body {
-    position: relative;
-    padding: 3rem 1.5rem;
+    padding: 3rem 2rem;
 }
 
 .home-logo {
@@ -172,15 +154,6 @@ main:focus {
     gap: 1rem;
 }
 
-@keyframes drift {
-    from {
-        transform: translate(0, 0) rotate(0deg);
-    }
-
-    to {
-        transform: translate(-160px, 80px) rotate(8deg);
-    }
-}
 
 .logo-loader {
     display: flex;
@@ -404,7 +377,7 @@ main:focus {
 
 .replay-stage canvas {
     display: block;
-    margin: 0 auto;
+    margin: 0;
     border-radius: 8px;
     cursor: pointer;
 }
@@ -417,10 +390,35 @@ main:focus {
     margin-top: 0.75rem;
 }
 
-.replay-seek {
-    flex: 1;
-    min-width: 8rem;
-    accent-color: var(--nascent-cyan);
+.replay-timeline {
+    margin-top: 0.75rem;
+}
+
+.replay-timeline svg {
+    height: 6rem;
+    border-radius: 6px;
+}
+
+.hit-error-graph.is-seekable svg {
+    cursor: pointer;
+    touch-action: none;
+}
+
+.hit-error-graph.is-seekable svg:focus-visible {
+    outline: 2px solid var(--nascent-cyan);
+    outline-offset: 2px;
+}
+
+.graph-played {
+    fill: rgba(0, 177, 225, 0.1);
+    pointer-events: none;
+}
+
+.graph-playhead {
+    stroke: var(--nascent-cyan);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
 }
 
 .replay-clock {
@@ -430,11 +428,11 @@ main:focus {
 
 @media screen and (max-width: 768px) {
     .hero {
-        margin: -1.5rem -0.75rem 1.5rem;
+        margin-bottom: 1.5rem;
     }
 
     .hero-body {
-        padding: 2rem 1rem;
+        padding: 2rem 1.25rem;
     }
 
     .chart-name {
@@ -457,10 +455,6 @@ main:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .hero::before {
-        animation: none;
-    }
-
     .logo-loader img {
         animation: none;
         opacity: 0.6;

@@ -7,20 +7,121 @@ const HIT_SCORES = {
     MISS: {color: "rgb(255, 0, 0)", weight: 0},
 };
 
-const LOGO_START = [0, 177, 225];
-const LOGO_END = [0, 245, 154];
 const MISS_DELAY_MS = 160;
 const LEAD_IN_MS = 1500;
 const JUDGEMENT_SHOW_MS = 500;
 const TIMING_HISTORY_MS = 3000;
+const SEEK_STEP_MS = 5000;
 
-function laneColor(lane, keyCount) {
-    const t = keyCount > 1 ? lane / (keyCount - 1) : 0.5;
-    return `rgb(${LOGO_START.map((start, index) => Math.round(start + (LOGO_END[index] - start) * t)).join(", ")})`;
+const SKIN_FILES = {
+    notes: [1, 2, 3, 4, 5, 6, 7].map((index) => `/skins/default/note_${index}.png`),
+    gradient: "/skins/default/title_gradient.png",
+    body: "/skins/arrows_holds/hold_body.png",
+    cap: "/skins/arrows_holds/hold_cap.png",
+};
+const KEY_SPACING = 0.15;
+const JUDGE_HEIGHT = 0.06;
+const RECEPTOR_ALPHA = 64 / 255;
+const HOLD_EDGE_INSET = 0.5;
+const TINT_CACHE_LIMIT = 800;
+
+let skinPromise = null;
+
+function loadImage(source) {
+    return new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => resolve(null);
+        image.src = source;
+    });
+}
+
+function readPixels(image) {
+    if (!image) {
+        return null;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d", {willReadFrequently: true});
+
+    if (!context) {
+        return null;
+    }
+
+    context.drawImage(image, 0, 0);
+    return {width: canvas.width, height: canvas.height, data: context.getImageData(0, 0, canvas.width, canvas.height).data};
+}
+
+function loadSkin() {
+    skinPromise ??= Promise.all([
+        Promise.all(SKIN_FILES.notes.map(loadImage)),
+        loadImage(SKIN_FILES.gradient),
+        loadImage(SKIN_FILES.body),
+        loadImage(SKIN_FILES.cap),
+    ]).then(([notes, gradient, body, cap]) => ({notes, gradient: readPixels(gradient), body, cap, cache: new Map()}));
+
+    return skinPromise;
+}
+
+function gradientAt(skin, x, y) {
+    const gradient = skin?.gradient;
+
+    if (!gradient || !gradient.width || !gradient.height) {
+        return [255, 255, 255];
+    }
+
+    const px = Math.floor(Math.min(1, Math.max(0, x)) * (gradient.width - 1));
+    const py = Math.floor(Math.min(1, Math.max(0, y)) * (gradient.height - 1));
+    const offset = (py * gradient.width + px) * 4;
+    return [gradient.data[offset], gradient.data[offset + 1], gradient.data[offset + 2]];
+}
+
+function tinted(skin, image, color, width, height) {
+    if (!skin || !image) {
+        return null;
+    }
+
+    const quantized = color.map((channel) => Math.min(255, Math.round(channel / 6) * 6));
+    const key = `${image.src}|${quantized.join(",")}|${width}x${height}`;
+    let canvas = skin.cache.get(key);
+
+    if (canvas) {
+        return canvas;
+    }
+
+    canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+        return null;
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+    context.globalCompositeOperation = "multiply";
+    context.fillStyle = `rgb(${quantized.join(", ")})`;
+    context.fillRect(0, 0, width, height);
+    context.globalCompositeOperation = "destination-in";
+    context.drawImage(image, 0, 0, width, height);
+
+    if (skin.cache.size >= TINT_CACHE_LIMIT) {
+        skin.cache.clear();
+    }
+
+    skin.cache.set(key, canvas);
+    return canvas;
 }
 
 function scoreName(score) {
     return String(score || "").toUpperCase();
+}
+
+function formatClock(ms) {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function prepareTimeline(timeline) {
@@ -104,20 +205,21 @@ function isHeld(intervals, time) {
 
 const ReplayViewer = {
     props: {timeline: Object, accuracy: Number},
-    data: () => ({playing: false, position: 0, speed: 1, scroll: 1.2}),
+    data: () => ({playing: false, position: 0, speed: 1, scroll: 2}),
     computed: {
         prepared: (self) => prepareTimeline(self.timeline),
         duration: (self) => self.prepared.end - self.prepared.start,
-        clock: (self) => {
-            const seconds = Math.max(0, Math.floor((self.position - Math.max(0, self.prepared.start)) / 1000));
-            return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-        },
+        clock: (self) => `${formatClock(self.position - Math.max(0, self.prepared.start))} / ${formatClock(self.prepared.end - Math.max(0, self.prepared.start))}`,
     },
     mounted() {
         this.position = this.prepared.start;
         this.resize = () => this.layout();
         addEventListener("resize", this.resize);
         this.layout();
+        loadSkin().then((skin) => {
+            this.skin = skin;
+            this.draw();
+        });
     },
     unmounted() {
         cancelAnimationFrame(this.frame);
@@ -163,8 +265,8 @@ const ReplayViewer = {
 
             this.frame = requestAnimationFrame(this.tick);
         },
-        seek(event) {
-            this.position = Number(event.target.value);
+        seekTo(time) {
+            this.position = Math.min(this.prepared.end, Math.max(this.prepared.start, time));
             this.draw();
         },
         draw() {
@@ -181,63 +283,135 @@ const ReplayViewer = {
                 return;
             }
 
+            const skin = this.skin;
             const width = canvas.width / ratio;
             const height = canvas.height / ratio;
             const {keyCount, notes, held, events, longestHold} = this.prepared;
             const time = this.position;
-            const lane = (width - 24) / keyCount;
-            const left = 12;
-            const judgeY = height - 70;
+            const fieldX = 12;
+            const fieldWidth = width - fieldX * 2;
+            const noteSize = fieldWidth / (keyCount + keyCount * KEY_SPACING - KEY_SPACING);
+            const laneStep = noteSize * (1 + KEY_SPACING);
+            const judgeY = height - noteSize - height * JUDGE_HEIGHT;
             const pxPerMs = (height / 1000) * this.scroll;
-            const noteHeight = Math.max(10, lane * 0.28);
+            const spritePx = Math.max(1, Math.round(noteSize * ratio));
+            const colorAt = (x, y) => gradientAt(skin, x / width, y / height);
+
+            const square = (image, x, y, color, alpha) => {
+                const sprite = tinted(skin, image, color, spritePx, spritePx);
+                context.globalAlpha = alpha;
+
+                if (sprite) {
+                    context.drawImage(sprite, x, y, noteSize, noteSize);
+                }
+                else {
+                    context.fillStyle = `rgb(${color.join(", ")})`;
+                    context.fillRect(x + noteSize * 0.1, y + noteSize * 0.35, noteSize * 0.8, noteSize * 0.3);
+                }
+            };
+
+            const holdBody = (x, top, bottom, color) => {
+                const body = skin?.body;
+                const sprite = body ? tinted(skin, body, color, spritePx, body.naturalHeight) : null;
+                context.globalAlpha = 1;
+
+                if (!sprite) {
+                    context.globalAlpha = 0.5;
+                    context.fillStyle = `rgb(${color.join(", ")})`;
+                    context.fillRect(x + noteSize * 0.2, top, noteSize * 0.6, bottom - top);
+                    return;
+                }
+
+                const inset = sprite.height > HOLD_EDGE_INSET * 2 ? HOLD_EDGE_INSET : 0;
+                context.save();
+                context.translate(x, bottom);
+                context.scale(1, -1);
+                context.drawImage(sprite, 0, inset, sprite.width, sprite.height - inset * 2, 0, 0, noteSize, bottom - top);
+                context.restore();
+            };
+
+            const holdCap = (x, bodyTop, color) => {
+                const cap = skin?.cap;
+
+                if (!cap || !cap.naturalWidth) {
+                    return;
+                }
+
+                const capHeight = noteSize * cap.naturalHeight / cap.naturalWidth;
+                const sprite = tinted(skin, cap, color, spritePx, cap.naturalHeight);
+
+                if (!sprite) {
+                    return;
+                }
+
+                const inset = sprite.height > HOLD_EDGE_INSET ? HOLD_EDGE_INSET : 0;
+                context.globalAlpha = 1;
+                context.save();
+                context.translate(x, bodyTop);
+                context.scale(1, -1);
+                context.drawImage(sprite, 0, inset, sprite.width, sprite.height - inset, 0, 0, noteSize, capHeight);
+                context.restore();
+            };
 
             context.setTransform(ratio, 0, 0, ratio, 0, 0);
+            context.globalAlpha = 1;
             context.fillStyle = "#0b0e12";
             context.fillRect(0, 0, width, height);
 
-            for (let index = 0; index < keyCount; index++) {
-                context.fillStyle = index % 2 ? "rgba(255, 255, 255, 0.025)" : "rgba(255, 255, 255, 0.045)";
-                context.fillRect(left + index * lane, 0, lane, height);
+            for (let lane = 0; lane < keyCount; lane++) {
+                const x = fieldX + lane * laneStep;
+                const pressed = isHeld(held[lane], time);
+                square(skin?.notes[lane % 7], x, judgeY, gradientAt(skin, (x - fieldX) / fieldWidth, judgeY / height), pressed ? 1 : RECEPTOR_ALPHA);
             }
 
-            for (let index = 0; index < keyCount; index++) {
-                const x = left + index * lane + 3;
-                context.globalAlpha = isHeld(held[index], time) ? 0.9 : 0.25;
-                context.fillStyle = laneColor(index, keyCount);
-                context.fillRect(x, judgeY - noteHeight / 2, lane - 6, noteHeight);
-            }
+            const first = Math.max(0, lastIndexAtOrBefore(notes, time - longestHold - height / pxPerMs));
 
-            context.globalAlpha = 1;
-            const visibleUntil = time + judgeY / pxPerMs;
-            const first = Math.max(0, lastIndexAtOrBefore(notes, time - longestHold - 400));
-
-            for (let index = first; index < notes.length && notes[index].time <= visibleUntil; index++) {
+            for (let index = first; index < notes.length; index++) {
                 const note = notes[index];
-                const pressTime = note.hit_played ? note.time + note.hit_error : null;
-                const releaseTime = note.hold ? (note.release_played ? note.end_time + note.release_error : note.end_time) : pressTime;
-                const x = left + note.lane * lane + 3;
-                const color = laneColor(note.lane, keyCount);
-                const headY = judgeY - (note.time - time) * pxPerMs;
+                const x = fieldX + note.lane * laneStep;
+                const screenY = judgeY - (note.time - time) * pxPerMs;
 
-                if (pressTime !== null && time >= (note.hold ? releaseTime : pressTime)) {
+                if (screenY + noteSize < 0) {
+                    break;
+                }
+
+                const holdPx = note.hold ? (note.end_time - note.time) * pxPerMs : 0;
+
+                if (screenY - holdPx >= height) {
                     continue;
                 }
 
-                const missed = pressTime === null && time > note.time + MISS_DELAY_MS;
-                context.globalAlpha = missed ? 0.35 : 1;
-                context.fillStyle = color;
+                const pressTime = note.hit_played ? note.time + note.hit_error : null;
+                const hitPlayed = pressTime !== null && time >= pressTime;
+                const releaseTime = note.hold ? (note.release_played ? note.end_time + note.release_error : note.end_time) : null;
+                const released = note.hold && hitPlayed && time >= releaseTime;
+                const holding = note.hold && hitPlayed && !released;
+                const dropped = released && note.release_played && note.release_error < 0 && scoreName(note.release_score) === "MISS";
+                const cutY = dropped ? judgeY - (releaseTime - time) * pxPerMs : judgeY;
+                const image = skin?.notes[note.lane % 7];
+                const color = colorAt(x, screenY);
 
                 if (note.hold) {
-                    const holding = pressTime !== null && time >= pressTime;
-                    const tailY = judgeY - (note.end_time - time) * pxPerMs;
-                    const bodyBottom = holding ? judgeY : headY;
-                    context.globalAlpha *= 0.45;
-                    context.fillRect(x + lane * 0.18, tailY, lane - 6 - lane * 0.36, Math.max(0, bodyBottom - tailY));
-                    context.globalAlpha = missed ? 0.35 : 1;
-                    context.fillRect(x, (holding ? judgeY : headY) - noteHeight / 2, lane - 6, noteHeight);
+                    const tailY = screenY - holdPx + noteSize / 2;
+                    let bodyBottom = screenY + noteSize / 2;
+
+                    if (hitPlayed) {
+                        bodyBottom = Math.min(bodyBottom, cutY + noteSize / 2);
+                    }
+
+                    bodyBottom = Math.min(bodyBottom, height);
+
+                    if (bodyBottom > tailY) {
+                        holdBody(x, tailY, bodyBottom, color);
+                        holdCap(x, tailY, color);
+                    }
                 }
-                else {
-                    context.fillRect(x, headY - noteHeight / 2, lane - 6, noteHeight);
+
+                if (holding) {
+                    square(image, x, Math.min(screenY, judgeY), colorAt(x, judgeY), 1);
+                }
+                else if ((!hitPlayed || screenY <= judgeY) && screenY < height) {
+                    square(image, x, screenY, color, 1);
                 }
             }
 
@@ -269,12 +443,12 @@ const ReplayViewer = {
 
             const barWidth = Math.min(width - 40, 260);
             const barX = (width - barWidth) / 2;
-            const barY = height - 26;
+            const barY = height - height * JUDGE_HEIGHT / 2;
             const range = 180;
             context.fillStyle = "rgba(255, 255, 255, 0.08)";
-            context.fillRect(barX, barY - 7, barWidth, 14);
+            context.fillRect(barX, barY - 5, barWidth, 10);
             context.fillStyle = "rgba(255, 255, 255, 0.5)";
-            context.fillRect(width / 2 - 1, barY - 9, 2, 18);
+            context.fillRect(width / 2 - 1, barY - 7, 2, 14);
 
             for (let index = latest; index >= 0 && time - events[index].time < TIMING_HISTORY_MS; index--) {
                 const past = events[index];
@@ -285,7 +459,7 @@ const ReplayViewer = {
 
                 context.globalAlpha = 1 - (time - past.time) / TIMING_HISTORY_MS;
                 context.fillStyle = HIT_SCORES[past.score].color;
-                context.fillRect(width / 2 + (Math.max(-range, Math.min(range, past.error)) / range) * (barWidth / 2) - 1, barY - 7, 2, 14);
+                context.fillRect(width / 2 + (Math.max(-range, Math.min(range, past.error)) / range) * (barWidth / 2) - 1, barY - 5, 2, 10);
             }
 
             context.globalAlpha = 1;
@@ -306,9 +480,9 @@ const ReplayViewer = {
         <div class="replay-stage">
             <canvas ref="canvas" tabindex="0" role="img" aria-label="Replay of this play" @click="toggle" @keydown="key"></canvas>
         </div>
+        <hit-error-graph class="replay-timeline" :timeline="timeline" :position="position" @seek="seekTo"></hit-error-graph>
         <div class="replay-controls">
             <button type="button" class="button is-link" @click="toggle" :aria-label="playing ? 'Pause replay' : 'Play replay'">{{ playing ? "Pause" : "Play" }}</button>
-            <input class="replay-seek" type="range" :min="prepared.start" :max="prepared.end" step="1" :value="position" @input="seek" aria-label="Replay position">
             <span class="replay-clock">{{ clock }}</span>
             <div class="select is-small">
                 <select v-model.number="speed" aria-label="Playback speed">
@@ -317,7 +491,7 @@ const ReplayViewer = {
             </div>
             <div class="select is-small">
                 <select v-model.number="scroll" aria-label="Scroll speed">
-                    <option v-for="option in [0.8, 1.2, 1.6, 2.2]" :value="option">Scroll {{ option }}</option>
+                    <option v-for="option in [1, 1.5, 2, 2.5, 3]" :value="option">Scroll {{ option }}</option>
                 </select>
             </div>
         </div>
@@ -325,17 +499,21 @@ const ReplayViewer = {
 };
 
 const HitErrorGraph = {
-    props: {timeline: Object},
+    props: {timeline: Object, position: {type: Number, default: null}},
+    emits: ["seek"],
     computed: {
         prepared: (self) => prepareTimeline(self.timeline),
         points: (self) => self.prepared.events.filter((event) => event.error !== null),
         misses: (self) => self.prepared.events.filter((event) => event.score === "MISS"),
         range: (self) => Math.max(160, ...self.points.map((event) => Math.abs(event.error))),
+        seekable: (self) => self.position !== null,
+        playhead: (self) => self.x(Math.min(self.prepared.end, Math.max(self.prepared.start, self.position ?? self.prepared.start))),
+        valueText: (self) => formatClock((self.position ?? 0) - Math.max(0, self.prepared.start)),
     },
     methods: {
         x(time) {
             const {start, end} = this.prepared;
-            return ((time - Math.max(0, start)) / Math.max(1, end - Math.max(0, start))) * 1000;
+            return ((time - start) / Math.max(1, end - start)) * 1000;
         },
         y(error) {
             return 60 + (error / this.range) * 56;
@@ -343,14 +521,65 @@ const HitErrorGraph = {
         color(score) {
             return HIT_SCORES[score].color;
         },
+        timeAt(event) {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const fraction = Math.min(1, Math.max(0, (event.clientX - bounds.left) / Math.max(1, bounds.width)));
+            return this.prepared.start + fraction * (this.prepared.end - this.prepared.start);
+        },
+        press(event) {
+            if (!this.seekable || event.button !== 0) {
+                return;
+            }
+
+            this.dragging = true;
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            this.$emit("seek", this.timeAt(event));
+        },
+        move(event) {
+            if (this.dragging) {
+                this.$emit("seek", this.timeAt(event));
+            }
+        },
+        release(event) {
+            this.dragging = false;
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+        },
+        key(event) {
+            if (!this.seekable) {
+                return;
+            }
+
+            const targets = {
+                ArrowLeft: this.position - SEEK_STEP_MS,
+                ArrowRight: this.position + SEEK_STEP_MS,
+                Home: this.prepared.start,
+                End: this.prepared.end,
+            };
+
+            if (event.key in targets) {
+                event.preventDefault();
+                this.$emit("seek", targets[event.key]);
+            }
+        },
     },
-    template: `<figure class="hit-error-graph">
-        <svg viewBox="0 0 1000 120" preserveAspectRatio="none" role="img" :aria-label="'Hit timing over the song, ' + points.length + ' timed hits and ' + misses.length + ' misses'">
-            <rect x="0" y="0" width="1000" height="120" class="graph-background"></rect>
-            <line x1="0" x2="1000" y1="60" y2="60" class="graph-center"></line>
-            <line v-for="miss in misses" :x1="x(miss.time)" :x2="x(miss.time)" y1="0" y2="120" class="graph-miss"></line>
-            <circle v-for="point in points" :cx="x(point.time)" :cy="y(point.error)" r="1.8" :fill="color(point.score)"></circle>
+    template: `<figure class="hit-error-graph" :class="{'is-seekable': seekable}">
+        <svg viewBox="0 0 1000 120" preserveAspectRatio="none"
+            :role="seekable ? 'slider' : 'img'"
+            :tabindex="seekable ? 0 : null"
+            :aria-label="seekable ? 'Replay position' : 'Hit timing over the song, ' + points.length + ' timed hits and ' + misses.length + ' misses'"
+            :aria-valuemin="seekable ? prepared.start : null"
+            :aria-valuemax="seekable ? prepared.end : null"
+            :aria-valuenow="seekable ? Math.round(position) : null"
+            :aria-valuetext="seekable ? valueText : null"
+            @pointerdown="press" @pointermove="move" @pointerup="release" @pointercancel="release" @keydown="key">
+            <g v-memo="[prepared, range]">
+                <rect x="0" y="0" width="1000" height="120" class="graph-background"></rect>
+                <line x1="0" x2="1000" y1="60" y2="60" class="graph-center"></line>
+                <line v-for="miss in misses" :x1="x(miss.time)" :x2="x(miss.time)" y1="0" y2="120" class="graph-miss"></line>
+                <circle v-for="point in points" :cx="x(point.time)" :cy="y(point.error)" r="1.8" :fill="color(point.score)"></circle>
+            </g>
+            <rect v-if="seekable" x="0" y="0" :width="playhead" height="120" class="graph-played"></rect>
+            <line v-if="seekable" :x1="playhead" :x2="playhead" y1="0" y2="120" class="graph-playhead"></line>
         </svg>
-        <figcaption class="is-size-7 has-text-grey">Hit timing over the song: early above the line, late below, misses in red</figcaption>
     </figure>`,
 };

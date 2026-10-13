@@ -402,10 +402,7 @@ app.component("download-button", {
         <a class="button is-primary download-button" :class="size" :href="release?.url || release?.page || fallback">
             {{ release?.label ? 'Download for ' + release.label : 'Download Nascent' }}
         </a>
-        <p class="is-size-7 mt-2">
-            <span v-if="release?.version" class="has-text-grey">{{ release.version }} &middot; </span>
-            <a :href="release?.page || fallback">All platforms</a>
-        </p>
+        <p v-if="release?.version" class="is-size-7 mt-2 has-text-grey">{{ release.version }}</p>
     </div>`,
 });
 

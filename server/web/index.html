@@ -145,7 +145,6 @@
                 <template v-if="view.timeline">
                     <h2 class="title is-4">Replay</h2>
                     <replay-viewer :timeline="view.timeline"></replay-viewer>
-                    <hit-error-graph class="mt-5" :timeline="view.timeline"></hit-error-graph>
                 </template>
                 <p v-else class="has-text-grey">The replay for this play couldn't be loaded.</p>
                 <a class="button is-small mt-3" :href="'/api/v1/plays/' + view.play.id + '/replay'" download>Download replay file</a>
@@ -284,7 +283,7 @@
                             <td class="is-numeric">{{ $f.performance(chart.difficulty) }}</td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.length(chart.duration_ms) }}</td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.number(chart.play_count) }}</td>
-                            <td class="is-hidden-mobile"><span class="tag is-light" :class="{'is-success': chart.status === 'ranked'}">{{ chart.status }}</span></td>
+                            <td class="is-hidden-mobile"><span class="tag" :class="chart.status === 'ranked' ? 'is-success is-dark' : 'is-light'">{{ chart.status }}</span></td>
                         </tr></tbody>
                     </table>
                 </div>
