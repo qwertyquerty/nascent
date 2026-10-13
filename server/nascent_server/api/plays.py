@@ -1,21 +1,25 @@
+import nascent_core as nc
 from flask import Blueprint, request
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from .. import timeutil
 from ..errors import ApiError
 from ..extensions import db
 from ..models import COUNTED_PLAY_STATUSES, Play, User
+from ..queries import count_rows
 from ..schemas import SubmissionIn, TicketIn, pagination, parse_body, query_int
 from ..security import current_user
 from ..serializers import chart_detail, play_out
+from ..services.charts import native_chart
 from ..services.plays import Standing, issue_ticket, submit_play
-from ..storage import json_gz_response
+from ..storage import get_json_gz, json_gz_response
 from .lookup import can_see_private, get_visible_play_or_404
 
 blueprint = Blueprint("plays", __name__, url_prefix="/plays")
 
 SORTS = ("recent", "performance")
+TIMELINE_MAX_AGE = 3600
 
 
 def standing_out(standing: Standing) -> dict:
@@ -62,7 +66,7 @@ def list_plays():
     else:
         order = (Play.id.desc(),)
 
-    total = db.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    total = count_rows(query)
     plays = db.session.scalars(query.options(joinedload(Play.user), joinedload(Play.chart)).order_by(*order).offset(offset).limit(limit)).all()
     return {"sort": sort, "total": total, "plays": [play_out(play) for play in plays]}
 
@@ -91,3 +95,35 @@ def get_play(play_id: int):
 def get_replay(play_id: int):
     play = get_visible_play_or_404(play_id)
     return json_gz_response(play.replay_key, f"nascent-replay-{play.id}.json")
+
+
+@blueprint.get("/<int:play_id>/timeline")
+def get_timeline(play_id: int):
+    play = get_visible_play_or_404(play_id)
+    native = native_chart(play.chart)
+    replay = nc.Replay.from_json(get_json_gz(play.replay_key))
+    simulation = nc.simulate(native, replay)
+    notes = [
+        {
+            "lane": note.lane,
+            "hold": note.is_hold,
+            "time": note.time,
+            "end_time": note.end_time,
+            "hit_played": note.hit_played,
+            "hit_error": note.hit_error,
+            "hit_score": note.hit_score,
+            "release_played": note.release_played,
+            "release_error": note.release_error,
+            "release_score": note.release_score,
+        }
+        for note in simulation.notes
+    ]
+    body = {
+        "play_id": play.id,
+        "rate": replay.rate,
+        "key_count": native.key_count,
+        "end_time": replay.end_time,
+        "inputs": [[time, lane, pressed] for time, lane, pressed in replay.inputs],
+        "notes": notes,
+    }
+    return body, 200, {"Cache-Control": f"public, max-age={TIMELINE_MAX_AGE}"}

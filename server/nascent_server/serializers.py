@@ -20,10 +20,11 @@ def totals_out(stats: User | UserKeyStats, grade_counts: dict[str, int]) -> dict
     }
 
 
-def key_mode_out(stats: UserKeyStats, rank: int | None, grade_counts: dict[str, int]) -> dict[str, Any]:
+def key_mode_out(stats: UserKeyStats, rank: int | None, ranked_players: int | None, grade_counts: dict[str, int]) -> dict[str, Any]:
     return {
         "key_count": stats.key_count,
         "global_rank": rank,
+        "ranked_players": ranked_players,
         "performance": stats.performance,
         "accuracy": stats.accuracy,
         **totals_out(stats, grade_counts),

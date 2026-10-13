@@ -4,44 +4,57 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="nascent-api" content="/api/v1">
+    <meta name="theme-color" content="#00b1e1">
     <title>Nascent</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tomorrow:wght@400;500&display=swap">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
-    <link rel="stylesheet" href="app.css">
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
-    <script src="app.js" defer></script>
+    <link rel="icon" type="image/png" href="/logo_n.png">
+    <link rel="preload" href="/display_font.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css" integrity="sha384-tl5h4XuWmVzPeVWU0x8bx0j/5iMwCBduLEgZ+2lH4Wjda+4+q3mpCww74dgAB3OX" crossorigin="anonymous">
+    <link rel="stylesheet" href="/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" integrity="sha384-W/1Fp/LgAYO/oTn9Gs+PbeWuMuq1eQCnUMPCeg8POmMYchhzxctjEqtbiCIxDOON" crossorigin="anonymous"></script>
+    <script src="/replay.js" defer></script>
+    <script src="/app.js" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#content">Skip to content</a>
 <div id="app" v-cloak>
-    <nav class="navbar has-shadow">
+    <nav class="navbar has-shadow" aria-label="Main">
         <div class="container">
             <div class="navbar-brand">
-                <a class="navbar-item" href="#/"><img class="nav-logo" src="/logo_n.png" alt="Nascent"></a>
-                <a class="navbar-burger" :class="{'is-active': menuOpen}" @click="menuOpen = !menuOpen"><span></span><span></span><span></span><span></span></a>
+                <a class="navbar-item" href="/" aria-label="Nascent home"><img class="nav-logo" src="/logo_n.png" alt=""></a>
+                <button type="button" class="navbar-burger" :class="{'is-active': menuOpen}" :aria-expanded="menuOpen" aria-controls="main-menu" aria-label="Menu" @click="menuOpen = !menuOpen">
+                    <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+                </button>
             </div>
-            <div class="navbar-menu" :class="{'is-active': menuOpen}">
+            <div id="main-menu" class="navbar-menu" :class="{'is-active': menuOpen}">
                 <div class="navbar-start">
-                    <a class="navbar-item" :class="{'is-active': route.name === 'home'}" href="#/">Home</a>
-                    <a class="navbar-item" :class="{'is-active': route.name === 'leaderboard'}" href="#/leaderboard">Leaderboard</a>
-                    <a class="navbar-item" :class="{'is-active': route.name.startsWith('chart')}" href="#/charts">Charts</a>
-                    <a class="navbar-item" :class="{'is-active': route.name === 'plays'}" href="#/plays">Plays</a>
+                    <a v-for="[path, label, names] in [['/', 'Home', ['home']], ['/leaderboard', 'Leaderboard', ['leaderboard']], ['/charts', 'Charts', ['charts', 'chart']], ['/plays', 'Plays', ['plays', 'play']]]"
+                        class="navbar-item" :class="{'is-active': names.includes(route.name)}" :href="path" :aria-current="names.includes(route.name) ? 'page' : null">{{ label }}</a>
                 </div>
-                <form class="navbar-end navbar-item" @submit.prevent="submit($event)">
-                    <input class="input is-small" name="player" type="search" placeholder="Find a player" required>
-                </form>
+                <div class="navbar-end">
+                    <div class="navbar-item"><player-search></player-search></div>
+                    <div class="navbar-item"><a class="button is-small is-primary download-button" :href="release?.url || release?.page || 'https://github.com/qwertyquerty/nascent/releases/latest'">Download</a></div>
+                </div>
             </div>
         </div>
     </nav>
 
-    <main class="section">
-        <div class="container">
-            <div v-if="error" class="notification is-danger is-light">{{ error }}</div>
-            <progress v-else-if="!view" class="progress is-small is-link"></progress>
+    <main id="content" class="section" tabindex="-1" :aria-busy="loading">
+        <div class="container" :class="{'is-refreshing': loading && view}">
+            <div v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</div>
+            <logo-loader v-else-if="!view"></logo-loader>
 
             <template v-else-if="route.name === 'home'">
-                <h1 class="title"><img class="home-logo" src="/logo.png" alt="Nascent"></h1>
+                <section class="hero">
+                    <div class="hero-body">
+                        <h1 class="title"><img class="home-logo" src="/logo.png" alt="Nascent"></h1>
+                        <p class="subtitle hero-tagline">A vertical scrolling rhythm game passion project.</p>
+                        <div class="hero-actions">
+                            <download-button :release="release" size="is-medium"></download-button>
+                            <a class="button is-medium is-link is-outlined" href="/leaderboard">Leaderboards</a>
+                        </div>
+                    </div>
+                </section>
+
                 <div class="columns is-multiline is-mobile">
                     <div v-for="[label, value] in [
                         ['Players', $f.number(view.stats.players)],
@@ -51,20 +64,20 @@
                         ['Ranked charts', $f.number(view.stats.ranked_charts)],
                         ['Time played', $f.playtime(view.stats.total_playtime_ms)],
                     ]" class="column is-2-desktop is-4-tablet is-6-mobile">
-                        <div class="box has-text-centered"><p class="is-size-7 is-uppercase has-text-grey">{{ label }}</p><p class="title is-4">{{ value }}</p></div>
+                        <div class="box stat"><p class="stat-label">{{ label }}</p><p class="stat-value">{{ value }}</p></div>
                     </div>
                 </div>
                 <div class="columns">
                     <div class="column">
                         <h2 class="title is-4">Top players</h2>
-                        <key-tabs :current="view.keyCount" path="/" :params="{plays_key_count: route.params.plays_key_count}"></key-tabs>
-                        <player-table :entries="view.board.entries"></player-table>
+                        <key-tabs :current="view.keyCount" path="/" :params="{plays_key_count: route.params.plays_key_count}" label="Top players key mode"></key-tabs>
+                        <player-table :entries="view.board.entries" :caption="'Top ' + view.keyCount + 'K players'"></player-table>
                         <a class="button is-small" :href="$link.to('/leaderboard', {key_count: view.keyCount})">Full {{ view.keyCount }}K leaderboard</a>
                     </div>
                     <div class="column">
                         <h2 class="title is-4">Top plays</h2>
-                        <key-tabs :current="view.playsKeyCount" path="/" param="plays_key_count" :params="{key_count: route.params.key_count}"></key-tabs>
-                        <play-table :plays="view.topPlays" show-user empty="No ranked plays yet."></play-table>
+                        <key-tabs :current="view.playsKeyCount" path="/" param="plays_key_count" :params="{key_count: route.params.key_count}" label="Top plays key mode"></key-tabs>
+                        <play-table :plays="view.topPlays" show-user empty="No ranked plays yet." :caption="'Top ' + view.playsKeyCount + 'K plays'"></play-table>
                         <a class="button is-small" :href="$link.to('/plays', {key_count: view.playsKeyCount, sort: 'performance'})">All top {{ view.playsKeyCount }}K plays</a>
                     </div>
                 </div>
@@ -74,16 +87,16 @@
                 <h1 class="title">{{ view.keyCount }}K leaderboard</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} ranked players</p>
                 <key-tabs :current="view.keyCount" path="/leaderboard" :params="{sort: route.params.sort}"></key-tabs>
-                <div class="field is-grouped is-align-items-center mb-4">
-                    <span class="mr-3">Sort by</span>
-                    <div class="buttons has-addons mb-0">
+                <div class="field is-grouped is-grouped-multiline is-align-items-center mb-4">
+                    <span class="mr-3" id="leaderboard-sort">Sort by</span>
+                    <div class="buttons has-addons mb-0" role="group" aria-labelledby="leaderboard-sort">
                         <a v-for="[sort, label] in [['performance', 'Performance'], ['accuracy', 'Accuracy'], ['ranked_plays', 'Ranked plays']]"
-                            class="button is-small mb-0" :class="{'is-link is-selected': sort === view.sort}"
+                            class="button is-small mb-0" :class="{'is-link is-selected': sort === view.sort}" :aria-current="sort === view.sort ? 'true' : null"
                             :href="$link.to('/leaderboard', {key_count: view.keyCount, sort: sort === 'performance' ? null : sort})">{{ label }}</a>
                     </div>
                 </div>
                 <pager :total="view.total" top></pager>
-                <player-table :entries="view.entries" detailed></player-table>
+                <player-table :entries="view.entries" detailed :caption="view.keyCount + 'K leaderboard'"></player-table>
                 <pager :total="view.total"></pager>
             </template>
 
@@ -91,15 +104,51 @@
                 <h1 class="title">Plays</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} {{ view.keyCount }}K {{ view.performance ? 'ranked plays' : 'plays' }}</p>
                 <div class="tabs">
-                    <ul>
-                        <li :class="{'is-active': !view.performance}"><a :href="$link.to('/plays', {key_count: view.keyCount})">Recent</a></li>
-                        <li :class="{'is-active': view.performance}"><a :href="$link.to('/plays', {key_count: view.keyCount, sort: 'performance'})">Top performance</a></li>
+                    <ul aria-label="Order">
+                        <li :class="{'is-active': !view.performance}"><a :href="$link.to('/plays', {key_count: view.keyCount})" :aria-current="!view.performance ? 'page' : null">Recent</a></li>
+                        <li :class="{'is-active': view.performance}"><a :href="$link.to('/plays', {key_count: view.keyCount, sort: 'performance'})" :aria-current="view.performance ? 'page' : null">Top performance</a></li>
                     </ul>
                 </div>
                 <key-tabs :current="view.keyCount" path="/plays" :params="{sort: route.params.sort}"></key-tabs>
                 <pager :total="view.total" top></pager>
-                <play-table :plays="view.plays" show-user :empty="view.performance ? 'No ranked plays yet.' : 'No plays yet.'"></play-table>
+                <play-table :plays="view.plays" show-user :empty="view.performance ? 'No ranked plays yet.' : 'No plays yet.'" caption="Plays"></play-table>
                 <pager :total="view.total"></pager>
+            </template>
+
+            <template v-else-if="route.name === 'play'">
+                <p class="is-size-6 mb-2"><a :href="$link.user(view.play.user.username)">{{ view.play.user.username }}</a> &middot; <rel-time :value="view.play.submitted_at"></rel-time></p>
+                <h1 class="title is-3 mb-1"><a :href="$link.chart(view.play.chart.hash, view.play.rate)">{{ view.titles.main }}</a></h1>
+                <p class="subtitle is-6 mb-4"><span v-if="view.titles.sub" class="has-text-grey">{{ view.titles.sub }} &middot; </span>[{{ view.play.chart.difficulty_name }}] by {{ view.play.chart.mapper }}</p>
+
+                <div class="play-summary box">
+                    <span class="grade play-grade" :class="'grade-' + view.play.grade">{{ view.play.grade }}</span>
+                    <div v-for="[label, value, extra] in [
+                        ['Accuracy', $f.accuracy(view.play.accuracy)],
+                        ['Performance', view.play.ranked ? $f.performance(view.play.performance) : 'Unranked'],
+                        ['Rate', $f.rate(view.play.rate), view.play.rate !== 1 ? 'rate-changed' : ''],
+                        ['Max combo', $f.number(view.play.max_combo)],
+                        ['Mean error', $f.error(view.play.average_error)],
+                        ['Difficulty', $f.performance(view.play.difficulty)],
+                    ]" class="play-stat">
+                        <p class="stat-label">{{ label }}</p><p class="stat-value" :class="extra">{{ value }}</p>
+                    </div>
+                </div>
+
+                <div class="tags mb-4" aria-label="Judgements">
+                    <span v-for="[score, count] in Object.entries(view.play.score_counts).filter(([score]) => score !== 'NONE')" :key="score" class="tag is-medium judgement-count">
+                        <span class="judgement-name" :class="'judgement-' + score.toLowerCase()">{{ score }}</span>{{ $f.number(count) }}
+                    </span>
+                    <span v-if="view.play.status !== 'verified'" class="tag is-medium is-warning is-light">{{ view.play.status.replace('_', ' ') }}</span>
+                    <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Chart best</span>
+                </div>
+
+                <template v-if="view.timeline">
+                    <h2 class="title is-4">Replay</h2>
+                    <replay-viewer :timeline="view.timeline"></replay-viewer>
+                    <hit-error-graph class="mt-5" :timeline="view.timeline"></hit-error-graph>
+                </template>
+                <p v-else class="has-text-grey">The replay for this play couldn't be loaded.</p>
+                <a class="button is-small mt-3" :href="'/api/v1/plays/' + view.play.id + '/replay'" download>Download replay file</a>
             </template>
 
             <template v-else-if="route.name === 'user'">
@@ -108,7 +157,12 @@
                     <span v-if="view.user.role !== 'user'" class="tag is-info is-light">{{ view.user.role }}</span>
                     <span v-if="view.user.is_restricted" class="tag is-danger is-light">restricted</span>
                 </h1>
-                <p class="subtitle is-6 has-text-grey">Joined {{ $f.date(view.user.created_at) }} &middot; last played {{ $f.date(view.user.last_played_at) }}</p>
+                <p class="subtitle is-6 has-text-grey">
+                    <span v-if="view.strongest && view.strongest.global_rank" class="profile-standing">
+                        {{ view.strongest.key_count }}K <rank-cell :rank="view.strongest.global_rank"></rank-cell> &middot; {{ $f.top(view.strongest.global_rank, view.strongest.ranked_players) }} &middot;
+                    </span>
+                    Joined <rel-time :value="view.user.created_at"></rel-time> &middot; last played <rel-time :value="view.user.last_played_at"></rel-time>
+                </p>
                 <div class="columns is-multiline is-mobile">
                     <div v-for="[label, value] in [
                         ['Plays', $f.number(view.user.stats.play_count)],
@@ -117,55 +171,58 @@
                         ['Time played', $f.playtime(view.user.stats.total_playtime_ms)],
                         ['Max combo', $f.number(view.user.stats.max_combo)],
                     ]" class="column is-2-desktop is-4-tablet is-6-mobile">
-                        <div class="box has-text-centered"><p class="is-size-7 is-uppercase has-text-grey">{{ label }}</p><p class="title is-4">{{ value }}</p></div>
+                        <div class="box stat"><p class="stat-label">{{ label }}</p><p class="stat-value">{{ value }}</p></div>
                     </div>
                 </div>
-                <div class="tags mb-5">
-                    <span v-for="grade in 'XSABCDEF'" class="tag is-medium">
-                        <span class="grade mr-2" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}
-                    </span>
-                </div>
+                <ul class="grade-counts mb-5" aria-label="Grades on best plays">
+                    <li v-for="grade in 'XSABCDEF'" :key="grade"><span class="grade" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}</li>
+                </ul>
 
                 <h2 class="title is-4">Key modes</h2>
                 <div class="table-container">
-                    <table class="table is-fullwidth is-hoverable is-striped">
+                    <table class="table is-fullwidth is-hoverable">
+                        <caption class="is-sr-only">Stats per key mode</caption>
                         <thead><tr>
-                            <th>Mode</th><th class="is-numeric">Rank</th><th class="is-numeric">Performance</th>
-                            <th class="is-numeric">Accuracy</th><th class="is-numeric">Ranked plays</th><th class="is-numeric">Time played</th>
+                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Top</th><th scope="col" class="is-numeric">Performance</th>
+                            <th scope="col" class="is-numeric">Accuracy</th><th scope="col" class="is-numeric is-hidden-mobile">Ranked plays</th><th scope="col" class="is-numeric is-hidden-mobile">Time played</th>
                         </tr></thead>
                         <tbody><tr v-for="mode in view.user.key_modes" :key="mode.key_count">
-                            <td>{{ mode.key_count }}K</td>
-                            <td class="is-numeric">{{ $f.rank(mode.global_rank) }}</td>
+                            <th scope="row">{{ mode.key_count }}K</th>
+                            <td class="is-numeric"><rank-cell :rank="mode.global_rank"></rank-cell></td>
+                            <td class="is-numeric">{{ $f.top(mode.global_rank, mode.ranked_players) || "—" }}</td>
                             <td class="is-numeric">{{ $f.performance(mode.performance) }}</td>
                             <td class="is-numeric">{{ $f.accuracy(mode.accuracy) }}</td>
-                            <td class="is-numeric">{{ $f.number(mode.ranked_play_count) }}</td>
-                            <td class="is-numeric">{{ $f.playtime(mode.total_playtime_ms) }}</td>
+                            <td class="is-numeric is-hidden-mobile">{{ $f.number(mode.ranked_play_count) }}</td>
+                            <td class="is-numeric is-hidden-mobile">{{ $f.playtime(mode.total_playtime_ms) }}</td>
                         </tr></tbody>
                     </table>
                 </div>
 
                 <div class="tabs mt-5">
-                    <ul>
-                        <li v-for="mode in view.modes" :class="{'is-active': !view.recent && mode.key_count === view.keyCount}">
-                            <a :href="$link.user(view.user.username, {key_count: mode.key_count})">{{ mode.key_count }}K best</a>
+                    <ul aria-label="Plays">
+                        <li v-for="mode in view.modes" :key="mode.key_count" :class="{'is-active': !view.recent && mode.key_count === view.keyCount}">
+                            <a :href="$link.user(view.user.username, {key_count: mode.key_count})" :aria-current="!view.recent && mode.key_count === view.keyCount ? 'page' : null">{{ mode.key_count }}K best</a>
                         </li>
-                        <li :class="{'is-active': view.recent}"><a :href="$link.user(view.user.username, {tab: 'recent'})">Recent plays</a></li>
+                        <li :class="{'is-active': view.recent}"><a :href="$link.user(view.user.username, {tab: 'recent'})" :aria-current="view.recent ? 'page' : null">Recent plays</a></li>
                     </ul>
                 </div>
-                <play-table :plays="view.plays"></play-table>
+                <pager :total="view.total" top></pager>
+                <play-table :plays="view.plays" :caption="view.recent ? 'Recent plays' : view.keyCount + 'K best plays'"></play-table>
+                <pager :total="view.total"></pager>
             </template>
 
             <template v-else-if="route.name === 'charts'">
                 <h1 class="title">Charts</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} {{ route.params.status === 'all' ? 'charts' : 'ranked charts' }}</p>
-                <form class="mb-5" @submit.prevent="submit($event, '/charts')">
+                <form class="mb-5 chart-filters" @submit.prevent="submit($event, '/charts')" aria-label="Chart filters">
                     <div class="field is-grouped is-grouped-multiline">
                         <div class="control is-expanded">
-                            <input class="input" name="q" type="search" placeholder="Search title, artist or mapper" :value="route.params.q">
+                            <label class="is-sr-only" for="chart-search">Search charts</label>
+                            <input id="chart-search" class="input" name="q" type="search" placeholder="Search title, artist or mapper" :value="route.params.q">
                         </div>
                         <div class="control">
                             <div class="select">
-                                <select name="key_count" @change="$event.target.form.requestSubmit()">
+                                <select name="key_count" aria-label="Key mode" @change="$event.target.form.requestSubmit()">
                                     <option value="">Any keys</option>
                                     <option v-for="count in keyCounts" :value="count" :selected="route.params.key_count == count">{{ count }}K</option>
                                 </select>
@@ -173,7 +230,7 @@
                         </div>
                         <div class="control">
                             <div class="select">
-                                <select name="status" @change="$event.target.form.requestSubmit()">
+                                <select name="status" aria-label="Status" @change="$event.target.form.requestSubmit()">
                                     <option value="">Ranked</option>
                                     <option value="all" :selected="route.params.status === 'all'">All charts</option>
                                 </select>
@@ -182,58 +239,52 @@
                     </div>
                     <div class="field is-grouped is-grouped-multiline is-align-items-center">
                         <div class="control"><span class="has-text-grey">Difficulty</span></div>
-                        <div class="control">
-                            <input class="input range-input" name="min_difficulty" type="number" min="0" step="any" placeholder="Min" :value="route.params.min_difficulty">
-                        </div>
-                        <div class="control">
-                            <input class="input range-input" name="max_difficulty" type="number" min="0" step="any" placeholder="Max" :value="route.params.max_difficulty">
-                        </div>
+                        <div class="control"><input class="input range-input" name="min_difficulty" type="number" min="0" step="any" placeholder="Min" aria-label="Minimum difficulty" :value="route.params.min_difficulty"></div>
+                        <div class="control"><input class="input range-input" name="max_difficulty" type="number" min="0" step="any" placeholder="Max" aria-label="Maximum difficulty" :value="route.params.max_difficulty"></div>
                         <div class="control"><span class="has-text-grey">Length</span></div>
-                        <div class="control">
-                            <input class="input range-input" name="min_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Min m:ss" :value="route.params.min_length">
-                        </div>
-                        <div class="control">
-                            <input class="input range-input" name="max_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Max m:ss" :value="route.params.max_length">
-                        </div>
-                        <div class="control"><button class="button is-link">Search</button></div>
+                        <div class="control"><input class="input range-input" name="min_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Min m:ss" aria-label="Minimum length" :value="route.params.min_length"></div>
+                        <div class="control"><input class="input range-input" name="max_length" pattern="\d+(\.\d+)?(:\d{1,2})?" placeholder="Max m:ss" aria-label="Maximum length" :value="route.params.max_length"></div>
                     </div>
                     <div class="field is-grouped is-grouped-multiline is-align-items-center">
                         <div class="control"><span class="has-text-grey">Sort by</span></div>
                         <div class="control">
                             <div class="select">
-                                <select name="sort" @change="$event.target.form.requestSubmit()">
-                                    <option v-for="[sort, label] in [['play_count', 'Plays'], ['difficulty', 'Difficulty'], ['length', 'Length']]"
-                                        :value="sort" :selected="(route.params.sort || 'play_count') === sort">{{ label }}</option>
+                                <select name="sort" aria-label="Sort by" @change="$event.target.form.requestSubmit()">
+                                    <option v-for="[sort, label] in [['play_count', 'Plays'], ['difficulty', 'Difficulty'], ['length', 'Length']]" :value="sort" :selected="(route.params.sort || 'play_count') === sort">{{ label }}</option>
                                 </select>
                             </div>
                         </div>
                         <div class="control">
                             <div class="select">
-                                <select name="order" @change="$event.target.form.requestSubmit()">
+                                <select name="order" aria-label="Order" @change="$event.target.form.requestSubmit()">
                                     <option value="desc">Highest first</option>
                                     <option value="asc" :selected="route.params.order === 'asc'">Lowest first</option>
                                 </select>
                             </div>
                         </div>
+                        <div class="control"><button class="button is-link">Search</button></div>
+                        <div v-if="view.filtered" class="control"><a class="button is-light" href="/charts">Clear filters</a></div>
                     </div>
                 </form>
                 <pager :total="view.total" top></pager>
-                <div class="table-container">
-                    <table class="table is-fullwidth is-hoverable is-striped">
+                <p v-if="!view.charts.length" class="has-text-grey">No charts match these filters.</p>
+                <div v-else class="table-container">
+                    <table class="table is-fullwidth is-hoverable">
+                        <caption class="is-sr-only">Charts</caption>
                         <thead><tr>
-                            <th>Song</th><th>Mapper</th><th class="is-numeric">Keys</th><th class="is-numeric">Difficulty</th>
-                            <th class="is-numeric">Length</th><th class="is-numeric">Plays</th><th>Status</th>
+                            <th scope="col">Song</th><th scope="col" class="is-hidden-mobile">Mapper</th><th scope="col" class="is-numeric">Keys</th><th scope="col" class="is-numeric">Difficulty</th>
+                            <th scope="col" class="is-numeric is-hidden-mobile">Length</th><th scope="col" class="is-numeric is-hidden-mobile">Plays</th><th scope="col" class="is-hidden-mobile">Status</th>
                         </tr></thead>
                         <tbody><tr v-for="chart in view.charts" :key="chart.hash">
                             <td class="chart-name">
                                 <a :href="$link.chart(chart.hash)">{{ chart.artist }} - {{ chart.title }}</a> <span class="has-text-grey">[{{ chart.difficulty_name }}]</span>
                             </td>
-                            <td>{{ chart.mapper }}</td>
+                            <td class="is-hidden-mobile">{{ chart.mapper }}</td>
                             <td class="is-numeric">{{ chart.key_count }}K</td>
                             <td class="is-numeric">{{ $f.performance(chart.difficulty) }}</td>
-                            <td class="is-numeric">{{ $f.length(chart.duration_ms) }}</td>
-                            <td class="is-numeric">{{ $f.number(chart.play_count) }}</td>
-                            <td><span class="tag is-light" :class="{'is-success': chart.status === 'ranked'}">{{ chart.status }}</span></td>
+                            <td class="is-numeric is-hidden-mobile">{{ $f.length(chart.duration_ms) }}</td>
+                            <td class="is-numeric is-hidden-mobile">{{ $f.number(chart.play_count) }}</td>
+                            <td class="is-hidden-mobile"><span class="tag is-light" :class="{'is-success': chart.status === 'ranked'}">{{ chart.status }}</span></td>
                         </tr></tbody>
                     </table>
                 </div>
@@ -241,53 +292,67 @@
             </template>
 
             <template v-else-if="route.name === 'chart'">
-                <h1 class="title">{{ view.chart.artist }} - {{ view.chart.title }}</h1>
-                <p class="subtitle">
+                <h1 class="title mb-1">{{ view.titles.main }}</h1>
+                <p v-if="view.titles.sub" class="has-text-grey mb-2">{{ view.titles.sub }}</p>
+                <p class="subtitle is-6 mt-2">
                     [{{ view.chart.difficulty_name }}] by {{ view.chart.mapper }}
                     <span class="tag is-light" :class="{'is-success': view.chart.status === 'ranked'}">{{ view.chart.status }}</span>
+                    <a v-for="source in view.chart.sources.filter((source) => source.url?.startsWith('https://'))" class="ml-2" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.source }} page</a>
                 </p>
-                <p class="mb-4">
-                    {{ view.chart.key_count }}K &middot; {{ $f.length(view.chart.duration_ms) }} &middot;
-                    {{ $f.number(view.chart.note_count) }} notes &middot; {{ $f.number(view.chart.hold_count) }} holds &middot;
-                    {{ $f.number(view.chart.play_count) }} plays
-                    <a v-for="source in view.chart.sources.filter((source) => source.url?.startsWith('https://'))" class="ml-2" :href="source.url" target="_blank" rel="noopener">{{ source.source }}</a>
-                </p>
-                <div class="tabs">
-                    <ul>
-                        <li :class="{'is-active': !view.performance}"><a :href="$link.chart(view.chart.hash, view.performance ? 1 : view.board.rate)">Accuracy</a></li>
-                        <li :class="{'is-active': view.performance}"><a :href="$link.chartPerformance(view.chart.hash)">Performance</a></li>
+
+                <div class="chart-headline box">
+                    <div class="chart-difficulty">
+                        <p class="stat-label">Difficulty at {{ $f.rate(view.rate) }}</p>
+                        <p class="difficulty-value">{{ $f.performance(view.difficulty) }}</p>
+                    </div>
+                    <div v-for="[label, value] in [
+                        ['Keys', view.chart.key_count + 'K'],
+                        ['Length', $f.length(view.chart.duration_ms / view.rate)],
+                        ['Notes', $f.number(view.chart.note_count)],
+                        ['Holds', $f.number(view.chart.hold_count)],
+                        ['Plays', $f.number(view.chart.play_count)],
+                    ]" class="play-stat">
+                        <p class="stat-label">{{ label }}</p><p class="stat-value">{{ value }}</p>
+                    </div>
+                </div>
+
+                <density-graph :hash="view.chart.hash" :rate="view.rate"></density-graph>
+
+                <div class="tabs mt-5">
+                    <ul aria-label="Leaderboard">
+                        <li :class="{'is-active': !view.performance}"><a :href="$link.chart(view.chart.hash, view.performance ? 1 : view.board.rate)" :aria-current="!view.performance ? 'page' : null">Accuracy</a></li>
+                        <li :class="{'is-active': view.performance}"><a :href="$link.chartPerformance(view.chart.hash)" :aria-current="view.performance ? 'page' : null">Performance</a></li>
                     </ul>
                 </div>
                 <template v-if="view.performance">
-                    <p class="mb-4 has-text-grey">
-                        Each player's best performance across every rate &middot; {{ $f.number(view.board.total) }} players
-                    </p>
+                    <p class="mb-4 has-text-grey">Each player's best performance across every rate &middot; {{ $f.number(view.board.total) }} players</p>
                     <pager :total="view.board.total" top></pager>
-                    <play-table :plays="view.board.entries" show-user :show-chart="false"
+                    <play-table :plays="view.board.entries" show-user :show-chart="false" caption="Performance leaderboard"
                         :empty="view.chart.status === 'ranked' ? 'Nobody has a ranked play on this chart yet.' : 'Only ranked charts give performance.'"></play-table>
                     <pager :total="view.board.total"></pager>
                 </template>
                 <template v-else>
-                <div class="field is-grouped is-align-items-center mb-4">
-                    <h2 class="title is-4 mb-0 mr-3">Leaderboard at</h2>
-                    <div class="select">
-                        <select @change="go($event.target.value)">
-                            <option v-for="entry in view.chart.difficulties" :value="$link.chart(view.chart.hash, entry.rate)" :selected="entry.rate === view.board.rate">
-                                {{ $f.rate(entry.rate) }} &middot; {{ $f.performance(entry.difficulty) }} difficulty
-                            </option>
-                        </select>
+                    <div class="field is-grouped is-grouped-multiline is-align-items-center mb-4">
+                        <label class="title is-5 mb-0 mr-3" for="rate-select">Leaderboard at</label>
+                        <div class="select">
+                            <select id="rate-select" @change="go($event.target.value)">
+                                <option v-for="entry in view.chart.difficulties" :key="entry.rate" :value="$link.chart(view.chart.hash, entry.rate)" :selected="entry.rate === view.board.rate">
+                                    {{ $f.rate(entry.rate) }} &middot; {{ $f.performance(entry.difficulty) }} difficulty &middot; {{ $f.number(view.players[entry.rate] || 0) }} players
+                                </option>
+                            </select>
+                        </div>
                     </div>
-                    <span class="has-text-grey ml-3">{{ $f.number(view.board.total) }} players</span>
-                </div>
-                <pager :total="view.board.total" top></pager>
-                <play-table :plays="view.board.entries" show-user :show-chart="false" empty="Nobody has played this rate yet."></play-table>
-                <pager :total="view.board.total"></pager>
+                    <pager :total="view.board.total" top></pager>
+                    <play-table :plays="view.board.entries" show-user :show-chart="false" empty="Nobody has played this rate yet." :caption="'Leaderboard at ' + $f.rate(view.board.rate)"></play-table>
+                    <pager :total="view.board.total"></pager>
                 </template>
             </template>
         </div>
     </main>
 
-    <footer class="footer has-text-centered is-size-7 has-text-grey">Nascent &middot; <a href="https://github.com/qwertyquerty/nascent">source</a></footer>
+    <footer class="footer has-text-centered is-size-7 has-text-grey">
+        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases/latest'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a>
+    </footer>
 </div>
 </body>
 </html>

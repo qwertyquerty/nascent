@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from pathlib import Path
 
 
 class Config:
@@ -33,6 +34,9 @@ class Config:
 
     TICKET_GRACE = timedelta(hours=1)
     TICKET_MIN_ELAPSED_RATIO = 0.95
+
+    STATS_CACHE_SECONDS = 30
+    WEB_DIR = os.environ.get("NASCENT_WEB_DIR", str(Path(__file__).resolve().parents[1] / "web"))
 
     PROFILE_TOP_PLAYS = 40
     PROFILE_DECAY = 0.9
@@ -72,6 +76,7 @@ class Config:
 
 class TestConfig(Config):
     TESTING = True
+    STATS_CACHE_SECONDS = 0
     SQLALCHEMY_DATABASE_URI = os.environ.get("NASCENT_TEST_DATABASE_URL", "sqlite://")
     SQLALCHEMY_ENGINE_OPTIONS = {}
     REDIS_URL = os.environ.get("NASCENT_TEST_REDIS_URL")

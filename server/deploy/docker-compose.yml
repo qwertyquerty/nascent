@@ -14,8 +14,10 @@ x-server: &server
     NASCENT_CORS_ORIGINS: ${NASCENT_CORS_ORIGINS:-}
     UWSGI_PROCESSES: ${NASCENT_UWSGI_PROCESSES:-4}
     UWSGI_THREADS: ${NASCENT_UWSGI_THREADS:-4}
+    NASCENT_WEB_DIR: /srv/web
   volumes:
     - ${NASCENT_DATA_DIR:-./data}/storage:/storage
+    - ../web:/srv/web:ro
   depends_on:
     postgres:
       condition: service_healthy
