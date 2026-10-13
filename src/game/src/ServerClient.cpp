@@ -8,6 +8,7 @@
 #include <mutex>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace nascent {
     static constexpr long REQUEST_TIMEOUT_S = 20;
@@ -45,26 +46,86 @@ namespace nascent {
         return shared->handle;
     }
 
-    static CURL* create_handle() {
-        CURLSH* share = curl_share();
-        CURL* curl = curl_easy_init();
-
-        if (curl != nullptr) {
-            curl_easy_setopt(curl, CURLOPT_SHARE, share);
-            curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
-            curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-            curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
+    static void configure_handle(CURL* curl) {
+        curl_easy_setopt(curl, CURLOPT_SHARE, curl_share());
+        curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
 #if LIBCURL_VERSION_NUM >= 0x075500
-            curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
-            curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
 #else
-            curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)CURLPROTO_HTTPS);
-            curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long)CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long)CURLPROTO_HTTPS);
 #endif
+#ifdef _WIN32
+        curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
+#endif
+    }
+
+    class PooledHandle {
+        static constexpr size_t MAX_IDLE = 4;
+
+        struct Pool {
+            std::mutex mutex;
+            std::vector<CURL*> idle;
+        };
+
+        static Pool& pool() {
+            static Pool* shared = new Pool();
+            return *shared;
         }
 
-        return curl;
-    }
+        CURL* curl = nullptr;
+
+        public:
+        PooledHandle() {
+            curl_share();
+
+            {
+                std::lock_guard<std::mutex> lock(pool().mutex);
+
+                if (!pool().idle.empty()) {
+                    curl = pool().idle.back();
+                    pool().idle.pop_back();
+                }
+            }
+
+            if (curl == nullptr) {
+                curl = curl_easy_init();
+            }
+
+            if (curl != nullptr) {
+                configure_handle(curl);
+            }
+        }
+
+        ~PooledHandle() {
+            if (curl == nullptr) {
+                return;
+            }
+
+            curl_easy_reset(curl);
+
+            {
+                std::lock_guard<std::mutex> lock(pool().mutex);
+
+                if (pool().idle.size() < MAX_IDLE) {
+                    pool().idle.push_back(curl);
+                    return;
+                }
+            }
+
+            curl_easy_cleanup(curl);
+        }
+
+        PooledHandle(const PooledHandle&) = delete;
+        PooledHandle& operator=(const PooledHandle&) = delete;
+
+        CURL* get() const {
+            return curl;
+        }
+    };
 
     static bool is_https(const std::string& url) {
         static constexpr std::string_view scheme = "https://";
@@ -157,7 +218,8 @@ namespace nascent {
             return response;
         }
 
-        CURL* curl = create_handle();
+        PooledHandle handle;
+        CURL* curl = handle.get();
 
         if (curl == nullptr) {
             response.error = "could not start a request";
@@ -191,10 +253,6 @@ namespace nascent {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)payload.size());
         }
 
-#ifdef _WIN32
-        curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
-#endif
-
         CURLcode result = curl_easy_perform(curl);
 
         if (result != CURLE_OK) {
@@ -214,8 +272,8 @@ namespace nascent {
             }
         }
 
+        curl_easy_reset(curl);
         curl_slist_free_all(headers);
-        curl_easy_cleanup(curl);
         return response;
     }
 
@@ -260,7 +318,8 @@ namespace nascent {
             return std::nullopt;
         }
 
-        CURL* curl = create_handle();
+        PooledHandle handle;
+        CURL* curl = handle.get();
 
         if (curl == nullptr) {
             error = "could not start a download";
@@ -283,13 +342,9 @@ namespace nascent {
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, DOWNLOAD_LOW_SPEED_BYTES);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, DOWNLOAD_LOW_SPEED_TIME_S);
 
-#ifdef _WIN32
-        curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_REVOKE_BEST_EFFORT);
-#endif
-
         CURLcode result = curl_easy_perform(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-        curl_easy_cleanup(curl);
+        curl_easy_reset(curl);
 
         if (result == CURLE_WRITE_ERROR && target.data.size() + CURL_MAX_WRITE_SIZE > max_bytes) {
             error = std::format("the download is larger than {} MB", max_bytes / (1024 * 1024));

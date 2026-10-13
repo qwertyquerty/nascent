@@ -14,6 +14,8 @@ def test_register_login_and_refresh(api, client):
     refresh_token = by_email.get_json()["tokens"]["refresh_token"]
     rotated = api.post("/api/v1/auth/refresh", {"refresh_token": refresh_token})
     assert rotated.status_code == 200
+    ttl = client.application.config["ACCESS_TOKEN_TTL"].total_seconds()
+    assert ttl - 5 <= rotated.get_json()["tokens"]["access_expires_in"] <= ttl
     new_access = rotated.get_json()["tokens"]["access_token"]
     assert api.get("/api/v1/me", new_access).status_code == 200
 

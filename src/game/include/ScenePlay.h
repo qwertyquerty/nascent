@@ -28,6 +28,9 @@ namespace nascent {
 
         int chart_audio_id = -1;
         std::shared_future<ApiResult<PlayTicket>> ticket;
+        double ticket_requested_at = 0;
+        bool waiting_for_ticket = false;
+        float ticket_hint_alpha = 0;
 
         Skin* skin;
         Scene* return_scene;
@@ -56,6 +59,8 @@ namespace nascent {
         void resume(double now);
         void finish();
         void start_attempt();
+        void request_ticket();
+        bool ticket_pending(double now);
         uint8_t chart_lane(uint8_t lane) const;
         uint32_t chart_lanes(uint32_t lanes) const;
         void restart();
@@ -73,6 +78,9 @@ namespace nascent {
         void on_resize() override;
         static constexpr float RESTART_HOLD_TIME = 0.3f;
         static constexpr double PAUSE_COOLDOWN_MS = 1000.0;
+        static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
+        static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
+        static constexpr float TICKET_HINT_FADE_S = 0.3f;
 
         ScenePlay(Chart* chart, Skin* skin, Scene* return_scene);
         ~ScenePlay();

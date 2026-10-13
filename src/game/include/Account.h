@@ -2,6 +2,7 @@
 
 #include "ServerClient.h"
 
+#include <chrono>
 #include <cstdint>
 #include <future>
 #include <string>
@@ -11,6 +12,9 @@ namespace nascent {
         public:
         static constexpr const char* FILE_NAME = "account.json";
         static constexpr uint32_t FILE_VERSION = 1;
+        static constexpr std::chrono::seconds EXPIRY_MARGIN{30};
+        static constexpr std::chrono::seconds REFRESH_MARGIN{300};
+        static constexpr std::chrono::seconds REFRESH_RETRY{30};
 
         static void load();
 

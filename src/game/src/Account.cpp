@@ -4,12 +4,16 @@
 #include "SettingsManager.h"
 #include "SettingsStore.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace nascent {
+    using Clock = std::chrono::steady_clock;
+
     struct AccountFile {
         std::string server_url;
         std::string username;
@@ -24,6 +28,9 @@ namespace nascent {
         std::unique_ptr<SettingsStore<AccountFile>> store;
         AccountFile session;
         std::string access;
+        std::optional<Clock::time_point> refresh_at;
+        std::optional<Clock::time_point> expires_at;
+        bool refreshing = false;
 
         std::filesystem::path account_path() {
             return user_config_directory(SettingsManager::APP_NAME) / Account::FILE_NAME;
@@ -51,6 +58,8 @@ namespace nascent {
             session = AccountFile();
             session.server_url = server_url;
             access.clear();
+            refresh_at.reset();
+            expires_at.reset();
             save_locked();
         }
 
@@ -63,6 +72,15 @@ namespace nascent {
 
             access = tokens["access_token"].get<std::string>();
             session.refresh_token = tokens["refresh_token"].get<std::string>();
+            refresh_at.reset();
+            expires_at.reset();
+
+            if (tokens.contains("access_expires_in") && tokens["access_expires_in"].is_number()) {
+                Clock::time_point now = Clock::now();
+                std::chrono::seconds lifetime(std::max<int64_t>(tokens["access_expires_in"].get<int64_t>(), 0));
+                expires_at = now + lifetime - std::min(lifetime, Account::EXPIRY_MARGIN);
+                refresh_at = now + lifetime - std::min(lifetime, Account::REFRESH_MARGIN);
+            }
 
             if (response.body.contains("user") && response.body["user"].is_object()) {
                 session.username = response.body["user"].value("username", session.username);
@@ -205,12 +223,16 @@ namespace nascent {
         session = AccountFile();
         session.server_url = server_url;
         access.clear();
+        refresh_at.reset();
+        expires_at.reset();
         save_locked();
     }
 
     ServerResponse Account::authorized(const std::string& method, const std::string& path, const nlohmann::json& body) {
         std::string token;
         std::string server_url;
+        bool expired = false;
+        bool refresh_early = false;
 
         {
             std::lock_guard<std::mutex> lock(state_mutex);
@@ -221,15 +243,37 @@ namespace nascent {
 
             token = access;
             server_url = session.server_url;
+            Clock::time_point now = Clock::now();
+            expired = token.empty() || (expires_at && now >= *expires_at);
+
+            if (!expired && !refreshing && refresh_at && now >= *refresh_at) {
+                refreshing = true;
+                refresh_early = true;
+            }
         }
 
-        if (token.empty()) {
-            if (!refresh(token)) {
-                return not_signed_in();
-            }
+        if (refresh_early) {
+            run_detached([token] {
+                bool refreshed = refresh(token);
+                std::lock_guard<std::mutex> lock(state_mutex);
+                refreshing = false;
 
+                if (!refreshed && refresh_at) {
+                    refresh_at = Clock::now() + Account::REFRESH_RETRY;
+                }
+
+                return refreshed;
+            });
+        }
+
+        if (expired) {
+            refresh(token);
             std::lock_guard<std::mutex> lock(state_mutex);
             token = access;
+
+            if (token.empty()) {
+                return not_signed_in();
+            }
         }
 
         ServerResponse response = ServerClient::request(server_url, method, path, body, token);

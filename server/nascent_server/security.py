@@ -63,6 +63,7 @@ class IssuedTokens:
             "token_type": "Bearer",
             "access_token": self.access_token,
             "access_expires_at": timeutil.isoformat(self.session.access_expires_at),
+            "access_expires_in": max(0, int((self.session.access_expires_at - timeutil.utcnow()).total_seconds())),
             "refresh_token": self.refresh_token,
             "refresh_expires_at": timeutil.isoformat(self.session.refresh_expires_at),
         }

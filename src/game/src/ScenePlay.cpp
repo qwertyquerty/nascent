@@ -26,6 +26,7 @@
 #include "Ui.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <format>
@@ -47,6 +48,10 @@ namespace nascent {
     static constexpr float DIAGNOSTICS_PADDING = 10.0f;
     static constexpr size_t DIAGNOSTICS_MAX_CHARS = 45;
     static constexpr uint8_t DIAGNOSTICS_BACKGROUND_ALPHA = 170;
+
+    static double start_position_ms() {
+        return -SettingsManager::settings.play_start_delay * 1000.0;
+    }
 
     ScenePlay::ScenePlay(Chart* chart, Skin* skin, Scene* return_scene) {
         this->chart = chart;
@@ -108,9 +113,7 @@ namespace nascent {
 
     void ScenePlay::init(Game* game) {
         RichPresence::playing(*chart);
-        if (Account::signed_in()) {
-            ticket = ServerApi::request_ticket(*chart).share();
-        }
+        request_ticket();
 
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
         start_attempt();
@@ -132,7 +135,7 @@ namespace nascent {
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
-        session->reset_clock(-SettingsManager::settings.play_start_delay * 1000.0, now_ms());
+        session->reset_clock(start_position_ms(), now_ms());
         mirror = settings.field_mirror;
 
         field = std::make_unique<EntityField>(chart, skin, olc::vd2d{((double)window_size.x - field_width) / 2, 0}, olc::vd2d{field_width, (double)window_size.y});
@@ -156,6 +159,30 @@ namespace nascent {
         closest_press_gap.reset();
         simultaneous_presses = 0;
         game->reset_input_delay();
+    }
+
+    void ScenePlay::request_ticket() {
+        ticket = Account::signed_in() ? ServerApi::request_ticket(*chart).share() : std::shared_future<ApiResult<PlayTicket>>();
+        ticket_requested_at = now_ms();
+        waiting_for_ticket = ticket.valid();
+    }
+
+    bool ScenePlay::ticket_pending(double now) {
+        if (!ticket.valid() || ticket.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            return false;
+        }
+
+        if (now - ticket_requested_at < TICKET_WAIT_LIMIT_MS) {
+            return true;
+        }
+
+        std::promise<ApiResult<PlayTicket>> abandoned;
+        ApiResult<PlayTicket> result;
+        result.response.error = "the server took too long to issue a play ticket";
+        abandoned.set_value(std::move(result));
+        ticket = abandoned.get_future().share();
+        game->notify("The server took too long to respond, this play will not be ranked", true);
+        return false;
     }
 
     uint8_t ScenePlay::chart_lane(uint8_t lane) const {
@@ -378,7 +405,7 @@ namespace nascent {
 
     bool ScenePlay::can_skip_intro(double now) const {
         int32_t target = chart->intro_skip_ms();
-        return !finished && !paused && target > 0 && session->song_position(now) < target;
+        return !finished && !paused && !waiting_for_ticket && target > 0 && session->song_position(now) < target;
     }
 
     void ScenePlay::skip_intro(double now) {
@@ -399,10 +426,7 @@ namespace nascent {
         game->get_audio().Stop(chart_audio_id);
         game->get_audio().Seek(chart_audio_id, 0);
         game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
-
-        if (Account::signed_in()) {
-            ticket = ServerApi::request_ticket(*chart).share();
-        }
+        request_ticket();
 
         chart_started = false;
         paused = false;
@@ -480,6 +504,14 @@ namespace nascent {
         if (paused) {
             session->reset_clock(paused_position, now);
         }
+        else if (waiting_for_ticket) {
+            session->reset_clock(start_position_ms(), now);
+
+            if (!ticket_pending(now)) {
+                waiting_for_ticket = false;
+                session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->window, lane_keys)), now);
+            }
+        }
         else {
             if (can_skip_intro(now) && game->window->GetKey(InputManager::get_key(KeyBinding::SKIP_INTRO)).bPressed) {
                 skip_intro(now);
@@ -533,6 +565,10 @@ namespace nascent {
             }
         }
 
+        float hint_target = waiting_for_ticket && !paused && now - ticket_requested_at >= TICKET_HINT_DELAY_MS ? 1.0f : 0.0f;
+        float hint_step = elapsed_time / TICKET_HINT_FADE_S;
+        ticket_hint_alpha = hint_target > ticket_hint_alpha ? std::min(hint_target, ticket_hint_alpha + hint_step) : std::max(hint_target, ticket_hint_alpha - hint_step);
+
         field->set_position(session->visual_position(now));
         field->set_keys(session->get_held_keys());
     };
@@ -555,6 +591,12 @@ namespace nascent {
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
         draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, olc::WHITE);
+
+        if (ticket_hint_alpha > 0) {
+            std::string waiting_hint = "Waiting for server...";
+            int32_t waiting_width = text_bounds(skin->display_font_medium, waiting_hint).size.x;
+            draw_text(skin->display_font_medium, waiting_hint, {screensize.x / 2 - waiting_width / 2, screensize.y * 2 / 3}, olc::Pixel(255, 255, 255, (uint8_t)std::lround(SKIP_HINT_ALPHA * ticket_hint_alpha)));
+        }
 
         if (can_skip_intro(now_ms())) {
             std::string skip_hint = std::format("Press {} to skip the intro", InputManager::key_label(InputManager::get_key(KeyBinding::SKIP_INTRO)));

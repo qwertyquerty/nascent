@@ -69,7 +69,6 @@ namespace nascent {
             return;
         }
 
-        color.a = 255;
         TextEngine::get()->DrawDecal({(float)(baseline.x + entry.bounds.offset.x), (float)(baseline.y + entry.bounds.offset.y)}, entry.decal.get(), {1.0f, 1.0f}, color);
     }
 
