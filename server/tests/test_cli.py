@@ -30,7 +30,7 @@ def test_import_replays(api, app, tmp_path):
     folder.mkdir(parents=True)
     (folder / "one.json").write_text(json.dumps(make_replay(CHART, seed=1)))
     (folder / "two.json").write_text(json.dumps(make_replay(CHART, seed=2)))
-    (folder / "unknown.json").write_text(json.dumps(make_replay(make_chart(title="Not Uploaded"), seed=3)))
+    (folder / "unknown.json").write_text(json.dumps(make_replay(make_chart(title="Not Uploaded", note_count=180), seed=3)))
     (folder / "settings.json").write_text("{}")
 
     result = run(app, "import-replays", str(tmp_path / "replays"), "--user", "alice")

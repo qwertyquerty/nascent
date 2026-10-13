@@ -175,6 +175,26 @@ namespace nascent {
         return sha256_hex(canonical);
     }
 
+    const std::string& Chart::difficulty_key() const {
+        return cached_difficulty_key;
+    }
+
+    std::string Chart::compute_difficulty_key() const {
+        std::string canonical = std::format("keys {}\nhits {}\n", unpitched_info.key_count, unpitched_hits.size());
+
+        for (const Hit& hit : unpitched_hits) {
+            canonical += std::format("{} {} {} {}\n", hit.time, hit.key, (int)hit.hit_type, hit.end_time);
+        }
+
+        canonical += std::format("timing {}\n", unpitched_timing_points.size());
+
+        for (const ChartTimingPoint& tp : unpitched_timing_points) {
+            canonical += std::format("{} {:a} {}\n", tp.time, tp.beat_length, tp.meter);
+        }
+
+        return sha256_hex(canonical);
+    }
+
     std::unique_ptr<Chart> Chart::create(const ChartInfo& info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string& error) {
         std::unique_ptr<Chart> chart(new Chart());
         chart->unpitched_info = info;
@@ -233,6 +253,7 @@ namespace nascent {
         });
 
         cached_gameplay_hash = compute_gameplay_hash();
+        cached_difficulty_key = compute_difficulty_key();
         return true;
     }
 

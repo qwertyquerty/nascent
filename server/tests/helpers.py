@@ -88,7 +88,7 @@ def _replay_skeleton(chart: dict, rate: float, inputs: list, end_time: int) -> d
         "played_at": "2026-10-09T12:00:00Z",
         "chart": {
             "path": "Test/chart.json",
-            "sha256": "",
+            "gameplay_hash": chart_hash(chart),
             "title": chart["info"]["title"],
             "artist": chart["info"]["artist"],
             "difficulty_name": chart["info"]["difficulty_name"],

@@ -15,7 +15,7 @@
 namespace nascent {
     struct ReplayChart {
         std::string path;
-        std::string sha256;
+        std::string gameplay_hash;
         std::string title;
         std::string artist;
         std::string difficulty_name;
@@ -26,6 +26,7 @@ namespace nascent {
         int32_t audio_input_offset = 0;
         int32_t audio_visual_offset = 0;
         uint32_t scroll_speed = 0;
+        bool mirror = false;
     };
 
     struct ReplayResult {
@@ -61,6 +62,7 @@ namespace nascent {
     Replay make_replay(const Attempt& attempt, const AttemptSummary& summary, const ReplayChart& chart, float rate, const ReplaySettings& settings, const std::string& played_at);
     Attempt simulate_replay(const Chart& chart, const Replay& replay);
 
+    std::filesystem::path replay_folder(const std::filesystem::path& directory, const std::string& gameplay_hash);
     std::optional<std::filesystem::path> save_replay(const Replay& replay, const std::filesystem::path& directory, std::string& error);
     std::optional<Replay> load_replay(const std::filesystem::path& path, std::string& error);
 }

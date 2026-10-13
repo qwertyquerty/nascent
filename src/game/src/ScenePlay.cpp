@@ -17,7 +17,6 @@
 #include "Results.h"
 #include "SceneResults.h"
 #include "SettingsManager.h"
-#include "Sha256.h"
 #include "Skin.h"
 #include "Util.h"
 #include "Utf8Path.h"
@@ -64,7 +63,7 @@ namespace nascent {
 
         ReplayChart replay_chart;
         replay_chart.path = (ec || relative.empty() ? chart->file_path : relative).generic_string();
-        replay_chart.sha256 = sha256_file_hex(chart->file_path).value_or("");
+        replay_chart.gameplay_hash = chart->gameplay_hash();
         replay_chart.title = chart->info.title;
         replay_chart.artist = chart->info.artist;
         replay_chart.difficulty_name = chart->info.difficulty_name;

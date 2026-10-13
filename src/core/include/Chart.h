@@ -49,9 +49,11 @@ namespace nascent {
         Chart() = default;
 
         std::string cached_gameplay_hash;
+        std::string cached_difficulty_key;
 
         bool validate_and_prepare(std::string& error);
         std::string compute_gameplay_hash() const;
+        std::string compute_difficulty_key() const;
 
         public:
         std::filesystem::path file_path;
@@ -79,6 +81,7 @@ namespace nascent {
 
         nlohmann::json serialize() const;
         const std::string& gameplay_hash() const;
+        const std::string& difficulty_key() const;
 
         /**
          * Get the length of the Chart in ms from the start of the first hit to the end of the last hit

@@ -20,7 +20,7 @@ namespace nascent {
             {"played_at", replay.played_at},
             {"chart", {
                           {"path", replay.chart.path},
-                          {"sha256", replay.chart.sha256},
+                          {"gameplay_hash", replay.chart.gameplay_hash},
                           {"title", replay.chart.title},
                           {"artist", replay.chart.artist},
                           {"difficulty_name", replay.chart.difficulty_name},
@@ -31,6 +31,7 @@ namespace nascent {
                              {"audio_input_offset", replay.settings.audio_input_offset},
                              {"audio_visual_offset", replay.settings.audio_visual_offset},
                              {"scroll_speed", replay.settings.scroll_speed},
+                             {"mirror", replay.settings.mirror},
                          }},
             {"end_time", replay.end_time},
             {"result", {
@@ -56,7 +57,7 @@ namespace nascent {
 
         const nlohmann::json& chart = j.at("chart");
         chart.at("path").get_to(replay.chart.path);
-        chart.at("sha256").get_to(replay.chart.sha256);
+        replay.chart.gameplay_hash = chart.value("gameplay_hash", std::string());
         chart.at("title").get_to(replay.chart.title);
         chart.at("artist").get_to(replay.chart.artist);
         chart.at("difficulty_name").get_to(replay.chart.difficulty_name);
@@ -68,6 +69,7 @@ namespace nascent {
         settings.at("audio_input_offset").get_to(replay.settings.audio_input_offset);
         settings.at("audio_visual_offset").get_to(replay.settings.audio_visual_offset);
         settings.at("scroll_speed").get_to(replay.settings.scroll_speed);
+        replay.settings.mirror = settings.value("mirror", false);
 
         j.at("end_time").get_to(replay.end_time);
 
@@ -145,9 +147,13 @@ namespace nascent {
         return attempt;
     }
 
+    std::filesystem::path replay_folder(const std::filesystem::path& directory, const std::string& gameplay_hash) {
+        return directory / (gameplay_hash.empty() ? std::string("unknown") : gameplay_hash.substr(0, Replay::FOLDER_HASH_LENGTH));
+    }
+
     std::optional<std::filesystem::path> save_replay(const Replay& replay, const std::filesystem::path& directory, std::string& error) {
         std::error_code ec;
-        std::filesystem::path chart_directory = directory / (replay.chart.sha256.empty() ? std::string("unknown") : replay.chart.sha256.substr(0, Replay::FOLDER_HASH_LENGTH));
+        std::filesystem::path chart_directory = replay_folder(directory, replay.chart.gameplay_hash);
         std::filesystem::create_directories(chart_directory, ec);
 
         if (ec) {

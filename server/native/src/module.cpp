@@ -255,6 +255,7 @@ PYBIND11_MODULE(nascent_core, m) {
             settings["audio_input_offset"] = r.replay.settings.audio_input_offset;
             settings["audio_visual_offset"] = r.replay.settings.audio_visual_offset;
             settings["scroll_speed"] = r.replay.settings.scroll_speed;
+            settings["mirror"] = r.replay.settings.mirror;
             return settings;
         })
         .def_property_readonly("claimed_result", [](const LoadedReplay& r) { return claimed_result(r.replay); })
