@@ -1,4 +1,5 @@
 #include "SceneResults.h"
+#include "RichPresence.h"
 #include "GradeColor.h"
 #include "Accuracy.h"
 #include "Chart.h"
@@ -45,6 +46,7 @@ namespace nascent {
     }
 
     void SceneResults::init(Game* game) {
+        RichPresence::viewing_results(*chart, summary.accuracy, grade_name(summary.grade));
         olc::vi2d screen = game->window->GetScreenSize();
         int32_t margin = screen.x / 24;
 
@@ -154,6 +156,7 @@ namespace nascent {
 
         if (submission.valid() && submission.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             submitted = submission.get();
+            RichPresence::refresh_profile();
         }
 
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {

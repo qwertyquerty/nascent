@@ -1,4 +1,5 @@
 #include "SceneTitle.h"
+#include "RichPresence.h"
 #include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
@@ -97,6 +98,7 @@ namespace nascent {
     }
 
     void SceneTitle::init(Game* game) {
+        RichPresence::in_menu("On the title screen");
         olc::vi2d window_size = game->window->GetScreenSize();
         std::string error;
         sky->show(SkyView::TITLE);

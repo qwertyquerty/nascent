@@ -1,4 +1,5 @@
 #include "SceneAccount.h"
+#include "RichPresence.h"
 
 #include "Account.h"
 #include "EntityStarfield.h"
@@ -35,6 +36,7 @@ namespace nascent {
     }
 
     void SceneAccount::on_enter() {
+        RichPresence::in_menu(Account::signed_in() ? "Managing their account" : "Signing in");
         if (pan_in) {
             sky->pan_to(SkyView::ACCOUNT);
         }

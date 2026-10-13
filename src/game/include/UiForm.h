@@ -1,5 +1,6 @@
 #pragma once
 
+#include "KeyRepeat.h"
 #include "UiField.h"
 
 #include <cstddef>
@@ -13,6 +14,8 @@ namespace nascent {
         protected:
         std::vector<std::unique_ptr<UiField>> fields;
         size_t focus = 0;
+        KeyRepeat up_repeat;
+        KeyRepeat down_repeat;
         bool enabled = true;
         mutable std::vector<int32_t> field_tops;
         mutable std::vector<int32_t> field_bottoms;

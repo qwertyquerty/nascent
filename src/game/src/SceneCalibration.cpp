@@ -1,4 +1,5 @@
 #include "SceneCalibration.h"
+#include "RichPresence.h"
 #include "Accuracy.h"
 #include "Chart.h"
 #include "EntityField.h"
@@ -98,6 +99,7 @@ namespace nascent {
     }
 
     void SceneCalibration::init(Game* game) {
+        RichPresence::in_menu("Calibrating offsets");
         visual_offset = SettingsManager::settings.field_audio_visual_offset;
         input_offset = SettingsManager::settings.field_audio_input_offset;
         scroll_speed = SettingsManager::settings.field_scroll_speed;
@@ -130,7 +132,7 @@ namespace nascent {
         field = std::make_unique<EntityField>(chart.get(), skin, olc::vd2d{(double)window_size.x / 4 * 3 - (double)window_size.x / 24, 0.0}, olc::vd2d{(double)(window_size.x / 4), (double)window_size.y});
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
-        field->judge_height = SettingsManager::settings.field_judge_offset;
+        field->judge_height = window_size.y * SettingsManager::settings.field_judge_line_percent / 100.0;
         field->upscroll = SettingsManager::settings.field_upscroll;
         field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(SettingsManager::settings.field_lane_gap) : std::nullopt);
 

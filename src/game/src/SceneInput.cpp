@@ -1,4 +1,5 @@
 #include "SceneInput.h"
+#include "RichPresence.h"
 
 #include "Game.h"
 #include "InputManager.h"
@@ -28,6 +29,7 @@ namespace nascent {
     }
 
     void SceneInput::on_enter() {
+        RichPresence::in_menu("Changing keybinds");
         capturing = false;
         capture_all = false;
         status.clear();

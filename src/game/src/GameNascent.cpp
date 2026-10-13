@@ -7,8 +7,8 @@
 #include "olcPixelGameEngine.h"
 #include "SceneAccount.h"
 #include "SceneList.h"
+#include "RichPresence.h"
 #include "SceneTitle.h"
-#include "discord-rpc.hpp"
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "Utf8Path.h"
@@ -28,7 +28,7 @@ namespace nascent {
                                                              };
 
     GameNascent::~GameNascent() {
-        discord::RPCManager::get().shutdown();
+        RichPresence::shutdown();
         release_scenes();
         scene_list.reset();
         sky.reset();
@@ -41,7 +41,7 @@ namespace nascent {
         Account::load();
         LocalBests::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
-        set_volumes(SettingsManager::settings.master_volume / 100.0f, SettingsManager::settings.music_volume / 100.0f, SettingsManager::settings.effects_volume / 100.0f);
+        set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
 
         olc::Font::init();
 
@@ -60,8 +60,7 @@ namespace nascent {
 
         set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get(), sky.get()));
 
-        discord_init();
-        discord_update();
+        RichPresence::set_enabled(SettingsManager::settings.discord_rich_presence);
     }
 
     void GameNascent::update(float elapsed_time) {
@@ -83,6 +82,7 @@ namespace nascent {
 
         this->elapsed_time = elapsed_time;
         scene->update(elapsed_time);
+        RichPresence::update(elapsed_time);
     }
 
     void GameNascent::draw(olc::PixelGameEngine* window) {
@@ -174,19 +174,5 @@ namespace nascent {
         window->FillRectDecal({left, top + edge}, {edge, height - edge * 2}, border);
         window->FillRectDecal({left + width - edge, top + edge}, {edge, height - edge * 2}, border);
         draw_text(font, toast, {x + TOAST_PADDING, TOAST_TOP + TOAST_PADDING - metrics.offset.y}, olc::Pixel(255, 255, 255, (uint8_t)(255 * fade)));
-    }
-
-    void GameNascent::discord_init() {
-        discord::RPCManager::get()
-            .setClientID(SettingsManager::settings.discord_application_id)
-            .onReady([](discord::User const& user) {
-                printf("Discord ready with user %s!\n", user.username.c_str());
-            });
-
-        discord::RPCManager::get().initialize();
-    }
-
-    void GameNascent::discord_update() {
-        discord::RPCManager::get().getPresence().setState("Training Rhythm").setDetails("Offline play").setStartTimestamp(start_time).refresh();
     }
 }

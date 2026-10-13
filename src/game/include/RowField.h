@@ -1,6 +1,7 @@
 #pragma once
 
 #include "InputManager.h"
+#include "KeyRepeat.h"
 #include "UiField.h"
 
 #include <cstddef>
@@ -47,6 +48,9 @@ namespace nascent {
 
     class SliderField : public RowField {
         protected:
+        KeyRepeat left_repeat;
+        KeyRepeat right_repeat;
+
         std::string display_value(bool focused) const override;
 
         public:

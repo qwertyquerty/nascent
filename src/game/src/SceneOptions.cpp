@@ -1,4 +1,5 @@
 #include "SceneOptions.h"
+#include "RichPresence.h"
 
 #include "Attempt.h"
 #include "Chart.h"
@@ -8,6 +9,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "TextCache.h"
+#include "TimingBar.h"
 
 #include <iostream>
 
@@ -17,22 +19,25 @@
 #include <format>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace nascent {
-    static constexpr int32_t VOLUME_STEP = 5;
+    static constexpr int32_t PERCENT_STEP = 1;
     static constexpr int32_t OPTIONS_FIELD_SPACING = 12;
-    static constexpr int32_t LANE_WIDTH_MIN = 64;
-    static constexpr int32_t LANE_WIDTH_MAX = 192;
-    static constexpr int32_t LANE_WIDTH_STEP = 4;
+    static constexpr int32_t LANE_WIDTH_MIN = 6;
+    static constexpr int32_t LANE_WIDTH_MAX = 18;
     static constexpr int16_t LANE_GAP_MAX = 48;
     static constexpr int16_t LANE_GAP_STEP = 4;
-    static constexpr int32_t JUDGE_OFFSET_MAX = 400;
-    static constexpr int32_t JUDGE_OFFSET_STEP = 4;
+    static constexpr int32_t JUDGE_LINE_MAX = 37;
+    static constexpr int32_t TIMING_BAR_LENGTH_MIN = 10;
+    static constexpr int32_t TIMING_BAR_WIDTH_MIN = 1;
+    static constexpr int32_t TIMING_BAR_WIDTH_MAX = 20;
     static constexpr uint8_t PREVIEW_KEY_COUNT = 4;
     static constexpr int32_t PREVIEW_BEAT_MS = 250;
     static constexpr int32_t PREVIEW_LOOP_BEATS = 32;
     static constexpr int32_t PREVIEW_HOLD_BEATS = 2;
     static constexpr int32_t PREVIEW_HOLD_EVERY = 8;
+    static constexpr int32_t PREVIEW_TAP_MS = 60;
     static constexpr int32_t HEADER_HEIGHT = 156;
     static constexpr int32_t FOOTER_GAP = 40;
     static constexpr int32_t STATUS_OFFSET = 8;
@@ -46,11 +51,28 @@ namespace nascent {
     static constexpr std::array<uint16_t, 9> FRAME_RATE_OPTIONS = {0, 60, 120, 144, 165, 240, 360, 480, 1000};
     static constexpr std::array<std::pair<const char*, float>, 4> TRANSITION_OPTIONS = {{{"Off", 0.0f}, {"Fast", 0.1f}, {"Normal", 0.2f}, {"Slow", 0.35f}}};
 
+    static uint32_t autoplay_keys(const Chart& chart, double time) {
+        uint32_t keys = chart.held_lanes_at(time);
+
+        for (const Hit& hit : chart.hits) {
+            if (hit.time > time) {
+                break;
+            }
+
+            if (hit.hit_type == HitType::HIT && time - hit.time < PREVIEW_TAP_MS) {
+                keys |= 1u << hit.key;
+            }
+        }
+
+        return keys;
+    }
+
     SceneOptions::SceneOptions(Skin* skin) : skin(skin) {}
 
     SceneOptions::~SceneOptions() = default;
 
     void SceneOptions::init(Game* game) {
+        RichPresence::in_menu("Changing settings");
         const Settings& settings = SettingsManager::settings;
 
         frame_rates.assign(FRAME_RATE_OPTIONS.begin(), FRAME_RATE_OPTIONS.end());
@@ -95,15 +117,16 @@ namespace nascent {
         skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
         frame_rate_field = &form.add<ChoiceField>("Frame rate limit", frame_rate_labels, frame_rate_index);
         fps_counter_field = &form.add<ChoiceField>("FPS counter", std::vector<std::string>{"Off", "On"}, settings.show_fps ? 1 : 0);
+        rich_presence_field = &form.add<ChoiceField>("Discord rich presence", std::vector<std::string>{"Off", "On"}, settings.discord_rich_presence ? 1 : 0);
         transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
 
         form.add<SectionField>("Audio");
-        master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, VOLUME_STEP, "%");
-        music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, VOLUME_STEP, "%");
-        effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, VOLUME_STEP, "%");
+        master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, PERCENT_STEP, "%");
+        music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, PERCENT_STEP, "%");
+        effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, PERCENT_STEP, "%");
 
         form.add<SectionField>("Playfield");
-        lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width, LANE_WIDTH_MIN, LANE_WIDTH_MAX, LANE_WIDTH_STEP, " px");
+        lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width_percent, LANE_WIDTH_MIN, LANE_WIDTH_MAX, PERCENT_STEP, "%");
 
         lane_gaps = {-1};
 
@@ -124,8 +147,16 @@ namespace nascent {
 
         size_t lane_gap_index = (size_t)(std::find(lane_gaps.begin(), lane_gaps.end(), settings.field_lane_gap) - lane_gaps.begin());
         lane_gap_field = &form.add<ChoiceField>("Lane separation", lane_gap_labels, lane_gap_index);
-        judge_offset_field = &form.add<SliderField>("Judgement line height", settings.field_judge_offset, 0, JUDGE_OFFSET_MAX, JUDGE_OFFSET_STEP, " px");
+        judge_offset_field = &form.add<SliderField>("Judgement line height", settings.field_judge_line_percent, 0, JUDGE_LINE_MAX, PERCENT_STEP, "%");
         scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
+        judgement_field = &form.add<ChoiceField>("Judgement", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement ? 1 : 0);
+        judgement_height_field = &form.add<SliderField>("Judgement height", settings.field_judgement_height, 0, 100, PERCENT_STEP, "%");
+        combo_field = &form.add<ChoiceField>("Combo", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_combo ? 1 : 0);
+        combo_height_field = &form.add<SliderField>("Combo height", settings.field_combo_height, 0, 100, PERCENT_STEP, "%");
+        timing_bar_field = &form.add<ChoiceField>("Hit timing bar", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_bar ? 1 : 0);
+        timing_bar_height_field = &form.add<SliderField>("Hit timing bar height", settings.field_timing_bar_height, 0, 100, PERCENT_STEP, "%");
+        timing_bar_length_field = &form.add<SliderField>("Hit timing bar length", settings.field_timing_bar_length, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH, PERCENT_STEP, "%");
+        timing_bar_width_field = &form.add<SliderField>("Hit timing bar width", settings.field_timing_bar_width, TIMING_BAR_WIDTH_MIN, TIMING_BAR_WIDTH_MAX, PERCENT_STEP, "%");
 
         form.add<SectionField>("Gameplay keys");
 
@@ -150,15 +181,25 @@ namespace nascent {
         settings.master_volume = (uint8_t)master_volume_field->value;
         settings.music_volume = (uint8_t)music_volume_field->value;
         settings.effects_volume = (uint8_t)effects_volume_field->value;
-        game->set_volumes(settings.master_volume / 100.0f, settings.music_volume / 100.0f, settings.effects_volume / 100.0f);
+        game->set_volumes(SettingsManager::volume_gain(settings.master_volume), SettingsManager::volume_gain(settings.music_volume), SettingsManager::volume_gain(settings.effects_volume));
         settings.frame_rate_limit = frame_rates[frame_rate_field->selected];
         settings.show_fps = fps_counter_field->selected == 1;
+        settings.discord_rich_presence = rich_presence_field->selected == 1;
+        RichPresence::set_enabled(settings.discord_rich_presence);
         settings.scene_transition_time = TRANSITION_OPTIONS[transition_field->selected].second;
         game->scene_transition_time = settings.scene_transition_time;
-        settings.field_lane_width = (uint16_t)lane_width_field->value;
+        settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
-        settings.field_judge_offset = (uint16_t)judge_offset_field->value;
+        settings.field_judge_line_percent = (uint8_t)judge_offset_field->value;
         settings.field_upscroll = scroll_direction_field->selected == 1;
+        settings.field_show_judgement = judgement_field->selected == 1;
+        settings.field_judgement_height = (uint8_t)judgement_height_field->value;
+        settings.field_show_combo = combo_field->selected == 1;
+        settings.field_combo_height = (uint8_t)combo_height_field->value;
+        settings.field_show_timing_bar = timing_bar_field->selected == 1;
+        settings.field_timing_bar_height = (uint8_t)timing_bar_height_field->value;
+        settings.field_timing_bar_length = (uint8_t)timing_bar_length_field->value;
+        settings.field_timing_bar_width = (uint8_t)timing_bar_width_field->value;
         rebuild_preview();
         status.clear();
 
@@ -229,15 +270,18 @@ namespace nascent {
 
         const Settings& settings = SettingsManager::settings;
         olc::vi2d screen = game->window->GetScreenSize();
-        double width = (double)settings.field_lane_width * PREVIEW_KEY_COUNT;
+        double width = screen.y * settings.field_lane_width_percent / 100.0 * PREVIEW_KEY_COUNT;
 
         preview_field = std::make_unique<EntityField>(preview_chart.get(), skin, olc::vd2d{(double)screen.x * 3 / 4 - width / 2, 0.0}, olc::vd2d{width, (double)screen.y});
         preview_field->draw_judge_colors = true;
         preview_field->draw_notes_past_judge = false;
-        preview_field->draw_hit_score = false;
+        preview_field->draw_hit_score = settings.field_show_judgement;
+        preview_field->draw_combo = settings.field_show_combo;
+        preview_field->judgement_height = settings.field_judgement_height / 100.0;
+        preview_field->combo_height = settings.field_combo_height / 100.0;
         preview_field->set_attempt(preview_attempt.get());
         preview_field->judge_alpha = 64;
-        preview_field->judge_height = settings.field_judge_offset;
+        preview_field->judge_height = screen.y * settings.field_judge_line_percent / 100.0;
         preview_field->upscroll = settings.field_upscroll;
         preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(settings.field_lane_gap) : std::nullopt);
     }
@@ -250,13 +294,32 @@ namespace nascent {
         preview_time += elapsed_time;
         double position = std::fmod(preview_time * 1000.0, (double)PREVIEW_LOOP_BEATS * PREVIEW_BEAT_MS);
 
+        double previous = preview_position;
+
         if (preview_attempt == nullptr || position < preview_position) {
             preview_attempt = std::make_unique<Attempt>(preview_chart.get());
             preview_field->set_attempt(preview_attempt.get());
+            previous = -1;
+        }
+
+        std::vector<double> moments;
+
+        for (const Hit& hit : preview_chart->hits) {
+            for (double moment : {(double)hit.time, (double)(hit.hit_type == HitType::HOLD ? hit.end_time : hit.time + PREVIEW_TAP_MS)}) {
+                if (moment > previous && moment <= position) {
+                    moments.push_back(moment);
+                }
+            }
+        }
+
+        std::sort(moments.begin(), moments.end());
+
+        for (double moment : moments) {
+            preview_attempt->set_keys(autoplay_keys(*preview_chart, moment), (int32_t)moment);
         }
 
         preview_position = position;
-        uint32_t keys = preview_chart->held_lanes_at(position);
+        uint32_t keys = autoplay_keys(*preview_chart, position);
         preview_attempt->set_keys(keys, (int32_t)position);
         preview_field->set_position(position);
         preview_field->set_keys(keys);
@@ -338,6 +401,11 @@ namespace nascent {
 
         if (preview_field != nullptr) {
             preview_field->draw(window);
+
+            if (SettingsManager::settings.field_show_timing_bar && preview_attempt != nullptr) {
+                const Settings& settings = SettingsManager::settings;
+                draw_timing_bar(window, *preview_attempt, screen.x * 3 / 4.0f, screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
+            }
         }
 
         draw_text(skin->display_font_large, "Options", {x, y}, olc::WHITE);

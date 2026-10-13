@@ -5,6 +5,8 @@
 #include "json.h"
 #include "Utf8Path.h"
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <memory>
 
@@ -15,10 +17,18 @@ namespace nascent {
         field_audio_sync_max_error,
         field_audio_visual_offset,
         field_audio_input_offset,
-        field_lane_width,
-        field_judge_offset,
+        field_lane_width_percent,
+        field_judge_line_percent,
         field_lane_gap,
         field_upscroll,
+        field_show_judgement,
+        field_judgement_height,
+        field_show_combo,
+        field_combo_height,
+        field_show_timing_bar,
+        field_timing_bar_height,
+        field_timing_bar_length,
+        field_timing_bar_width,
         title_logo_start_delay,
         title_field_count,
         title_h_scroll_rate,
@@ -33,6 +43,7 @@ namespace nascent {
         show_fps,
         list_song_directory,
         discord_application_id,
+        discord_rich_presence,
         server_url,
         beatmap_download_urls,
         lane_keymaps,
@@ -96,6 +107,15 @@ namespace nascent {
         settings = settings_store()->value;
         settings.list_song_directory = path_utf8(resolve_song_directory(settings.list_song_directory));
         return status;
+    }
+
+    float SettingsManager::volume_gain(uint8_t percent) {
+        if (percent == 0) {
+            return 0.0f;
+        }
+
+        double fraction = std::min<uint8_t>(percent, 100) / 100.0;
+        return (float)std::pow(10.0, (fraction - 1.0) * VOLUME_RANGE_DB / 20.0);
     }
 
     bool SettingsManager::save() {

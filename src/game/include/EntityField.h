@@ -38,6 +38,8 @@ namespace nascent {
         bool draw_combo = false;
         double judge_height = 0;
         bool upscroll = false;
+        double judgement_height = 0.45;
+        double combo_height = 0.41;
 
         uint8_t judge_alpha = 64;
 
@@ -59,9 +61,11 @@ namespace nascent {
         void set_lane_gap(std::optional<double> gap);
         double get_judge_bottom() const;
         double flip_y(double y) const;
+        double overlay_y(double height) const;
         olc::Pixel with_opacity(olc::Pixel color) const;
         olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
         void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
+        void draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const;
         void set_attempt(const Attempt* attempt);
 
         void set_keys(uint32_t keys);

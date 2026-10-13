@@ -108,6 +108,16 @@ namespace nascent {
             return changed ? Action::CHANGED : Action::NONE;
         }
 
+        bool down = down_repeat.update(window->GetKey(InputManager::menu_down_key), elapsed_time);
+        bool up = up_repeat.update(window->GetKey(InputManager::menu_up_key), elapsed_time);
+
+        if (int32_t wheel = window->GetMouseWheel(); wheel != 0) {
+            if (std::optional<size_t> next = step_focus(focus, wheel < 0, false)) {
+                focus_field(window, *next);
+                return Action::MOVED;
+            }
+        }
+
         if (window->GetKey(InputManager::field_key).bPressed && !window->GetKey(InputManager::switch_modifier).bHeld) {
             bool backwards = window->GetKey(InputManager::keybind_mod1).bHeld;
 
@@ -126,14 +136,14 @@ namespace nascent {
             return Action::SUBMIT;
         }
 
-        if (window->GetKey(InputManager::menu_down_key).bPressed) {
+        if (down) {
             if (std::optional<size_t> next = step_focus(focus, true, false)) {
                 focus_field(window, *next);
                 return Action::MOVED;
             }
         }
 
-        if (window->GetKey(InputManager::menu_up_key).bPressed) {
+        if (up) {
             if (std::optional<size_t> previous = step_focus(focus, false, false)) {
                 focus_field(window, *previous);
                 return Action::MOVED;

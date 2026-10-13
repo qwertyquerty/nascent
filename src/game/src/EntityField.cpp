@@ -9,6 +9,7 @@
 #include "olcPixelGameEngine.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <format>
 
@@ -99,11 +100,13 @@ namespace nascent {
             }
 
             if ((screen_hit_y - hit_height) < pos.y + size.y) {
-                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && manifest.hold_style == HoldStyle::STRETCH ? skin->image(SkinImage::HOLD_BODY, hit.key, key_count) : nullptr;
+                bool textured_body = manifest.hold_style == HoldStyle::STRETCH || manifest.hold_style == HoldStyle::TILE;
+                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && textured_body ? skin->image(SkinImage::HOLD_BODY, hit.key, key_count) : nullptr;
 
                 if (hold_body != nullptr) {
-                    double body_top = screen_hit_y - hit_height + note_size / 2;
-                    double body_bottom = screen_hit_y + note_size / 2;
+                    double tail_y = screen_hit_y - hit_height + note_size / 2;
+                    double body_top = tail_y - manifest.hold_body_tail_offset * note_size;
+                    double body_bottom = screen_hit_y + note_size / 2 - manifest.hold_body_head_offset * note_size;
 
                     if (stops_at_cut) {
                         body_bottom = std::min(body_bottom, cut_y + note_size / 2);
@@ -112,16 +115,12 @@ namespace nascent {
                     body_bottom = std::min(body_bottom, pos.y + size.y);
 
                     if (body_bottom > body_top) {
-                        float top = (float)flip_y(body_top);
-                        float bottom = (float)flip_y(body_bottom);
-                        float body_height = (float)hold_body->sprite->height;
-                        float inset = body_height > HOLD_EDGE_INSET * 2 ? HOLD_EDGE_INSET : 0.0f;
-                        window->DrawPartialWarpedDecal(hold_body, {{(float)hit_x, top}, {(float)hit_x, bottom}, {(float)(hit_x + note_size), bottom}, {(float)(hit_x + note_size), top}}, {0.0f, inset}, {(float)hold_body->sprite->width, body_height - inset * 2}, with_opacity(note_color(hit_x, screen_hit_y, window)));
+                        draw_hold_body(window, hold_body, hit_x, body_top, body_bottom, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
 
                     olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, hit.key, key_count);
 
-                    if (cap != nullptr && body_top < body_bottom && cap->sprite->width > 0) {
+                    if (cap != nullptr && tail_y < body_bottom && cap->sprite->width > 0) {
                         double cap_height = note_size * cap->sprite->height / cap->sprite->width;
                         double cap_top = body_top - cap_height;
                         float top = (float)flip_y(body_top);
@@ -155,21 +154,22 @@ namespace nascent {
             }
         }
 
-        const JudgedHit* jhit = attempt != nullptr ? attempt->get_last_scored() : nullptr;
-        olc::Decal* hs_skin = draw_hit_score && jhit != nullptr ? skin->hit_score_decal(jhit->released ? jhit->release_score : jhit->hit_score) : nullptr;
+        const JudgedHit* jhit = attempt != nullptr && (draw_hit_score || draw_combo) ? attempt->get_last_scored() : nullptr;
 
-        if (hs_skin != nullptr) {
+        if (jhit != nullptr) {
             double t = (position - (jhit->hit_played ? (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) : jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, attempt->hit_accuracy))) / 1000;
-
+            olc::Decal* hs_skin = draw_hit_score ? skin->hit_score_decal(jhit->released ? jhit->release_score : jhit->hit_score) : nullptr;
             float scale = smoothstep(0.8, 0.6, t * 4);
 
-            window->DrawDecal(
-                {(float)(pos.x + size.x / 2 - hs_skin->sprite->width * scale / 2),
-                 (float)(pos.y + size.y * 0.55 - hs_skin->sprite->height * scale / 2)},
-                hs_skin,
-                {scale, scale},
-                with_opacity(olc::Pixel(255, 255, 255, smoothstep(255, 0, (t - 1) * 2)))
-            );
+            if (hs_skin != nullptr) {
+                window->DrawDecal(
+                    {(float)(pos.x + size.x / 2 - hs_skin->sprite->width * scale / 2),
+                     (float)(overlay_y(judgement_height) - hs_skin->sprite->height * scale / 2)},
+                    hs_skin,
+                    {scale, scale},
+                    with_opacity(olc::Pixel(255, 255, 255, smoothstep(255, 0, (t - 1) * 2)))
+                );
+            }
 
             if (draw_combo) {
                 uint32_t combo = attempt->get_combo();
@@ -187,7 +187,7 @@ namespace nascent {
 
                     window->DrawDecal(
                         {(float)(pos.x + size.x / 2 - combo_decal.get_sprite()->Size().x * scale / 2),
-                         (float)(pos.y + size.y * 0.59 - combo_decal.get_sprite()->Size().y * scale / 2)},
+                         (float)(overlay_y(combo_height) - combo_decal.get_sprite()->Size().y * scale / 2)},
                         combo_decal.get(),
                         {scale, scale},
                         with_opacity(olc::WHITE)
@@ -220,6 +220,28 @@ namespace nascent {
         window->DrawWarpedDecal(decal, {{(float)x, (float)top}, {(float)x, (float)(top + note_size)}, {(float)(x + note_size), (float)(top + note_size)}, {(float)(x + note_size), (float)top}}, tint);
     }
 
+    void EntityField::draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const {
+        float head_y = (float)flip_y(head);
+        float tail_y = (float)flip_y(tail);
+        float left = (float)x;
+        float right = (float)(x + note_size);
+        float width = (float)body->sprite->width;
+        float height = (float)body->sprite->height;
+        std::array<olc::vf2d, 4> corners = {{{left, head_y}, {left, tail_y}, {right, tail_y}, {right, head_y}}};
+        const SkinManifest& manifest = skin->manifest();
+
+        if (manifest.hold_style == HoldStyle::TILE && width > HOLD_EDGE_INSET * 2) {
+            double aspect = manifest.hold_body_aspect.value_or(height / width);
+            double period = std::max(1.0, note_size * aspect);
+            float length = (float)((head - tail) / period * height);
+            window->DrawPartialWarpedDecal(body, corners, {HOLD_EDGE_INSET, -length}, {width - HOLD_EDGE_INSET * 2, length}, tint);
+            return;
+        }
+
+        float inset = height > HOLD_EDGE_INSET * 2 ? HOLD_EDGE_INSET : 0.0f;
+        window->DrawPartialWarpedDecal(body, corners, {0.0f, inset}, {width, height - inset * 2}, tint);
+    }
+
     olc::Pixel EntityField::with_opacity(olc::Pixel color) const {
         color.a = (uint8_t)std::lround(color.a * std::clamp(opacity, 0.0f, 1.0f));
         return color;
@@ -231,6 +253,10 @@ namespace nascent {
 
     double EntityField::flip_y(double y) const {
         return upscroll ? pos.y * 2 + size.y - y : y;
+    }
+
+    double EntityField::overlay_y(double height) const {
+        return pos.y + size.y * (1 - height);
     }
 
     void EntityField::set_position(double position) {

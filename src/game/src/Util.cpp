@@ -29,11 +29,11 @@ namespace nascent {
         return id;
     }
 
-    SpriteDecal::SpriteDecal(std::unique_ptr<olc::Sprite> sprite, bool filter) {
+    SpriteDecal::SpriteDecal(std::unique_ptr<olc::Sprite> sprite, bool filter, bool clamp) {
         this->sprite = std::move(sprite);
 
         if (this->sprite != nullptr) {
-            decal = std::make_unique<olc::Decal>(this->sprite.get(), filter);
+            decal = std::make_unique<olc::Decal>(this->sprite.get(), filter, clamp);
         }
     }
 

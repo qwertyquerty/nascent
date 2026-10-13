@@ -1,6 +1,7 @@
 #include "Const.h"
 #include "Account.h"
 #include "SceneList.h"
+#include "RichPresence.h"
 #include "BeatmapDownloads.h"
 #include "Chart.h"
 #include "DifficultyCalculator.h"
@@ -383,6 +384,8 @@ namespace nascent {
     };
 
     void SceneList::on_enter() {
+        active = true;
+        RichPresence::picking_song(selected_chart);
         if (BeatmapDownloads::take_library_changed()) {
             start_library_load();
         }
@@ -431,6 +434,7 @@ namespace nascent {
     }
 
     void SceneList::on_exit() {
+        active = false;
         stop_preview_audio();
         load_generation++;
     }
@@ -592,6 +596,10 @@ namespace nascent {
     void SceneList::select_chart(int32_t index, bool sound) {
         selected_chart = charts[visible[index]].get();
         status_bar.set_key_count(selected_chart->info.key_count);
+
+        if (active) {
+            RichPresence::picking_song(selected_chart);
+        }
         leaderboard_delay = LEADERBOARD_DELAY;
 
         selected_chart->set_pitch(this->pitch);

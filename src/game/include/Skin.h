@@ -45,7 +45,8 @@ namespace nascent {
 
     enum class HoldStyle : uint8_t {
         REPEAT,
-        STRETCH
+        STRETCH,
+        TILE
     };
 
     struct SkinManifest {
@@ -56,6 +57,9 @@ namespace nascent {
         HoldStyle hold_style = HoldStyle::REPEAT;
         double key_spacing = 0.15;
         uint8_t hold_alpha = 64;
+        std::optional<double> hold_body_aspect;
+        double hold_body_head_offset = 0;
+        double hold_body_tail_offset = 0;
         std::optional<uint8_t> receptor_alpha;
         std::map<uint8_t, std::vector<uint8_t>> lane_images;
 

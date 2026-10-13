@@ -11,6 +11,7 @@ add_library(game
     src/InputManager.cpp
     src/LocalBests.cpp
     src/ProgressBar.cpp
+    src/RichPresence.cpp
     src/RowField.cpp
     src/SceneAccount.cpp
     src/SceneBrowser.cpp
@@ -28,6 +29,7 @@ add_library(game
     src/StatusBar.cpp
     src/TextCache.cpp
     src/TextField.cpp
+    src/TimingBar.cpp
     src/UiForm.cpp
     src/Util.cpp
 )

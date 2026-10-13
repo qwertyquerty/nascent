@@ -44,7 +44,5 @@ namespace nascent {
         void draw(olc::PixelGameEngine*) override;
         void notify(const std::string& message, bool is_error = false) override;
 
-        void discord_init();
-        void discord_update();
     };
 }

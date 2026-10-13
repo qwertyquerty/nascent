@@ -24,7 +24,7 @@ namespace nascent {
 
         public:
         SpriteDecal() = default;
-        explicit SpriteDecal(std::unique_ptr<olc::Sprite> sprite, bool filter = false);
+        explicit SpriteDecal(std::unique_ptr<olc::Sprite> sprite, bool filter = false, bool clamp = true);
 
         static SpriteDecal adopt(olc::Decal* decal);
 

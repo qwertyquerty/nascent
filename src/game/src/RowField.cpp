@@ -118,12 +118,14 @@ namespace nascent {
     bool SliderField::update(olc::PixelGameEngine* window, const std::string& typed, float elapsed_time) {
         RowField::update(window, typed, elapsed_time);
         int32_t before = value;
+        bool left = left_repeat.update(window->GetKey(InputManager::menu_left_key), elapsed_time);
+        bool right = right_repeat.update(window->GetKey(InputManager::menu_right_key), elapsed_time);
 
-        if (window->GetKey(InputManager::menu_left_key).bPressed) {
+        if (left) {
             value = std::max(minimum, value - step);
         }
 
-        if (window->GetKey(InputManager::menu_right_key).bPressed) {
+        if (right) {
             value = std::min(maximum, value + step);
         }
 

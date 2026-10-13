@@ -91,7 +91,21 @@ namespace nascent {
         }
 
         if (has("hold_style", nlohmann::json::value_t::string)) {
-            hold_style = config["hold_style"].get<std::string>() == "stretch" ? HoldStyle::STRETCH : HoldStyle::REPEAT;
+            std::string style = config["hold_style"].get<std::string>();
+            hold_style = style == "stretch" ? HoldStyle::STRETCH : style == "tile" ? HoldStyle::TILE
+                                                                                   : HoldStyle::REPEAT;
+        }
+
+        if (has("hold_body_aspect", nlohmann::json::value_t::number_float)) {
+            hold_body_aspect = std::clamp(config["hold_body_aspect"].get<double>(), 0.001, 1000.0);
+        }
+
+        if (has("hold_body_head_offset", nlohmann::json::value_t::number_float)) {
+            hold_body_head_offset = std::clamp(config["hold_body_head_offset"].get<double>(), -4.0, 4.0);
+        }
+
+        if (has("hold_body_tail_offset", nlohmann::json::value_t::number_float)) {
+            hold_body_tail_offset = std::clamp(config["hold_body_tail_offset"].get<double>(), -4.0, 4.0);
         }
 
         if (has("key_spacing", nlohmann::json::value_t::number_float)) {
@@ -334,6 +348,7 @@ namespace nascent {
             slot.emplace();
             std::error_code ec;
             std::string stem = IMAGE_SLOTS[(size_t)image].stem;
+            bool clamp = image != SkinImage::HOLD_BODY || skin_manifest.hold_style != HoldStyle::TILE;
 
             for (const std::filesystem::path& directory : chain) {
                 for (uint8_t lane = 1; lane <= MAX_LANES; lane++) {
@@ -343,11 +358,11 @@ namespace nascent {
                         break;
                     }
 
-                    slot->emplace_back(std::make_unique<olc::Sprite>(path.string()), true);
+                    slot->emplace_back(std::make_unique<olc::Sprite>(path.string()), true, clamp);
                 }
 
                 if (slot->empty() && std::filesystem::exists(directory / (stem + ".png"), ec)) {
-                    slot->emplace_back(std::make_unique<olc::Sprite>((directory / (stem + ".png")).string()), true);
+                    slot->emplace_back(std::make_unique<olc::Sprite>((directory / (stem + ".png")).string()), true, clamp);
                 }
 
                 if (!slot->empty()) {

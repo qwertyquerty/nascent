@@ -1,4 +1,5 @@
 #include "ScenePlay.h"
+#include "RichPresence.h"
 #include "Account.h"
 #include "Accuracy.h"
 #include "Chart.h"
@@ -21,6 +22,7 @@
 #include "Util.h"
 #include "Utf8Path.h"
 #include "TextCache.h"
+#include "TimingBar.h"
 
 #include <algorithm>
 #include <cmath>
@@ -103,6 +105,7 @@ namespace nascent {
     }
 
     void ScenePlay::init(Game* game) {
+        RichPresence::playing(*chart);
         if (Account::signed_in()) {
             ticket = ServerApi::request_ticket(*chart).share();
         }
@@ -121,7 +124,7 @@ namespace nascent {
     void ScenePlay::start_attempt() {
         olc::vi2d window_size = game->window->GetScreenSize();
         const Settings& settings = SettingsManager::settings;
-        double lane_width = std::min((double)settings.field_lane_width, (double)window_size.x / chart->info.key_count);
+        double lane_width = std::min(window_size.y * settings.field_lane_width_percent / 100.0, (double)window_size.x / chart->info.key_count);
         double field_width = lane_width * chart->info.key_count;
 
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
@@ -133,10 +136,13 @@ namespace nascent {
         field->set_attempt(&session->get_attempt());
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
-        field->judge_height = settings.field_judge_offset;
+        field->judge_height = window_size.y * settings.field_judge_line_percent / 100.0;
         field->upscroll = settings.field_upscroll;
         field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(settings.field_lane_gap) : std::nullopt);
-        field->draw_combo = true;
+        field->draw_hit_score = settings.field_show_judgement;
+        field->draw_combo = settings.field_show_combo;
+        field->judgement_height = settings.field_judgement_height / 100.0;
+        field->combo_height = settings.field_combo_height / 100.0;
         timer = 0;
         frames_played = 0;
         frame_time_total = 0;
@@ -364,6 +370,7 @@ namespace nascent {
 
         chart_started = false;
         paused = false;
+        resumed_at.reset();
         audio_finished = false;
         restart_hold = 0;
         start_attempt();
@@ -390,6 +397,7 @@ namespace nascent {
 
     void ScenePlay::resume(double now) {
         paused = false;
+        resumed_at = now;
 
         if (chart_started && !audio_finished) {
             game->get_audio().Play(chart_audio_id);
@@ -429,7 +437,7 @@ namespace nascent {
                 resume(now);
             }
         }
-        else if (pause_pressed || !game->window->IsFocused()) {
+        else if ((pause_pressed && (!resumed_at || now - *resumed_at >= PAUSE_COOLDOWN_MS)) || !game->window->IsFocused()) {
             pause(now);
         }
 
@@ -550,34 +558,9 @@ namespace nascent {
             }
         }
 
-        l = 0;
-
-        float hit_width = screensize.x / 400;
-        float hit_height = hit_width * 15;
-        float px_per_ms = ((double)screensize.x) / 3.0 / get_window_from_hit_acc_diff(HitScore::BAD, attempt.hit_accuracy) / 2;
-        float y = screensize.y - hit_height;
-
-        for (auto it = TIMED_HIT_SCORES.rbegin(); it != TIMED_HIT_SCORES.rend(); ++it) {
-            uint16_t hit_err_window = get_window_from_hit_acc_diff(*it, attempt.hit_accuracy);
-            float x = screensize.x / 2 - hit_err_window * px_per_ms;
-            olc::Pixel c = olc::Pixel(hit_score_color(*it));
-            c.a = 24;
-            window->FillRectDecal({x, y}, {hit_err_window * 2 * px_per_ms, hit_height}, c);
-        }
-
-        const uint8_t max_hit_lines = 100;
-        for (int64_t i = attempt.soonest_scored_hit_index; i >= 0 && i < (int64_t)attempt.judged_hits.size(); i--) {
-            const JudgedHit& jhit = attempt.judged_hits[i];
-
-            if (jhit.hit_played && jhit.hit_score != HitScore::MISS) {
-                float x = screensize.x / 2 - hit_width - 2 + jhit.hit_err * px_per_ms;
-                window->FillRectDecal({x, y}, {hit_width, hit_height}, olc::Pixel(200, 255 - l, 255 - l, max_hit_lines - l));
-                l++;
-            }
-
-            if (l >= max_hit_lines) {
-                break;
-            }
+        if (SettingsManager::settings.field_show_timing_bar) {
+            const Settings& settings = SettingsManager::settings;
+            draw_timing_bar(window, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
         }
 
         if (paused) {

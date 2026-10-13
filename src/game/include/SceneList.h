@@ -109,6 +109,7 @@ namespace nascent {
 
         Skin* skin;
         EntityStarfield* sky;
+        bool active = false;
 
         StatusBar status_bar;
 

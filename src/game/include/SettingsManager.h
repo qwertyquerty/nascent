@@ -14,10 +14,18 @@ namespace nascent {
         uint8_t field_audio_sync_max_error = 20; // ms
         int16_t field_audio_visual_offset = 0; //ms
         int16_t field_audio_input_offset = 0; // ms
-        uint16_t field_lane_width = 128; // px
-        uint16_t field_judge_offset = 64; // px
+        uint8_t field_lane_width_percent = 12; // % of the screen height
+        uint8_t field_judge_line_percent = 6; // % of the screen height
         int16_t field_lane_gap = -1; // px, -1 uses the skin's spacing
         bool field_upscroll = false;
+        bool field_show_judgement = true;
+        uint8_t field_judgement_height = 45; // % of the field above the judgement line's end
+        bool field_show_combo = true;
+        uint8_t field_combo_height = 41; // % of the field above the judgement line's end
+        bool field_show_timing_bar = true;
+        uint8_t field_timing_bar_height = 0; // % of the screen above its bottom edge
+        uint8_t field_timing_bar_length = 33; // % of the screen width
+        uint8_t field_timing_bar_width = 5; // % of the screen height
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;
@@ -29,8 +37,8 @@ namespace nascent {
         float list_preview_fade_in_time = 0.5; // s
 
         std::string skin = "default";
-        uint16_t frame_rate_limit = 0;
-        uint8_t master_volume = 50;
+        uint16_t frame_rate_limit = 1000;
+        uint8_t master_volume = 85;
         uint8_t music_volume = 100;
         uint8_t effects_volume = 100;
         bool show_fps = true;
@@ -38,6 +46,7 @@ namespace nascent {
         std::string list_song_directory;
 
         std::string discord_application_id = "1360933253070061718";
+        bool discord_rich_presence = true;
 
         std::string server_url = "https://dev-ns.madeline.sh";
         std::vector<std::string> beatmap_download_urls = {"https://catboy.best/d/{id}", "https://osu.direct/api/d/{id}"};
@@ -54,6 +63,7 @@ namespace nascent {
         public:
         static constexpr const char* APP_NAME = "Nascent";
         static constexpr const char* SETTINGS_FILE_NAME = "settings.json";
+        static constexpr double VOLUME_RANGE_DB = 40.0;
         static constexpr uint32_t SETTINGS_VERSION = 1;
         static constexpr const char* SONG_DIRECTORY_NAME = "songs";
         static constexpr const char* LEGACY_SONG_DIRECTORY = "assets/songs";
@@ -65,5 +75,6 @@ namespace nascent {
         static SettingsLoadStatus load();
         static SettingsLoadStatus load(const std::filesystem::path& path);
         static bool save();
+        static float volume_gain(uint8_t percent);
     };
 }

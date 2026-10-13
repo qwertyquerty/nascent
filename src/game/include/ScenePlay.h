@@ -33,6 +33,7 @@ namespace nascent {
 
         double timer = 0;
         double paused_position = 0;
+        std::optional<double> resumed_at;
         float restart_hold = 0;
         uint32_t frames_played = 0;
         double frame_time_total = 0;
@@ -67,6 +68,7 @@ namespace nascent {
 
         public:
         static constexpr float RESTART_HOLD_TIME = 0.3f;
+        static constexpr double PAUSE_COOLDOWN_MS = 1000.0;
 
         ScenePlay(Chart* chart, Skin* skin, Scene* return_scene);
         ~ScenePlay();

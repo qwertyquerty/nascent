@@ -43,7 +43,22 @@ namespace nascent {
             mz_uint index;
             int32_t columns = 1;
             int32_t rows = 1;
+            int32_t res_width = 0;
+            int32_t res_height = 0;
         };
+
+        constexpr double ETTERNA_ARROW_SIZE = 64.0;
+
+        std::optional<double> metric(const std::string& metrics, const char* name) {
+            std::regex pattern(std::format(R"((?:^|\n)\s*{}\s*=\s*(-?\d+(?:\.\d+)?))", name), std::regex::icase);
+            std::smatch match;
+
+            if (!std::regex_search(metrics, match, pattern)) {
+                return std::nullopt;
+            }
+
+            return std::stod(match[1].str());
+        }
 
         struct Image {
             int32_t width = 0;
@@ -261,6 +276,15 @@ namespace nascent {
                         frame.rows = std::max(1, std::stoi(match[3].str()));
                     }
 
+                    static const std::regex resolution(R"(res\s*(\d+)\s*x\s*(\d+))", std::regex::icase);
+                    std::string tag = match[4].str();
+                    std::smatch size;
+
+                    if (std::regex_search(tag, size, resolution)) {
+                        frame.res_width = std::stoi(size[1].str());
+                        frame.res_height = std::stoi(size[2].str());
+                    }
+
                     return {frame};
                 }
 
@@ -432,6 +456,7 @@ namespace nascent {
 
         NoteSkinFiles skin(archive);
         NoteSkinScript script;
+        std::string metrics;
 
         for (const auto& [name, index] : entries) {
             if (folder_of(name) != *root) {
@@ -447,6 +472,10 @@ namespace nascent {
                 if (std::optional<std::string> text = archive.read(index, 256 * 1024)) {
                     parse_script(*text, script);
                 }
+            }
+
+            if (lowercase(file) == "metrics.ini") {
+                metrics = archive.read(index, 256 * 1024).value_or("");
             }
 
             skin.files.push_back({normalize_name(stem), extension, index});
@@ -553,9 +582,37 @@ namespace nascent {
             {"source", "etterna"},
             {"inherits", "default"},
             {"tint", "none"},
-            {"hold_style", "stretch"},
+            {"hold_style", "tile"},
             {"receptor_alpha", 255},
         };
+
+        for (size_t lane = 0; lane < LANE_BUTTONS.size(); lane++) {
+            std::vector<Frame> frames = lane_frames(lane, "Hold Body Active");
+
+            if (frames.empty()) {
+                continue;
+            }
+
+            const Frame& body = frames.front();
+
+            if (body.res_width > 0 && body.res_height > 0) {
+                config["hold_body_aspect"] = ((double)body.res_height / body.rows) / ((double)body.res_width / body.columns);
+            }
+
+            break;
+        }
+
+        if (std::optional<double> stretch = metric(metrics, "UseStretchHolds"); stretch && *stretch != 0) {
+            config["hold_style"] = "stretch";
+        }
+
+        if (std::optional<double> head = metric(metrics, "StartDrawingHoldBodyOffsetFromHead"); head && *head != 0) {
+            config["hold_body_head_offset"] = *head / ETTERNA_ARROW_SIZE;
+        }
+
+        if (std::optional<double> tail = metric(metrics, "StopDrawingHoldBodyOffsetFromTail"); tail && *tail != 0) {
+            config["hold_body_tail_offset"] = *tail / ETTERNA_ARROW_SIZE;
+        }
         std::ofstream(staging / "skin.json", std::ios::trunc) << config.dump(4) << std::endl;
 
         std::filesystem::remove_all(destination, ec);

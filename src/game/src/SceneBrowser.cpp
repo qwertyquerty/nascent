@@ -1,4 +1,5 @@
 #include "SceneBrowser.h"
+#include "RichPresence.h"
 
 #include "BeatmapDownloads.h"
 #include "Game.h"
@@ -96,6 +97,7 @@ namespace nascent {
     }
 
     void SceneBrowser::on_enter() {
+        RichPresence::in_menu("Browsing for new charts");
         focus_results(false);
     }
 
