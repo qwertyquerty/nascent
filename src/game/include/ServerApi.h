@@ -255,6 +255,8 @@ namespace nascent {
 
         static std::future<ApiResult<PlayTicket>> request_ticket(const Chart& chart);
         static std::future<ApiResult<Submission>> submit_play(const Chart& chart, const Replay& replay, const std::string& ticket = "");
+        static ApiResult<Submission> send_submission(nlohmann::json body, const nlohmann::json& chart_data);
+        static bool is_retryable(const ServerResponse& response);
         static std::future<ApiResult<Submission>> submit_play(const Chart& chart, const Replay& replay, std::shared_future<ApiResult<PlayTicket>> ticket);
         static std::future<ApiResult<ServerPlay>> play(int64_t play_id);
         static std::future<ApiResult<Replay>> replay(int64_t play_id);

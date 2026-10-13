@@ -3,13 +3,17 @@ message(STATUS "Building Game Module")
 add_library(game
     src/Account.cpp
     src/BeatmapDownloads.cpp
+    src/ChartLibrary.cpp
+    src/ChartMenu.cpp
     src/EntityFFT.cpp
     src/EntityField.cpp
     src/EtternaSkin.cpp
     src/EntityStarfield.cpp
     src/GameNascent.cpp
     src/InputManager.cpp
+    src/LeaderboardPanel.cpp
     src/LocalBests.cpp
+    src/LocalReplays.cpp
     src/ProgressBar.cpp
     src/RichPresence.cpp
     src/RowField.cpp
@@ -27,6 +31,7 @@ add_library(game
     src/SettingsManager.cpp
     src/Skin.cpp
     src/StatusBar.cpp
+    src/SubmissionQueue.cpp
     src/TextCache.cpp
     src/TextField.cpp
     src/TimingBar.cpp

@@ -6,6 +6,7 @@
 #include <cctype>
 #include <format>
 #include <mutex>
+#include <string_view>
 #include <utility>
 
 namespace nascent {
@@ -54,9 +55,27 @@ namespace nascent {
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
             curl_easy_setopt(curl, CURLOPT_USERAGENT, "Nascent");
+            curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+            curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
         }
 
         return curl;
+    }
+
+    static bool is_https(const std::string& url) {
+        static constexpr std::string_view scheme = "https://";
+
+        if (url.size() < scheme.size()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < scheme.size(); i++) {
+            if (std::tolower((unsigned char)url[i]) != scheme[i]) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     static size_t append_body(char* data, size_t size, size_t count, void* target) {
@@ -99,6 +118,12 @@ namespace nascent {
 
     ServerResponse ServerClient::request(const std::string& base_url, const std::string& method, const std::string& path, const nlohmann::json& body, const std::string& access_token) {
         ServerResponse response;
+
+        if (!is_https(base_url)) {
+            response.error = "the server address must start with https://";
+            return response;
+        }
+
         CURL* curl = create_handle();
 
         if (curl == nullptr) {
@@ -196,6 +221,12 @@ namespace nascent {
 
     std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable) {
         retryable = false;
+
+        if (!is_https(url)) {
+            error = "download addresses must start with https://";
+            return std::nullopt;
+        }
+
         CURL* curl = create_handle();
 
         if (curl == nullptr) {

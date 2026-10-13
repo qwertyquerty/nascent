@@ -18,6 +18,7 @@
 #include "SceneResults.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "SubmissionQueue.h"
 #include "Util.h"
 #include "Utf8Path.h"
 #include "TextCache.h"
@@ -89,7 +90,7 @@ namespace nascent {
         std::future<ApiResult<Submission>> submission;
 
         if (ticket.valid()) {
-            submission = ServerApi::submit_play(*chart, replay, ticket);
+            submission = SubmissionQueue::submit(*chart, replay, ticket);
         }
 
         int continuing_audio_id = -1;

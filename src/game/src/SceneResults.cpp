@@ -282,6 +282,11 @@ namespace nascent {
             return;
         }
 
+        if (!submitted->ok() && ServerApi::is_retryable(submitted->response)) {
+            message("Not submitted yet: it will be retried in the background", olc::GREY);
+            return;
+        }
+
         if (!submitted->ok()) {
             message(std::format("Not submitted: {}", submitted->error()), NEGATIVE_COLOR);
             return;

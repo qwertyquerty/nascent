@@ -423,31 +423,39 @@ namespace nascent {
                 body["ticket"] = ticket.get().value->ticket;
             }
 
-            ApiResult<Submission> result;
-            result.response = Account::authorized("POST", "/plays", body);
-
-            if (result.response.status == 409 && result.response.error_code() == "chart_required") {
-                body["chart"] = chart_data;
-                result.response = Account::authorized("POST", "/plays", body);
-            }
-
-            if (result.response.ok()) {
-                const json& j = result.response.body;
-                Submission submission;
-                submission.play = parse_play(field(j, "play"));
-                submission.chart = parse_chart(field(j, "chart"));
-                submission.chart_created = get_bool(j, "chart_created");
-                submission.chart_rank = get_optional_int(j, "chart_rank");
-
-                if (field(j, "key_mode").is_object()) {
-                    submission.key_mode = parse_standing(j["key_mode"]);
-                }
-
-                result.value = submission;
-            }
-
-            return result;
+            return send_submission(std::move(body), chart_data);
         });
+    }
+
+    ApiResult<Submission> ServerApi::send_submission(nlohmann::json body, const nlohmann::json& chart_data) {
+        ApiResult<Submission> result;
+        result.response = Account::authorized("POST", "/plays", body);
+
+        if (result.response.status == 409 && result.response.error_code() == "chart_required") {
+            body["chart"] = chart_data;
+            result.response = Account::authorized("POST", "/plays", body);
+        }
+
+        if (result.response.ok()) {
+            const json& j = result.response.body;
+            Submission submission;
+            submission.play = parse_play(field(j, "play"));
+            submission.chart = parse_chart(field(j, "chart"));
+            submission.chart_created = get_bool(j, "chart_created");
+            submission.chart_rank = get_optional_int(j, "chart_rank");
+
+            if (field(j, "key_mode").is_object()) {
+                submission.key_mode = parse_standing(j["key_mode"]);
+            }
+
+            result.value = submission;
+        }
+
+        return result;
+    }
+
+    bool ServerApi::is_retryable(const ServerResponse& response) {
+        return !response.error.empty() || response.status == 401 || response.status == 408 || response.status == 429 || response.status >= 500;
     }
 
     std::future<ApiResult<ServerPlay>> ServerApi::play(int64_t play_id) {

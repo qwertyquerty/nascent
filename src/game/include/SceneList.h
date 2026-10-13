@@ -1,5 +1,8 @@
 #pragma once
 
+#include "ChartLibrary.h"
+#include "ChartMenu.h"
+#include "LeaderboardPanel.h"
 #include "Scene.h"
 #include "SongClock.h"
 #include "StatusBar.h"
@@ -9,47 +12,20 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 namespace nascent {
     class Chart;
+    class DifficultyCache;
     class EntityField;
     class EntityStarfield;
     class Skin;
-    struct SearchFilter;
-
-    struct ChartLibrary {
-        std::vector<std::unique_ptr<Chart>> charts;
-        std::vector<std::string> hashes;
-        std::vector<std::optional<float>> difficulties;
-        std::vector<std::string> search_texts;
-        std::vector<std::string> details;
-        std::vector<double> lengths_ms;
-        std::unordered_map<std::string, std::string> hash_by_replay_folder;
-        float pitch = 1.0f;
-        bool hashed_files = false;
-    };
-
-    struct LocalScore {
-        double accuracy = 0;
-        uint32_t max_combo = 0;
-        std::string played_at;
-    };
-
-    template <typename T>
-    struct LeaderboardRequest {
-        std::string key;
-        uint64_t generation = 0;
-        std::future<T> result;
-    };
 
     class SceneList : public Scene {
         protected:
@@ -76,23 +52,15 @@ namespace nascent {
             std::unique_ptr<olc::Sprite> sprite;
         };
 
-        struct ChartMenu {
-            size_t selected = 0;
-            bool confirming = false;
-        };
+        std::unique_ptr<DifficultyCache> difficulty_cache;
 
-        std::vector<std::unique_ptr<Chart>> charts;
-        std::vector<std::string> chart_hashes;
-        std::vector<std::string> search_texts;
-        std::vector<std::string> chart_details;
-        std::vector<double> chart_lengths_ms;
+        ChartLibrary library;
         std::vector<size_t> visible;
         std::string search;
         std::optional<std::string> pending_selection;
         std::filesystem::path pending_selection_path;
         int pending_audio_id = -1;
         std::unordered_set<std::string> local_hashes;
-        std::vector<std::optional<float>> chart_difficulties;
         Chart* selected_chart = nullptr;
         int32_t selected_chart_index = 0;
 
@@ -102,8 +70,6 @@ namespace nascent {
         Chart* preview_audio_chart = nullptr;
         SongClock preview_clock;
         double preview_position = 0;
-
-        const uint8_t list_chart_height = 100;
 
         float list_scroll_offset = 0;
 
@@ -152,25 +118,19 @@ namespace nascent {
         float widest_grade = -1.0f;
 
         std::optional<ChartMenu> chart_menu;
-
+        LeaderboardPanel leaderboards;
         bool show_leaderboards = false;
         bool recommended_started = false;
-        float leaderboard_delay = 0;
-        uint64_t leaderboard_generation = 0;
-        std::unordered_map<std::string, std::vector<LocalScore>> local_scores;
-        std::unordered_map<std::string, ApiResult<ChartLeaderboard>> online_scores;
-        std::optional<LeaderboardRequest<std::vector<LocalScore>>> local_request;
-        std::optional<LeaderboardRequest<ApiResult<ChartLeaderboard>>> online_request;
 
         void start_library_load();
         void poll_library_load();
-        void apply_library(ChartLibrary library);
+        void apply_library(ChartLibrary loaded);
         void apply_search(size_t keep_chart);
         void refresh_search();
-        bool matches_filter(size_t index, const SearchFilter& filter);
         void update_search();
         void draw_search(olc::PixelGameEngine* window);
         void select_chart(int32_t, bool sound = true);
+        void create_preview_field();
         void set_pitch(float);
         std::optional<float> get_difficulty(size_t index) const;
         void difficulty_loop();
@@ -183,24 +143,35 @@ namespace nascent {
         void background_load_loop();
         void stop_preview_audio();
         void draw_list(olc::PixelGameEngine* window);
-        std::string leaderboard_key() const;
-        void update_leaderboards(float elapsed_time);
-        void draw_leaderboards(olc::PixelGameEngine* window);
+        std::string selected_hash() const;
+        olc::vi2d side_panel_position(olc::vi2d screen) const;
+        olc::vi2d side_panel_size(olc::vi2d screen) const;
         void download_recommended();
         void draw_recommended(olc::PixelGameEngine* window);
         bool update_controls();
         void update_chart_menu();
-        void draw_chart_menu(olc::PixelGameEngine* window);
         size_t pack_chart_count() const;
         void open_chart_website();
         void delete_charts(bool whole_pack);
 
         public:
+        static constexpr float DIFFICULTY_BAR_MAX = 100.0f;
+        static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
+        static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
+        static constexpr float LENGTH_OFFSET = 90.0f;
+        static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
+        static constexpr float GRADE_GAP = 8.0f;
+        static constexpr int32_t LIST_ROW_HEIGHT = 100;
+        static constexpr int32_t RECOMMENDED_ROW_HEIGHT = 30;
+        static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;
+        static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.json";
+
         SceneList(Skin* skin, EntityStarfield* sky);
         ~SceneList();
         void init(Game*) override;
         void on_enter() override;
         void on_exit() override;
+        void on_resize() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
 

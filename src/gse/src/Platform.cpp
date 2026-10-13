@@ -214,7 +214,7 @@ namespace nascent {
     }
 
     bool open_url(const std::string& url) {
-        if (!url.starts_with("https://") && !url.starts_with("http://")) {
+        if (!url.starts_with("https://")) {
             return false;
         }
 

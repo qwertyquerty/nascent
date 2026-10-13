@@ -11,6 +11,7 @@
 #include "SceneTitle.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "SubmissionQueue.h"
 #include "Utf8Path.h"
 #include "TextCache.h"
 #include "Ui.h"
@@ -29,6 +30,7 @@ namespace nascent {
                                                              };
 
     GameNascent::~GameNascent() {
+        SubmissionQueue::stop();
         RichPresence::shutdown();
         release_scenes();
         scene_list.reset();
@@ -39,6 +41,7 @@ namespace nascent {
 
     void GameNascent::init() {
         Account::load();
+        SubmissionQueue::start();
         LocalBests::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
         set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
@@ -97,6 +100,11 @@ namespace nascent {
         begin_frame(elapsed_time);
         text_cache_begin_frame();
         handle_dropped_files();
+
+        for (SubmissionNotice& notice : SubmissionQueue::take_notices()) {
+            show_toast(std::move(notice.message), notice.is_error);
+        }
+
         toast_timer = std::max(0.0f, toast_timer - elapsed_time);
 
         this->elapsed_time = elapsed_time;
