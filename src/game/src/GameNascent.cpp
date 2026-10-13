@@ -91,7 +91,9 @@ namespace nascent {
             return;
         }
 
-        if (window->GetKey(InputManager::back_key).bPressed && scene != scene_list.get() && dynamic_cast<SceneTitle*>(scene) == nullptr) {
+        bool went_back = window->GetKey(InputManager::back_key).bPressed && scene != scene_list.get() && dynamic_cast<SceneTitle*>(scene) == nullptr;
+
+        if (went_back) {
             play_sound(skin->get_random_menu_pluck());
             set_scene(scene_list.get());
         }
@@ -108,7 +110,10 @@ namespace nascent {
         toast_timer = std::max(0.0f, toast_timer - elapsed_time);
 
         this->elapsed_time = elapsed_time;
-        scene->update(elapsed_time);
+
+        if (!went_back) {
+            scene->update(elapsed_time);
+        }
         RichPresence::update(elapsed_time);
     }
 
