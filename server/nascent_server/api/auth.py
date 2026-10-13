@@ -47,8 +47,9 @@ def register():
 def login():
     body = parse_body(LoginIn)
     login_key = body.login.lower()
-    check_rate_limit("login_ip", client_ip())
-    check_rate_limit("login_account", login_key)
+    ip = client_ip()
+    check_rate_limit("login_ip", ip)
+    check_rate_limit("login_account", f"{login_key}:{ip}")
 
     user = db.session.scalar(select(User).where(or_(User.username_key == login_key, User.email_key == login_key)))
 

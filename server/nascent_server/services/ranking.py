@@ -11,6 +11,7 @@ from ..cache import store
 from ..errors import ApiError
 from ..extensions import db
 from ..models import COUNTED_PLAY_STATUSES, Play, User, UserKeyStats
+from ..queries import count_rows
 
 BOARD_PREFIX = "performance"
 
@@ -233,16 +234,14 @@ def global_rank(user: User, key_count: int) -> int | None:
     except redis.RedisError:
         current_app.logger.warning("leaderboard unavailable, ranking user %s from the database", user.id)
 
-    query = leaderboard_users_query(key_count).subquery()
-    above = db.session.scalar(select(func.count()).select_from(query).where(query.c.performance > standing(user, key_count)[0]))
-    return int(above or 0) + 1
+    return count_rows(leaderboard_users_query(key_count).where(UserKeyStats.performance > standing(user, key_count)[0])) + 1
 
 
 def ranked_player_count(key_count: int) -> int:
     try:
         return store().leaderboard_count(board_name(key_count))
     except redis.RedisError:
-        return int(db.session.scalar(select(func.count()).select_from(leaderboard_users_query(key_count).subquery())) or 0)
+        return count_rows(leaderboard_users_query(key_count))
 
 
 def leaderboard_page(offset: int, limit: int, key_count: int) -> tuple[list[tuple[int, int, float]], int]:
@@ -253,9 +252,9 @@ def leaderboard_page(offset: int, limit: int, key_count: int) -> tuple[list[tupl
     except redis.RedisError:
         current_app.logger.warning("leaderboard unavailable, paging from the database")
 
+    total = count_rows(leaderboard_users_query(key_count))
     query = leaderboard_users_query(key_count).subquery()
-    total = db.session.scalar(select(func.count()).select_from(query)) or 0
     rows = db.session.execute(
         select(query.c.user_id, query.c.performance).order_by(query.c.performance.desc(), query.c.user_id.asc()).offset(offset).limit(limit)
     ).all()
-    return [(offset + index + 1, row.user_id, row.performance) for index, row in enumerate(rows)], int(total)
+    return [(offset + index + 1, row.user_id, row.performance) for index, row in enumerate(rows)], total

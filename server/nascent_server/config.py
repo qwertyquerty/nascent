@@ -31,7 +31,7 @@ class Config:
     REFRESH_TOKEN_TTL = timedelta(days=90)
     SESSION_TOUCH_INTERVAL = timedelta(minutes=5)
 
-    TICKET_GRACE = timedelta(hours=2)
+    TICKET_GRACE = timedelta(hours=1)
     TICKET_MIN_ELAPSED_RATIO = 0.95
 
     PROFILE_TOP_PLAYS = 40
@@ -45,7 +45,7 @@ class Config:
         "login_ip": (30, 600),
         "login_account": (10, 600),
         "refresh": (60, 600),
-        "ticket": (120, 3600),
+        "ticket": (2000, 3600),
         "submit_burst": (6, 60),
         "submit": (120, 3600),
         "chart_upload": (30, 3600),

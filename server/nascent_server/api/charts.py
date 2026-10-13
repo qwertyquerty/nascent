@@ -5,6 +5,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from ..errors import ApiError
 from ..extensions import db
 from ..models import Chart, ChartSource, ChartStatus, Play, User
+from ..queries import count_rows
 from ..ratelimit import check_rate_limit
 from ..schemas import json_body, pagination, query_float, query_int
 from ..security import authenticate, current_user, require_not_banned
@@ -74,7 +75,7 @@ def list_charts():
 
     order = request.args.get("order", "asc")
     column = SORTS[sort].desc() if order == "desc" else SORTS[sort].asc()
-    total = db.session.scalar(select(func.count()).select_from(query.subquery()))
+    total = count_rows(query)
     charts = db.session.scalars(query.options(selectinload(Chart.sources)).order_by(column, Chart.id.asc()).offset(offset).limit(limit)).all()
     return {"total": total, "charts": [chart_summary(chart, include_sources=True) for chart in charts]}
 
@@ -115,11 +116,10 @@ def leaderboard(chart_hash: str):
     query = (
         select(Play)
         .join(User, User.id == Play.user_id)
-        .options(joinedload(Play.user))
         .where(Play.chart_id == chart.id, Play.rate_key == rate_key, Play.is_chart_best.is_(True), User.is_banned.is_(False))
     )
-    total = db.session.scalar(select(func.count()).select_from(query.subquery()))
-    plays = db.session.scalars(query.order_by(Play.accuracy.desc(), Play.max_combo.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
+    total = count_rows(query)
+    plays = db.session.scalars(query.options(joinedload(Play.user)).order_by(Play.accuracy.desc(), Play.max_combo.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
 
     body = {
         "chart": chart_summary(chart),
@@ -147,11 +147,10 @@ def performance_leaderboard(chart_hash: str):
     query = (
         select(Play)
         .join(User, User.id == Play.user_id)
-        .options(joinedload(Play.user))
         .where(Play.chart_id == chart.id, Play.is_profile_best.is_(True), User.is_banned.is_(False))
     )
-    total = db.session.scalar(select(func.count()).select_from(query.subquery()))
-    plays = db.session.scalars(query.order_by(Play.performance.desc(), Play.accuracy.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
+    total = count_rows(query)
+    plays = db.session.scalars(query.options(joinedload(Play.user)).order_by(Play.performance.desc(), Play.accuracy.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
 
     body = {
         "chart": chart_summary(chart),

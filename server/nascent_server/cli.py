@@ -6,9 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import click
+import flask_migrate
 from flask import current_app
 from flask.cli import AppGroup
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, inspect, select
 
 from . import tasks, timeutil
 from .errors import ApiError
@@ -23,16 +24,23 @@ from .services.plays import review_play, submit_play
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
 
 CHART_SUFFIXES = (".osu", ".json")
+BASELINE_REVISION = "0001"
 
 
 def _report(job: str | None, done: str) -> None:
     click.echo(f"queued job {job}" if job else done)
 
 
-@nascent_cli.command("create-db")
-def create_db():
-    db.create_all()
-    click.echo("created any missing tables")
+@nascent_cli.command("upgrade-db")
+def upgrade_db():
+    tables = set(inspect(db.engine).get_table_names())
+
+    if "alembic_version" not in tables and "users" in tables:
+        flask_migrate.stamp(revision=BASELINE_REVISION)
+        click.echo(f"marked the existing database as revision {BASELINE_REVISION}")
+
+    flask_migrate.upgrade()
+    click.echo("the database schema is up to date")
 
 
 @nascent_cli.command("create-user")

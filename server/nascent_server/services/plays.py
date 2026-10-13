@@ -166,7 +166,9 @@ def replay_fingerprint(chart_hash: str, replay: nc.Replay) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _resolve_ticket(user: User, token: str | None, chart_hash: str, rate_key: int, playable_ms: int) -> tuple[PlayTicket | None, anticheat.Flag | None]:
+def _resolve_ticket(
+    user: User, token: str | None, chart_hash: str, rate_key: int, playable_ms: int, chart_length_ms: int
+) -> tuple[PlayTicket | None, anticheat.Flag | None]:
     if token is None:
         return None, None
 
@@ -185,7 +187,9 @@ def _resolve_ticket(user: User, token: str | None, chart_hash: str, rate_key: in
     if ticket.chart_hash != chart_hash or ticket.rate_key != rate_key:
         return None, anticheat.Flag("ticket_rejected", anticheat.INFO, "The play ticket was issued for a different chart or rate", {"reason": "mismatch"})
 
-    if ticket.expires_at <= now:
+    expires_at = min(ticket.expires_at, ticket.issued_at + timedelta(milliseconds=chart_length_ms) + current_app.config["TICKET_GRACE"])
+
+    if expires_at <= now:
         return None, anticheat.Flag("ticket_rejected", anticheat.INFO, "The play ticket expired", {"reason": "expired"})
 
     elapsed_ms = (now - ticket.issued_at).total_seconds() * 1000
@@ -258,7 +262,8 @@ def submit_play(
         raise ApiError(409, "duplicate_replay", "This replay has already been submitted")
 
     playable_ms = replay.end_time - native.intro_skip_ms_at(replay.rate)
-    ticket, ticket_flag = (None, None) if trusted else _resolve_ticket(user, ticket_token, chart_hash, rate_key, playable_ms)
+    chart_length_ms = native.duration_ms_at(replay.rate)
+    ticket, ticket_flag = (None, None) if trusted else _resolve_ticket(user, ticket_token, chart_hash, rate_key, playable_ms, chart_length_ms)
     eligible = trusted or ticket is not None
     chart_created = False
 
@@ -296,7 +301,7 @@ def submit_play(
         eligible=eligible,
         ranked=eligible and status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED,
         **judgement_fields(simulation),
-        duration_ms=native.duration_ms_at(replay.rate),
+        duration_ms=chart_length_ms,
         difficulty=difficulty,
         performance=play_performance,
         calculator_version=calculator_version(),

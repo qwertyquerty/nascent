@@ -39,4 +39,4 @@ RUN pip install --no-cache-dir --no-deps -e . \
 
 USER nascent
 EXPOSE 8000
-CMD ["sh", "-c", "flask --app wsgi nascent create-db && exec uwsgi --ini uwsgi.ini"]
+CMD ["sh", "-c", "flask --app wsgi nascent upgrade-db && exec uwsgi --ini uwsgi.ini"]

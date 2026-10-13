@@ -1,10 +1,11 @@
 from flask import Blueprint, request
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from ..errors import ApiError
 from ..extensions import db
 from ..models import User, UserKeyStats
+from ..queries import count_rows
 from ..schemas import pagination
 from ..serializers import user_summary
 from ..services import ranking
@@ -24,11 +25,11 @@ def sorted_page(offset: int, limit: int, key_count: int, sort: str) -> tuple[lis
         .join(User, User.id == UserKeyStats.user_id)
         .where(UserKeyStats.key_count == key_count, UserKeyStats.ranked_play_count > 0, User.is_banned.is_(False))
     )
-    total = db.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    total = count_rows(query)
     rows = db.session.execute(
         query.order_by(SORTS[sort].desc(), UserKeyStats.performance.desc(), UserKeyStats.user_id.asc()).offset(offset).limit(limit)
     ).all()
-    return [(offset + index + 1, row.user_id, row.performance) for index, row in enumerate(rows)], int(total)
+    return [(offset + index + 1, row.user_id, row.performance) for index, row in enumerate(rows)], total
 
 
 @blueprint.get("/performance")
