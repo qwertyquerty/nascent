@@ -37,7 +37,6 @@ namespace nascent {
             curl_share_setopt(created->handle, CURLSHOPT_LOCKFUNC, lock_share);
             curl_share_setopt(created->handle, CURLSHOPT_UNLOCKFUNC, unlock_share);
             curl_share_setopt(created->handle, CURLSHOPT_USERDATA, created);
-            curl_share_setopt(created->handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
             curl_share_setopt(created->handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
             curl_share_setopt(created->handle, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
             return created;
