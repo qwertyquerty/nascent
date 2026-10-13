@@ -3,6 +3,7 @@ import json
 import nascent_core as nc
 import pytest
 
+from nascent_server.config import Config
 from nascent_server.services.ranking import profile_weights
 
 from .helpers import CHART, HASH, make_chart, make_replay, rank_chart, submit, ticket_for
@@ -33,7 +34,7 @@ def test_ranked_play_flow(api, clock):
     assert seven["key_mode"]["key_count"] == 7
     assert seven["key_mode"]["global_rank"] == 1
 
-    weights = profile_weights(50, 0.95)
+    weights = profile_weights(Config.PROFILE_TOP_PLAYS, Config.PROFILE_DECAY)
     profile = api.get("/api/v1/users/alice").get_json()["user"]
     modes = {mode["key_count"]: mode for mode in profile["key_modes"]}
     assert set(modes) == {4, 7}
