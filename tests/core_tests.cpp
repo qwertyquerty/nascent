@@ -334,6 +334,26 @@ static void test_song_clock() {
     }
 }
 
+static void test_intro_skip() {
+    auto chart_with_first_note = [](int32_t time) {
+        ChartInfo info;
+        info.key_count = 4;
+        std::vector<Hit> hits = {{0, HitType::HIT, time, time}, {1, HitType::HIT, time + 500, time + 500}};
+        std::string error;
+        return Chart::create(info, std::move(hits), {{0, 500.0f, 4}}, error);
+    };
+
+    std::unique_ptr<Chart> long_intro = chart_with_first_note(12000);
+    std::unique_ptr<Chart> short_intro = chart_with_first_note(INTRO_SKIP_MIN_GAP_MS);
+    CHECK(long_intro && long_intro->intro_skip_ms() == 12000 - INTRO_SKIP_LEAD_MS);
+    CHECK(short_intro && short_intro->intro_skip_ms() == 0);
+
+    if (long_intro) {
+        long_intro->set_pitch(1.5f);
+        CHECK(long_intro->intro_skip_ms() == 8000 - INTRO_SKIP_LEAD_MS);
+    }
+}
+
 static void test_snap_pitch() {
     float pitch = 1.0f;
 
@@ -400,6 +420,7 @@ int main() {
         {"snap_pitch", test_snap_pitch},
         {"song_clock", test_song_clock},
         {"mp3_padding", test_mp3_padding},
+        {"intro_skip", test_intro_skip},
     };
 
     for (const auto& [name, test] : tests) {

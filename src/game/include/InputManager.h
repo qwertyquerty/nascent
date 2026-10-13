@@ -15,7 +15,8 @@ namespace nascent {
         PAUSE,
         RESTART,
         DIAGNOSTICS,
-        COPY_DIAGNOSTICS
+        COPY_DIAGNOSTICS,
+        SKIP_INTRO
     };
 
     struct KeyBindingInfo {
@@ -24,11 +25,12 @@ namespace nascent {
         olc::Key default_key;
     };
 
-    inline constexpr std::array<KeyBindingInfo, 4> KEY_BINDINGS = {{
+    inline constexpr std::array<KeyBindingInfo, 5> KEY_BINDINGS = {{
         {"pause", "Pause", olc::Key::TAB},
         {"restart", "Quick restart (hold)", olc::Key::OEM_3},
         {"diagnostics", "Diagnostics overlay", olc::Key::F10},
         {"copy_diagnostics", "Copy diagnostics", olc::Key::F11},
+        {"skip_intro", "Skip intro", olc::Key::SPACE},
     }};
 
     class InputManager {

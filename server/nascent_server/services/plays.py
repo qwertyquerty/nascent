@@ -166,7 +166,7 @@ def replay_fingerprint(chart_hash: str, replay: nc.Replay) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _resolve_ticket(user: User, token: str | None, chart_hash: str, rate_key: int, end_time: int) -> tuple[PlayTicket | None, anticheat.Flag | None]:
+def _resolve_ticket(user: User, token: str | None, chart_hash: str, rate_key: int, playable_ms: int) -> tuple[PlayTicket | None, anticheat.Flag | None]:
     if token is None:
         return None, None
 
@@ -189,7 +189,7 @@ def _resolve_ticket(user: User, token: str | None, chart_hash: str, rate_key: in
         return None, anticheat.Flag("ticket_rejected", anticheat.INFO, "The play ticket expired", {"reason": "expired"})
 
     elapsed_ms = (now - ticket.issued_at).total_seconds() * 1000
-    required_ms = max(end_time, 0) * current_app.config["TICKET_MIN_ELAPSED_RATIO"]
+    required_ms = max(playable_ms, 0) * current_app.config["TICKET_MIN_ELAPSED_RATIO"]
 
     if elapsed_ms < required_ms:
         raise ApiError(
@@ -257,7 +257,8 @@ def submit_play(
     if db.session.scalar(select(Play.id).where(Play.replay_hash == fingerprint)) is not None:
         raise ApiError(409, "duplicate_replay", "This replay has already been submitted")
 
-    ticket, ticket_flag = (None, None) if trusted else _resolve_ticket(user, ticket_token, chart_hash, rate_key, replay.end_time)
+    playable_ms = replay.end_time - native.intro_skip_ms_at(replay.rate)
+    ticket, ticket_flag = (None, None) if trusted else _resolve_ticket(user, ticket_token, chart_hash, rate_key, playable_ms)
     eligible = trusted or ticket is not None
     chart_created = False
 

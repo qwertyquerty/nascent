@@ -89,6 +89,7 @@ namespace nascent {
          * Get the start of the played part of the chart (hit time of first hit)
          */
         int32_t get_chart_start_ms() const;
+        int32_t intro_skip_ms() const;
 
         /**
          * Get the end of the played part of the chart (release time of last hit)

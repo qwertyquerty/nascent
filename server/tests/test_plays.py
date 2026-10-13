@@ -1,3 +1,6 @@
+import json
+
+import nascent_core as nc
 import pytest
 
 from nascent_server.services.ranking import profile_weights
@@ -73,3 +76,23 @@ def test_bad_submissions_are_rejected(api, clock):
     assert response["play"]["flags"][-1]["data"]["reason"] == "superseded"
     assert response["play"]["is_chart_best"] is False
 
+
+def test_intro_skip_shortens_the_minimum_play_time(api, clock):
+    chart = make_chart(title="Long Intro")
+
+    for hit in chart["hit_objects"]:
+        hit["time"] += 29000
+        hit["end_time"] += 29000
+
+    native = nc.Chart.from_json(json.dumps(chart))
+    assert native.intro_skip_ms_at(1.0) == 30000 - nc.INTRO_SKIP_LEAD_MS
+    assert nc.Chart.from_json(json.dumps(CHART)).intro_skip_ms_at(1.0) == 0
+    playable_minutes = (native.end_ms_at(1.0) - native.intro_skip_ms_at(1.0)) / 60000
+    token = api.token("skipper")
+
+    early = submit(api, clock, token, make_replay(chart, seed=1), chart=chart, wait_minutes=playable_minutes * 0.8)
+    assert early.status_code == 422
+    assert early.get_json()["error"]["code"] == "play_too_fast"
+
+    skipped = submit(api, clock, token, make_replay(chart, seed=2), chart=chart, wait_minutes=playable_minutes)
+    assert skipped.status_code == 201, skipped.get_json()

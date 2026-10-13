@@ -281,6 +281,11 @@ namespace nascent {
         return hits.empty() ? 0 : hits.front().time;
     }
 
+    int32_t Chart::intro_skip_ms() const {
+        int32_t first_note = get_chart_start_ms();
+        return first_note > INTRO_SKIP_MIN_GAP_MS ? first_note - INTRO_SKIP_LEAD_MS : 0;
+    }
+
     const ChartTimingPoint* Chart::timing_point_at(double time) const {
         auto it = std::upper_bound(timing_points.begin(), timing_points.end(), time, [](double t, const ChartTimingPoint& tp) {
             return t < tp.time;

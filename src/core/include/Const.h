@@ -20,4 +20,7 @@ namespace nascent {
     }
 
     inline constexpr uint8_t MAX_LANES = 32;
+
+    inline constexpr int32_t INTRO_SKIP_MIN_GAP_MS = 5000;
+    inline constexpr int32_t INTRO_SKIP_LEAD_MS = 2000;
 }

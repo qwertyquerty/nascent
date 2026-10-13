@@ -171,6 +171,11 @@ namespace {
         return chart.at_rate(rate).get_chart_end_ms();
     }
 
+    int32_t chart_intro_skip_at(const LoadedChart& chart, float rate) {
+        check_rate(rate);
+        return chart.at_rate(rate).intro_skip_ms();
+    }
+
     int32_t chart_duration_at(const LoadedChart& chart, float rate) {
         check_rate(rate);
         return chart.at_rate(rate).get_duration_ms();
@@ -200,6 +205,8 @@ PYBIND11_MODULE(nascent_core, m) {
     m.attr("RATE_MIN") = PITCH_MINIMUM;
     m.attr("RATE_MAX") = PITCH_MAXIMUM;
     m.attr("RATE_STEP") = PITCH_INTERVAL;
+    m.attr("INTRO_SKIP_MIN_GAP_MS") = INTRO_SKIP_MIN_GAP_MS;
+    m.attr("INTRO_SKIP_LEAD_MS") = INTRO_SKIP_LEAD_MS;
     m.attr("REPLAY_FORMAT_VERSION") = Replay::FORMAT_VERSION;
     m.attr("CHART_HASH_FORMAT") = std::string(Chart::CHART_HASH_FORMAT);
     m.attr("PERFORMANCE_ACCURACY_FLOOR") = PERFORMANCE_ACCURACY_FLOOR;
@@ -231,6 +238,7 @@ PYBIND11_MODULE(nascent_core, m) {
         .def_property_readonly("start_ms", [](const LoadedChart& c) { return c.chart->get_chart_start_ms(); })
         .def_property_readonly("duration_ms", [](const LoadedChart& c) { return c.chart->get_duration_ms(); })
         .def("end_ms_at", &chart_end_at, py::arg("rate"))
+        .def("intro_skip_ms_at", &chart_intro_skip_at, py::arg("rate"))
         .def("duration_ms_at", &chart_duration_at, py::arg("rate"))
         .def("difficulty", &chart_difficulty_at, py::arg("rate") = 1.0f)
         .def("to_json", [](const LoadedChart& c) { return c.chart->serialize().dump(); });

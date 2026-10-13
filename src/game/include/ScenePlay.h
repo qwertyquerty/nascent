@@ -55,6 +55,8 @@ namespace nascent {
         void finish();
         void start_attempt();
         void restart();
+        bool can_skip_intro(double now) const;
+        void skip_intro(double now);
         void record_frame(float elapsed_time);
         void record_press(double time);
         double frame_percentile_ms(double fraction) const;

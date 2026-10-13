@@ -2,6 +2,7 @@
 #include "Account.h"
 #include "Accuracy.h"
 #include "Chart.h"
+#include "Const.h"
 #include "EntityField.h"
 #include "Game.h"
 #include "InputManager.h"
@@ -35,6 +36,7 @@ namespace nascent {
     static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
     static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
     static constexpr float SONG_PROGRESS_TOP = 40.0f;
+    static constexpr uint8_t SKIP_HINT_ALPHA = 200;
     static constexpr float DIAGNOSTICS_RIGHT = 570.0f;
     static constexpr float DIAGNOSTICS_TOP = 70.0f;
     static constexpr float DIAGNOSTICS_LINE_HEIGHT = 18.0f;
@@ -332,6 +334,25 @@ namespace nascent {
         }
     }
 
+    bool ScenePlay::can_skip_intro(double now) const {
+        int32_t target = chart->intro_skip_ms();
+        return !finished && !paused && target > 0 && session->song_position(now) < target;
+    }
+
+    void ScenePlay::skip_intro(double now) {
+        double target = chart->intro_skip_ms();
+        double latency = game->get_audio().GetOutputLatencyMilliseconds();
+        game->get_audio().Seek(chart_audio_id, (ma_uint64)std::lround(std::max(0.0, (target + latency) * chart->pitch)));
+        session->reset_clock(target, now);
+
+        if (!chart_started) {
+            chart_started = true;
+            game->get_audio().Play(chart_audio_id);
+        }
+
+        game->play_sound(skin->get_random_menu_pluck());
+    }
+
     void ScenePlay::restart() {
         game->get_audio().Stop(chart_audio_id);
         game->get_audio().Seek(chart_audio_id, 0);
@@ -416,6 +437,10 @@ namespace nascent {
             session->reset_clock(paused_position, now);
         }
         else {
+            if (can_skip_intro(now) && game->window->GetKey(InputManager::get_key(KeyBinding::SKIP_INTRO)).bPressed) {
+                skip_intro(now);
+            }
+
             if (!chart_started && session->song_position(now) >= -game->get_audio().GetOutputLatencyMilliseconds()) {
                 chart_started = true;
                 game->get_audio().Play(chart_audio_id);
@@ -482,6 +507,12 @@ namespace nascent {
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
         draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, olc::WHITE);
+
+        if (can_skip_intro(now_ms())) {
+            std::string skip_hint = std::format("Press {} to skip the intro", InputManager::key_label(InputManager::get_key(KeyBinding::SKIP_INTRO)));
+            int32_t skip_width = text_bounds(skin->display_font_medium, skip_hint).size.x;
+            draw_text(skin->display_font_medium, skip_hint, {screensize.x / 2 - skip_width / 2, screensize.y * 2 / 3}, olc::Pixel(255, 255, 255, SKIP_HINT_ALPHA));
+        }
 
         uint8_t l = 0;
         const double vspacing = 26;
