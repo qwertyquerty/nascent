@@ -292,6 +292,15 @@ Index(
     postgresql_where=text("is_chart_best"),
     sqlite_where=text("is_chart_best"),
 )
+Index(
+    "ix_plays_chart_performance",
+    Play.chart_id,
+    Play.performance.desc(),
+    Play.accuracy.desc(),
+    Play.id,
+    postgresql_where=text("is_profile_best"),
+    sqlite_where=text("is_profile_best"),
+)
 Index("ix_plays_profile_best", Play.user_id, Play.performance.desc(), postgresql_where=text("is_profile_best"), sqlite_where=text("is_profile_best"))
 Index(
     "ix_plays_profile_best_keys",
@@ -302,6 +311,7 @@ Index(
     sqlite_where=text("is_profile_best"),
 )
 Index("ix_plays_user_recent", Play.user_id, Play.id)
+Index("ix_plays_ranked_performance", Play.performance.desc(), Play.id, postgresql_where=text("ranked"), sqlite_where=text("ranked"))
 Index("ix_plays_user_chart", Play.user_id, Play.chart_id, Play.rate_key)
 Index("ix_plays_chart_user", Play.chart_id, Play.user_id)
 Index("ix_plays_status", Play.status, Play.id)

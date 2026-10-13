@@ -1,7 +1,12 @@
-from flask import Blueprint
+from flask import Blueprint, request
+from sqlalchemy import func, select
+from sqlalchemy.orm import joinedload
 
 from .. import timeutil
-from ..schemas import SubmissionIn, TicketIn, parse_body
+from ..errors import ApiError
+from ..extensions import db
+from ..models import COUNTED_PLAY_STATUSES, Play, User
+from ..schemas import SubmissionIn, TicketIn, pagination, parse_body, query_int
 from ..security import current_user
 from ..serializers import chart_detail, play_out
 from ..services.plays import Standing, issue_ticket, submit_play
@@ -9,6 +14,8 @@ from ..storage import json_gz_response
 from .lookup import can_see_private, get_visible_play_or_404
 
 blueprint = Blueprint("plays", __name__, url_prefix="/plays")
+
+SORTS = ("recent", "performance")
 
 
 def standing_out(standing: Standing) -> dict:
@@ -34,6 +41,30 @@ def create_ticket():
         "chart_known": issued.chart is not None,
         "chart_status": issued.chart.status if issued.chart is not None else None,
     }, 201
+
+
+@blueprint.get("")
+def list_plays():
+    limit, offset = pagination(default_limit=50, max_limit=100, max_offset=10_000)
+    sort = request.args.get("sort", "recent")
+
+    if sort not in SORTS:
+        raise ApiError(400, "invalid_query", f"sort must be one of {', '.join(SORTS)}")
+
+    query = select(Play).join(User, User.id == Play.user_id).where(User.is_banned.is_(False), Play.status.in_(COUNTED_PLAY_STATUSES))
+
+    if "key_count" in request.args:
+        query = query.where(Play.key_count == query_int("key_count", 4, 1, 32))
+
+    if sort == "performance":
+        query = query.where(Play.ranked.is_(True), Play.eligible.is_(True))
+        order = (Play.performance.desc(), Play.id.asc())
+    else:
+        order = (Play.id.desc(),)
+
+    total = db.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    plays = db.session.scalars(query.options(joinedload(Play.user), joinedload(Play.chart)).order_by(*order).offset(offset).limit(limit)).all()
+    return {"sort": sort, "total": total, "plays": [play_out(play) for play in plays]}
 
 
 @blueprint.post("")

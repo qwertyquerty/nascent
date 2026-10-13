@@ -11,7 +11,7 @@ from ..security import authenticate, current_user, require_not_banned
 from ..serializers import chart_detail, chart_summary, play_out
 from ..services.calculator import DEFAULT_RATE_KEY, require_rate_key
 from ..services.charts import get_chart_or_404, parse_chart, register_chart
-from ..services.plays import chart_rank
+from ..services.plays import chart_performance_rank, chart_rank
 from ..storage import json_gz_response
 
 blueprint = Blueprint("charts", __name__, url_prefix="/charts")
@@ -134,6 +134,35 @@ def leaderboard(chart_hash: str):
             select(Play).where(Play.chart_id == chart.id, Play.rate_key == rate_key, Play.user_id == viewer.id, Play.is_chart_best.is_(True))
         )
         body["viewer"] = {"rank": chart_rank(mine), "play": play_out(mine, include_chart=False)} if mine is not None and not viewer.is_banned else None
+
+    return body
+
+
+@blueprint.get("/<chart_hash>/leaderboard/performance")
+def performance_leaderboard(chart_hash: str):
+    chart = get_chart_or_404(chart_hash)
+    limit, offset = pagination(default_limit=50, max_limit=100, max_offset=10_000)
+
+    query = (
+        select(Play)
+        .join(User, User.id == Play.user_id)
+        .options(joinedload(Play.user))
+        .where(Play.chart_id == chart.id, Play.is_profile_best.is_(True), User.is_banned.is_(False))
+    )
+    total = db.session.scalar(select(func.count()).select_from(query.subquery()))
+    plays = db.session.scalars(query.order_by(Play.performance.desc(), Play.accuracy.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
+
+    body = {
+        "chart": chart_summary(chart),
+        "total": total,
+        "entries": [{"rank": offset + index + 1, "play": play_out(play, include_chart=False)} for index, play in enumerate(plays)],
+    }
+
+    viewer = authenticate()
+
+    if viewer is not None:
+        mine = db.session.scalar(select(Play).where(Play.chart_id == chart.id, Play.user_id == viewer.id, Play.is_profile_best.is_(True)))
+        body["viewer"] = {"rank": chart_performance_rank(mine), "play": play_out(mine, include_chart=False)} if mine is not None and not viewer.is_banned else None
 
     return body
 

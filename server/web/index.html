@@ -26,6 +26,7 @@
                     <a class="navbar-item" :class="{'is-active': route.name === 'home'}" href="#/">Home</a>
                     <a class="navbar-item" :class="{'is-active': route.name === 'leaderboard'}" href="#/leaderboard">Leaderboard</a>
                     <a class="navbar-item" :class="{'is-active': route.name.startsWith('chart')}" href="#/charts">Charts</a>
+                    <a class="navbar-item" :class="{'is-active': route.name === 'plays'}" href="#/plays">Plays</a>
                 </div>
                 <form class="navbar-end navbar-item" @submit.prevent="submit($event)">
                     <input class="input is-small" name="player" type="search" placeholder="Find a player" required>
@@ -70,8 +71,37 @@
             <template v-else-if="route.name === 'leaderboard'">
                 <h1 class="title">{{ view.keyCount }}K leaderboard</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} ranked players</p>
-                <key-tabs :current="view.keyCount" path="/leaderboard"></key-tabs>
+                <key-tabs :current="view.keyCount" path="/leaderboard" :params="{sort: route.params.sort}"></key-tabs>
+                <div class="field is-grouped is-align-items-center mb-4">
+                    <span class="mr-3">Sort by</span>
+                    <div class="buttons has-addons mb-0">
+                        <a v-for="[sort, label] in [['performance', 'Performance'], ['accuracy', 'Accuracy'], ['ranked_plays', 'Ranked plays']]"
+                            class="button is-small mb-0" :class="{'is-link is-selected': sort === view.sort}"
+                            :href="$link.to('/leaderboard', {key_count: view.keyCount, sort: sort === 'performance' ? null : sort})">{{ label }}</a>
+                    </div>
+                </div>
                 <player-table :entries="view.entries" detailed></player-table>
+                <pager :total="view.total"></pager>
+            </template>
+
+            <template v-else-if="route.name === 'plays'">
+                <h1 class="title">Plays</h1>
+                <p class="subtitle">{{ $f.number(view.total) }} {{ view.performance ? 'ranked plays' : 'plays' }}</p>
+                <div class="tabs">
+                    <ul>
+                        <li :class="{'is-active': !view.performance}"><a :href="$link.to('/plays', {key_count: route.params.key_count})">Recent</a></li>
+                        <li :class="{'is-active': view.performance}"><a :href="$link.to('/plays', {key_count: route.params.key_count, sort: 'performance'})">Top performance</a></li>
+                    </ul>
+                </div>
+                <div class="field is-grouped is-align-items-center mb-4">
+                    <div class="select">
+                        <select @change="go($link.to('/plays', {sort: route.params.sort, key_count: $event.target.value}))">
+                            <option value="">Any keys</option>
+                            <option v-for="count in keyCounts" :value="count" :selected="route.params.key_count == count">{{ count }}K</option>
+                        </select>
+                    </div>
+                </div>
+                <play-table :plays="view.plays" show-user :empty="view.performance ? 'No ranked plays yet.' : 'No plays yet.'"></play-table>
                 <pager :total="view.total"></pager>
             </template>
 
@@ -181,6 +211,21 @@
                     {{ $f.number(view.chart.play_count) }} plays
                     <a v-for="source in view.chart.sources.filter((source) => source.url?.startsWith('https://'))" class="ml-2" :href="source.url" target="_blank" rel="noopener">{{ source.source }}</a>
                 </p>
+                <div class="tabs">
+                    <ul>
+                        <li :class="{'is-active': !view.performance}"><a :href="$link.chart(view.chart.hash, view.performance ? 1 : view.board.rate)">Accuracy</a></li>
+                        <li :class="{'is-active': view.performance}"><a :href="$link.chartPerformance(view.chart.hash)">Performance</a></li>
+                    </ul>
+                </div>
+                <template v-if="view.performance">
+                    <p class="mb-4 has-text-grey">
+                        Each player's best performance across every rate &middot; {{ $f.number(view.board.total) }} players
+                    </p>
+                    <play-table :plays="view.board.entries" show-user :show-chart="false"
+                        :empty="view.chart.status === 'ranked' ? 'Nobody has a ranked play on this chart yet.' : 'Only ranked charts give performance.'"></play-table>
+                    <pager :total="view.board.total"></pager>
+                </template>
+                <template v-else>
                 <div class="field is-grouped is-align-items-center mb-4">
                     <h2 class="title is-4 mb-0 mr-3">Leaderboard at</h2>
                     <div class="select">
@@ -194,6 +239,7 @@
                 </div>
                 <play-table :plays="view.board.entries" show-user :show-chart="false" empty="Nobody has played this rate yet."></play-table>
                 <pager :total="view.board.total"></pager>
+                </template>
             </template>
         </div>
     </main>

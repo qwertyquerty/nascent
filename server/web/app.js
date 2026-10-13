@@ -20,6 +20,7 @@ const link = {
     to: (path, params) => `#${path}?${query(params)}`.replace(/\?$/, ""),
     user: (name, params) => link.to(`/users/${encodeURIComponent(name)}`, params),
     chart: (hash, rate) => link.to(`/charts/${encodeURIComponent(hash)}`, {rate: rate === 1 ? null : rate}),
+    chartPerformance: (hash) => link.to(`/charts/${encodeURIComponent(hash)}`, {board: "performance"}),
 };
 
 const format = {
@@ -48,7 +49,14 @@ const loaders = {
 
     async leaderboard({params}, keyCounts) {
         const keyCount = params.key_count ?? keyCounts[0];
-        return {keyCount, ...(await api("/leaderboards/performance", {key_count: keyCount, ...paged(params)}))};
+        return {keyCount, ...(await api("/leaderboards/performance", {key_count: keyCount, sort: params.sort, ...paged(params)}))};
+    },
+
+    async plays({params}) {
+        const performance = params.sort === "performance";
+        const page = paged(params);
+        const {plays, total} = await api("/plays", {sort: params.sort, key_count: params.key_count, ...page});
+        return {total, performance, plays: performance ? plays.map((play, index) => ({rank: page.offset + index + 1, play})) : plays};
     },
 
     async user({id, params}, keyCounts) {
@@ -65,8 +73,10 @@ const loaders = {
 
     async chart({id, params}) {
         const base = `/charts/${encodeURIComponent(id)}`;
-        const [{chart}, board] = await Promise.all([api(base), api(`${base}/leaderboard`, {rate: params.rate, ...paged(params)})]);
-        return {chart, board};
+        const performance = params.board === "performance";
+        const board = performance ? api(`${base}/leaderboard/performance`, paged(params)) : api(`${base}/leaderboard`, {rate: params.rate, ...paged(params)});
+        const [{chart}, entries] = await Promise.all([api(base), board]);
+        return {chart, board: entries, performance};
     },
 };
 

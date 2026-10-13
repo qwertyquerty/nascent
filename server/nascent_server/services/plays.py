@@ -361,6 +361,26 @@ def chart_rank(play: Play) -> int | None:
     return int(better or 0) + 1
 
 
+def chart_performance_rank(play: Play) -> int | None:
+    if not play.is_profile_best:
+        return None
+
+    better = db.session.scalar(
+        select(func.count())
+        .select_from(Play)
+        .join(User, User.id == Play.user_id)
+        .where(
+            Play.chart_id == play.chart_id,
+            Play.is_profile_best.is_(True),
+            User.is_banned.is_(False),
+            (Play.performance > play.performance)
+            | ((Play.performance == play.performance) & (Play.accuracy > play.accuracy))
+            | ((Play.performance == play.performance) & (Play.accuracy == play.accuracy) & (Play.id < play.id)),
+        )
+    )
+    return int(better or 0) + 1
+
+
 def review_play(play: Play, moderator: User | None, approve: bool, note: str) -> None:
     play.status = PlayStatus.VERIFIED if approve else PlayStatus.REJECTED
     play.eligible = play.eligible or approve
