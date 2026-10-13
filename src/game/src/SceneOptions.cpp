@@ -72,30 +72,6 @@ namespace nascent {
         return keys;
     }
 
-    static std::string normalize_server_url(std::string url) {
-        size_t start = url.find_first_not_of(" \t");
-        size_t end = url.find_last_not_of(" \t");
-        url = start == std::string::npos ? std::string() : url.substr(start, end - start + 1);
-
-        if (url.empty()) {
-            return url;
-        }
-
-        if (url.find("://") == std::string::npos) {
-            url = "https://" + url;
-        }
-
-        while (!url.empty() && url.back() == '/') {
-            url.pop_back();
-        }
-
-        if (url.ends_with("/api/v1")) {
-            url.erase(url.size() - std::string_view("/api/v1").size());
-        }
-
-        return url;
-    }
-
     SceneOptions::SceneOptions(Skin* skin) : skin(skin) {}
 
     SceneOptions::~SceneOptions() = default;
@@ -242,7 +218,6 @@ namespace nascent {
         settings.field_timing_bar_width = (uint8_t)timing_bar_width_field->value;
         rebuild_preview();
         status.clear();
-        status_is_error = false;
 
         for (KeyBindField* field : key_fields) {
             if (std::optional<KeyBinding> swapped = std::exchange(field->swapped, std::nullopt)) {
@@ -289,7 +264,7 @@ namespace nascent {
         }
 
         server_check_delay = std::max(0.0f, server_check_delay - elapsed_time);
-        std::string url = normalize_server_url(server_typed);
+        std::string url = server_host(server_typed);
 
         if (server_check.valid() && server_check.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             ApiResult<ServerHealth> result = server_check.get();
@@ -297,16 +272,13 @@ namespace nascent {
 
             if (server_checked == url) {
                 if (!result.ok()) {
-                    status = std::format("Couldn't reach {}: {}", server_checked, result.error());
-                    status_is_error = true;
+                    game->notify(std::format("Couldn't reach {}: {}", server_checked, result.error()), true);
                 }
                 else if (!result.value->healthy) {
-                    status = std::format("{} answered but isn't healthy right now", server_checked);
-                    status_is_error = true;
+                    game->notify(std::format("{} answered but isn't healthy right now", server_checked), true);
                 }
                 else {
-                    status = std::format("{} is online ({:.0f} ms)", server_checked, result.value->latency_ms);
-                    status_is_error = false;
+                    game->notify(std::format("{} is online ({:.0f} ms)", server_checked, result.value->latency_ms));
                 }
             }
         }
@@ -314,8 +286,6 @@ namespace nascent {
         if (!server_check.valid() && server_check_delay <= 0 && !url.empty() && url != server_checked) {
             server_checking = url;
             server_check = ServerApi::health(url);
-            status = std::format("Checking {}...", url);
-            status_is_error = false;
         }
 
         if (form.focused_field() != server_field) {
@@ -329,7 +299,7 @@ namespace nascent {
         }
 
         Settings& settings = SettingsManager::settings;
-        std::string url = normalize_server_url(server_field->value);
+        std::string url = server_host(server_field->value);
 
         if (url.empty()) {
             url = settings.server_url;
@@ -536,7 +506,7 @@ namespace nascent {
         draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, olc::GREY);
 
         if (!status.empty()) {
-            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, status_is_error ? olc::RED : olc::GREY);
+            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, olc::GREY);
         }
 
         draw_text(skin->display_font_small, footer, {x, footer_top}, olc::GREY);

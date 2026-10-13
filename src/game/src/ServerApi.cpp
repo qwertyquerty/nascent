@@ -204,13 +204,7 @@ namespace nascent {
     }
 
     std::string ServerApi::website_url(const std::string& route) {
-        std::string base = SettingsManager::settings.server_url;
-
-        while (base.ends_with('/')) {
-            base.pop_back();
-        }
-
-        return std::format("{}/#{}", base, route);
+        return server_base_url(SettingsManager::settings.server_url) + route;
     }
 
     std::string ServerApi::chart_page_url(const std::string& chart_hash, float rate) {

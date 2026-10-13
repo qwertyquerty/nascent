@@ -149,6 +149,7 @@ namespace nascent {
         }
 
         session = store->value;
+        session.server_url = server_host(session.server_url);
 
         if (session.server_url != SettingsManager::settings.server_url) {
             session = AccountFile();

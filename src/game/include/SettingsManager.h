@@ -53,7 +53,7 @@ namespace nascent {
         std::string discord_application_id = "1360933253070061718";
         bool discord_rich_presence = true;
 
-        std::string server_url = "https://dev-ns.madeline.sh";
+        std::string server_url = "dev-ns.madeline.sh";
         std::vector<std::string> beatmap_download_urls = {"https://catboy.best/d/{id}", "https://osu.direct/api/d/{id}"};
 
         std::map<std::string, std::vector<std::string>> lane_keymaps = {

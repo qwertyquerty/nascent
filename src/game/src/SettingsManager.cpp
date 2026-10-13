@@ -1,6 +1,7 @@
 #include "SettingsManager.h"
 
 #include "Platform.h"
+#include "ServerClient.h"
 #include "SettingsStore.h"
 #include "json.h"
 #include "Utf8Path.h"
@@ -110,6 +111,7 @@ namespace nascent {
         }
 
         settings = settings_store()->value;
+        settings.server_url = server_host(settings.server_url);
         settings.list_song_directory = path_utf8(resolve_song_directory(settings.list_song_directory));
         return status;
     }

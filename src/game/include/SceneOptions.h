@@ -54,7 +54,6 @@ namespace nascent {
         std::vector<KeyBindField*> key_fields;
         TextField* server_field = nullptr;
         std::string status;
-        bool status_is_error = false;
 
         std::string server_typed;
         std::string server_checked;

@@ -115,11 +115,40 @@ namespace nascent {
         return std::format("the server answered with HTTP {}", status);
     }
 
-    ServerResponse ServerClient::request(const std::string& base_url, const std::string& method, const std::string& path, const nlohmann::json& body, const std::string& access_token) {
-        ServerResponse response;
+    std::string server_host(const std::string& address) {
+        size_t start = address.find_first_not_of(" \t");
+        size_t end = address.find_last_not_of(" \t");
+        std::string host = start == std::string::npos ? std::string() : address.substr(start, end - start + 1);
 
-        if (!is_https(base_url)) {
-            response.error = "the server address must start with https://";
+        if (size_t scheme = host.find("://"); scheme != std::string::npos) {
+            host.erase(0, scheme + 3);
+        }
+
+        while (host.ends_with('/')) {
+            host.pop_back();
+        }
+
+        if (host.ends_with("/api/v1")) {
+            host.erase(host.size() - std::string_view("/api/v1").size());
+        }
+
+        while (host.ends_with('/')) {
+            host.pop_back();
+        }
+
+        return host;
+    }
+
+    std::string server_base_url(const std::string& address) {
+        return "https://" + server_host(address);
+    }
+
+    ServerResponse ServerClient::request(const std::string& server, const std::string& method, const std::string& path, const nlohmann::json& body, const std::string& access_token) {
+        ServerResponse response;
+        std::string host = server_host(server);
+
+        if (host.empty()) {
+            response.error = "no server address is set";
             return response;
         }
 
@@ -130,7 +159,7 @@ namespace nascent {
             return response;
         }
 
-        std::string url = base_url + "/api/v1" + path;
+        std::string url = "https://" + host + "/api/v1" + path;
         std::string payload = body.is_null() ? std::string() : body.dump();
         std::string authorization = "Authorization: Bearer " + access_token;
         std::string received;
@@ -185,9 +214,9 @@ namespace nascent {
         return response;
     }
 
-    std::future<ServerResponse> ServerClient::request_async(const std::string& base_url, const std::string& method, const std::string& path, const nlohmann::json& body, const std::string& access_token) {
-        return run_detached([base_url, method, path, body, access_token] {
-            return request(base_url, method, path, body, access_token);
+    std::future<ServerResponse> ServerClient::request_async(const std::string& server, const std::string& method, const std::string& path, const nlohmann::json& body, const std::string& access_token) {
+        return run_detached([server, method, path, body, access_token] {
+            return request(server, method, path, body, access_token);
         });
     }
 
