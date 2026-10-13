@@ -24,10 +24,10 @@ namespace nascent {
     static std::map<int64_t, std::shared_ptr<BeatmapDownloads::Download>> downloads;
     static std::atomic<bool> library_changed = false;
 
-    static std::string folder_name(int64_t set_id, const std::string& artist, const std::string& title) {
+    static std::string folder_name(const std::string& text) {
         std::string name;
 
-        for (unsigned char c : std::format("{} {} - {}", set_id, artist, title)) {
+        for (unsigned char c : text) {
             if (c >= 0x20 && c != 0x7f && std::string_view("<>:\"/\\|?*").find((char)c) == std::string_view::npos) {
                 name.push_back((char)c);
             }
@@ -160,7 +160,7 @@ namespace nascent {
         mz_zip_archive zip = {};
 
         if (!mz_zip_reader_init_mem(&zip, archive.data(), archive.size(), 0)) {
-            error = "the download is not a valid .osz archive";
+            error = "it is not a valid .osz archive";
             return false;
         }
 
@@ -226,7 +226,34 @@ namespace nascent {
         mz_zip_reader_end(&zip);
 
         if (charts_written == 0) {
-            error = first_failure.empty() ? std::string("the download has no .osu files") : first_failure;
+            error = first_failure.empty() ? std::string("it has no .osu files") : first_failure;
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool install(const std::string& archive, const std::filesystem::path& destination, std::string& error) {
+        std::error_code ec;
+
+        if (std::filesystem::exists(destination, ec)) {
+            return extract(archive, destination, error);
+        }
+
+        std::filesystem::path staging = destination;
+        staging += ".part";
+        std::filesystem::remove_all(staging, ec);
+
+        if (!extract(archive, staging, error)) {
+            std::filesystem::remove_all(staging, ec);
+            return false;
+        }
+
+        std::filesystem::rename(staging, destination, ec);
+
+        if (ec) {
+            std::filesystem::remove_all(staging, ec);
+            error = std::format("could not move the beatmap into the songs folder: {}", ec.message());
             return false;
         }
 
@@ -314,7 +341,7 @@ namespace nascent {
             urls.push_back(std::move(url));
         }
 
-        std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(folder_name(set_id, artist, title));
+        std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(folder_name(std::format("{} {} - {}", set_id, artist, title)));
 
         std::thread([download, urls, destination] {
             std::string error = "no beatmap download mirrors are configured";
@@ -326,32 +353,10 @@ namespace nascent {
             }
 
             download->state = State::EXTRACTING;
-            std::error_code ec;
 
-            if (std::filesystem::exists(destination, ec)) {
-                if (!extract(*archive, destination, error)) {
-                    download->fail(error);
-                    return;
-                }
-            }
-            else {
-                std::filesystem::path staging = destination;
-                staging += ".part";
-                std::filesystem::remove_all(staging, ec);
-
-                if (!extract(*archive, staging, error)) {
-                    std::filesystem::remove_all(staging, ec);
-                    download->fail(error);
-                    return;
-                }
-
-                std::filesystem::rename(staging, destination, ec);
-
-                if (ec) {
-                    std::filesystem::remove_all(staging, ec);
-                    download->fail(std::format("could not move the beatmap into the songs folder: {}", ec.message()));
-                    return;
-                }
+            if (!install(*archive, destination, error)) {
+                download->fail(error);
+                return;
             }
 
             download->progress = 1.0;
@@ -370,5 +375,44 @@ namespace nascent {
 
     bool BeatmapDownloads::take_library_changed() {
         return library_changed.exchange(false);
+    }
+
+    BeatmapDownloads::ImportResult BeatmapDownloads::import_archive(const std::filesystem::path& file) {
+        ImportResult result;
+        result.name = folder_name(path_utf8(file.stem()));
+
+        if (result.name.empty()) {
+            result.name = "Imported beatmap";
+        }
+
+        std::error_code ec;
+        uintmax_t size = std::filesystem::file_size(file, ec);
+
+        if (ec) {
+            result.error = std::format("could not read it: {}", ec.message());
+            return result;
+        }
+
+        if (size > MAX_DOWNLOAD_BYTES) {
+            result.error = "it is too large";
+            return result;
+        }
+
+        std::ifstream stream(file, std::ios::binary);
+        std::string archive((size_t)size, '\0');
+        stream.read(archive.data(), (std::streamsize)archive.size());
+
+        if (!stream) {
+            result.error = "could not read it";
+            return result;
+        }
+
+        if (!install(archive, SettingsManager::song_directory() / utf8_path(result.name), result.error)) {
+            return result;
+        }
+
+        library_changed = true;
+        result.ok = true;
+        return result;
     }
 }

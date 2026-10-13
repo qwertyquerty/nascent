@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BeatmapDownloads.h"
 #include "EtternaSkin.h"
 #include "Game.h"
 
@@ -7,6 +8,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace nascent {
     class EntityStarfield;
@@ -22,6 +24,7 @@ namespace nascent {
         int64_t start_time;
 
         std::future<SkinImportResult> skin_import;
+        std::vector<std::future<BeatmapDownloads::ImportResult>> beatmap_imports;
         std::string toast;
         float toast_timer = 0;
         bool toast_is_error = false;
@@ -43,6 +46,5 @@ namespace nascent {
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;
         void notify(const std::string& message, bool is_error = false) override;
-
     };
 }

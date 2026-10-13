@@ -118,6 +118,23 @@ namespace nascent {
             }
         }
 
+        for (auto it = beatmap_imports.begin(); it != beatmap_imports.end();) {
+            if (it->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+                ++it;
+                continue;
+            }
+
+            BeatmapDownloads::ImportResult result = it->get();
+            it = beatmap_imports.erase(it);
+
+            if (result.ok) {
+                show_toast(std::format("Imported {}", result.name), false);
+            }
+            else {
+                show_toast(std::format("Could not import {}: {}", result.name, result.error), true);
+            }
+        }
+
         for (const std::string& file : get_frame_dropped_files()) {
             std::filesystem::path path = utf8_path(file);
             std::string extension = path_utf8(path.extension());
@@ -126,8 +143,24 @@ namespace nascent {
                 c = (char)std::tolower((unsigned char)c);
             }
 
+            if (extension == ".osz") {
+                show_toast(std::format("Importing {}...", path_utf8(path.filename())), false, std::numeric_limits<float>::infinity());
+                beatmap_imports.push_back(std::async(std::launch::async, [path] {
+                    try {
+                        return BeatmapDownloads::import_archive(path);
+                    }
+                    catch (const std::exception& e) {
+                        BeatmapDownloads::ImportResult result;
+                        result.name = path_utf8(path.stem());
+                        result.error = e.what();
+                        return result;
+                    }
+                }));
+                continue;
+            }
+
             if (extension != ".zip") {
-                show_toast("Drop an Etterna noteskin .zip to import it", true);
+                show_toast("Drop an osu! .osz beatmap or an Etterna noteskin .zip to import it", true);
                 continue;
             }
 
