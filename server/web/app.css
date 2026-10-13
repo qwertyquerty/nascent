@@ -18,6 +18,10 @@ main {
     font-family: "Tomorrow", sans-serif;
 }
 
+.title {
+    font-weight: 600;
+}
+
 @font-face {
     font-family: "Nascent Display";
     src: url("/display_font.ttf") format("truetype");
