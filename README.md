@@ -45,6 +45,7 @@ Code style is defined in `.clang-format`. Format everything with `scripts/format
 - `tests` - unit tests for `src/core`
 - `tools` - chart conversion and difficulty tuning scripts
 - `server` - the game server API
+- `docs` - how gameplay and scoring works: [Nascent Engine](docs/engine.md) covers judgement, accuracy, performance and profile performance
 
 ### Credits
 
