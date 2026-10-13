@@ -83,8 +83,8 @@
         chdir: "{{ nascent_compose_dir }}"
       changed_when: true
 
-    - name: Apply the Cloudflare settings to nginx
-      when: cloudflare_conf is changed or cloudflare_removed is changed
+    - name: Restart nginx to pick up the new release and Cloudflare settings
+      when: checkout is changed or cloudflare_conf is changed or cloudflare_removed is changed
       ansible.builtin.command: docker compose restart nginx
       args:
         chdir: "{{ nascent_compose_dir }}"
