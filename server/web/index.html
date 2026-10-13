@@ -139,15 +139,17 @@
                         <span class="judgement-name" :class="'judgement-' + score.toLowerCase()">{{ score }}</span>{{ $f.number(count) }}
                     </span>
                     <span v-if="view.play.status !== 'verified'" class="tag is-medium is-warning is-light">{{ view.play.status.replace('_', ' ') }}</span>
-                    <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Chart best</span>
+                    <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Personal best</span>
                 </div>
 
                 <template v-if="view.timeline">
                     <h2 class="title is-4">Replay</h2>
-                    <replay-viewer :timeline="view.timeline"></replay-viewer>
+                    <replay-viewer :timeline="view.timeline" :download-url="'/api/v1/plays/' + view.play.id + '/replay'"></replay-viewer>
                 </template>
-                <p v-else class="has-text-grey">The replay for this play couldn't be loaded.</p>
-                <a class="button is-small mt-3" :href="'/api/v1/plays/' + view.play.id + '/replay'" download>Download replay file</a>
+                <template v-else>
+                    <p class="has-text-grey">The replay for this play couldn't be loaded.</p>
+                    <a class="button is-small mt-3" :href="'/api/v1/plays/' + view.play.id + '/replay'" download>Download replay file</a>
+                </template>
             </template>
 
             <template v-else-if="route.name === 'user'">

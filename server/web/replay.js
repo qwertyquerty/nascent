@@ -12,6 +12,8 @@ const LEAD_IN_MS = 1500;
 const JUDGEMENT_SHOW_MS = 500;
 const TIMING_HISTORY_MS = 3000;
 const SEEK_STEP_MS = 5000;
+const SIDE_COLUMN_PX = 256;
+const SIDE_GAP_PX = 24;
 
 const SKIN_FILES = {
     notes: [1, 2, 3, 4, 5, 6, 7].map((index) => `/skins/default/note_${index}.png`),
@@ -204,8 +206,8 @@ function isHeld(intervals, time) {
 }
 
 const ReplayViewer = {
-    props: {timeline: Object, accuracy: Number},
-    data: () => ({playing: false, position: 0, speed: 1, scroll: 2}),
+    props: {timeline: Object, accuracy: Number, downloadUrl: String},
+    data: () => ({playing: false, position: 0, speed: 1, scroll: 200}),
     computed: {
         prepared: (self) => prepareTimeline(self.timeline),
         duration: (self) => self.prepared.end - self.prepared.start,
@@ -229,7 +231,9 @@ const ReplayViewer = {
         layout() {
             const canvas = this.$refs.canvas;
             const ratio = devicePixelRatio || 1;
-            const width = Math.min(canvas.parentElement.clientWidth, this.prepared.keyCount * 72 + 48);
+            const stacked = matchMedia("(max-width: 768px)").matches;
+            const available = this.$el.clientWidth - (stacked ? 0 : SIDE_COLUMN_PX + SIDE_GAP_PX);
+            const width = Math.max(160, Math.min(available, this.prepared.keyCount * 72 + 48));
             const height = Math.min(520, Math.max(320, innerHeight * 0.6));
             canvas.style.width = `${width}px`;
             canvas.style.height = `${height}px`;
@@ -293,7 +297,7 @@ const ReplayViewer = {
             const noteSize = fieldWidth / (keyCount + keyCount * KEY_SPACING - KEY_SPACING);
             const laneStep = noteSize * (1 + KEY_SPACING);
             const judgeY = height - noteSize - height * JUDGE_HEIGHT;
-            const pxPerMs = (height / 1000) * this.scroll;
+            const pxPerMs = (height / 100000) * this.scroll;
             const spritePx = Math.max(1, Math.round(noteSize * ratio));
             const colorAt = (x, y) => gradientAt(skin, x / width, y / height);
 
@@ -480,19 +484,22 @@ const ReplayViewer = {
         <div class="replay-stage">
             <canvas ref="canvas" tabindex="0" role="img" aria-label="Replay of this play" @click="toggle" @keydown="key"></canvas>
         </div>
-        <hit-error-graph class="replay-timeline" :timeline="timeline" :position="position" @seek="seekTo"></hit-error-graph>
-        <div class="replay-controls">
-            <button type="button" class="button is-link" @click="toggle" :aria-label="playing ? 'Pause replay' : 'Play replay'">{{ playing ? "Pause" : "Play" }}</button>
-            <span class="replay-clock">{{ clock }}</span>
-            <div class="select is-small">
-                <select v-model.number="speed" aria-label="Playback speed">
-                    <option v-for="option in [0.25, 0.5, 1, 1.5, 2]" :value="option">{{ option }}x</option>
-                </select>
-            </div>
-            <div class="select is-small">
-                <select v-model.number="scroll" aria-label="Scroll speed">
-                    <option v-for="option in [1, 1.5, 2, 2.5, 3]" :value="option">Scroll {{ option }}</option>
-                </select>
+        <div class="replay-side">
+            <hit-error-graph class="replay-timeline" :timeline="timeline" :position="position" @seek="seekTo"></hit-error-graph>
+            <div class="replay-controls">
+                <button type="button" class="button is-link" @click="toggle" :aria-label="playing ? 'Pause replay' : 'Play replay'">{{ playing ? "Pause" : "Play" }}</button>
+                <span class="replay-clock">{{ clock }}</span>
+                <div class="select is-small">
+                    <select v-model.number="speed" aria-label="Playback speed">
+                        <option v-for="option in [0.25, 0.5, 1, 1.5, 2]" :value="option">{{ option }}x</option>
+                    </select>
+                </div>
+                <div class="select is-small">
+                    <select v-model.number="scroll" aria-label="Scroll speed">
+                        <option v-for="option in [100, 150, 200, 250, 300]" :value="option">Scroll {{ option }}</option>
+                    </select>
+                </div>
+                <a v-if="downloadUrl" class="button is-small" :href="downloadUrl" download>Download replay file</a>
             </div>
         </div>
     </div>`,
