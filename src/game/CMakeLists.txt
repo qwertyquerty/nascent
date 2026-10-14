@@ -36,6 +36,7 @@ add_library(game
     src/TextField.cpp
     src/TimingBar.cpp
     src/UiForm.cpp
+    src/Updater.cpp
     src/Util.cpp
 )
 

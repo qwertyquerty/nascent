@@ -33,6 +33,10 @@ namespace nascent {
         return window->GetKey(reset_modifier).bHeld && window->GetKey(reset_shortcut_key).bPressed;
     }
 
+    bool InputManager::update_pressed(olc::PixelGameEngine* window) {
+        return window->GetKey(update_modifier).bHeld && window->GetKey(update_key).bPressed;
+    }
+
     std::optional<olc::Key> InputManager::key_from_name(std::string_view name) {
         for (size_t i = 1; i < KEY_NAMES.size(); i++) {
             if (KEY_NAMES[i] == name) {

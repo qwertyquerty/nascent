@@ -1,9 +1,9 @@
 add_executable(NascentMain nascent_main.cpp)
 
 if(MSVC)
-    target_sources(NascentMain PRIVATE nascent.manifest)
+    target_sources(NascentMain PRIVATE nascent.manifest nascent_icon.rc)
 elseif(MINGW)
-    target_sources(NascentMain PRIVATE nascent.rc)
+    target_sources(NascentMain PRIVATE nascent.rc nascent_icon.rc)
 endif()
 target_link_libraries(NascentMain PRIVATE game)
 nascent_target_warnings(NascentMain)

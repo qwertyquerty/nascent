@@ -5,6 +5,7 @@ on:
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -59,8 +60,12 @@ jobs:
       run:
         shell: ${{ matrix.shell }}
 
+    env:
+      NASCENT_VERSION: ${{ github.event_name == 'push' && github.ref_name || format('0.0.0.ci{0}', github.run_number) }}
+
     steps:
       - name: Validate tag
+        if: github.event_name == 'push'
         shell: bash
         run: |
           if [[ ! "$GITHUB_REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9A-Za-z]+)?$ ]]; then
@@ -89,7 +94,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} "-DNASCENT_VERSION=${{ github.ref_name }}" "-DNASCENT_PACKAGE_ARCH=${{ matrix.arch }}" ${{ matrix.osx_arch && format('-DCMAKE_OSX_ARCHITECTURES={0}', matrix.osx_arch) || '' }}
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} "-DNASCENT_VERSION=${{ env.NASCENT_VERSION }}" "-DNASCENT_PACKAGE_ARCH=${{ matrix.arch }}" ${{ matrix.osx_arch && format('-DCMAKE_OSX_ARCHITECTURES={0}', matrix.osx_arch) || '' }}
 
       - name: Build
         run: cmake --build build --parallel
@@ -100,16 +105,35 @@ jobs:
       - name: Package
         run: cmake --build build --target portable_zip
 
-      - name: Upload package
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress -y
+
+      - name: Install appimagetool
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$(uname -m).AppImage"
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          cmake -DNASCENT_APPIMAGETOOL="$RUNNER_TEMP/appimagetool" build
+
+      - name: Build installer
+        run: cmake --build build --target installer
+
+      - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
           name: nascent-${{ matrix.os_name }}-${{ matrix.arch }}
-          path: build/dist/*.zip
+          path: |
+            build/dist/*.zip
+            build/dist/*.exe
+            build/dist/*.dmg
+            build/dist/*.AppImage
           if-no-files-found: error
 
   release:
     name: Publish release
     needs: package
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -118,6 +142,10 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS
 
       - name: Create release
         env:
@@ -129,9 +157,9 @@ jobs:
           fi
 
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            gh release create "$GITHUB_REF_NAME" dist/* \
               --repo "$GITHUB_REPOSITORY" \
               --title "Nascent $GITHUB_REF_NAME" \
               --notes "" \

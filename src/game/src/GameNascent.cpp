@@ -12,6 +12,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "SubmissionQueue.h"
+#include "Updater.h"
 #include "Utf8Path.h"
 #include "TextCache.h"
 #include "Ui.h"
@@ -42,6 +43,7 @@ namespace nascent {
     void GameNascent::init() {
         Account::load();
         SubmissionQueue::start();
+        Updater::check();
         LocalBests::load();
         scene_transition_time = SettingsManager::settings.scene_transition_time;
         set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
@@ -105,6 +107,10 @@ namespace nascent {
 
         for (SubmissionNotice& notice : SubmissionQueue::take_notices()) {
             show_toast(std::move(notice.message), notice.is_error);
+        }
+
+        if (std::optional<UpdateNotice> notice = Updater::take_notice()) {
+            show_toast(std::move(notice->message), notice->is_error);
         }
 
         toast_timer = std::max(0.0f, toast_timer - elapsed_time);

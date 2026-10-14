@@ -39,7 +39,7 @@ extern char** environ;
 #endif
 
 namespace nascent {
-    std::filesystem::path executable_directory() {
+    std::filesystem::path executable_path() {
         std::error_code ec;
 
 #if defined(_WIN32)
@@ -53,7 +53,7 @@ namespace nascent {
             }
 
             if (length < buffer.size()) {
-                return std::filesystem::path(std::wstring(buffer.data(), length)).parent_path();
+                return std::filesystem::path(std::wstring(buffer.data(), length));
             }
 
             buffer.resize(buffer.size() * 2);
@@ -68,20 +68,75 @@ namespace nascent {
         }
 
         std::filesystem::path path = std::filesystem::canonical(buffer.data(), ec);
-        return ec ? std::filesystem::path() : path.parent_path();
+        return ec ? std::filesystem::path() : path;
 #else
         std::filesystem::path path = std::filesystem::read_symlink("/proc/self/exe", ec);
-        return ec ? std::filesystem::path() : path.parent_path();
+        return ec ? std::filesystem::path() : path;
 #endif
+    }
+
+    std::filesystem::path executable_directory() {
+        return executable_path().parent_path();
     }
 
     void use_executable_directory_for_assets() {
         std::error_code ec;
         std::filesystem::path directory = executable_directory();
 
-        if (!directory.empty() && std::filesystem::is_directory(directory / "assets", ec)) {
+        if (directory.empty()) {
+            return;
+        }
+
+#if defined(__APPLE__)
+        std::filesystem::path resources = directory.parent_path() / "Resources";
+
+        if (!std::filesystem::is_directory(directory / "assets", ec) && std::filesystem::is_directory(resources / "assets", ec)) {
+            directory = resources;
+        }
+#endif
+
+        if (std::filesystem::is_directory(directory / "assets", ec)) {
             std::filesystem::current_path(directory, ec);
         }
+    }
+
+    bool spawn_detached(const std::filesystem::path& program, const std::vector<std::string>& arguments) {
+#if defined(_WIN32)
+        std::wstring command = L"\"" + program.wstring() + L"\"";
+
+        for (const std::string& argument : arguments) {
+            int length = MultiByteToWideChar(CP_UTF8, 0, argument.c_str(), (int)argument.size(), nullptr, 0);
+            std::wstring wide(length, L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, argument.c_str(), (int)argument.size(), wide.data(), length);
+            command += L" \"" + wide + L"\"";
+        }
+
+        STARTUPINFOW startup = {};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process = {};
+        std::wstring directory = program.parent_path().wstring();
+
+        if (!CreateProcessW(program.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, directory.empty() ? nullptr : directory.c_str(), &startup, &process)) {
+            return false;
+        }
+
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        return true;
+#else
+        std::string path = program.string();
+        std::vector<std::string> owned = {path};
+        owned.insert(owned.end(), arguments.begin(), arguments.end());
+        std::vector<char*> argv;
+
+        for (std::string& argument : owned) {
+            argv.push_back(argument.data());
+        }
+
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        return posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv.data(), environ) == 0;
+#endif
     }
 
     void attach_parent_console() {

@@ -57,6 +57,7 @@ namespace nascent {
         void layout_background();
         bool logo_playing();
         bool logo_finished();
+        void draw_update_notice(olc::PixelGameEngine* window);
 
         public:
         static constexpr const char* LOGO_CHART_PATH = "assets/logo/logo.json";
@@ -72,6 +73,8 @@ namespace nascent {
         static constexpr const char* START_HINT = "PRESS ENTER TO START";
         static constexpr int32_t START_HINT_GAP = 24;
         static constexpr float START_HINT_PULSE_SPEED = 2.5f;
+        static constexpr int32_t UPDATE_NOTICE_BOTTOM = 48;
+        static constexpr uint8_t UPDATE_NOTICE_ALPHA = 220;
 
         SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky);
         ~SceneTitle();

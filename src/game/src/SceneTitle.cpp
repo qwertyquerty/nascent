@@ -14,13 +14,16 @@
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "TextCache.h"
 #include "Ui.h"
+#include "Updater.h"
 #include "Utf8Path.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <iostream>
 
 namespace nascent {
@@ -207,6 +210,15 @@ namespace nascent {
     }
 
     void SceneTitle::update(float elapsed_time) {
+        if (Updater::ready()) {
+            game->quit();
+            return;
+        }
+
+        if (InputManager::update_pressed(game->window)) {
+            Updater::start();
+        }
+
         if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
             bool sign_in_first = !Account::signed_in();
 
@@ -296,10 +308,44 @@ namespace nascent {
         timer += step;
     };
 
+    void SceneTitle::draw_update_notice(olc::PixelGameEngine* window) {
+        UpdateSnapshot update = Updater::snapshot();
+
+        if (!update.release) {
+            return;
+        }
+
+        std::string text;
+        olc::Pixel color = olc::Pixel(255, 255, 255, UPDATE_NOTICE_ALPHA);
+
+        switch (update.status) {
+            case UpdateStatus::AVAILABLE:
+                text = std::format("Nascent {} is available, press Ctrl+R to {}", update.release->tag, update.installable ? "update" : "open the download page");
+                break;
+            case UpdateStatus::DOWNLOADING:
+                text = std::format("Downloading Nascent {}... {}%", update.release->tag, (int)std::floor(update.progress * 100.0));
+                break;
+            case UpdateStatus::READY:
+                text = "Restarting to finish the update...";
+                break;
+            case UpdateStatus::FAILED:
+                text = std::format("Update failed: {}. Press Ctrl+R to try again", update.error);
+                color = olc::Pixel(255, 120, 120, UPDATE_NOTICE_ALPHA);
+                break;
+            default:
+                return;
+        }
+
+        olc::vi2d screen = window->GetScreenSize();
+        int32_t width = text_bounds(bg_skin->display_font_small, text).size.x;
+        draw_text(bg_skin->display_font_small, text, {(screen.x - width) / 2, screen.y - Ui::px(UPDATE_NOTICE_BOTTOM)}, color);
+    }
+
     void SceneTitle::draw(olc::PixelGameEngine* window) {
         sky->draw(window);
 
         if (!loaded) {
+            draw_update_notice(window);
             return;
         }
 
@@ -326,5 +372,7 @@ namespace nascent {
             float y = (float)(logo_field->pos.y + logo_field->size.y + Ui::px(START_HINT_GAP));
             window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, olc::Pixel(255, 255, 255, (uint8_t)((110 + 145 * pulse) * visibility)));
         }
+
+        draw_update_notice(window);
     };
 }

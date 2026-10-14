@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nascent
+Comment=Vertical scrolling rhythm game
+Exec=Nascent
+Icon=nascent
+Categories=Game;
+Terminal=false

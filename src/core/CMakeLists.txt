@@ -10,6 +10,7 @@ add_library(core
     src/Hit.cpp
     src/OsuFormat.cpp
     src/PlaySession.cpp
+    src/ReleaseUpdate.cpp
     src/Replay.cpp
     src/Results.cpp
     src/SettingsStore.cpp

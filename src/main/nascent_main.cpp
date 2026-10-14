@@ -3,6 +3,7 @@
 #include "GameNascent.h"
 #include "Platform.h"
 #include "SettingsManager.h"
+#include "Updater.h"
 
 #include <algorithm>
 
@@ -42,17 +43,21 @@ class NascentMain : public olc::PixelGameEngine {
 int main() {
     attach_parent_console();
     use_executable_directory_for_assets();
+    Updater::recover();
     SettingsManager::load();
 
     const Settings& settings = SettingsManager::settings;
     int32_t width = std::max<int32_t>(settings.display_window_width, MINIMUM_WINDOW_WIDTH);
     int32_t height = std::max<int32_t>(settings.display_window_height, MINIMUM_WINDOW_HEIGHT);
 
-    NascentMain ns_main;
+    {
+        NascentMain ns_main;
 
-    if (ns_main.Construct(width, height, 1, 1, settings.display_fullscreen, false, false, true)) {
-        ns_main.Start();
+        if (ns_main.Construct(width, height, 1, 1, settings.display_fullscreen, false, false, true)) {
+            ns_main.Start();
+        }
     }
 
+    Updater::install_and_relaunch();
     return 0;
 }

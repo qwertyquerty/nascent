@@ -30,7 +30,7 @@ namespace nascent {
         std::string access;
         std::optional<Clock::time_point> refresh_at;
         std::optional<Clock::time_point> expires_at;
-        bool refreshing = false;
+        bool refresh_running = false;
 
         std::filesystem::path account_path() {
             return user_config_directory(SettingsManager::APP_NAME) / Account::FILE_NAME;
@@ -246,8 +246,8 @@ namespace nascent {
             Clock::time_point now = Clock::now();
             expired = token.empty() || (expires_at && now >= *expires_at);
 
-            if (!expired && !refreshing && refresh_at && now >= *refresh_at) {
-                refreshing = true;
+            if (!expired && !refresh_running && refresh_at && now >= *refresh_at) {
+                refresh_running = true;
                 refresh_early = true;
             }
         }
@@ -256,7 +256,7 @@ namespace nascent {
             run_detached([token] {
                 bool refreshed = refresh(token);
                 std::lock_guard<std::mutex> lock(state_mutex);
-                refreshing = false;
+                refresh_running = false;
 
                 if (!refreshed && refresh_at) {
                     refresh_at = Clock::now() + Account::REFRESH_RETRY;

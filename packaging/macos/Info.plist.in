@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Nascent</string>
+    <key>CFBundleExecutable</key>
+    <string>Nascent</string>
+    <key>CFBundleIconFile</key>
+    <string>Nascent</string>
+    <key>CFBundleIdentifier</key>
+    <string>io.github.qwertyquerty.nascent</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Nascent</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@NASCENT_NUMERIC_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@NASCENT_VERSION@</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.music-games</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
