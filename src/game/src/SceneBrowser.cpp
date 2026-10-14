@@ -25,12 +25,10 @@ namespace nascent {
     static constexpr int32_t STATUS_WIDTH = 260;
     static constexpr int32_t FIELD_GAP = 10;
     static constexpr int32_t HINT_LINE_HEIGHT = 28;
-    static constexpr uint8_t DOWNLOAD_TRACK_ALPHA = 12;
     static constexpr uint8_t DOWNLOAD_FILL_ALPHA = 70;
     static constexpr uint8_t FIRST_KEY_COUNT = 4;
     static constexpr uint8_t LAST_KEY_COUNT = 10;
     static constexpr float SCROLL_SPEED = 14.0f;
-    static const olc::Pixel DOWNLOADED_COLOR = olc::Pixel(90, 220, 120);
 
     template <typename T>
     static bool is_ready(const std::future<T>& future) {
@@ -272,7 +270,7 @@ namespace nascent {
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 
-        draw_text(skin->display_font_large, "Browse Charts", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Browse Charts", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(90);
 
         std::string subtitle;
@@ -287,7 +285,7 @@ namespace nascent {
             subtitle = std::format("{} charts on {}", total, SettingsManager::settings.server_url);
         }
 
-        draw_text(skin->display_font_small, subtitle, {x, y}, error.empty() ? olc::GREY : olc::RED);
+        draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(error.empty() ? SkinColor::TEXT_MUTED : SkinColor::TEXT_ERROR));
         y += Ui::px(60);
 
         form.draw(window, skin, {x, y});
@@ -307,7 +305,7 @@ namespace nascent {
         olc::FontRect detail_metrics = text_bounds(detail_font, "Hgjy");
 
         if (shown && results.empty() && error.empty()) {
-            draw_text(detail_font, "No charts match these filters", {panel_x + row_padding, top - detail_metrics.offset.y}, olc::GREY);
+            draw_text(detail_font, "No charts match these filters", {panel_x + row_padding, top - detail_metrics.offset.y}, skin->color(SkinColor::TEXT_MUTED));
         }
 
         for (size_t index = 0; index < results.size(); index++) {
@@ -319,11 +317,11 @@ namespace nascent {
 
             const ServerChart& chart = results[index];
             bool is_selected = index == selected;
-            olc::Pixel color = is_selected ? olc::WHITE : olc::GREY;
+            olc::Pixel color = skin->color(is_selected ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
             int32_t row_y = (int32_t)row_top;
 
             std::string status;
-            olc::Pixel status_color = olc::GREY;
+            olc::Pixel status_color = skin->color(SkinColor::TEXT_MUTED);
             std::optional<int64_t> set_id = osu_set_id(chart);
             std::shared_ptr<BeatmapDownloads::Download> download = set_id ? BeatmapDownloads::find(*set_id) : nullptr;
             BeatmapDownloads::State download_state = download != nullptr ? download->state.load() : BeatmapDownloads::State::FAILED;
@@ -331,42 +329,43 @@ namespace nascent {
             olc::vf2d box_position = {(float)panel_x, row_top};
             olc::vf2d box_size = {(float)panel_width, (float)row_height - Ui::pxf(6)};
             uint8_t highlight = is_selected ? (results_focused ? 36 : 16) : 0;
+            olc::Pixel selection = fade(skin->color(SkinColor::BROWSER_HIGHLIGHT), highlight / 255.0);
 
             if (downloading) {
                 float progress = download_state == BeatmapDownloads::State::EXTRACTING ? 1.0f : (float)download->progress.load();
-                ProgressBar bar(box_size);
-                bar.track_color = olc::Pixel(255, 255, 255, std::max<uint8_t>(highlight, DOWNLOAD_TRACK_ALPHA));
+                ProgressBar bar(box_size, skin->color(SkinColor::DOWNLOAD_TRACK));
+                bar.track_color.a = std::max(bar.track_color.a, selection.a);
                 olc::Pixel fill = skin->title_gradient_at(progress, 0.5);
                 fill.a = DOWNLOAD_FILL_ALPHA;
                 bar.draw(window, box_position, progress, fill);
             }
             else if (is_selected) {
-                window->FillRectDecal(box_position, box_size, olc::Pixel(255, 255, 255, highlight));
+                window->FillRectDecal(box_position, box_size, selection);
             }
 
             if (list->get_local_hashes().contains(chart.hash)) {
                 status = "Downloaded";
-                status_color = DOWNLOADED_COLOR;
+                status_color = skin->color(SkinColor::POSITIVE);
             }
             else if (download != nullptr && download_state == BeatmapDownloads::State::DOWNLOADING) {
                 status = std::format("Downloading {:.0f}%", download->progress.load() * 100.0);
-                status_color = olc::WHITE;
+                status_color = skin->color(SkinColor::TEXT);
             }
             else if (download != nullptr && download_state == BeatmapDownloads::State::EXTRACTING) {
                 status = "Extracting";
-                status_color = olc::WHITE;
+                status_color = skin->color(SkinColor::TEXT);
             }
             else if (download != nullptr && download_state == BeatmapDownloads::State::DONE) {
                 status = "Downloaded";
-                status_color = DOWNLOADED_COLOR;
+                status_color = skin->color(SkinColor::POSITIVE);
             }
             else if (download != nullptr && download_state == BeatmapDownloads::State::FAILED) {
                 status = fit_text(detail_font, "Failed: " + download->error(), status_width);
-                status_color = olc::RED;
+                status_color = skin->color(SkinColor::TEXT_ERROR);
             }
             else if (!set_id) {
                 status = "Not on osu!";
-                status_color = olc::DARK_GREY;
+                status_color = skin->color(SkinColor::TEXT_FAINT);
             }
             else {
                 status = is_selected && results_focused ? "Enter:  download" : "Download";
@@ -386,7 +385,7 @@ namespace nascent {
                 chart.mapper
             );
             int32_t detail_baseline = row_y + row_height - Ui::px(16) - (detail_metrics.size.y + detail_metrics.offset.y);
-            draw_text(detail_font, fit_text(detail_font, details, panel_width - status_width - row_padding * 3), {panel_x + row_padding, detail_baseline}, olc::GREY);
+            draw_text(detail_font, fit_text(detail_font, details, panel_width - status_width - row_padding * 3), {panel_x + row_padding, detail_baseline}, skin->color(SkinColor::TEXT_MUTED));
 
             int32_t status_x = panel_x + panel_width - row_padding - text_width(detail_font, status);
             draw_text(detail_font, status, {status_x, title_baseline}, status_color);
@@ -398,7 +397,7 @@ namespace nascent {
         int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * hint_line_height;
 
         for (const std::string& hint : hints) {
-            draw_text(detail_font, hint, {x, hint_baseline}, olc::GREY);
+            draw_text(detail_font, hint, {x, hint_baseline}, skin->color(SkinColor::TEXT_MUTED));
             hint_baseline += hint_line_height;
         }
     }

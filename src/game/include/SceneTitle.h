@@ -74,7 +74,6 @@ namespace nascent {
         static constexpr int32_t START_HINT_GAP = 24;
         static constexpr float START_HINT_PULSE_SPEED = 2.5f;
         static constexpr int32_t UPDATE_NOTICE_BOTTOM = 48;
-        static constexpr uint8_t UPDATE_NOTICE_ALPHA = 220;
 
         SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky);
         ~SceneTitle();

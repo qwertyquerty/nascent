@@ -306,21 +306,21 @@ namespace nascent {
 
         int step_index = (int)step;
 
-        draw_text(skin->display_font_large, "Offset Calibration", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Offset Calibration", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(90);
 
-        draw_text(skin->display_font_medium, std::format("Step {} of 3: {}", step_index + 1, step_names[step_index]), {x, y}, olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("Step {} of 3: {}", step_index + 1, step_names[step_index]), {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(50);
 
         for (const char* line : step_descriptions[step_index]) {
-            draw_text(skin->display_font_small, line, {x, y}, olc::GREY);
+            draw_text(skin->display_font_small, line, {x, y}, skin->color(SkinColor::TEXT_MUTED));
             y += Ui::px(26);
         }
 
         y += Ui::px(20);
 
         for (const char* line : step_instructions[step_index]) {
-            draw_text(skin->display_font_small, line, {x, y}, olc::WHITE);
+            draw_text(skin->display_font_small, line, {x, y}, skin->color(SkinColor::TEXT));
             y += Ui::px(26);
         }
 
@@ -333,7 +333,7 @@ namespace nascent {
         };
 
         for (int i = 0; i < 3; i++) {
-            olc::Pixel color = i == step_index ? olc::WHITE : olc::DARK_GREY;
+            olc::Pixel color = skin->color(i == step_index ? SkinColor::TEXT : SkinColor::TEXT_FAINT);
             draw_text(skin->display_font_medium, std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
             draw_text(skin->display_font_medium, values[i], {x + Ui::px(380), y}, color);
             y += Ui::px(48);
@@ -345,14 +345,14 @@ namespace nascent {
             std::string taps = tap_errors.empty()
                 ? std::string("No taps yet")
                 : std::format("{} taps, average error {:+.1f} ms{}", tap_errors.size(), get_average_tap_error(), tap_errors.size() < MIN_TAPS_FOR_SUGGESTION ? " (keep tapping)" : "");
-            draw_text(skin->display_font_small, taps, {x, y}, olc::WHITE);
+            draw_text(skin->display_font_small, taps, {x, y}, skin->color(SkinColor::TEXT));
             y += Ui::px(26);
-            draw_text(skin->display_font_small, "Ctrl+R: clear taps", {x, y}, olc::GREY);
+            draw_text(skin->display_font_small, "Ctrl+R: clear taps", {x, y}, skin->color(SkinColor::TEXT_MUTED));
             y += Ui::px(40);
         }
 
         if (!status_message.empty()) {
-            draw_text(skin->display_font_small, status_message, {x, y}, olc::RED);
+            draw_text(skin->display_font_small, status_message, {x, y}, skin->color(SkinColor::TEXT_ERROR));
         }
 
         std::string footer = "↑/↓:  change step        ←/→:  adjust (Shift for bigger steps)        Enter:  save and exit        Esc:  exit";
@@ -360,6 +360,6 @@ namespace nascent {
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
         int32_t footer_bottom = field != nullptr && !field->upscroll ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;
 
-        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
+        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, skin->color(SkinColor::TEXT_MUTED));
     }
 }

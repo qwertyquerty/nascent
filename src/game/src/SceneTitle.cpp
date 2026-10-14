@@ -316,7 +316,7 @@ namespace nascent {
         }
 
         std::string text;
-        olc::Pixel color = olc::Pixel(255, 255, 255, UPDATE_NOTICE_ALPHA);
+        olc::Pixel color = bg_skin->color(SkinColor::UPDATE_NOTICE);
 
         switch (update.status) {
             case UpdateStatus::AVAILABLE:
@@ -330,7 +330,7 @@ namespace nascent {
                 break;
             case UpdateStatus::FAILED:
                 text = std::format("Update failed: {}. Press Ctrl+R to try again", update.error);
-                color = olc::Pixel(255, 120, 120, UPDATE_NOTICE_ALPHA);
+                color = bg_skin->color(SkinColor::UPDATE_NOTICE_ERROR);
                 break;
             default:
                 return;
@@ -370,7 +370,7 @@ namespace nascent {
             float pulse = 0.5f + 0.5f * std::sin((float)timer * START_HINT_PULSE_SPEED);
             float visibility = bg_chart != nullptr ? bg_fade : 1.0f;
             float y = (float)(logo_field->pos.y + logo_field->size.y + Ui::px(START_HINT_GAP));
-            window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, olc::Pixel(255, 255, 255, (uint8_t)((110 + 145 * pulse) * visibility)));
+            window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, fade(bg_skin->color(SkinColor::TEXT), (110 + 145 * pulse) * visibility / 255.0));
         }
 
         draw_update_notice(window);

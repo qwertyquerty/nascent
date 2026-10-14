@@ -40,8 +40,6 @@ namespace nascent {
         static constexpr int32_t GRADE_OFFSET = 56;
         static constexpr int32_t ACCURACY_OFFSET = 90;
         static constexpr int32_t NAME_OFFSET = 190;
-        static inline const olc::Pixel BACKGROUND = olc::Pixel(0, 0, 0, 150);
-        static inline const olc::Pixel HIGHLIGHT = olc::Pixel(255, 255, 255, 24);
 
         static std::string key(const std::string& gameplay_hash, float pitch);
 

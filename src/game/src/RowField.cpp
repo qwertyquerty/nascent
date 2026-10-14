@@ -36,12 +36,12 @@ namespace nascent {
 
     RowField::RowField(std::string label) : label(std::move(label)) {}
 
-    olc::Pixel RowField::value_color(Skin*, bool focused) const {
+    olc::Pixel RowField::value_color(Skin* skin, bool focused) const {
         if (is_placeholder()) {
-            return olc::DARK_GREY;
+            return skin->color(SkinColor::TEXT_FAINT);
         }
 
-        return focused ? olc::WHITE : olc::GREY;
+        return skin->color(focused ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
     }
 
     bool RowField::is_placeholder() const {
@@ -63,13 +63,13 @@ namespace nascent {
 
     int32_t RowField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const {
         olc::Font& font = skin->display_font_small;
-        olc::Pixel color = focused ? olc::WHITE : olc::GREY;
+        olc::Pixel color = skin->color(focused ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
         int32_t row_width = width();
         int32_t row_height = height();
         int32_t padding = Ui::px(PADDING);
         int32_t caret_inset = Ui::px(CARET_INSET);
-        window->FillRectDecal({(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
+        window->FillRectDecal({(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}, skin->color(focused ? SkinColor::INPUT_BACKGROUND_FOCUSED : SkinColor::INPUT_BACKGROUND));
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = position.y + (row_height - metrics.size.y) / 2 - metrics.offset.y;
@@ -81,7 +81,7 @@ namespace nascent {
 
         if (focused && shows_caret() && std::fmod(blink_timer, 1.0f) < 0.5f) {
             int32_t caret = is_placeholder() ? position.x + row_width - padding : value_x + text_width(font, value) + 1;
-            window->FillRectDecal({(float)caret, (float)(position.y + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(row_height - caret_inset * 2)}, olc::WHITE);
+            window->FillRectDecal({(float)caret, (float)(position.y + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(row_height - caret_inset * 2)}, skin->color(SkinColor::TEXT));
         }
 
         return row_height;
@@ -153,7 +153,7 @@ namespace nascent {
         olc::Pixel color = skin->title_gradient_at(fill, 0.5);
         color.a = focused ? 255 : 140;
 
-        ProgressBar({bar_width, bar_height}).draw(window, {(float)position.x + Ui::pxf(BAR_LEFT), (float)position.y + (row_height - bar_height) / 2}, fill, color);
+        ProgressBar({bar_width, bar_height}, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, {(float)position.x + Ui::pxf(BAR_LEFT), (float)position.y + (row_height - bar_height) / 2}, fill, color);
         return row_height;
     }
 
@@ -169,8 +169,7 @@ namespace nascent {
         }
 
         olc::Pixel color = skin->title_gradient_at(0.5, 0.5);
-        color.a = (uint8_t)std::lround(150.0 + 105.0 * (0.5 + 0.5 * std::cos(blink_timer * CAPTURE_PULSE_SPEED)));
-        return color;
+        return fade(color, (150.0 + 105.0 * (0.5 + 0.5 * std::cos(blink_timer * CAPTURE_PULSE_SPEED))) / 255.0);
     }
 
     void KeyBindField::on_blur(olc::PixelGameEngine*) {
@@ -246,11 +245,11 @@ namespace nascent {
         olc::Font& font = skin->display_font_small;
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t text_top = position.y + Ui::px(TOP_GAP);
-        draw_text(font, title, {position.x, text_top - metrics.offset.y}, olc::WHITE);
+        draw_text(font, title, {position.x, text_top - metrics.offset.y}, skin->color(SkinColor::TEXT));
 
         int32_t line_top = text_top + metrics.size.y + Ui::px(LINE_GAP);
         int32_t line_height = std::max(1, Ui::px(LINE_HEIGHT));
-        window->FillRectDecal({(float)position.x, (float)line_top}, {(float)RowField::width(), (float)line_height}, olc::Pixel(255, 255, 255, LINE_ALPHA));
+        window->FillRectDecal({(float)position.x, (float)line_top}, {(float)RowField::width(), (float)line_height}, skin->color(SkinColor::SEPARATOR));
         return line_top + line_height - position.y;
     }
 

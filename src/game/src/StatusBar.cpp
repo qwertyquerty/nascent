@@ -16,8 +16,6 @@
 #include <utility>
 
 namespace nascent {
-    static const olc::Pixel RATE_CHANGED_COLOR = olc::Pixel(240, 190, 70);
-
     template <typename T>
     static bool is_ready(const std::future<T>& future) {
         return future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
@@ -116,8 +114,8 @@ namespace nascent {
         int32_t radius = std::max(1, Ui::px(DOT_RADIUS));
         olc::Font& font = skin->display_font_small;
 
-        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, BACKGROUND);
-        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, EDGE);
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, skin->color(SkinColor::STATUS_BAR_BACKGROUND));
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, skin->color(SkinColor::STATUS_BAR_EDGE));
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = top + (bar_height - metrics.size.y) / 2 - metrics.offset.y;
@@ -133,19 +131,19 @@ namespace nascent {
         switch (connection) {
             case Connection::CHECKING:
                 status = "Connecting";
-                status_color = olc::Pixel(200, 200, 200);
+                status_color = skin->color(SkinColor::STATUS_IDLE);
                 break;
             case Connection::ONLINE:
                 status = std::format("Online  {:.0f} ms", latency_ms);
-                status_color = olc::Pixel(90, 220, 120);
+                status_color = skin->color(SkinColor::POSITIVE);
                 break;
             case Connection::DEGRADED:
                 status = "Server degraded";
-                status_color = olc::Pixel(240, 190, 70);
+                status_color = skin->color(SkinColor::ATTENTION);
                 break;
             case Connection::OFFLINE:
                 status = "Offline";
-                status_color = olc::Pixel(235, 80, 80);
+                status_color = skin->color(SkinColor::NEGATIVE);
                 break;
         }
 
@@ -154,12 +152,12 @@ namespace nascent {
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
             hint_x -= segment_gap + width(*hint);
-            draw_text(font, *hint, {hint_x, baseline}, olc::GREY);
+            draw_text(font, *hint, {hint_x, baseline}, skin->color(SkinColor::TEXT_MUTED));
         }
 
         int32_t status_x = hint_x - segment_gap - width(status);
         int32_t dot_x = status_x - label_gap - radius * 2;
-        draw_text(font, status, {status_x, baseline}, olc::WHITE);
+        draw_text(font, status, {status_x, baseline}, skin->color(SkinColor::TEXT));
 
         if (!dot || dot_radius != radius) {
             auto sprite = std::make_unique<olc::Sprite>(radius * 2 + 1, radius * 2 + 1);
@@ -179,8 +177,8 @@ namespace nascent {
         std::string rate_value = std::format("{:.2f}x", rate);
         int32_t rate_value_x = dot_x - radius - segment_gap - width(rate_value);
         int32_t rate_label_x = rate_value_x - label_gap - width("Rate");
-        draw_text(font, "Rate", {rate_label_x, baseline}, olc::GREY);
-        draw_text(font, rate_value, {rate_value_x, baseline}, std::abs(rate - 1.0f) < 0.001f ? olc::WHITE : RATE_CHANGED_COLOR);
+        draw_text(font, "Rate", {rate_label_x, baseline}, skin->color(SkinColor::TEXT_MUTED));
+        draw_text(font, rate_value, {rate_value_x, baseline}, skin->color(std::abs(rate - 1.0f) < 0.001f ? SkinColor::TEXT : SkinColor::ATTENTION));
         int32_t left_limit = rate_label_x - segment_gap;
         bool left_full = false;
 
@@ -197,18 +195,18 @@ namespace nascent {
             }
 
             x += segment_gap;
-            text(label, olc::GREY);
+            text(label, skin->color(SkinColor::TEXT_MUTED));
             x += label_gap;
-            text(value, olc::WHITE);
+            text(value, skin->color(SkinColor::TEXT));
         };
 
         if (username.empty()) {
-            text("Guest", olc::WHITE);
+            text("Guest", skin->color(SkinColor::TEXT));
             x += segment_gap;
-            text("Scores are not submitted while signed out", olc::GREY);
+            text("Scores are not submitted while signed out", skin->color(SkinColor::TEXT_MUTED));
         }
         else {
-            text(username, olc::WHITE);
+            text(username, skin->color(SkinColor::TEXT));
 
             if (profile && key_count > 0) {
                 auto mode_stats = std::find_if(profile->key_modes.begin(), profile->key_modes.end(), [this](const KeyModeStats& entry) {
@@ -227,7 +225,7 @@ namespace nascent {
             }
             else if (!profile) {
                 x += segment_gap;
-                text(connection == Connection::OFFLINE ? "Profile unavailable" : "Loading profile", olc::GREY);
+                text(connection == Connection::OFFLINE ? "Profile unavailable" : "Loading profile", skin->color(SkinColor::TEXT_MUTED));
             }
         }
     }

@@ -8,7 +8,6 @@
 #include "DifficultyCache.h"
 #include "EntityField.h"
 #include "Game.h"
-#include "GradeColor.h"
 #include "InputManager.h"
 #include "LocalBests.h"
 #include "LocalReplays.h"
@@ -669,18 +668,18 @@ namespace nascent {
         int32_t padding = StatusBar::padding();
         int32_t baseline = (bar_height - metrics.size.y) / 2 - metrics.offset.y;
 
-        window->FillRectDecal({0.0f, 0.0f}, {(float)screensize.x, (float)bar_height}, StatusBar::BACKGROUND);
-        window->FillRectDecal({0.0f, (float)(bar_height - 1)}, {(float)screensize.x, 1.0f}, StatusBar::EDGE);
+        window->FillRectDecal({0.0f, 0.0f}, {(float)screensize.x, (float)bar_height}, skin->color(SkinColor::STATUS_BAR_BACKGROUND));
+        window->FillRectDecal({0.0f, (float)(bar_height - 1)}, {(float)screensize.x, 1.0f}, skin->color(SkinColor::STATUS_BAR_EDGE));
 
         if (search.empty()) {
-            draw_text(font, "Type to search", {padding, baseline}, olc::DARK_GREY);
+            draw_text(font, "Type to search", {padding, baseline}, skin->color(SkinColor::TEXT_FAINT));
             return;
         }
 
         std::string count = std::format("{} / {}", visible.size(), library.size());
         int32_t count_width = text_bounds(font, count).size.x;
-        draw_text(font, search, {padding, baseline}, olc::WHITE);
-        draw_text(font, count, {screensize.x - padding - count_width, baseline}, visible.empty() ? olc::RED : olc::GREY);
+        draw_text(font, search, {padding, baseline}, skin->color(SkinColor::TEXT));
+        draw_text(font, count, {screensize.x - padding - count_width, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
     }
 
     void SceneList::download_recommended() {
@@ -699,15 +698,15 @@ namespace nascent {
         bool any_failed = false;
         bool all_started = true;
 
-        draw_text(skin->display_font_large, "Your library is empty", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Your library is empty", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(70);
-        draw_text(skin->display_font_small, "Download these recommended songs to get started.", {x, y}, olc::GREY);
+        draw_text(skin->display_font_small, "Download these recommended songs to get started.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
         y += Ui::px(60);
 
         for (const RecommendedSong& song : RECOMMENDED_SONGS) {
             std::shared_ptr<BeatmapDownloads::Download> download = BeatmapDownloads::find(song.set_id);
             std::string status;
-            olc::Pixel status_color = olc::GREY;
+            olc::Pixel status_color = skin->color(SkinColor::TEXT_MUTED);
 
             if (download == nullptr) {
                 all_started = false;
@@ -722,17 +721,17 @@ namespace nascent {
                         break;
                     case BeatmapDownloads::State::DONE:
                         status = "Downloaded";
-                        status_color = olc::Pixel(90, 220, 120);
+                        status_color = skin->color(SkinColor::POSITIVE);
                         break;
                     case BeatmapDownloads::State::FAILED:
                         status = "Failed";
-                        status_color = olc::RED;
+                        status_color = skin->color(SkinColor::TEXT_ERROR);
                         any_failed = true;
                         break;
                 }
             }
 
-            draw_text(skin->display_font_small, std::format("{} - {}", song.artist, song.title), {x, y}, olc::WHITE);
+            draw_text(skin->display_font_small, std::format("{} - {}", song.artist, song.title), {x, y}, skin->color(SkinColor::TEXT));
             draw_text(skin->display_font_small, status, {x + Ui::px(RECOMMENDED_STATUS_OFFSET), y}, status_color);
             y += Ui::px(RECOMMENDED_ROW_HEIGHT);
         }
@@ -742,7 +741,7 @@ namespace nascent {
         std::string hint = !all_started ? "Enter:  download recommended songs        F5:  browse charts"
             : any_failed                ? "Enter:  retry failed downloads        F5:  browse charts"
                                         : "Downloading...        F5:  browse charts";
-        draw_text(skin->display_font_small, hint, {x, y}, olc::GREY);
+        draw_text(skin->display_font_small, hint, {x, y}, skin->color(SkinColor::TEXT_MUTED));
     }
 
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
@@ -890,7 +889,7 @@ namespace nascent {
                 return;
             }
 
-            draw_text(skin->display_font_medium, library.charts.empty() ? std::string("Loading charts...") : std::string("No charts match your search"), {screensize.x / 48, screensize.y / 2}, olc::GREY);
+            draw_text(skin->display_font_medium, library.charts.empty() ? std::string("Loading charts...") : std::string("No charts match your search"), {screensize.x / 48, screensize.y / 2}, skin->color(SkinColor::TEXT_MUTED));
             return;
         }
 
@@ -904,20 +903,18 @@ namespace nascent {
             {screensize.x - 1.0f, 0.0f}
         };
 
+        olc::Pixel background_tint = skin->color(SkinColor::BACKGROUND_TINT);
+
+        for (uint8_t* channel : {&background_tint.r, &background_tint.g, &background_tint.b}) {
+            *channel = (uint8_t)std::min(255, *channel + background_brightening);
+        }
+
         if (background_image) {
-            window->DrawWarpedDecal(
-                background_image.get(),
-                rect,
-                olc::Pixel(240 + background_brightening, 240 + background_brightening, 240 + background_brightening, 25 * (1 - crossfade_timer))
-            );
+            window->DrawWarpedDecal(background_image.get(), rect, fade(background_tint, 1 - crossfade_timer));
         }
 
         if (old_background_image) {
-            window->DrawWarpedDecal(
-                old_background_image.get(),
-                rect,
-                olc::Pixel(240 + background_brightening, 240 + background_brightening, 240 + background_brightening, 25 * crossfade_timer)
-            );
+            window->DrawWarpedDecal(old_background_image.get(), rect, fade(background_tint, crossfade_timer));
         }
 
         int32_t row_height = Ui::px(LIST_ROW_HEIGHT);
@@ -935,7 +932,7 @@ namespace nascent {
         float grade_gap = Ui::pxf(GRADE_GAP);
         float grade_indent = std::max(0.0f, Ui::pxf(GRADE_SCREEN_MARGIN) + widest_grade + grade_gap - list_margin);
         float bar_width = Ui::pxf(DIFFICULTY_BAR_WIDTH);
-        const ProgressBar difficulty_bar({bar_width, std::max(1.0f, Ui::pxf(DIFFICULTY_BAR_HEIGHT))});
+        const ProgressBar difficulty_bar({bar_width, std::max(1.0f, Ui::pxf(DIFFICULTY_BAR_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK));
         wanted_difficulties.clear();
 
         if (show_leaderboards) {
@@ -956,7 +953,7 @@ namespace nascent {
 
             double distance = std::abs((float)screensize.y / 2 - y) / Ui::scale();
             float x = list_margin + grade_indent + Ui::pxf(std::pow(std::max(300.0 - distance, 0.0) / 50.0, 2));
-            olc::Pixel text_color = index == selected_chart_index ? olc::WHITE : olc::GREY;
+            olc::Pixel text_color = skin->color(index == selected_chart_index ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
             draw_text(skin->display_font_medium, chart->info.title, {(int)x, (int)y}, text_color);
             draw_text(skin->display_font_small, library.details[chart_index], {(int)x, (int)y + Ui::px(36)}, text_color);
@@ -986,7 +983,7 @@ namespace nascent {
                 std::string_view grade_text = grade_name(grade);
                 olc::FontRect grade_bounds = text_bounds(skin->display_font_large, grade_text);
                 float grade_center_y = y + Ui::pxf(18);
-                draw_text(skin->display_font_large, grade_text, {(int)(x - grade_gap - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)}, grade_color(grade));
+                draw_text(skin->display_font_large, grade_text, {(int)(x - grade_gap - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)}, skin->grade_color(grade));
             }
         }
 

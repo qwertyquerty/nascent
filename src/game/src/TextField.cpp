@@ -115,7 +115,7 @@ namespace nascent {
     int32_t TextField::draw(olc::PixelGameEngine* window, Skin* skin, olc::vi2d position, bool focused) const {
         olc::Font& label_font = skin->display_font_small;
         olc::Font& text_font = skin->display_font_medium;
-        olc::Pixel color = focused ? olc::WHITE : olc::GREY;
+        olc::Pixel color = skin->color(focused ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
         olc::FontRect label_metrics = text_bounds(label_font, "Hgjy");
         draw_text(label_font, label, {position.x, position.y - label_metrics.offset.y}, color);
@@ -125,7 +125,7 @@ namespace nascent {
         int32_t padding = Ui::px(PADDING);
         int32_t caret_inset = Ui::px(CARET_INSET);
         int32_t box_top = position.y + label_metrics.size.y + Ui::px(LABEL_GAP);
-        window->FillRectDecal({(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}, olc::Pixel(255, 255, 255, focused ? 36 : 14));
+        window->FillRectDecal({(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}, skin->color(focused ? SkinColor::INPUT_BACKGROUND_FOCUSED : SkinColor::INPUT_BACKGROUND));
 
         size_t end = focused ? std::min(cursor, value.size()) : value.size();
         std::string shown = secret ? std::string(character_count(value, value.size()), '*') : value;
@@ -150,7 +150,7 @@ namespace nascent {
 
         if (focused && std::fmod(blink_timer, 1.0f) < 0.5f) {
             int32_t caret = text_left + text_width(text_font, shown.substr(first, caret_index - first)) + 1;
-            window->FillRectDecal({(float)caret, (float)(box_top + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(box_height - caret_inset * 2)}, olc::WHITE);
+            window->FillRectDecal({(float)caret, (float)(box_top + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(box_height - caret_inset * 2)}, skin->color(SkinColor::TEXT));
         }
 
         return box_top + box_height - position.y;

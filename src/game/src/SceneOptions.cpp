@@ -50,8 +50,6 @@ namespace nascent {
     static constexpr int32_t EDGE_FADE = 28;
     static constexpr int32_t SCROLLBAR_GAP = 24;
     static constexpr int32_t SCROLLBAR_WIDTH = 4;
-    static constexpr uint8_t SCROLLBAR_TRACK_ALPHA = 24;
-    static constexpr uint8_t SCROLLBAR_THUMB_ALPHA = 120;
     static constexpr std::array<uint16_t, 9> FRAME_RATE_OPTIONS = {0, 60, 120, 144, 165, 240, 360, 480, 1000};
     static constexpr float SERVER_CHECK_DELAY = 0.6f;
     static constexpr std::array<std::pair<const char*, float>, 4> TRANSITION_OPTIONS = {{{"Off", 0.0f}, {"Fast", 0.1f}, {"Normal", 0.2f}, {"Slow", 0.35f}}};
@@ -458,8 +456,8 @@ namespace nascent {
         float thumb_height = (float)view_height * (float)view_height / (float)content_height;
         float thumb_top = (float)viewport_top + ((float)view_height - thumb_height) * (scroll / (float)(content_height - view_height));
 
-        window->FillRectDecal({track_x, (float)viewport_top}, {track_width, (float)view_height}, olc::Pixel(255, 255, 255, SCROLLBAR_TRACK_ALPHA));
-        window->FillRectDecal({track_x, thumb_top}, {track_width, thumb_height}, olc::Pixel(255, 255, 255, SCROLLBAR_THUMB_ALPHA));
+        window->FillRectDecal({track_x, (float)viewport_top}, {track_width, (float)view_height}, skin->color(SkinColor::SCROLLBAR_TRACK));
+        window->FillRectDecal({track_x, thumb_top}, {track_width, thumb_height}, skin->color(SkinColor::SCROLLBAR_THUMB));
     }
 
     void SceneOptions::draw(olc::PixelGameEngine* window) {
@@ -478,16 +476,17 @@ namespace nascent {
         form.draw(window, skin, {x, viewport_top - (int32_t)std::lround(scroll)});
 
         float max_scroll = (float)std::max(0, form.height() - (viewport_bottom - viewport_top));
-        olc::Pixel clear = olc::Pixel(0, 0, 0, 0);
-        window->FillRectDecal({0.0f, 0.0f}, {(float)screen.x, (float)viewport_top}, olc::BLACK);
-        window->FillRectDecal({0.0f, (float)viewport_bottom}, {(float)screen.x, (float)(screen.y - viewport_bottom)}, olc::BLACK);
+        olc::Pixel mask = skin->color(SkinColor::OPTIONS_MASK);
+        olc::Pixel clear = fade(mask, 0.0);
+        window->FillRectDecal({0.0f, 0.0f}, {(float)screen.x, (float)viewport_top}, mask);
+        window->FillRectDecal({0.0f, (float)viewport_bottom}, {(float)screen.x, (float)(screen.y - viewport_bottom)}, mask);
 
         if (scroll > 0.5f) {
-            window->GradientFillRectDecal({0.0f, (float)viewport_top}, {(float)screen.x, edge_fade}, olc::BLACK, clear, clear, olc::BLACK);
+            window->GradientFillRectDecal({0.0f, (float)viewport_top}, {(float)screen.x, edge_fade}, mask, clear, clear, mask);
         }
 
         if (scroll < max_scroll - 0.5f) {
-            window->GradientFillRectDecal({0.0f, (float)viewport_bottom - edge_fade}, {(float)screen.x, edge_fade}, clear, olc::BLACK, olc::BLACK, clear);
+            window->GradientFillRectDecal({0.0f, (float)viewport_bottom - edge_fade}, {(float)screen.x, edge_fade}, clear, mask, mask, clear);
         }
 
         draw_scrollbar(window, x);
@@ -497,18 +496,18 @@ namespace nascent {
 
             if (SettingsManager::settings.field_show_timing_bar && preview_attempt != nullptr) {
                 const Settings& settings = SettingsManager::settings;
-                draw_timing_bar(window, *preview_attempt, screen.x * 3 / 4.0f, screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
+                draw_timing_bar(window, skin, *preview_attempt, screen.x * 3 / 4.0f, screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
             }
         }
 
-        draw_text(skin->display_font_large, "Options", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Options", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(90);
-        draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, olc::GREY);
+        draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
 
         if (!status.empty()) {
-            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, olc::GREY);
+            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, skin->color(SkinColor::TEXT_MUTED));
         }
 
-        draw_text(skin->display_font_small, footer, {x, footer_top}, olc::GREY);
+        draw_text(skin->display_font_small, footer, {x, footer_top}, skin->color(SkinColor::TEXT_MUTED));
     }
 }

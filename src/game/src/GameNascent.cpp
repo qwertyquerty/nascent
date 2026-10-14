@@ -124,11 +124,12 @@ namespace nascent {
     }
 
     void GameNascent::draw(olc::PixelGameEngine* window) {
+        clear_color = skin->color(SkinColor::SCREEN_BACKGROUND);
         draw_scenes(window);
 
         if (SettingsManager::settings.show_fps) {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
-            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(100), Ui::px(30), olc::WHITE);
+            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(100), Ui::px(30), skin->color(SkinColor::TEXT));
         }
 
         draw_toast(window);
@@ -234,18 +235,18 @@ namespace nascent {
         int32_t width = bounds.size.x + padding * 2;
         int32_t height = metrics.size.y + padding * 2;
         int32_t x = (window->GetScreenSize().x - width) / 2;
-        float fade = std::min(1.0f, toast_timer / TOAST_FADE_TIME);
+        float opacity = std::min(1.0f, toast_timer / TOAST_FADE_TIME);
 
-        olc::Pixel border = toast_is_error ? olc::Pixel(235, 80, 80, (uint8_t)(255 * fade)) : olc::Pixel(90, 220, 120, (uint8_t)(255 * fade));
+        olc::Pixel border = fade(skin->color(toast_is_error ? SkinColor::NEGATIVE : SkinColor::POSITIVE), opacity);
         float left = (float)x;
         float top = (float)toast_top;
         float edge = std::max(1.0f, Ui::pxf(TOAST_BORDER));
 
-        window->FillRectDecal({left, top}, {(float)width, (float)height}, olc::Pixel(0, 0, 0, (uint8_t)(220 * fade)));
+        window->FillRectDecal({left, top}, {(float)width, (float)height}, fade(skin->color(SkinColor::TOAST_BACKGROUND), opacity));
         window->FillRectDecal({left, top}, {(float)width, edge}, border);
         window->FillRectDecal({left, top + height - edge}, {(float)width, edge}, border);
         window->FillRectDecal({left, top + edge}, {edge, height - edge * 2}, border);
         window->FillRectDecal({left + width - edge, top + edge}, {edge, height - edge * 2}, border);
-        draw_text(font, toast, {x + padding, toast_top + padding - metrics.offset.y}, olc::Pixel(255, 255, 255, (uint8_t)(255 * fade)));
+        draw_text(font, toast, {x + padding, toast_top + padding - metrics.offset.y}, fade(skin->color(SkinColor::TEXT), opacity));
     }
 }

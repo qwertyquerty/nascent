@@ -50,8 +50,6 @@ namespace nascent {
         static constexpr int32_t SEGMENT_GAP = 36;
         static constexpr int32_t LABEL_GAP = 8;
         static constexpr int32_t DOT_RADIUS = 4;
-        static inline const olc::Pixel BACKGROUND = olc::Pixel(0, 0, 0, 213);
-        static inline const olc::Pixel EDGE = olc::Pixel(255, 255, 255, 30);
 
         static int32_t height();
         static int32_t padding();

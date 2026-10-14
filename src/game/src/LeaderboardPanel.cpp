@@ -1,7 +1,6 @@
 #include "LeaderboardPanel.h"
 
 #include "Account.h"
-#include "GradeColor.h"
 #include "Results.h"
 #include "Skin.h"
 #include "TextCache.h"
@@ -86,7 +85,7 @@ namespace nascent {
         int32_t top = position.y;
         int32_t bottom = position.y + size.y;
 
-        window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)(bottom - top)}, BACKGROUND);
+        window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)(bottom - top)}, skin->color(SkinColor::PANEL_BACKGROUND));
 
         olc::Font& header_font = skin->display_font_medium;
         olc::Font& row_font = skin->display_font_small;
@@ -99,11 +98,11 @@ namespace nascent {
         std::string own_name = Account::signed_in() ? Account::username() : std::string();
 
         auto header = [&](std::string_view title, std::string_view detail) {
-            draw_text(header_font, title, {x, y - header_metrics.offset.y}, olc::WHITE);
+            draw_text(header_font, title, {x, y - header_metrics.offset.y}, skin->color(SkinColor::TEXT));
 
             if (!detail.empty()) {
                 int32_t detail_width = text_bounds(row_font, detail).size.x;
-                draw_text(row_font, detail, {right - detail_width, y - header_metrics.offset.y}, olc::GREY);
+                draw_text(row_font, detail, {right - detail_width, y - header_metrics.offset.y}, skin->color(SkinColor::TEXT_MUTED));
             }
 
             y += header_height;
@@ -123,7 +122,7 @@ namespace nascent {
             int32_t name_width = right - combo_width - padding / 2 - name_x;
 
             if (highlight) {
-                window->FillRectDecal({(float)(left + padding / 2), (float)y}, {(float)(width - padding), (float)row_height}, HIGHLIGHT);
+                window->FillRectDecal({(float)(left + padding / 2), (float)y}, {(float)(width - padding), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));
             }
 
             while (!name.empty() && text_bounds(row_font, name).size.x > name_width) {
@@ -138,11 +137,11 @@ namespace nascent {
                 }
             }
 
-            draw_text(row_font, std::format("#{}", rank), {x, baseline}, olc::GREY);
-            draw_text(row_font, grade_name(grade), {x + Ui::px(GRADE_OFFSET), baseline}, grade_color(grade));
-            draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + Ui::px(ACCURACY_OFFSET), baseline}, olc::WHITE);
-            draw_text(row_font, name, {name_x, baseline}, highlight ? olc::WHITE : olc::GREY);
-            draw_text(row_font, combo_text, {right - combo_width, baseline}, olc::GREY);
+            draw_text(row_font, std::format("#{}", rank), {x, baseline}, skin->color(SkinColor::TEXT_MUTED));
+            draw_text(row_font, grade_name(grade), {x + Ui::px(GRADE_OFFSET), baseline}, skin->grade_color(grade));
+            draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + Ui::px(ACCURACY_OFFSET), baseline}, skin->color(SkinColor::TEXT));
+            draw_text(row_font, name, {name_x, baseline}, skin->color(highlight ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
+            draw_text(row_font, combo_text, {right - combo_width, baseline}, skin->color(SkinColor::TEXT_MUTED));
             y += row_height;
         };
 
@@ -150,10 +149,10 @@ namespace nascent {
         header("Local", local != local_scores.end() && !local->second.empty() ? std::format("{} plays", local->second.size()) : std::string());
 
         if (local == local_scores.end()) {
-            message("Loading...", olc::GREY);
+            message("Loading...", skin->color(SkinColor::TEXT_MUTED));
         }
         else if (local->second.empty()) {
-            message("No plays at this rate yet", olc::DARK_GREY);
+            message("No plays at this rate yet", skin->color(SkinColor::TEXT_FAINT));
         }
         else {
             for (size_t index = 0; index < local->second.size() && (int32_t)index < LOCAL_ROWS; index++) {
@@ -169,17 +168,17 @@ namespace nascent {
         header("Online", board != nullptr && board->total > 0 ? std::format("{} players", board->total) : std::string());
 
         if (online == online_scores.end()) {
-            message("Loading...", olc::GREY);
+            message("Loading...", skin->color(SkinColor::TEXT_MUTED));
             return;
         }
 
         if (board == nullptr) {
-            message(online->second.error(), olc::DARK_GREY);
+            message(online->second.error(), skin->color(SkinColor::TEXT_FAINT));
             return;
         }
 
         if (board->entries.empty()) {
-            message("No plays at this rate yet", olc::DARK_GREY);
+            message("No plays at this rate yet", skin->color(SkinColor::TEXT_FAINT));
             return;
         }
 

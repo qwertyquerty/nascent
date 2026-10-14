@@ -36,6 +36,7 @@ namespace nascent {
         InputMode input_mode = InputMode::POLLING;
         bool quit_requested = false;
         olc::vi2d screen_size = {0, 0};
+        olc::Pixel clear_color = olc::BLACK;
 
         void init_input();
         void use_blank_canvas();

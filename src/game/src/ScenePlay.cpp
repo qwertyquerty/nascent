@@ -40,14 +40,12 @@ namespace nascent {
     static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
     static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
     static constexpr float SONG_PROGRESS_TOP = 40.0f;
-    static constexpr uint8_t SKIP_HINT_ALPHA = 200;
     static constexpr float DIAGNOSTICS_RIGHT = 570.0f;
     static constexpr float DIAGNOSTICS_TOP = 70.0f;
     static constexpr float DIAGNOSTICS_LINE_HEIGHT = 18.0f;
     static constexpr float DIAGNOSTICS_SCALE = 1.5f;
     static constexpr float DIAGNOSTICS_PADDING = 10.0f;
     static constexpr size_t DIAGNOSTICS_MAX_CHARS = 45;
-    static constexpr uint8_t DIAGNOSTICS_BACKGROUND_ALPHA = 170;
 
     static double start_position_ms() {
         return -SettingsManager::settings.play_start_delay * 1000.0;
@@ -386,7 +384,7 @@ namespace nascent {
         float width = char_size * DIAGNOSTICS_MAX_CHARS + padding * 2;
         float height = line_height * (float)(lines.size() - 1) + char_size + padding * 2;
 
-        window->FillRectDecal({x - padding, top - padding}, {width, height}, olc::Pixel(0, 0, 0, DIAGNOSTICS_BACKGROUND_ALPHA));
+        window->FillRectDecal({x - padding, top - padding}, {width, height}, skin->color(SkinColor::DIAGNOSTICS_BACKGROUND));
 
         for (size_t index = 0; index < lines.size(); index++) {
             std::string line = lines[index];
@@ -399,7 +397,7 @@ namespace nascent {
                 line = line.substr(0, DIAGNOSTICS_MAX_CHARS - 3) + "...";
             }
 
-            window->DrawStringDecal({x, top + (float)index * line_height}, line, olc::WHITE, {scale, scale});
+            window->DrawStringDecal({x, top + (float)index * line_height}, line, skin->color(SkinColor::TEXT), {scale, scale});
         }
     }
 
@@ -583,25 +581,25 @@ namespace nascent {
         int32_t chart_start = chart->get_chart_start_ms();
         int32_t chart_length = std::max(1, chart->get_chart_end_ms() - chart_start);
         float progress = (float)((position - chart_start) / chart_length);
-        ProgressBar({Ui::pxf(SONG_PROGRESS_WIDTH), std::max(1.0f, Ui::pxf(SONG_PROGRESS_HEIGHT))}).draw(window, {screensize.x - Ui::pxf(SONG_PROGRESS_RIGHT), Ui::pxf(SONG_PROGRESS_TOP)}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+        ProgressBar({Ui::pxf(SONG_PROGRESS_WIDTH), std::max(1.0f, Ui::pxf(SONG_PROGRESS_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, {screensize.x - Ui::pxf(SONG_PROGRESS_RIGHT), Ui::pxf(SONG_PROGRESS_TOP)}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
 
-        draw_text(skin->display_font_medium, std::format("{:.2f}%", attempt.get_accuracy() * 100), Ui::px(20), Ui::px(40), olc::WHITE);
-        draw_text(skin->display_font_medium, std::format("{:.1f}ms", attempt.get_avg_err()), Ui::px(20), Ui::px(80), olc::WHITE);
+        draw_text(skin->display_font_medium, std::format("{:.2f}%", attempt.get_accuracy() * 100), Ui::px(20), Ui::px(40), skin->color(SkinColor::TEXT));
+        draw_text(skin->display_font_medium, std::format("{:.1f}ms", attempt.get_avg_err()), Ui::px(20), Ui::px(80), skin->color(SkinColor::TEXT));
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
-        draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, olc::WHITE);
+        draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, skin->color(SkinColor::TEXT));
 
         if (ticket_hint_alpha > 0) {
             std::string waiting_hint = "Waiting for server...";
             int32_t waiting_width = text_bounds(skin->display_font_medium, waiting_hint).size.x;
-            draw_text(skin->display_font_medium, waiting_hint, {screensize.x / 2 - waiting_width / 2, screensize.y * 2 / 3}, olc::Pixel(255, 255, 255, (uint8_t)std::lround(SKIP_HINT_ALPHA * ticket_hint_alpha)));
+            draw_text(skin->display_font_medium, waiting_hint, {screensize.x / 2 - waiting_width / 2, screensize.y * 2 / 3}, fade(skin->color(SkinColor::PLAY_HINT), ticket_hint_alpha));
         }
 
         if (can_skip_intro(now_ms())) {
             std::string skip_hint = std::format("Press {} to skip the intro", InputManager::key_label(InputManager::get_key(KeyBinding::SKIP_INTRO)));
             int32_t skip_width = text_bounds(skin->display_font_medium, skip_hint).size.x;
-            draw_text(skin->display_font_medium, skip_hint, {screensize.x / 2 - skip_width / 2, screensize.y * 2 / 3}, olc::Pixel(255, 255, 255, SKIP_HINT_ALPHA));
+            draw_text(skin->display_font_medium, skip_hint, {screensize.x / 2 - skip_width / 2, screensize.y * 2 / 3}, skin->color(SkinColor::PLAY_HINT));
         }
 
         uint8_t l = 0;
@@ -619,8 +617,8 @@ namespace nascent {
             const JudgedHit& jhit = attempt.judged_hits[i];
 
             if (jhit.hit) {
-                window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.hit_score)), olc::Pixel(hit_score_color(jhit.hit_score)), {log_scale, log_scale});
-                window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("  {:+}ms", jhit.hit_err), olc::WHITE, {log_scale, log_scale});
+                window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.hit_score)), skin->judgement_color(jhit.hit_score), {log_scale, log_scale});
+                window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("  {:+}ms", jhit.hit_err), skin->color(SkinColor::TEXT), {log_scale, log_scale});
 
                 l += 1;
                 if (l >= vlen) {
@@ -629,11 +627,11 @@ namespace nascent {
 
                 if (jhit.chart_hit.hit_type == HitType::HOLD) {
                     if (jhit.released) {
-                        window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.release_score)), olc::Pixel(hit_score_color(jhit.release_score)), {log_scale, log_scale});
-                        window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("R {:+}ms", jhit.release_err), olc::WHITE, {log_scale, log_scale});
+                        window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.release_score)), skin->judgement_color(jhit.release_score), {log_scale, log_scale});
+                        window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("R {:+}ms", jhit.release_err), skin->color(SkinColor::TEXT), {log_scale, log_scale});
                     }
                     else {
-                        window->DrawStringDecal({score_x, log_top + vspacing * l}, "...", olc::GREY, {log_scale, log_scale});
+                        window->DrawStringDecal({score_x, log_top + vspacing * l}, "...", skin->color(SkinColor::TEXT_MUTED), {log_scale, log_scale});
                     }
                     l += 1;
                 }
@@ -646,13 +644,13 @@ namespace nascent {
 
         if (SettingsManager::settings.field_show_timing_bar) {
             const Settings& settings = SettingsManager::settings;
-            draw_timing_bar(window, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
+            draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
         }
 
         if (paused) {
             olc::Decal* paused_decal = skin->game_paused_decal.get();
 
-            window->FillRectDecal({0, 0}, screensize, olc::Pixel(0, 0, 0, 200));
+            window->FillRectDecal({0, 0}, screensize, skin->color(SkinColor::PAUSE_OVERLAY));
             window->DrawDecal({(float)((double)screensize.x / 2 - (double)paused_decal->sprite->width / 2), (float)((double)screensize.y / 2 - (double)paused_decal->sprite->height / 2)}, paused_decal);
         }
     };

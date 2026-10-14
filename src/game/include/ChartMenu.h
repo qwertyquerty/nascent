@@ -35,10 +35,6 @@ namespace nascent {
         static constexpr int32_t ROW_HEIGHT = 44;
         static constexpr int32_t ROW_INSET = 14;
         static constexpr int32_t GAP = 14;
-        static constexpr uint8_t DIM = 160;
-        static inline const olc::Pixel BACKGROUND = olc::Pixel(10, 10, 14, 235);
-        static inline const olc::Pixel HIGHLIGHT = olc::Pixel(255, 255, 255, 24);
-        static inline const olc::Pixel DANGER = olc::Pixel(235, 80, 80);
 
         Outcome update(olc::PixelGameEngine* window);
         void draw(olc::PixelGameEngine* window, Skin* skin, const Chart& chart, size_t pack_count) const;

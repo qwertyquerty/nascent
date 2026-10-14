@@ -191,16 +191,16 @@ namespace nascent {
                          (float)(overlay_y(combo_height) - combo_decal.get_sprite()->Size().y * scale / 2)},
                         combo_decal.get(),
                         {scale, scale},
-                        with_opacity(olc::WHITE)
+                        with_opacity(skin->color(SkinColor::COMBO))
                     );
                 }
             }
         }
 
         if (debug) {
-            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 20)}, std::format("POS {:.1f}", position), olc::WHITE, {2.0f, 2.0f});
-            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 40)}, std::format("MB {}", chart->meter_beat_at(position)), olc::WHITE, {2.0f, 2.0f});
-            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 60)}, std::format("SB {}", chart->section_beat_at(position)), olc::WHITE, {2.0f, 2.0f});
+            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 20)}, std::format("POS {:.1f}", position), skin->color(SkinColor::TEXT), {2.0f, 2.0f});
+            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 40)}, std::format("MB {}", chart->meter_beat_at(position)), skin->color(SkinColor::TEXT), {2.0f, 2.0f});
+            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 60)}, std::format("SB {}", chart->section_beat_at(position)), skin->color(SkinColor::TEXT), {2.0f, 2.0f});
         }
     };
 

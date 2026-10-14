@@ -123,7 +123,7 @@ namespace nascent {
 
             window->EnableLayer((uint8_t)transition_layer, true);
             window->SetDrawTarget((uint8_t)transition_layer);
-            window->Clear(olc::BLACK);
+            window->Clear(clear_color);
             outgoing_scene->draw(window);
         }
         else if (transition_layer >= 0) {
@@ -131,7 +131,7 @@ namespace nascent {
         }
 
         window->SetDrawTarget((uint8_t)0);
-        window->Clear(olc::BLACK);
+        window->Clear(clear_color);
 
         if (scene != nullptr) {
             scene->draw(window);

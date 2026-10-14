@@ -115,7 +115,6 @@ namespace nascent {
         static constexpr int32_t TOP_GAP = 24;
         static constexpr int32_t LINE_GAP = 10;
         static constexpr int32_t LINE_HEIGHT = 2;
-        static constexpr uint8_t LINE_ALPHA = 50;
 
         std::string title;
 

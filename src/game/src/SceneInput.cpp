@@ -13,8 +13,6 @@
 #include <format>
 
 namespace nascent {
-    static const olc::Pixel LANE_BACKGROUND = olc::Pixel(20, 20, 24, 200);
-    static const olc::Pixel CUSTOM_COLOR = olc::Pixel(240, 190, 70);
     static constexpr float MAX_LANE_SIZE = 150.0f;
     static constexpr float LANE_GAP_RATIO = 0.18f;
     static constexpr uint8_t IDLE_NOTE_ALPHA = 70;
@@ -172,7 +170,7 @@ namespace nascent {
             }
 
             float label_top = top + size + Ui::pxf(16);
-            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + Ui::pxf(24)}, LANE_BACKGROUND);
+            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + Ui::pxf(24)}, skin->color(SkinColor::INPUT_LANE_BACKGROUND));
 
             std::string label = waiting ? "?" : InputManager::key_label(lane_keys[lane]);
             olc::Font* font = &skin->display_font_medium;
@@ -182,10 +180,10 @@ namespace nascent {
             }
 
             olc::FontRect bounds = text_bounds(*font, label);
-            olc::Pixel label_color = selected ? olc::WHITE : olc::GREY;
+            olc::Pixel label_color = skin->color(selected ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
             if (waiting) {
-                label_color.a = (uint8_t)(140 + 115 * (0.5 + 0.5 * std::sin(timer * 6)));
+                label_color = fade(label_color, (140 + 115 * (0.5 + 0.5 * std::sin(timer * 6))) / 255.0);
             }
 
             int32_t label_x = (int32_t)std::lround(lane_x + size / 2 - bounds.size.x / 2.0f - bounds.offset.x);
@@ -200,7 +198,7 @@ namespace nascent {
             std::string number = std::format("{}", lane + 1);
             olc::FontRect number_bounds = text_bounds(skin->display_font_small, number);
             int32_t number_x = (int32_t)std::lround(lane_x + size / 2 - number_bounds.size.x / 2.0f - number_bounds.offset.x);
-            draw_text(skin->display_font_small, number, {number_x, (int32_t)(label_top + metrics.size.y + Ui::pxf(52))}, olc::DARK_GREY);
+            draw_text(skin->display_font_small, number, {number_x, (int32_t)(label_top + metrics.size.y + Ui::pxf(52))}, skin->color(SkinColor::TEXT_FAINT));
         }
     }
 
@@ -209,26 +207,26 @@ namespace nascent {
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 
-        draw_text(skin->display_font_large, "Input", {x, y}, olc::WHITE);
+        draw_text(skin->display_font_large, "Input", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(90);
 
-        draw_text(skin->display_font_small, "Lane keys used while playing. Changes are saved as you make them.", {x, y}, olc::GREY);
+        draw_text(skin->display_font_small, "Lane keys used while playing. Changes are saved as you make them.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
         y += Ui::px(70);
 
-        draw_text(skin->display_font_medium, "Key mode", {x, y}, olc::GREY);
-        draw_text(skin->display_font_medium, std::format("{}K", key_count), {x + Ui::px(300), y}, olc::WHITE);
+        draw_text(skin->display_font_medium, "Key mode", {x, y}, skin->color(SkinColor::TEXT_MUTED));
+        draw_text(skin->display_font_medium, std::format("{}K", key_count), {x + Ui::px(300), y}, skin->color(SkinColor::TEXT));
 
         bool custom = InputManager::is_custom_lane_keys(key_count);
-        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::px(400), y}, custom ? CUSTOM_COLOR : olc::DARK_GREY);
+        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::px(400), y}, skin->color(custom ? SkinColor::ATTENTION : SkinColor::TEXT_FAINT));
 
         draw_lanes(window, (int32_t)(screen.y * 0.38));
 
         std::string line = status;
-        olc::Pixel line_color = status_is_error ? olc::RED : olc::GREY;
+        olc::Pixel line_color = skin->color(status_is_error ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED);
 
         if (capturing) {
             line = capture_all ? std::format("Press a key for lane {} of {}", selected_lane + 1, key_count) : std::format("Press a key for lane {}", selected_lane + 1);
-            line_color = olc::WHITE;
+            line_color = skin->color(SkinColor::TEXT);
         }
 
         if (!line.empty()) {
@@ -241,6 +239,6 @@ namespace nascent {
 
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
         int32_t footer_bottom = screen.y - screen.y / 12;
-        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, olc::GREY);
+        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, skin->color(SkinColor::TEXT_MUTED));
     }
 }

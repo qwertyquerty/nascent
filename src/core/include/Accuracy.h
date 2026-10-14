@@ -30,10 +30,6 @@ namespace nascent {
         "PERFECT", "AMAZING", "GREAT", "GOOD", "BAD", "MISS", "NONE"
     };
 
-    inline constexpr std::array<uint32_t, HIT_SCORE_COUNT> HIT_SCORE_COLORS = {
-        0xff44ddff, 0xff0099cc, 0xff33cc33, 0xffff6600, 0xffcccccc, 0xff0000ff, 0x00000000
-    };
-
     inline constexpr std::array<uint8_t, HIT_SCORE_COUNT> HIT_SCORE_ACCS = {
         100, 95, 70, 40, 10, 0, 0 // %
     };
@@ -44,10 +40,6 @@ namespace nascent {
 
     constexpr std::string_view hit_score_name(HitScore score) {
         return HIT_SCORE_NAMES[(size_t)score];
-    }
-
-    constexpr uint32_t hit_score_color(HitScore score) {
-        return HIT_SCORE_COLORS[(size_t)score];
     }
 
     constexpr uint8_t hit_score_acc(HitScore score) {

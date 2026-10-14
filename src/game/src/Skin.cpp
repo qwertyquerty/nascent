@@ -7,6 +7,7 @@
 #include "Utf8Path.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cctype>
 #include <format>
@@ -59,6 +60,52 @@ namespace nascent {
 
         uint8_t clamp_alpha(const nlohmann::json& value) {
             return (uint8_t)std::clamp(value.get<double>(), 0.0, 255.0);
+        }
+
+        std::optional<olc::Pixel> parse_color(std::string_view text) {
+            if (!text.starts_with('#') || (text.size() != 7 && text.size() != 9)) {
+                return std::nullopt;
+            }
+
+            uint8_t channels[4] = {0, 0, 0, 255};
+
+            for (size_t index = 0; index * 2 + 1 < text.size(); index++) {
+                std::string_view digits = text.substr(1 + index * 2, 2);
+                auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), channels[index], 16);
+
+                if (error != std::errc() || end != digits.data() + digits.size()) {
+                    return std::nullopt;
+                }
+            }
+
+            return olc::Pixel(channels[0], channels[1], channels[2], channels[3]);
+        }
+    }
+
+    void SkinManifest::apply_colors(const nlohmann::json& config) {
+        auto entries = config.is_object() ? config.find("colors") : config.end();
+
+        if (!config.is_object() || entries == config.end() || !entries->is_object()) {
+            return;
+        }
+
+        for (const auto& [key, value] : entries->items()) {
+            auto slot = std::find_if(SKIN_COLOR_NAMES.begin(), SKIN_COLOR_NAMES.end(), [&](const char* name) {
+                return key == name;
+            });
+
+            if (slot == SKIN_COLOR_NAMES.end()) {
+                continue;
+            }
+
+            std::optional<olc::Pixel> color = value.is_string() ? parse_color(value.get<std::string>()) : std::nullopt;
+
+            if (!color) {
+                std::cerr << "Skin color \"" << key << "\" must look like #rrggbb or #rrggbbaa" << std::endl;
+                continue;
+            }
+
+            colors[(size_t)(slot - SKIN_COLOR_NAMES.begin())] = color;
         }
     }
 
@@ -120,6 +167,8 @@ namespace nascent {
         if (has("receptor_alpha", nlohmann::json::value_t::number_float)) {
             receptor_alpha = clamp_alpha(config["receptor_alpha"]);
         }
+
+        apply_colors(config);
 
         if (has("lane_images", nlohmann::json::value_t::object)) {
             for (const auto& [keys, lanes] : config["lane_images"].items()) {
@@ -246,8 +295,18 @@ namespace nascent {
 
         skin_manifest = SkinManifest();
 
+        if (!fallback.empty()) {
+            skin_manifest.apply_colors(read_manifest(fallback));
+        }
+
         for (auto config = configs.rbegin(); config != configs.rend(); ++config) {
             skin_manifest.apply(*config);
+        }
+
+        for (size_t index = 0; index < SKIN_COLOR_COUNT; index++) {
+            if (!skin_manifest.colors[index]) {
+                std::cerr << "Skin \"" << id << "\" has no color \"" << SKIN_COLOR_NAMES[index] << "\", using white" << std::endl;
+            }
         }
 
         SkinManifest own;
@@ -277,12 +336,10 @@ namespace nascent {
         }
 
         for (HitScore h : ALL_HIT_SCORES) {
-            hit_score_decals[(size_t)h] = SpriteDecal::adopt(
-                display_font_large.RenderStringToDecal(std::string(hit_score_name(h)), olc::Pixel(hit_score_color(h)))
-            );
+            hit_score_decals[(size_t)h] = SpriteDecal::adopt(display_font_large.RenderStringToDecal(std::string(hit_score_name(h)), judgement_color(h)));
         }
 
-        game_paused_decal = SpriteDecal::adopt(display_font_large.RenderStringToDecal("Game Paused", olc::WHITE));
+        game_paused_decal = SpriteDecal::adopt(display_font_large.RenderStringToDecal("Game Paused", color(SkinColor::TEXT)));
     }
 
     void Skin::unload_fonts() {
@@ -426,6 +483,50 @@ namespace nascent {
         x = std::clamp(x, 0.0, 1.0);
         y = std::clamp(y, 0.0, 1.0);
         return title_gradient->GetPixel({(int32_t)(x * (title_gradient->width - 1)), (int32_t)(y * (title_gradient->height - 1))});
+    }
+
+    olc::Pixel Skin::color(SkinColor color) const {
+        return skin_manifest.colors[(size_t)color].value_or(olc::WHITE);
+    }
+
+    olc::Pixel Skin::judgement_color(HitScore score) const {
+        switch (score) {
+            case HitScore::PERFECT:
+                return color(SkinColor::JUDGEMENT_PERFECT);
+            case HitScore::AMAZING:
+                return color(SkinColor::JUDGEMENT_AMAZING);
+            case HitScore::GREAT:
+                return color(SkinColor::JUDGEMENT_GREAT);
+            case HitScore::GOOD:
+                return color(SkinColor::JUDGEMENT_GOOD);
+            case HitScore::BAD:
+                return color(SkinColor::JUDGEMENT_BAD);
+            case HitScore::MISS:
+                return color(SkinColor::JUDGEMENT_MISS);
+            default:
+                return olc::BLANK;
+        }
+    }
+
+    olc::Pixel Skin::grade_color(Grade grade) const {
+        switch (grade) {
+            case Grade::X:
+                return color(SkinColor::GRADE_X);
+            case Grade::S:
+                return color(SkinColor::GRADE_S);
+            case Grade::A:
+                return color(SkinColor::GRADE_A);
+            case Grade::B:
+                return color(SkinColor::GRADE_B);
+            case Grade::C:
+                return color(SkinColor::GRADE_C);
+            case Grade::D:
+                return color(SkinColor::GRADE_D);
+            case Grade::E:
+                return color(SkinColor::GRADE_E);
+            default:
+                return color(SkinColor::GRADE_F);
+        }
     }
 
     int32_t Skin::sound(SkinSound sound) {

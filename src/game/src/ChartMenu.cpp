@@ -86,12 +86,12 @@ namespace nascent {
         int32_t x = left + padding;
         int32_t y = top + padding;
 
-        window->FillRectDecal({0.0f, 0.0f}, {(float)screen.x, (float)screen.y}, olc::Pixel(0, 0, 0, DIM));
-        window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)height}, BACKGROUND);
+        window->FillRectDecal({0.0f, 0.0f}, {(float)screen.x, (float)screen.y}, skin->color(SkinColor::MENU_DIM));
+        window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)height}, skin->color(SkinColor::MENU_BACKGROUND));
 
-        draw_text(title_font, title, {x, y - title_metrics.offset.y}, olc::WHITE);
+        draw_text(title_font, title, {x, y - title_metrics.offset.y}, skin->color(SkinColor::TEXT));
         y += title_metrics.size.y + gap;
-        draw_text(row_font, subtitle, {x, y - row_metrics.offset.y}, olc::GREY);
+        draw_text(row_font, subtitle, {x, y - row_metrics.offset.y}, skin->color(SkinColor::TEXT_MUTED));
         y += row_metrics.size.y + gap * 2;
 
         for (size_t index = 0; index < ACTIONS.size(); index++) {
@@ -101,12 +101,13 @@ namespace nascent {
             bool danger = action != ChartAction::OPEN_WEBSITE;
 
             if (is_selected) {
-                window->FillRectDecal({(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}, HIGHLIGHT);
+                window->FillRectDecal({(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));
             }
 
-            olc::Pixel color = is_confirming ? DANGER : is_selected ? olc::WHITE
-                : danger                                            ? olc::Pixel(200, 140, 140)
-                                                                    : olc::GREY;
+            SkinColor role = is_confirming ? SkinColor::NEGATIVE : is_selected ? SkinColor::TEXT
+                : danger                                                       ? SkinColor::MENU_DANGER_IDLE
+                                                                               : SkinColor::TEXT_MUTED;
+            olc::Pixel color = skin->color(role);
             int32_t baseline = y + (row_height - row_metrics.size.y) / 2 - row_metrics.offset.y;
             draw_text(row_font, label(action, is_confirming), {x + row_inset, baseline}, color);
             y += row_height;

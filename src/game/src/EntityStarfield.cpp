@@ -496,8 +496,8 @@ namespace nascent {
 
         window->GradientTriangleDecal(shooting.pos + side, shooting.pos - side, tail, head_color, head_color, tail_color);
 
-        olc::Pixel glow_color = olc::WHITE;
-        glow_color.a = alpha_of(envelope * 0.75 * light_level);
+        olc::Pixel glow_color = skin->color(SkinColor::SHOOTING_STAR_GLOW);
+        glow_color.a = (uint8_t)std::lround(glow_color.a * alpha_of(envelope * 0.75 * light_level) / 255.0);
         draw_sprite(window, glow, shooting.pos, 14 * Ui::scale(), glow_color);
     }
 
