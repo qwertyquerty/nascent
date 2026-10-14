@@ -17,6 +17,7 @@
 #include <format>
 #include <memory>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -25,6 +26,7 @@ namespace nascent {
     static const olc::Pixel POSITIVE_COLOR = olc::Pixel(90, 220, 120);
     static const olc::Pixel NEGATIVE_COLOR = olc::Pixel(235, 80, 80);
     static const olc::Pixel BEST_COLOR = olc::Pixel(240, 190, 70);
+    static const olc::Pixel FULL_COMBO_COLOR = olc::Pixel(255, 205, 70);
     static constexpr std::string_view BACK_HINT = "Enter / Esc  back to the song list";
 
     static olc::Pixel blend(olc::Pixel below, olc::Pixel above) {
@@ -340,16 +342,18 @@ namespace nascent {
         draw_text(skin->display_font_large, std::format("{:.2f}%", std::floor(summary.accuracy * 10000.0) / 100.0), {x + Ui::px(110), y + Ui::px(20)}, olc::WHITE);
         y += Ui::px(80);
 
-        const std::pair<const char*, std::string> stats[] = {
-            {"Max combo", std::format("{}", summary.max_combo)},
-            {"Average error", std::format("{:+.1f} ms", summary.average_error)},
-            {"Diff", std::format("{:.2f}", summary.difficulty)},
-            {"Perf", std::format("{:.2f}", summary.performance)},
+        bool full_combo = summary.max_combo > 0 && summary.score_counts[(size_t)HitScore::MISS] == 0;
+
+        const std::tuple<const char*, std::string, olc::Pixel> stats[] = {
+            {"Max combo", std::format("{}", summary.max_combo), full_combo ? FULL_COMBO_COLOR : olc::WHITE},
+            {"Average error", std::format("{:+.1f} ms", summary.average_error), olc::WHITE},
+            {"Diff", std::format("{:.2f}", summary.difficulty), olc::WHITE},
+            {"Perf", std::format("{:.2f}", summary.performance), olc::WHITE},
         };
 
-        for (const auto& [label, value] : stats) {
+        for (const auto& [label, value, color] : stats) {
             draw_text(skin->display_font_medium, label, {x, y}, olc::GREY);
-            draw_text(skin->display_font_medium, value, {x + Ui::px(300), y}, olc::WHITE);
+            draw_text(skin->display_font_medium, value, {x + Ui::px(300), y}, color);
             y += Ui::px(44);
         }
 
