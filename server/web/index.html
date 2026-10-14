@@ -132,6 +132,10 @@
                     ]" class="play-stat">
                         <p class="stat-label">{{ label }}</p><p class="stat-value" :class="extra">{{ value }}</p>
                     </div>
+                    <div v-if="view.leaderboard" class="play-stat">
+                        <p class="stat-label">Leaderboard at {{ $f.rate(view.leaderboard.rate) }}</p>
+                        <p class="stat-value"><a :href="$link.chart(view.play.chart.hash, view.leaderboard.rate)"><rank-cell :rank="view.leaderboard.rank"></rank-cell></a> <span class="is-size-6 has-text-grey">of {{ $f.number(view.leaderboard.total) }}</span></p>
+                    </div>
                 </div>
 
                 <div class="tags mb-4" aria-label="Judgements">
@@ -144,7 +148,7 @@
 
                 <template v-if="view.timeline">
                     <h2 class="title is-4">Replay</h2>
-                    <replay-viewer :timeline="view.timeline" :download-url="'/api/v1/plays/' + view.play.id + '/replay'"></replay-viewer>
+                    <replay-viewer :key="route.path + ':' + view.startAt" :timeline="view.timeline" :start-at="view.startAt" :share-url="$link.play(view.play.id)" :download-url="'/api/v1/plays/' + view.play.id + '/replay'"></replay-viewer>
                 </template>
                 <template v-else>
                     <p class="has-text-grey">The replay for this play couldn't be loaded.</p>
@@ -160,7 +164,7 @@
                 </h1>
                 <p class="subtitle is-6 has-text-grey">
                     <span v-if="view.strongest && view.strongest.global_rank" class="profile-standing">
-                        {{ view.strongest.key_count }}K <rank-cell :rank="view.strongest.global_rank"></rank-cell> &middot; {{ $f.top(view.strongest.global_rank, view.strongest.ranked_players) }} &middot;
+                        {{ view.strongest.key_count }}K <rank-cell :rank="view.strongest.global_rank"></rank-cell> &middot; {{ $f.standing(view.strongest.global_rank, view.strongest.ranked_players) }} &middot;
                     </span>
                     Joined <rel-time :value="view.user.created_at"></rel-time> &middot; last played <rel-time :value="view.user.last_played_at"></rel-time>
                 </p>
@@ -179,18 +183,40 @@
                     <li v-for="grade in 'XSABCDEF'" :key="grade"><span class="grade" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}</li>
                 </ul>
 
+                <template v-if="view.activity">
+                    <h2 class="title is-4">Activity</h2>
+                    <activity-heatmap class="mb-5" :activity="view.activity"></activity-heatmap>
+                </template>
+
+                <div class="columns mb-4">
+                    <div v-if="view.history" class="column is-7">
+                        <h2 class="title is-4">{{ view.keyCount }}K history</h2>
+                        <history-graph :history="view.history"></history-graph>
+                    </div>
+                    <div v-if="view.activity" class="column">
+                        <h2 class="title is-4">Favorite charts</h2>
+                        <ol v-if="view.activity.favorite_charts.length" class="favorite-charts">
+                            <li v-for="entry in view.activity.favorite_charts" :key="entry.chart.hash">
+                                <a :href="$link.chart(entry.chart.hash)">{{ entry.chart.artist }} - {{ entry.chart.title }}</a> <span class="has-text-grey">[{{ entry.chart.difficulty_name }}]</span>
+                                <p class="is-size-7 has-text-grey">{{ entry.chart.key_count }}K &middot; {{ $f.plural(entry.plays, 'play') }} &middot; best {{ $f.accuracy(entry.best_accuracy) }} &middot; last <rel-time :value="entry.last_played_at"></rel-time></p>
+                            </li>
+                        </ol>
+                        <p v-else class="has-text-grey">No plays yet.</p>
+                    </div>
+                </div>
+
                 <h2 class="title is-4">Key modes</h2>
                 <div class="table-container">
                     <table class="table is-fullwidth is-hoverable">
                         <caption class="is-sr-only">Stats per key mode</caption>
                         <thead><tr>
-                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Top</th><th scope="col" class="is-numeric">Performance</th>
+                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Percentile</th><th scope="col" class="is-numeric">Performance</th>
                             <th scope="col" class="is-numeric">Accuracy</th><th scope="col" class="is-numeric is-hidden-mobile">Ranked plays</th><th scope="col" class="is-numeric is-hidden-mobile">Time played</th>
                         </tr></thead>
                         <tbody><tr v-for="mode in view.user.key_modes" :key="mode.key_count">
                             <th scope="row">{{ mode.key_count }}K</th>
                             <td class="is-numeric"><rank-cell :rank="mode.global_rank"></rank-cell></td>
-                            <td class="is-numeric">{{ $f.top(mode.global_rank, mode.ranked_players) || "—" }}</td>
+                            <td class="is-numeric">{{ $f.standing(mode.global_rank, mode.ranked_players) || "—" }}</td>
                             <td class="is-numeric">{{ $f.performance(mode.performance) }}</td>
                             <td class="is-numeric">{{ $f.accuracy(mode.accuracy) }}</td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.number(mode.ranked_play_count) }}</td>
@@ -298,8 +324,11 @@
                 <p class="subtitle is-6 mt-2">
                     [{{ view.chart.difficulty_name }}] by {{ view.chart.mapper }}
                     <span class="tag is-light" :class="{'is-success': view.chart.status === 'ranked'}">{{ view.chart.status }}</span>
-                    <a v-for="source in view.chart.sources.filter((source) => source.url?.startsWith('https://'))" class="ml-2" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.source }} page</a>
                 </p>
+                <div v-if="view.downloads.length || view.pages.length" class="buttons chart-links">
+                    <a v-for="download in view.downloads" :key="download.url" class="button is-small is-primary" :href="download.url" rel="noopener noreferrer">Download from {{ download.name }}</a>
+                    <a v-for="page in view.pages" :key="page.url" class="button is-small" :href="page.url" target="_blank" rel="noopener noreferrer">{{ page.name }} page</a>
+                </div>
 
                 <div class="chart-headline box">
                     <div class="chart-difficulty">
@@ -317,7 +346,7 @@
                     </div>
                 </div>
 
-                <density-graph :hash="view.chart.hash" :rate="view.rate"></density-graph>
+                <chart-preview :hash="view.chart.hash" :rate="view.rate"></chart-preview>
 
                 <div class="tabs mt-5">
                     <ul aria-label="Leaderboard">

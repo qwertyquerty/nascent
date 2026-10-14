@@ -80,7 +80,7 @@ services:
   scheduler:
     <<: *server
     init: true
-    command: ["sh", "-c", "while true; do flask --app wsgi nascent prune; sleep 86400; done"]
+    command: ["sh", "-c", "while true; do flask --app wsgi nascent prune; flask --app wsgi nascent snapshot-ranks; sleep 86400; done"]
 
   backup:
     image: postgres:17-alpine

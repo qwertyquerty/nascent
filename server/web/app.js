@@ -3,6 +3,14 @@ const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases/lat
 const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases/latest";
 const PAGE_SIZE = 50;
 const SEARCH_DELAY_MS = 180;
+const DAY_MS = 86400000;
+const HISTORY_WIDTH = 600;
+const HISTORY_HEIGHT = 140;
+const HEAT_CELL = 11;
+const HEAT_STEP = 13;
+const HEAT_LEFT = 30;
+const HEAT_TOP = 16;
+const HEAT_LEVELS = 4;
 
 const query = (params = {}) => new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== "")).toString();
 const pageOf = (params) => Math.max(1, parseInt(params.page, 10) || 1);
@@ -21,6 +29,26 @@ async function api(path, params) {
 
     return body;
 }
+
+const chartDataCache = new Map();
+
+function chartData(hash) {
+    if (!chartDataCache.has(hash)) {
+        chartDataCache.set(hash, api(`/charts/${encodeURIComponent(hash)}/data`).catch(() => {
+            chartDataCache.delete(hash);
+            return null;
+        }));
+    }
+
+    return chartDataCache.get(hash);
+}
+
+function uniqueBy(items, key) {
+    return [...new Map(items.map((item) => [item[key], item])).values()];
+}
+
+const utcDay = (day) => Date.parse(`${day}T00:00:00Z`);
+const isoDay = (time) => new Date(time).toISOString().slice(0, 10);
 
 async function notFoundAs(promise, message) {
     try {
@@ -51,14 +79,17 @@ const format = {
     length: (ms) => `${Math.floor(ms / 60000)}:${String(Math.round(ms / 1000) % 60).padStart(2, "0")}`,
     playtime: (ms) => `${Math.floor(ms / 3600000).toLocaleString()}h ${Math.floor(ms / 60000) % 60}m`,
     error: (ms) => `${ms >= 0 ? "+" : ""}${Number(ms).toFixed(1)} ms`,
-    top(rank, players) {
+    standing(rank, players) {
         if (!rank || !players) {
             return "";
         }
 
-        const percent = (rank / players) * 100;
-        return `top ${percent < 1 ? Math.max(0.1, Math.ceil(percent * 10) / 10) : Math.ceil(percent)}%`;
+        const rounded = (percent) => (percent < 1 ? Math.max(0.1, Math.ceil(percent * 10) / 10) : Math.ceil(percent));
+        const top = (rank / players) * 100;
+        return top <= 50 ? `top ${rounded(top)}%` : `bottom ${rounded(((players - rank + 1) / players) * 100)}%`;
     },
+    day: (value) => new Date(typeof value === "number" ? value : utcDay(value)).toLocaleDateString(undefined, {dateStyle: "medium", timeZone: "UTC"}),
+    plural: (count, word) => `${Number(count ?? 0).toLocaleString()} ${word}${count === 1 ? "" : "s"}`,
     fullDate: (value) => (value ? new Date(value).toLocaleString(undefined, {dateStyle: "medium", timeStyle: "short"}) : ""),
     when(value) {
         if (!value) {
@@ -94,6 +125,18 @@ function seconds(length) {
     const [minutes, rest] = String(length).trim().split(":");
     const total = rest === undefined ? Number(minutes) * 60 : Number(minutes) * 60 + Number(rest);
     return Number.isFinite(total) ? total : null;
+}
+
+function timestamp(value) {
+    const text = String(value ?? "").trim().toLowerCase();
+    const clock = text.match(/^(?:(\d+):)?(\d+)$/);
+    const units = text.match(/^(?:(\d+)m)?(?:(\d+)s)?$/);
+
+    if (clock) {
+        return Number(clock[1] ?? 0) * 60 + Number(clock[2]);
+    }
+
+    return text && units ? Number(units[1] ?? 0) * 60 + Number(units[2] ?? 0) : null;
 }
 
 function parseRoute() {
@@ -165,11 +208,11 @@ const loaders = {
         return {title: "Plays", total, keyCount, performance, plays: performance ? plays.map((play, index) => ({rank: page.offset + index + 1, play})) : plays};
     },
 
-    async play({id}) {
+    async play({id, params}) {
         const path = `/plays/${encodeURIComponent(id)}`;
-        const [{play}, timeline] = await Promise.all([notFoundAs(api(path), "This play doesn't exist or isn't public."), api(`${path}/timeline`).catch(() => null)]);
+        const [{play, leaderboard}, timeline] = await Promise.all([notFoundAs(api(path), "This play doesn't exist or isn't public."), api(`${path}/timeline`).catch(() => null)]);
         const title = `${play.user.username} · ${play.grade} ${format.accuracy(play.accuracy)} on ${chartName(play.chart)}`;
-        return {title, play, timeline, titles: chartTitles(play.chart)};
+        return {title, play, leaderboard, timeline, titles: chartTitles(play.chart), startAt: timestamp(params.t)};
     },
 
     async user({id, params}, keyCounts) {
@@ -179,8 +222,12 @@ const loaders = {
         const recent = params.tab === "recent" || modes.length === 0;
         const strongest = [...modes].sort((a, b) => b.performance - a.performance)[0];
         const keyCount = Number(params.key_count ?? strongest?.key_count);
-        const {plays, total} = await api(`${base}/plays/${recent ? "recent" : "best"}`, {key_count: recent ? null : keyCount, ...paged(params)});
-        return {title: user.username, user, modes, strongest, recent, keyCount, plays, total};
+        const [{plays, total}, history, activity] = await Promise.all([
+            api(`${base}/plays/${recent ? "recent" : "best"}`, {key_count: recent ? null : keyCount, ...paged(params)}),
+            keyCounts.includes(keyCount) ? api(`${base}/history`, {key_count: keyCount}).catch(() => null) : null,
+            api(`${base}/activity`).catch(() => null),
+        ]);
+        return {title: user.username, user, modes, strongest, recent, keyCount, plays, total, history, activity};
     },
 
     async charts({params}) {
@@ -208,7 +255,10 @@ const loaders = {
         const rate = performance ? 1 : entries.rate;
         const players = Object.fromEntries(rates.map((entry) => [entry.rate, entry.players]));
         const difficulty = chart.difficulties.find((entry) => entry.rate === rate)?.difficulty ?? chart.difficulty;
-        return {title: chartName(chart), chart, board: entries, performance, rate, players, difficulty, titles: chartTitles(chart)};
+        const https = (entry) => entry.url?.startsWith("https://");
+        const downloads = uniqueBy(chart.sources.flatMap((source) => source.downloads ?? []).filter(https), "url");
+        const pages = uniqueBy(chart.sources.map((source) => ({name: source.source, url: source.url})).filter(https), "url");
+        return {title: chartName(chart), chart, board: entries, performance, rate, players, difficulty, downloads, pages, titles: chartTitles(chart)};
     },
 };
 
@@ -425,7 +475,7 @@ app.component("density-graph", {
         peak: (self) => Math.max(1, ...self.bars),
     },
     async mounted() {
-        const data = await api(`/charts/${encodeURIComponent(this.hash)}/data`).catch(() => null);
+        const data = await chartData(this.hash);
         this.times = (data?.hit_objects ?? []).map((hit) => hit.time).sort((a, b) => a - b);
     },
     template: `<figure v-if="bars.length" class="density-graph">
@@ -434,6 +484,164 @@ app.component("density-graph", {
             <rect v-for="(value, index) in bars" :key="index" :x="index + 0.1" :y="40 - (value / peak) * 38" width="0.8" :height="(value / peak) * 38" fill="url(#density-fill)"></rect>
         </svg>
         <figcaption class="is-size-7 has-text-grey">Note density at {{ $f.rate(rate) }} &middot; peak {{ peak.toFixed(1) }} notes/s</figcaption>
+    </figure>`,
+});
+
+app.component("chart-preview", {
+    props: {hash: String, rate: {type: Number, default: 1}},
+    data: () => ({open: false, data: null, failed: false}),
+    computed: {
+        timeline: (self) => (self.data ? previewTimeline(self.data, self.rate) : null),
+    },
+    methods: {
+        async toggle() {
+            this.open = !this.open;
+
+            if (this.open && !this.data) {
+                this.data = await chartData(this.hash);
+                this.failed = !this.data;
+            }
+        },
+    },
+    template: `<div class="chart-preview">
+        <replay-viewer v-if="open && timeline" :timeline="timeline" preview></replay-viewer>
+        <density-graph v-else :hash="hash" :rate="rate"></density-graph>
+        <p v-if="open && failed" class="has-text-grey mt-2">The chart couldn't be loaded for a preview.</p>
+        <button type="button" class="button is-small mt-3" :aria-expanded="open" @click="toggle">{{ open ? "Hide preview" : "Preview chart" }}</button>
+    </div>`,
+});
+
+app.component("history-graph", {
+    props: {history: Object},
+    data: () => ({metric: "performance", hover: null}),
+    computed: {
+        points() {
+            return (this.history?.[this.metric] ?? []).map(([day, value]) => ({time: utcDay(day), value}));
+        },
+        span() {
+            const today = utcDay(isoDay(Date.now()));
+            const start = this.points[0]?.time ?? today;
+            return {start, end: Math.max(today, start + DAY_MS)};
+        },
+        range() {
+            const values = this.points.map((point) => point.value);
+            let low = Math.min(...values);
+            let high = Math.max(...values);
+
+            if (high - low < 1e-6) {
+                low -= this.metric === "rank" ? 1 : Math.max(1, low * 0.05);
+                high += this.metric === "rank" ? 1 : Math.max(1, high * 0.05);
+            }
+
+            const padding = (high - low) * 0.1;
+            return {low: low - padding, high: high + padding};
+        },
+        line() {
+            return this.points.map((point, index) => (index === 0 ? `M${this.x(point.time)},${this.y(point.value)}` : `H${this.x(point.time)} V${this.y(point.value)}`)).join(" ") + (this.points.length ? ` H${HISTORY_WIDTH}` : "");
+        },
+        area() {
+            return this.points.length ? `${this.line} V${HISTORY_HEIGHT} H${this.x(this.points[0].time)} Z` : "";
+        },
+        shown: (self) => self.hover ?? self.points[self.points.length - 1] ?? null,
+    },
+    methods: {
+        x(time) {
+            return ((time - this.span.start) / (this.span.end - this.span.start)) * HISTORY_WIDTH;
+        },
+        y(value) {
+            const fraction = (value - this.range.low) / (this.range.high - this.range.low);
+            return this.metric === "rank" ? fraction * HISTORY_HEIGHT : HISTORY_HEIGHT - fraction * HISTORY_HEIGHT;
+        },
+        value(point) {
+            return this.metric === "rank" ? format.rank(point.value) : format.performance(point.value);
+        },
+        track(event) {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const time = this.span.start + ((event.clientX - bounds.left) / Math.max(1, bounds.width)) * (this.span.end - this.span.start);
+            this.hover = [...this.points].reverse().find((point) => point.time <= time) ?? this.points[0] ?? null;
+        },
+    },
+    template: `<div class="history-graph">
+        <div class="history-header">
+            <div class="buttons has-addons mb-0" role="group" aria-label="History metric">
+                <button v-for="[metric, label] in [['performance', 'Performance'], ['rank', 'Rank']]" type="button" class="button is-small mb-0"
+                    :class="{'is-link is-selected': metric === $data.metric}" :aria-pressed="metric === $data.metric" @click="$data.metric = metric; hover = null">{{ label }}</button>
+            </div>
+            <p v-if="shown" class="history-value"><span class="stat-value">{{ value(shown) }}</span> <span class="has-text-grey is-size-7">{{ hover ? $f.day(shown.time) : 'now' }}</span></p>
+        </div>
+        <template v-if="points.length">
+            <svg :viewBox="'0 0 ' + ${HISTORY_WIDTH} + ' ' + ${HISTORY_HEIGHT}" preserveAspectRatio="none" role="img"
+                :aria-label="(metric === 'rank' ? 'Rank' : 'Performance') + ' over time, now ' + value(points[points.length - 1])" @pointermove="track" @pointerleave="hover = null">
+                <defs><linearGradient id="history-fill" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0" stop-color="#00b1e1" stop-opacity="0.35"></stop><stop offset="1" stop-color="#00b1e1" stop-opacity="0"></stop>
+                </linearGradient></defs>
+                <path :d="area" fill="url(#history-fill)"></path>
+                <path :d="line" class="history-line"></path>
+                <line v-if="hover" :x1="x(hover.time)" :x2="x(hover.time)" y1="0" :y2="${HISTORY_HEIGHT}" class="history-cursor"></line>
+            </svg>
+            <div class="history-axis is-size-7 has-text-grey"><span>{{ $f.day(span.start) }}</span><span>Today</span></div>
+        </template>
+        <p v-else class="has-text-grey history-empty">{{ metric === 'rank' ? 'Rank history is recorded once a day, so it will show up soon.' : 'No ranked plays in this mode yet.' }}</p>
+    </div>`,
+});
+
+app.component("activity-heatmap", {
+    props: {activity: Object},
+    computed: {
+        counts: (self) => new Map(self.activity.days),
+        cells() {
+            const first = utcDay(this.activity.first_day);
+            const last = utcDay(this.activity.last_day);
+            const start = first - new Date(first).getUTCDay() * DAY_MS;
+            const cells = [];
+
+            for (let time = start; time <= last; time += DAY_MS) {
+                const index = Math.round((time - start) / DAY_MS);
+
+                if (time >= first) {
+                    const day = isoDay(time);
+                    cells.push({day, time, column: Math.floor(index / 7), row: index % 7, count: this.counts.get(day) ?? 0});
+                }
+            }
+
+            return cells;
+        },
+        columns: (self) => (self.cells.length ? self.cells[self.cells.length - 1].column + 1 : 0),
+        peak: (self) => Math.max(1, ...self.activity.days.map(([, count]) => count)),
+        total: (self) => self.activity.days.reduce((sum, [, count]) => sum + count, 0),
+        months() {
+            const labels = [];
+
+            for (const cell of this.cells) {
+                const month = new Date(cell.time).toLocaleString(undefined, {month: "short", timeZone: "UTC"});
+
+                if (new Date(cell.time).getUTCDate() <= 7 && cell.row === 0 && labels[labels.length - 1]?.month !== month) {
+                    labels.push({month, column: cell.column});
+                }
+            }
+
+            return labels.filter((label, index) => index === 0 || label.column - labels[index - 1].column >= 3);
+        },
+        width: (self) => HEAT_LEFT + self.columns * HEAT_STEP,
+        height: () => HEAT_TOP + 7 * HEAT_STEP,
+    },
+    methods: {
+        level(count) {
+            return count ? Math.min(HEAT_LEVELS, Math.ceil((count / this.peak) * HEAT_LEVELS)) : 0;
+        },
+    },
+    template: `<figure class="activity-heatmap">
+        <div class="activity-scroll">
+            <svg :width="width" :height="height" :viewBox="'0 0 ' + width + ' ' + height" role="img" :aria-label="$f.plural(total, 'play') + ' in the last year'">
+                <text v-for="label in months" :key="label.column + label.month" :x="${HEAT_LEFT} + label.column * ${HEAT_STEP}" y="10" class="heat-label">{{ label.month }}</text>
+                <text v-for="[row, name] in [[1, 'Mon'], [3, 'Wed'], [5, 'Fri']]" :key="name" x="0" :y="${HEAT_TOP} + row * ${HEAT_STEP} + 9" class="heat-label">{{ name }}</text>
+                <rect v-for="cell in cells" :key="cell.day" :x="${HEAT_LEFT} + cell.column * ${HEAT_STEP}" :y="${HEAT_TOP} + cell.row * ${HEAT_STEP}"
+                    width="${HEAT_CELL}" height="${HEAT_CELL}" rx="2" :class="'heat-' + level(cell.count)">
+                    <title>{{ $f.plural(cell.count, 'play') }} on {{ $f.day(cell.day) }}</title>
+                </rect>
+            </svg>
+        </div>
+        <figcaption class="is-size-7 has-text-grey">{{ $f.plural(total, 'play') }} in the last year</figcaption>
     </figure>`,
 });
 

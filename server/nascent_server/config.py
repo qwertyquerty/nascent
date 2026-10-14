@@ -38,6 +38,11 @@ class Config:
     STATS_CACHE_SECONDS = 30
     WEB_DIR = os.environ.get("NASCENT_WEB_DIR", str(Path(__file__).resolve().parents[1] / "web"))
 
+    BEATMAP_MIRRORS = (
+        ("catboy.best", "https://catboy.best/d/{set_id}"),
+        ("osu.direct", "https://osu.direct/api/d/{set_id}"),
+    )
+
     PROFILE_TOP_PLAYS = 40
     PROFILE_DECAY = 0.9
     RANKED_KEY_COUNTS = tuple(range(4, 11))

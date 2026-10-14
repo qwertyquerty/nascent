@@ -12,6 +12,10 @@ const LEAD_IN_MS = 1500;
 const JUDGEMENT_SHOW_MS = 500;
 const TIMING_HISTORY_MS = 3000;
 const SEEK_STEP_MS = 5000;
+const COPIED_SHOW_MS = 1600;
+const PREVIEW_TAP_MS = 60;
+const PREVIEW_TAIL_MS = 1000;
+const DENSITY_BUCKETS = 120;
 const SIDE_COLUMN_PX = 256;
 const SIDE_GAP_PX = 24;
 
@@ -180,6 +184,40 @@ function prepareTimeline(timeline) {
     return {keyCount, notes, held, events, longestHold, start: Math.min(0, first - LEAD_IN_MS), end: Math.max(timeline.end_time, notes.length ? notes[notes.length - 1].end_time : 0) + 500};
 }
 
+function previewTimeline(chart, rate = 1) {
+    const keyCount = chart.info.key_count;
+    const notes = chart.hit_objects
+        .filter((hit) => hit.key >= 0 && hit.key < keyCount)
+        .map((hit) => {
+            const hold = hit.hit_type === 1 && hit.end_time > hit.time;
+            return {
+                lane: hit.key,
+                hold,
+                time: hit.time / rate,
+                end_time: (hold ? hit.end_time : hit.time) / rate,
+                hit_played: true,
+                hit_error: 0,
+                hit_score: "PERFECT",
+                release_played: hold,
+                release_error: 0,
+                release_score: hold ? "PERFECT" : "NONE",
+            };
+        })
+        .sort((a, b) => a.time - b.time);
+    const inputs = [];
+    const lanes = Array.from({length: keyCount}, () => []);
+    notes.forEach((note) => lanes[note.lane].push(note));
+
+    lanes.forEach((laneNotes, lane) => laneNotes.forEach((note, index) => {
+        const next = laneNotes[index + 1];
+        const release = note.hold ? note.end_time : note.time + PREVIEW_TAP_MS;
+        inputs.push([note.time, lane, true], [Math.max(note.time + 1, Math.min(release, next ? next.time - 1 : release)), lane, false]);
+    }));
+
+    const last = notes.reduce((latest, note) => Math.max(latest, note.end_time), 0);
+    return {key_count: keyCount, rate, end_time: last + PREVIEW_TAIL_MS, inputs, notes};
+}
+
 function lastIndexAtOrBefore(items, time, key = (item) => item.time) {
     let low = 0;
     let high = items.length - 1;
@@ -206,15 +244,17 @@ function isHeld(intervals, time) {
 }
 
 const ReplayViewer = {
-    props: {timeline: Object, accuracy: Number, downloadUrl: String},
-    data: () => ({playing: false, position: 0, speed: 1, scroll: 200}),
+    props: {timeline: Object, accuracy: Number, downloadUrl: String, shareUrl: String, startAt: Number, preview: Boolean},
+    data: () => ({playing: false, position: 0, speed: 1, scroll: 200, copied: ""}),
     computed: {
         prepared: (self) => prepareTimeline(self.timeline),
         duration: (self) => self.prepared.end - self.prepared.start,
-        clock: (self) => `${formatClock(self.position - Math.max(0, self.prepared.start))} / ${formatClock(self.prepared.end - Math.max(0, self.prepared.start))}`,
+        origin: (self) => Math.max(0, self.prepared.start),
+        elapsed: (self) => formatClock(self.position - self.origin),
+        clock: (self) => `${self.elapsed} / ${formatClock(self.prepared.end - self.origin)}`,
     },
     mounted() {
-        this.position = this.prepared.start;
+        this.position = this.startAt != null ? Math.min(this.prepared.end, this.origin + this.startAt * 1000) : this.prepared.start;
         this.resize = () => this.layout();
         addEventListener("resize", this.resize);
         this.layout();
@@ -222,9 +262,14 @@ const ReplayViewer = {
             this.skin = skin;
             this.draw();
         });
+
+        if (this.startAt != null) {
+            this.$el.scrollIntoView?.({block: "center"});
+        }
     },
     unmounted() {
         cancelAnimationFrame(this.frame);
+        clearTimeout(this.copiedTimer);
         removeEventListener("resize", this.resize);
     },
     methods: {
@@ -272,6 +317,25 @@ const ReplayViewer = {
         seekTo(time) {
             this.position = Math.min(this.prepared.end, Math.max(this.prepared.start, time));
             this.draw();
+        },
+        async copyLink() {
+            const seconds = Math.floor((this.position - this.origin) / 1000);
+            const url = new URL(this.shareUrl, location.href);
+
+            if (seconds > 0) {
+                url.searchParams.set("t", seconds);
+            }
+
+            try {
+                await navigator.clipboard.writeText(url.href);
+                this.copied = "Link copied";
+            }
+            catch {
+                this.copied = "Couldn't copy";
+            }
+
+            clearTimeout(this.copiedTimer);
+            this.copiedTimer = setTimeout(() => (this.copied = ""), COPIED_SHOW_MS);
         },
         draw() {
             const canvas = this.$refs.canvas;
@@ -420,6 +484,11 @@ const ReplayViewer = {
             }
 
             context.globalAlpha = 1;
+
+            if (this.preview) {
+                return;
+            }
+
             const latest = lastIndexAtOrBefore(events, time);
             const event = latest >= 0 ? events[latest] : null;
             context.textAlign = "center";
@@ -479,15 +548,20 @@ const ReplayViewer = {
         scroll() {
             this.draw();
         },
+        timeline() {
+            this.pause();
+            this.position = this.prepared.start;
+            this.layout();
+        },
     },
     template: `<div class="replay-viewer">
         <div class="replay-stage">
-            <canvas ref="canvas" tabindex="0" role="img" aria-label="Replay of this play" @click="toggle" @keydown="key"></canvas>
+            <canvas ref="canvas" tabindex="0" role="img" :aria-label="preview ? 'Preview of this chart' : 'Replay of this play'" @click="toggle" @keydown="key"></canvas>
         </div>
         <div class="replay-side">
-            <hit-error-graph class="replay-timeline" :timeline="timeline" :position="position" @seek="seekTo"></hit-error-graph>
+            <hit-error-graph class="replay-timeline" :timeline="timeline" :position="position" :density="preview" @seek="seekTo"></hit-error-graph>
             <div class="replay-controls">
-                <button type="button" class="button is-link" @click="toggle" :aria-label="playing ? 'Pause replay' : 'Play replay'">{{ playing ? "Pause" : "Play" }}</button>
+                <button type="button" class="button is-link" @click="toggle" :aria-label="(playing ? 'Pause ' : 'Play ') + (preview ? 'preview' : 'replay')">{{ playing ? "Pause" : "Play" }}</button>
                 <span class="replay-clock">{{ clock }}</span>
                 <div class="select is-small">
                     <select v-model.number="speed" aria-label="Playback speed">
@@ -499,6 +573,7 @@ const ReplayViewer = {
                         <option v-for="option in [100, 150, 200, 250, 300]" :value="option">Scroll {{ option }}</option>
                     </select>
                 </div>
+                <button v-if="shareUrl" type="button" class="button is-small replay-share" @click="copyLink" aria-live="polite">{{ copied || 'Copy link at ' + elapsed }}</button>
                 <a v-if="downloadUrl" class="button is-small" :href="downloadUrl" download>Download replay file</a>
             </div>
         </div>
@@ -506,10 +581,23 @@ const ReplayViewer = {
 };
 
 const HitErrorGraph = {
-    props: {timeline: Object, position: {type: Number, default: null}},
+    props: {timeline: Object, position: {type: Number, default: null}, density: Boolean},
     emits: ["seek"],
     computed: {
         prepared: (self) => prepareTimeline(self.timeline),
+        bars() {
+            if (!this.density) {
+                return [];
+            }
+
+            const {notes, start, end} = this.prepared;
+            const size = Math.max(1, end - start) / DENSITY_BUCKETS;
+            const buckets = new Array(DENSITY_BUCKETS).fill(0);
+            notes.forEach((note) => buckets[Math.min(DENSITY_BUCKETS - 1, Math.max(0, Math.floor((note.time - start) / size)))]++);
+            const peak = Math.max(1, ...buckets);
+            const width = 1000 / DENSITY_BUCKETS;
+            return buckets.map((count, index) => ({x: index * width + width * 0.1, width: width * 0.8, height: (count / peak) * 112}));
+        },
         points: (self) => self.prepared.events.filter((event) => event.error !== null),
         misses: (self) => self.prepared.events.filter((event) => event.score === "MISS"),
         range: (self) => Math.max(160, ...self.points.map((event) => Math.abs(event.error))),
@@ -573,17 +661,23 @@ const HitErrorGraph = {
         <svg viewBox="0 0 1000 120" preserveAspectRatio="none"
             :role="seekable ? 'slider' : 'img'"
             :tabindex="seekable ? 0 : null"
-            :aria-label="seekable ? 'Replay position' : 'Hit timing over the song, ' + points.length + ' timed hits and ' + misses.length + ' misses'"
+            :aria-label="seekable ? (density ? 'Preview position' : 'Replay position') : 'Hit timing over the song, ' + points.length + ' timed hits and ' + misses.length + ' misses'"
             :aria-valuemin="seekable ? prepared.start : null"
             :aria-valuemax="seekable ? prepared.end : null"
             :aria-valuenow="seekable ? Math.round(position) : null"
             :aria-valuetext="seekable ? valueText : null"
             @pointerdown="press" @pointermove="move" @pointerup="release" @pointercancel="release" @keydown="key">
-            <g v-memo="[prepared, range]">
+            <g v-memo="[prepared, range, density]">
                 <rect x="0" y="0" width="1000" height="120" class="graph-background"></rect>
-                <line x1="0" x2="1000" y1="60" y2="60" class="graph-center"></line>
-                <line v-for="miss in misses" :x1="x(miss.time)" :x2="x(miss.time)" y1="0" y2="120" class="graph-miss"></line>
-                <circle v-for="point in points" :cx="x(point.time)" :cy="y(point.error)" r="1.8" :fill="color(point.score)"></circle>
+                <template v-if="density">
+                    <defs><linearGradient id="replay-density-fill" x1="0" x2="1"><stop offset="0" stop-color="#00b1e1"></stop><stop offset="1" stop-color="#00f59a"></stop></linearGradient></defs>
+                    <rect v-for="(bar, index) in bars" :key="index" :x="bar.x" :y="118 - bar.height" :width="bar.width" :height="bar.height" fill="url(#replay-density-fill)"></rect>
+                </template>
+                <template v-else>
+                    <line x1="0" x2="1000" y1="60" y2="60" class="graph-center"></line>
+                    <line v-for="miss in misses" :x1="x(miss.time)" :x2="x(miss.time)" y1="0" y2="120" class="graph-miss"></line>
+                    <circle v-for="point in points" :cx="x(point.time)" :cy="y(point.error)" r="1.8" :fill="color(point.score)"></circle>
+                </template>
             </g>
             <rect v-if="seekable" x="0" y="0" :width="playhead" height="120" class="graph-played"></rect>
             <line v-if="seekable" :x1="playhead" :x2="playhead" y1="0" y2="120" class="graph-playhead"></line>

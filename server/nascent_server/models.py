@@ -1,10 +1,11 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -116,6 +117,16 @@ class UserKeyStats(db.Model):
     user: Mapped[User] = relationship(back_populates="key_stats")
 
     __table_args__ = (Index("ix_user_key_stats_performance", "key_count", "performance", "user_id"),)
+
+
+class RankSnapshot(db.Model):
+    __tablename__ = "rank_snapshots"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    key_count: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    performance: Mapped[float] = mapped_column(Float)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class AuthSession(db.Model):

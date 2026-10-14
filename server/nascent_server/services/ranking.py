@@ -1,16 +1,18 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from functools import cache
+from itertools import groupby
 
 import redis
 from flask import current_app
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, delete, func, select, update
 
+from .. import timeutil
 from ..cache import store
 from ..errors import ApiError
 from ..extensions import db
-from ..models import COUNTED_PLAY_STATUSES, Play, User, UserKeyStats
+from ..models import COUNTED_PLAY_STATUSES, Play, RankSnapshot, User, UserKeyStats
 from ..queries import count_rows
 
 BOARD_PREFIX = "performance"
@@ -235,6 +237,60 @@ def global_rank(user: User, key_count: int) -> int | None:
         current_app.logger.warning("leaderboard unavailable, ranking user %s from the database", user.id)
 
     return count_rows(leaderboard_users_query(key_count).where(UserKeyStats.performance > standing(user, key_count)[0])) + 1
+
+
+def record_snapshot(user_id: int, key_count: int, performance: float, rank: int | None) -> None:
+    db.session.merge(RankSnapshot(user_id=user_id, key_count=key_count, day=timeutil.utcnow().date(), performance=performance, rank=rank))
+
+
+def snapshot_all() -> int:
+    day = timeutil.utcnow().date()
+    recorded = 0
+
+    for key_count in ranked_key_counts():
+        db.session.execute(delete(RankSnapshot).where(RankSnapshot.key_count == key_count, RankSnapshot.day == day))
+        query = leaderboard_users_query(key_count).subquery()
+        rows = db.session.execute(select(query.c.user_id, query.c.performance).order_by(query.c.performance.desc(), query.c.user_id.asc())).all()
+        db.session.add_all(
+            RankSnapshot(user_id=row.user_id, key_count=key_count, day=day, performance=row.performance, rank=index + 1) for index, row in enumerate(rows)
+        )
+        recorded += len(rows)
+
+    db.session.commit()
+    return recorded
+
+
+def performance_history(user_id: int, key_count: int) -> list[tuple[date, float]]:
+    weights = current_weights()
+    rows = db.session.execute(
+        select(Play.chart_id, Play.performance, Play.submitted_at)
+        .where(Play.user_id == user_id, Play.key_count == key_count, Play.ranked.is_(True))
+        .order_by(Play.submitted_at.asc(), Play.id.asc())
+    ).all()
+    best: dict[int, float] = {}
+    points: list[tuple[date, float]] = []
+
+    for day, group in groupby(rows, key=lambda row: row.submitted_at.date()):
+        improved = False
+
+        for row in group:
+            if row.performance > best.get(row.chart_id, float("-inf")):
+                best[row.chart_id] = row.performance
+                improved = True
+
+        if improved:
+            points.append((day, profile_performance(list(best.values()), weights)))
+
+    return points
+
+
+def rank_history(user_id: int, key_count: int) -> list[tuple[date, int]]:
+    rows = db.session.execute(
+        select(RankSnapshot.day, RankSnapshot.rank)
+        .where(RankSnapshot.user_id == user_id, RankSnapshot.key_count == key_count, RankSnapshot.rank.is_not(None))
+        .order_by(RankSnapshot.day.asc())
+    ).all()
+    return [(row.day, row.rank) for row in rows]
 
 
 def ranked_player_count(key_count: int) -> int:

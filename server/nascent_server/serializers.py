@@ -1,5 +1,7 @@
 from typing import Any
 
+from flask import current_app
+
 from .models import Chart, ChartSource, Play, User, UserKeyStats
 from .timeutil import isoformat
 
@@ -73,10 +75,11 @@ def chart_summary(chart: Chart, include_sources: bool = False) -> dict[str, Any]
 
 
 def chart_source_out(source: ChartSource) -> dict[str, Any]:
-    body: dict[str, Any] = {"source": source.source, "checksum": source.checksum, "id": source.source_id, "set_id": source.source_set_id, "url": None}
+    body: dict[str, Any] = {"source": source.source, "checksum": source.checksum, "id": source.source_id, "set_id": source.source_set_id, "url": None, "downloads": []}
 
     if source.source == "osu" and source.source_set_id is not None:
         body["url"] = f"https://osu.ppy.sh/beatmapsets/{source.source_set_id}" + (f"#mania/{source.source_id}" if source.source_id is not None else "")
+        body["downloads"] = [{"name": name, "url": template.format(set_id=source.source_set_id)} for name, template in current_app.config["BEATMAP_MIRRORS"]]
 
     return body
 

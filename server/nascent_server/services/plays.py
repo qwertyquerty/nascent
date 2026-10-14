@@ -336,6 +336,10 @@ def submit_play(
         key_mode.performance = ranking.standing(user, key_count)[0]
         key_mode.rank = ranking.global_rank(user, key_count)
 
+        if play.ranked:
+            ranking.record_snapshot(user.id, key_count, key_mode.performance, key_mode.rank)
+            db.session.commit()
+
     return SubmissionResult(
         play=play,
         chart=chart,
@@ -364,6 +368,18 @@ def chart_rank(play: Play) -> int | None:
         )
     )
     return int(better or 0) + 1
+
+
+def chart_board_size(chart_id: int, rate_key: int) -> int:
+    return int(
+        db.session.scalar(
+            select(func.count())
+            .select_from(Play)
+            .join(User, User.id == Play.user_id)
+            .where(Play.chart_id == chart_id, Play.rate_key == rate_key, Play.is_chart_best.is_(True), User.is_banned.is_(False))
+        )
+        or 0
+    )
 
 
 def chart_performance_rank(play: Play) -> int | None:

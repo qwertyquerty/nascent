@@ -437,6 +437,96 @@ a.navbar-item.is-active:focus-within {
     min-width: 3rem;
 }
 
+.chart-links {
+    margin-bottom: 1rem;
+}
+
+.history-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.history-value {
+    font-variant-numeric: tabular-nums;
+}
+
+.history-value .stat-value {
+    font-size: 1.25rem;
+}
+
+.history-graph svg {
+    display: block;
+    width: 100%;
+    height: 9rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    touch-action: none;
+}
+
+.history-line {
+    fill: none;
+    stroke: var(--nascent-cyan);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+.history-cursor {
+    stroke: rgba(255, 255, 255, 0.4);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.history-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.25rem;
+}
+
+.history-empty {
+    padding: 2rem 0;
+}
+
+.activity-heatmap {
+    margin: 0;
+}
+
+.activity-scroll {
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+}
+
+.activity-scroll svg {
+    display: block;
+}
+
+.heat-label {
+    fill: var(--bulma-text-weak);
+    font-size: 9px;
+}
+
+.heat-0 { fill: rgba(255, 255, 255, 0.06); }
+.heat-1 { fill: #0b4a5c; }
+.heat-2 { fill: #007ea3; }
+.heat-3 { fill: #00b1e1; }
+.heat-4 { fill: #00f59a; }
+
+.favorite-charts {
+    list-style: none;
+    margin: 0;
+}
+
+.favorite-charts li + li {
+    margin-top: 0.75rem;
+}
+
+.replay-share {
+    font-variant-numeric: tabular-nums;
+}
+
 @media screen and (max-width: 768px) {
     .replay-viewer {
         grid-template-columns: minmax(0, 1fr);

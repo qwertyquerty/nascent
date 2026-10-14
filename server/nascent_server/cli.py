@@ -315,6 +315,11 @@ def rebuild_leaderboard():
         click.echo(f"{board}: {size} players")
 
 
+@nascent_cli.command("snapshot-ranks")
+def snapshot_ranks():
+    click.echo(f"recorded today's rank for {ranking.snapshot_all()} leaderboard entries")
+
+
 @nascent_cli.command("prune")
 def prune():
     now = timeutil.utcnow()

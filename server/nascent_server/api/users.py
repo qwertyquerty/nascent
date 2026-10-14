@@ -1,4 +1,5 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
+from datetime import UTC, datetime, time, timedelta
 
 from flask import Blueprint, request
 from sqlalchemy import case, func, select
@@ -6,10 +7,10 @@ from sqlalchemy.orm import joinedload
 
 from .. import timeutil
 from ..extensions import db
-from ..models import COUNTED_PLAY_STATUSES, Play, User
+from ..models import COUNTED_PLAY_STATUSES, Chart, Play, User
 from ..queries import count_rows
 from ..schemas import pagination, query_float, query_int
-from ..serializers import key_mode_out, play_out, totals_out, user_profile, user_summary
+from ..serializers import chart_summary, key_mode_out, play_out, totals_out, user_profile, user_summary
 from ..services import ranking
 from ..services.calculator import require_rate_key
 from ..services.charts import get_chart_or_404
@@ -18,6 +19,8 @@ from .lookup import can_see_private, get_user_or_404
 blueprint = Blueprint("users", __name__, url_prefix="/users")
 
 SEARCH_LENGTH = 32
+ACTIVITY_DAYS = 365
+FAVORITE_CHARTS = 6
 
 
 @blueprint.get("")
@@ -73,6 +76,59 @@ def rank(reference: str):
         "global_rank": ranking.global_rank(user, key_count),
         "performance": ranking.standing(user, key_count)[0],
         "ranked_players": ranking.ranked_player_count(key_count),
+    }
+
+
+@blueprint.get("/<reference>/history")
+def history(reference: str):
+    user = get_user_or_404(reference)
+    key_count = ranking.check_key_count(request.args.get("key_count", type=int))
+    return {
+        "user_id": user.id,
+        "key_count": key_count,
+        "performance": [[day.isoformat(), performance] for day, performance in ranking.performance_history(user.id, key_count)],
+        "rank": [[day.isoformat(), rank] for day, rank in ranking.rank_history(user.id, key_count)],
+    }
+
+
+@blueprint.get("/<reference>/activity")
+def activity(reference: str):
+    user = get_user_or_404(reference)
+    visible = [Play.user_id == user.id]
+
+    if not can_see_private(user):
+        visible.append(Play.status.in_(COUNTED_PLAY_STATUSES))
+
+    today = timeutil.utcnow().date()
+    first = today - timedelta(days=ACTIVITY_DAYS - 1)
+    since = datetime.combine(first, time(), tzinfo=UTC)
+    days = Counter(submitted_at.date() for submitted_at in db.session.scalars(select(Play.submitted_at).where(*visible, Play.submitted_at >= since)))
+
+    plays = func.count().label("plays")
+    last_played = func.max(Play.submitted_at).label("last_played_at")
+    rows = db.session.execute(
+        select(Play.chart_id, plays, func.max(Play.accuracy).label("best_accuracy"), last_played)
+        .where(*visible)
+        .group_by(Play.chart_id)
+        .order_by(plays.desc(), last_played.desc(), Play.chart_id.asc())
+        .limit(FAVORITE_CHARTS)
+    ).all()
+    charts = {chart.id: chart for chart in db.session.scalars(select(Chart).where(Chart.id.in_([row.chart_id for row in rows])))}
+
+    return {
+        "user_id": user.id,
+        "first_day": first.isoformat(),
+        "last_day": today.isoformat(),
+        "days": [[day.isoformat(), count] for day, count in sorted(days.items())],
+        "favorite_charts": [
+            {
+                "chart": chart_summary(charts[row.chart_id]),
+                "plays": row.plays,
+                "best_accuracy": row.best_accuracy,
+                "last_played_at": timeutil.isoformat(row.last_played_at),
+            }
+            for row in rows
+        ],
     }
 
 
