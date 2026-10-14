@@ -106,6 +106,9 @@ def activity(reference: str):
     if not can_see_private(user):
         visible.append(Play.status.in_(COUNTED_PLAY_STATUSES))
 
+    if "key_count" in request.args:
+        visible.append(Play.key_count == query_int("key_count", 4, 1, 32))
+
     today = timeutil.utcnow().date()
     first = today - timedelta(days=ACTIVITY_DAYS - 1)
     since = datetime.combine(first, time(), tzinfo=UTC)
@@ -173,6 +176,9 @@ def recent_plays(reference: str):
 
     if not can_see_private(user):
         query = query.where(Play.status.in_(COUNTED_PLAY_STATUSES))
+
+    if "key_count" in request.args:
+        query = query.where(Play.key_count == query_int("key_count", 4, 1, 32))
 
     total = count_rows(query)
 

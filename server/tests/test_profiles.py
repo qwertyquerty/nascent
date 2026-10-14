@@ -139,3 +139,16 @@ def test_global_activity_stats(api, clock):
 def test_charts_sort_by_mapper_and_keys(api):
     for sort in ("mapper", "key_count"):
         assert api.get(f"/api/v1/charts?sort={sort}").status_code == 200
+
+
+def test_recent_plays_and_activity_filter_by_key_count(api, clock):
+    seven = make_chart(key_count=7, title="Seven", note_count=240)
+    alice = api.token("alice")
+    submit(api, clock, alice, make_replay(CHART, seed=1))
+    submit(api, clock, alice, make_replay(seven, seed=2), chart=seven)
+
+    assert [play["key_count"] for play in api.get("/api/v1/users/alice/plays/recent?key_count=7").get_json()["plays"]] == [7]
+    assert api.get("/api/v1/users/alice/plays/recent").get_json()["total"] == 2
+    activity = api.get("/api/v1/users/alice/activity?key_count=4").get_json()
+    assert activity["days"] == [["2026-10-09", 1]]
+    assert [entry["chart"]["title"] for entry in activity["favorite_charts"]] == ["Test Song"]

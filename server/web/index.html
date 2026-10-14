@@ -176,16 +176,41 @@
                     <li v-for="grade in 'XSABCDEF'" :key="grade"><span class="grade" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.user.stats.grade_counts[grade]) }}</li>
                 </ul>
 
-                <template v-if="view.activity">
-                    <h2 class="title is-4">Activity</h2>
-                    <activity-heatmap class="mb-5" :activity="view.activity"></activity-heatmap>
-                </template>
+                <h2 class="title is-4">Key modes</h2>
+                <div class="table-container">
+                    <table class="table is-fullwidth is-hoverable">
+                        <caption class="is-sr-only">Stats per key mode</caption>
+                        <thead><tr>
+                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Percentile</th><th scope="col" class="is-numeric is-hidden-mobile">Peak</th><th scope="col" class="is-numeric">Performance</th>
+                            <th scope="col" class="is-numeric">Accuracy</th><th scope="col" class="is-numeric is-hidden-mobile">Ranked plays</th><th scope="col" class="is-numeric is-hidden-mobile">Time played</th>
+                        </tr></thead>
+                        <tbody><tr v-for="mode in view.user.key_modes" :key="mode.key_count" :class="{'is-selected-mode': mode.key_count === view.keyCount}">
+                            <th scope="row"><a :href="$link.user(view.user.username, {key_count: mode.key_count, tab: route.params.tab})">{{ mode.key_count }}K</a></th>
+                            <td class="is-numeric"><rank-cell :rank="mode.global_rank"></rank-cell></td>
+                            <td class="is-numeric">{{ $f.standing(mode.global_rank, mode.ranked_players) || "—" }}</td>
+                            <td class="is-numeric is-hidden-mobile"><span :title="mode.peak_rank_day ? $f.day(mode.peak_rank_day) : null">{{ $f.rank(mode.peak_rank) }}</span></td>
+                            <td class="is-numeric">{{ $f.performance(mode.performance) }}</td>
+                            <td class="is-numeric">{{ $f.accuracy(mode.accuracy) }}</td>
+                            <td class="is-numeric is-hidden-mobile">{{ $f.number(mode.ranked_play_count) }}</td>
+                            <td class="is-numeric is-hidden-mobile">{{ $f.playtime(mode.total_playtime_ms) }}</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+
+                <key-tabs v-if="view.modes.length" class="mt-5" :current="view.keyCount" :path="'/users/' + encodeURIComponent(view.user.username)" :params="{tab: route.params.tab}"
+                    :counts="view.modes.map((mode) => mode.key_count)" label="Key mode for the rest of the page"></key-tabs>
 
                 <div class="columns mb-4">
-                    <div v-if="view.history" class="column is-7">
-                        <h2 class="title is-4">{{ view.keyCount }}K history</h2>
-                        <history-graph :history="view.history"></history-graph>
-                        <skill-scatter class="mt-4" :key="view.keyCount" :username="view.user.username" :key-count="view.keyCount"></skill-scatter>
+                    <div class="column is-two-thirds-tablet">
+                        <template v-if="view.activity">
+                            <h2 class="title is-4">{{ view.modes.length ? view.keyCount + 'K activity' : 'Activity' }}</h2>
+                            <activity-heatmap class="mb-5" :activity="view.activity"></activity-heatmap>
+                        </template>
+                        <template v-if="view.history">
+                            <h2 class="title is-4">{{ view.keyCount }}K history</h2>
+                            <history-graph :history="view.history"></history-graph>
+                            <skill-scatter class="mt-4" :key="view.keyCount" :username="view.user.username" :key-count="view.keyCount"></skill-scatter>
+                        </template>
                     </div>
                     <div v-if="view.activity" class="column">
                         <h2 class="title is-4">Favorite charts</h2>
@@ -199,37 +224,15 @@
                     </div>
                 </div>
 
-                <h2 class="title is-4">Key modes</h2>
-                <div class="table-container">
-                    <table class="table is-fullwidth is-hoverable">
-                        <caption class="is-sr-only">Stats per key mode</caption>
-                        <thead><tr>
-                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Percentile</th><th scope="col" class="is-numeric is-hidden-mobile">Peak</th><th scope="col" class="is-numeric">Performance</th>
-                            <th scope="col" class="is-numeric">Accuracy</th><th scope="col" class="is-numeric is-hidden-mobile">Ranked plays</th><th scope="col" class="is-numeric is-hidden-mobile">Time played</th>
-                        </tr></thead>
-                        <tbody><tr v-for="mode in view.user.key_modes" :key="mode.key_count">
-                            <th scope="row">{{ mode.key_count }}K</th>
-                            <td class="is-numeric"><rank-cell :rank="mode.global_rank"></rank-cell></td>
-                            <td class="is-numeric">{{ $f.standing(mode.global_rank, mode.ranked_players) || "—" }}</td>
-                            <td class="is-numeric is-hidden-mobile"><span :title="mode.peak_rank_day ? $f.day(mode.peak_rank_day) : null">{{ $f.rank(mode.peak_rank) }}</span></td>
-                            <td class="is-numeric">{{ $f.performance(mode.performance) }}</td>
-                            <td class="is-numeric">{{ $f.accuracy(mode.accuracy) }}</td>
-                            <td class="is-numeric is-hidden-mobile">{{ $f.number(mode.ranked_play_count) }}</td>
-                            <td class="is-numeric is-hidden-mobile">{{ $f.playtime(mode.total_playtime_ms) }}</td>
-                        </tr></tbody>
-                    </table>
-                </div>
-
                 <div class="tabs mt-5">
                     <ul aria-label="Plays">
-                        <li v-for="mode in view.modes" :key="mode.key_count" :class="{'is-active': !view.recent && mode.key_count === view.keyCount}">
-                            <a :href="$link.user(view.user.username, {key_count: mode.key_count})" :aria-current="!view.recent && mode.key_count === view.keyCount ? 'page' : null">{{ mode.key_count }}K best</a>
+                        <li v-for="[recent, label] in [[false, 'Best plays'], [true, 'Recent plays']]" :key="label" :class="{'is-active': recent === view.recent}">
+                            <a :href="$link.user(view.user.username, {key_count: route.params.key_count, tab: recent ? 'recent' : 'best'})" :aria-current="recent === view.recent ? 'page' : null">{{ label }}</a>
                         </li>
-                        <li :class="{'is-active': view.recent}"><a :href="$link.user(view.user.username, {tab: 'recent'})" :aria-current="view.recent ? 'page' : null">Recent plays</a></li>
                     </ul>
                 </div>
                 <pager :total="view.total" top></pager>
-                <play-table :plays="view.plays" :caption="view.recent ? 'Recent plays' : view.keyCount + 'K best plays'"></play-table>
+                <play-table :plays="view.plays" :caption="(view.modes.length ? view.keyCount + 'K ' : '') + (view.recent ? 'recent plays' : 'best plays')"></play-table>
                 <pager :total="view.total"></pager>
             </template>
 

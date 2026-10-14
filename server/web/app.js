@@ -226,14 +226,17 @@ const loaders = {
     async user({id, params}, keyCounts) {
         const base = `/users/${encodeURIComponent(id)}`;
         const {user} = await notFoundAs(api(base), `No player named "${id}".`);
-        const modes = user.key_modes.filter((mode) => keyCounts.includes(mode.key_count) && mode.ranked_play_count > 0);
-        const recent = params.tab === "recent" || modes.length === 0;
-        const strongest = [...modes].sort((a, b) => b.performance - a.performance)[0];
-        const keyCount = Number(params.key_count ?? strongest?.key_count);
+        const modes = user.key_modes.filter((mode) => keyCounts.includes(mode.key_count) && mode.play_count > 0);
+        const strongest = modes.filter((mode) => mode.ranked_play_count > 0).sort((a, b) => b.performance - a.performance)[0];
+        const busiest = [...modes].sort((a, b) => b.play_count - a.play_count)[0];
+        const keyCount = Number(params.key_count ?? (strongest ?? busiest)?.key_count);
+        const mode = modes.find((entry) => entry.key_count === keyCount);
+        const filtered = keyCounts.includes(keyCount);
+        const recent = params.tab === "recent" || !filtered || (params.tab !== "best" && !mode?.ranked_play_count);
         const [{plays, total}, history, activity] = await Promise.all([
-            api(`${base}/plays/${recent ? "recent" : "best"}`, {key_count: recent ? null : keyCount, ...paged(params)}),
-            keyCounts.includes(keyCount) ? api(`${base}/history`, {key_count: keyCount}).catch(() => null) : null,
-            api(`${base}/activity`).catch(() => null),
+            api(`${base}/plays/${recent ? "recent" : "best"}`, {key_count: filtered ? keyCount : null, ...paged(params)}),
+            filtered ? api(`${base}/history`, {key_count: keyCount}).catch(() => null) : null,
+            api(`${base}/activity`, {key_count: filtered ? keyCount : null}).catch(() => null),
         ]);
         return {title: user.username, user, modes, strongest, recent, keyCount, plays, total, history, activity};
     },
@@ -803,7 +806,7 @@ app.component("activity-heatmap", {
     },
     template: `<figure class="activity-heatmap">
         <div class="activity-scroll">
-            <svg :width="width" :height="height" :viewBox="'0 0 ' + width + ' ' + height" role="img" :aria-label="$f.plural(total, 'play') + ' in the last year'">
+            <svg :width="width" :height="height" :viewBox="'0 0 ' + width + ' ' + height" :style="{maxWidth: width + 'px'}" role="img" :aria-label="$f.plural(total, 'play') + ' in the last year'">
                 <text v-for="label in months" :key="label.column + label.month" :x="${HEAT_LEFT} + label.column * ${HEAT_STEP}" y="10" class="heat-label">{{ label.month }}</text>
                 <text v-for="[row, name] in [[1, 'Mon'], [3, 'Wed'], [5, 'Fri']]" :key="name" x="0" :y="${HEAT_TOP} + row * ${HEAT_STEP} + 9" class="heat-label">{{ name }}</text>
                 <rect v-for="cell in cells" :key="cell.day" :x="${HEAT_LEFT} + cell.column * ${HEAT_STEP}" :y="${HEAT_TOP} + cell.row * ${HEAT_STEP}"

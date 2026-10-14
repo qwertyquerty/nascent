@@ -501,6 +501,9 @@ a.navbar-item.is-active:focus-within {
 
 .activity-scroll svg {
     display: block;
+    width: 100%;
+    height: auto;
+    min-width: 36rem;
 }
 
 .heat-label {
@@ -680,4 +683,9 @@ a.navbar-item.is-active:focus-within {
         animation: none;
         opacity: 0.6;
     }
+}
+
+.is-selected-mode th,
+.is-selected-mode td {
+    background: rgba(0, 177, 225, 0.07);
 }
