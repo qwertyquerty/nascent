@@ -25,6 +25,8 @@ SORTS = {
     "ranked_at": Chart.ranked_at,
     "play_count": Chart.play_count,
     "length": Chart.duration_ms,
+    "mapper": Chart.mapper,
+    "key_count": Chart.key_count,
 }
 
 

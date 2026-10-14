@@ -12,6 +12,7 @@ const LEAD_IN_MS = 1500;
 const JUDGEMENT_SHOW_MS = 500;
 const TIMING_HISTORY_MS = 3000;
 const SEEK_STEP_MS = 5000;
+const DEFAULT_SCROLL = 200;
 const COPIED_SHOW_MS = 1600;
 const PREVIEW_TAP_MS = 60;
 const PREVIEW_TAIL_MS = 1000;
@@ -245,8 +246,11 @@ function isHeld(intervals, time) {
 
 const ReplayViewer = {
     props: {timeline: Object, accuracy: Number, downloadUrl: String, shareUrl: String, startAt: Number, preview: Boolean},
-    data: () => ({playing: false, position: 0, speed: 1, scroll: 200, copied: ""}),
+    data() {
+        return {playing: false, position: 0, speed: 1, scroll: this.timeline?.scroll_speed ? "replay" : DEFAULT_SCROLL, copied: ""};
+    },
     computed: {
+        scrollSpeed: (self) => (self.scroll === "replay" ? self.timeline?.scroll_speed || DEFAULT_SCROLL : self.scroll),
         prepared: (self) => prepareTimeline(self.timeline),
         duration: (self) => self.prepared.end - self.prepared.start,
         origin: (self) => Math.max(0, self.prepared.start),
@@ -361,7 +365,7 @@ const ReplayViewer = {
             const noteSize = fieldWidth / (keyCount + keyCount * KEY_SPACING - KEY_SPACING);
             const laneStep = noteSize * (1 + KEY_SPACING);
             const judgeY = height - noteSize - height * JUDGE_HEIGHT;
-            const pxPerMs = (height / 100000) * this.scroll;
+            const pxPerMs = (height / 100000) * this.scrollSpeed;
             const spritePx = Math.max(1, Math.round(noteSize * ratio));
             const colorAt = (x, y) => gradientAt(skin, x / width, y / height);
 
@@ -569,7 +573,8 @@ const ReplayViewer = {
                     </select>
                 </div>
                 <div class="select is-small">
-                    <select v-model.number="scroll" aria-label="Scroll speed">
+                    <select v-model="scroll" aria-label="Scroll speed">
+                        <option v-if="timeline.scroll_speed" value="replay">Scroll {{ timeline.scroll_speed }} (replay)</option>
                         <option v-for="option in [100, 150, 200, 250, 300]" :value="option">Scroll {{ option }}</option>
                     </select>
                 </div>

@@ -56,12 +56,19 @@ def profile(reference: str):
         all_grades[grade] += count
 
     key_modes = []
+    peaks = ranking.peak_ranks(user.id)
+    today = timeutil.utcnow().date()
 
     for row in user.key_stats:
         ranked = row.key_count in ranking.ranked_key_counts()
         rank_value = ranking.global_rank(user, row.key_count) if ranked else None
         ranked_players = ranking.ranked_player_count(row.key_count) if ranked else None
-        key_modes.append(key_mode_out(row, rank_value, ranked_players, grades.get(row.key_count, {})))
+        peak = peaks.get(row.key_count)
+
+        if rank_value is not None and (peak is None or rank_value < peak[0]):
+            peak = (rank_value, today)
+
+        key_modes.append(key_mode_out(row, rank_value, ranked_players, grades.get(row.key_count, {}), peak if ranked else None))
 
     return {"user": user_profile(user, totals_out(user, dict(all_grades)), key_modes)}
 

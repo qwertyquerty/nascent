@@ -284,6 +284,17 @@ def performance_history(user_id: int, key_count: int) -> list[tuple[date, float]
     return points
 
 
+def peak_ranks(user_id: int) -> dict[int, tuple[int, date]]:
+    position = func.row_number().over(partition_by=RankSnapshot.key_count, order_by=(RankSnapshot.rank.asc(), RankSnapshot.day.asc())).label("position")
+    ranked = (
+        select(RankSnapshot.key_count, RankSnapshot.rank, RankSnapshot.day, position)
+        .where(RankSnapshot.user_id == user_id, RankSnapshot.rank.is_not(None))
+        .subquery()
+    )
+    rows = db.session.execute(select(ranked.c.key_count, ranked.c.rank, ranked.c.day).where(ranked.c.position == 1)).all()
+    return {row.key_count: (row.rank, row.day) for row in rows}
+
+
 def rank_history(user_id: int, key_count: int) -> list[tuple[date, int]]:
     rows = db.session.execute(
         select(RankSnapshot.day, RankSnapshot.rank)

@@ -94,3 +94,48 @@ def test_osu_sources_list_mirror_downloads(api, app):
         {"name": "catboy.best", "url": "https://catboy.best/d/7"},
         {"name": "osu.direct", "url": "https://osu.direct/api/d/7"},
     ]
+
+
+def test_profiles_show_peak_rank(api, clock):
+    rank_chart(api)
+    alice = api.token("alice")
+    submit(api, clock, alice, make_replay(CHART, seed=1, spread=40))
+    clock.advance(days=1)
+    bob = api.token("bob")
+    submit(api, clock, bob, make_replay(CHART, seed=2, spread=3))
+
+    modes = {mode["key_count"]: mode for mode in api.get("/api/v1/users/alice").get_json()["user"]["key_modes"]}
+    assert modes[4]["global_rank"] == 2
+    assert modes[4]["peak_rank"] == 1
+    assert modes[4]["peak_rank_day"] == "2026-10-09"
+
+    bobs = {mode["key_count"]: mode for mode in api.get("/api/v1/users/bob").get_json()["user"]["key_modes"]}
+    assert bobs[4]["peak_rank"] == 1
+    assert bobs[4]["peak_rank_day"] == "2026-10-10"
+
+
+def test_timeline_includes_the_players_scroll_speed(api, clock):
+    alice = api.token("alice")
+    play = submit(api, clock, alice, make_replay(CHART)).get_json()["play"]
+    assert api.get(f"/api/v1/plays/{play['id']}/timeline").get_json()["scroll_speed"] == 200
+
+
+def test_global_activity_stats(api, clock):
+    alice = api.token("alice")
+    submit(api, clock, alice, make_replay(CHART, seed=1))
+    submit(api, clock, alice, make_replay(CHART, seed=2))
+    bob = api.token("bob")
+    submit(api, clock, bob, make_replay(SECOND, seed=3), chart=SECOND)
+
+    activity = api.get("/api/v1/stats/activity").get_json()
+    assert len(activity["plays_per_day"]) == 90
+    assert activity["plays_per_day"][-1] == ["2026-10-09", 3]
+    assert activity["week"] == {"plays": 3, "active_players": 2, "new_players": 2}
+    assert [(entry["chart"]["title"], entry["plays"], entry["players"]) for entry in activity["popular_charts"]] == [("Test Song", 2, 1), ("Second Song", 1, 1)]
+    assert activity["key_modes"] == [{"key_count": 4, "plays": 3}]
+    assert sum(activity["grades"].values()) == 3
+
+
+def test_charts_sort_by_mapper_and_keys(api):
+    for sort in ("mapper", "key_count"):
+        assert api.get(f"/api/v1/charts?sort={sort}").status_code == 200

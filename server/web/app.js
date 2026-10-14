@@ -11,6 +11,14 @@ const HEAT_STEP = 13;
 const HEAT_LEFT = 30;
 const HEAT_TOP = 16;
 const HEAT_LEVELS = 4;
+const SCATTER_WIDTH = 600;
+const SCATTER_HEIGHT = 280;
+const SCATTER_PAD = {left: 46, right: 12, top: 12, bottom: 30};
+const SCATTER_PLAYS = 100;
+const DAILY_HEIGHT = 120;
+const GRADE_COLORS = {X: "rgb(255, 240, 160)", S: "rgb(255, 210, 80)", A: "rgb(110, 220, 120)", B: "rgb(90, 170, 255)", C: "rgb(190, 120, 255)", D: "rgb(255, 150, 70)", E: "rgb(240, 90, 90)", F: "rgb(150, 150, 150)"};
+const LEADERBOARD_SORT = {sort: "performance", order: "desc"};
+const CHART_SORT = {sort: "play_count", order: "desc"};
 
 const query = (params = {}) => new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== "")).toString();
 const pageOf = (params) => Math.max(1, parseInt(params.page, 10) || 1);
@@ -230,6 +238,13 @@ const loaders = {
         return {title: user.username, user, modes, strongest, recent, keyCount, plays, total, history, activity};
     },
 
+    async stats() {
+        const [stats, activity] = await Promise.all([api("/stats"), api("/stats/activity")]);
+        const keyPeak = Math.max(1, ...activity.key_modes.map((mode) => mode.plays));
+        const gradeTotal = Object.values(activity.grades).reduce((sum, count) => sum + count, 0);
+        return {title: "Stats", stats, activity, keyPeak, gradeTotal};
+    },
+
     async charts({params}) {
         const result = await api("/charts", {
             q: params.q,
@@ -354,6 +369,21 @@ const app = Vue.createApp({
 
         submit(event, path) {
             this.go(link.to(path, Object.fromEntries(new FormData(event.target))));
+        },
+
+        sortState(defaults) {
+            return {sort: this.route.params.sort || defaults.sort, order: this.route.params.order || defaults.order};
+        },
+
+        sortHref(field, defaults, first = "desc", toggle = true) {
+            const {sort, order} = this.sortState(defaults);
+            const next = sort === field && toggle ? (order === "asc" ? "desc" : "asc") : first;
+            return link.to(this.route.path, {...this.route.params, page: null, sort: field === defaults.sort ? null : field, order: next === defaults.order ? null : next});
+        },
+
+        ariaSort(field, defaults) {
+            const {sort, order} = this.sortState(defaults);
+            return sort === field ? (order === "asc" ? "ascending" : "descending") : null;
         },
     },
 });
@@ -585,6 +615,147 @@ app.component("history-graph", {
     </div>`,
 });
 
+app.component("sort-link", {
+    props: {field: String, label: String, defaults: Object, first: {type: String, default: "desc"}, toggle: {type: Boolean, default: true}},
+    computed: {
+        state: (self) => self.$root.ariaSort(self.field, self.defaults),
+    },
+    template: `<a class="sort-link" :class="{'is-sorted': state}" :href="$root.sortHref(field, defaults, first, toggle)">{{ label }}<span class="sort-arrow" aria-hidden="true">{{ state === 'ascending' ? '▲' : state === 'descending' ? '▼' : '' }}</span></a>`,
+});
+
+app.component("daily-bars", {
+    props: {days: Array},
+    data: () => ({hover: null}),
+    computed: {
+        peak: (self) => Math.max(1, ...self.days.map(([, count]) => count)),
+        width: (self) => self.days.length * 10,
+        total: (self) => self.days.reduce((sum, [, count]) => sum + count, 0),
+        shown: (self) => self.hover ?? null,
+    },
+    template: `<figure class="daily-bars">
+        <svg :viewBox="'0 0 ' + width + ' ${DAILY_HEIGHT}'" preserveAspectRatio="none" role="img" :aria-label="$f.plural(total, 'play') + ' over the last ' + days.length + ' days'" @pointerleave="hover = null">
+            <defs><linearGradient id="daily-fill" x1="0" x2="1"><stop offset="0" stop-color="#00b1e1"></stop><stop offset="1" stop-color="#00f59a"></stop></linearGradient></defs>
+            <rect v-for="([day, count], index) in days" :key="day" :x="index * 10 + 1" :y="${DAILY_HEIGHT} - Math.max(count ? 2 : 0, (count / peak) * ${DAILY_HEIGHT - 4})" width="8"
+                :height="Math.max(count ? 2 : 0, (count / peak) * ${DAILY_HEIGHT - 4})" :fill="hover && hover[0] === day ? '#ffffff' : 'url(#daily-fill)'"></rect>
+            <rect v-for="([day, count], index) in days" :key="'hit-' + day" :x="index * 10" y="0" width="10" height="${DAILY_HEIGHT}" fill="transparent" @pointerenter="hover = [day, count]">
+                <title>{{ $f.plural(count, 'play') }} on {{ $f.day(day) }}</title>
+            </rect>
+        </svg>
+        <figcaption class="daily-caption is-size-7 has-text-grey">
+            <span>{{ $f.day(days[0][0]) }}</span>
+            <span v-if="shown">{{ $f.plural(shown[1], 'play') }} on {{ $f.day(shown[0]) }}</span>
+            <span>Today</span>
+        </figcaption>
+    </figure>`,
+});
+
+app.component("skill-scatter", {
+    props: {username: String, keyCount: Number},
+    data: () => ({open: false, plays: null, failed: false, hover: null}),
+    computed: {
+        bounds() {
+            const difficulties = this.plays.map((play) => play.difficulty);
+            const accuracies = this.plays.map((play) => play.accuracy);
+            const low = Math.min(...difficulties);
+            const high = Math.max(...difficulties);
+            const spread = Math.max(0.5, high - low);
+            const floor = Math.min(...accuracies);
+            return {low: low - spread * 0.05, high: high + spread * 0.05, floor: Math.max(0, floor - Math.max(0.005, (1 - floor) * 0.08)), ceiling: 1};
+        },
+        points() {
+            return this.plays.map((play) => ({play, x: this.x(play.difficulty), y: this.y(play.accuracy), color: GRADE_COLORS[play.grade] ?? GRADE_COLORS.F}));
+        },
+        xTicks() {
+            const {low, high} = this.bounds;
+            const step = this.niceStep((high - low) / 5);
+            const ticks = [];
+
+            for (let value = Math.ceil(low / step) * step; value <= high; value += step) {
+                ticks.push({value, label: value.toFixed(step < 1 ? 1 : 0), position: this.x(value)});
+            }
+
+            return ticks;
+        },
+        yTicks() {
+            const {floor, ceiling} = this.bounds;
+            const step = this.niceStep((ceiling - floor) / 4);
+            const ticks = [];
+
+            for (let value = Math.ceil(floor / step) * step; value <= ceiling + 1e-9; value += step) {
+                ticks.push({value, label: `${(value * 100).toFixed(step < 0.01 ? 1 : 0)}%`, position: this.y(value)});
+            }
+
+            return ticks;
+        },
+        hardest() {
+            const strong = this.plays.filter((play) => play.grade === "X" || play.grade === "S");
+            return strong.length ? strong.reduce((best, play) => (play.difficulty > best.difficulty ? play : best)) : null;
+        },
+        average: (self) => self.plays.reduce((sum, play) => sum + play.accuracy, 0) / Math.max(1, self.plays.length),
+    },
+    methods: {
+        async toggle() {
+            this.open = !this.open;
+
+            if (this.open && this.plays === null) {
+                try {
+                    const {plays} = await api(`/users/${encodeURIComponent(this.username)}/plays/best`, {key_count: this.keyCount, limit: SCATTER_PLAYS});
+                    this.plays = plays.map((entry) => entry.play);
+                }
+                catch {
+                    this.failed = true;
+                }
+            }
+        },
+        niceStep(raw) {
+            const magnitude = 10 ** Math.floor(Math.log10(Math.max(raw, 1e-9)));
+            return [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((step) => step >= raw) ?? magnitude * 10;
+        },
+        x(difficulty) {
+            const {low, high} = this.bounds;
+            return SCATTER_PAD.left + ((difficulty - low) / Math.max(1e-9, high - low)) * (SCATTER_WIDTH - SCATTER_PAD.left - SCATTER_PAD.right);
+        },
+        y(accuracy) {
+            const {floor, ceiling} = this.bounds;
+            return SCATTER_PAD.top + (1 - (accuracy - floor) / Math.max(1e-9, ceiling - floor)) * (SCATTER_HEIGHT - SCATTER_PAD.top - SCATTER_PAD.bottom);
+        },
+        visit(play) {
+            this.$root.go(link.play(play.id));
+        },
+    },
+    template: `<div class="skill-scatter">
+        <button type="button" class="button is-small" :aria-expanded="open" @click="toggle">{{ open ? 'Hide' : 'Show' }} {{ keyCount }}K skill breakdown</button>
+        <div v-if="open" class="skill-body mt-4">
+            <p v-if="failed" class="has-text-grey">The best plays couldn't be loaded.</p>
+            <logo-loader v-else-if="plays === null"></logo-loader>
+            <p v-else-if="!plays.length" class="has-text-grey">No ranked {{ keyCount }}K plays yet.</p>
+            <template v-else>
+                <p class="skill-summary is-size-7 has-text-grey">
+                    Accuracy against difficulty for the top {{ plays.length }} {{ keyCount }}K plays &middot; average {{ $f.accuracy(average) }}
+                    <template v-if="hardest"> &middot; hardest S: {{ $f.performance(hardest.difficulty) }}</template>
+                </p>
+                <svg :viewBox="'0 0 ${SCATTER_WIDTH} ${SCATTER_HEIGHT}'" role="img" :aria-label="'Accuracy against difficulty for ' + plays.length + ' best plays'">
+                    <line v-for="tick in yTicks" :key="'y' + tick.value" :x1="${SCATTER_PAD.left}" :x2="${SCATTER_WIDTH - SCATTER_PAD.right}" :y1="tick.position" :y2="tick.position" class="scatter-grid"></line>
+                    <line v-for="tick in xTicks" :key="'x' + tick.value" :x1="tick.position" :x2="tick.position" :y1="${SCATTER_PAD.top}" :y2="${SCATTER_HEIGHT - SCATTER_PAD.bottom}" class="scatter-grid"></line>
+                    <text v-for="tick in yTicks" :key="'yl' + tick.value" :x="${SCATTER_PAD.left - 6}" :y="tick.position + 4" class="scatter-label" text-anchor="end">{{ tick.label }}</text>
+                    <text v-for="tick in xTicks" :key="'xl' + tick.value" :x="tick.position" :y="${SCATTER_HEIGHT - 10}" class="scatter-label" text-anchor="middle">{{ tick.label }}</text>
+                    <circle v-for="point in points" :key="point.play.id" :cx="point.x" :cy="point.y" :r="hover === point ? 6 : 4" :fill="point.color"
+                        class="scatter-point" tabindex="0" role="link" :aria-label="point.play.chart.title + ', ' + $f.accuracy(point.play.accuracy)"
+                        @pointerenter="hover = point" @pointerleave="hover = null" @focus="hover = point" @blur="hover = null" @click="visit(point.play)" @keydown.enter="visit(point.play)"></circle>
+                </svg>
+                <p class="skill-detail is-size-7">
+                    <template v-if="hover">
+                        <span class="grade" :class="'grade-' + hover.play.grade">{{ hover.play.grade }}</span>
+                        {{ hover.play.chart.artist }} - {{ hover.play.chart.title }} [{{ hover.play.chart.difficulty_name }}] &middot; {{ $f.rate(hover.play.rate) }}
+                        &middot; {{ $f.performance(hover.play.difficulty) }} difficulty &middot; {{ $f.accuracy(hover.play.accuracy) }} &middot; {{ $f.performance(hover.play.performance) }} performance
+                    </template>
+                    <span v-else class="has-text-grey">Difficulty across, accuracy up. Point at a dot for details, click to open the play.</span>
+                </p>
+            </template>
+        </div>
+    </div>`,
+});
+
 app.component("activity-heatmap", {
     props: {activity: Object},
     computed: {
@@ -682,20 +853,27 @@ app.component("pager", {
 });
 
 app.component("player-table", {
-    props: {entries: Array, detailed: Boolean, caption: String},
+    props: {entries: Array, detailed: Boolean, caption: String, sortable: Boolean},
+    data: () => ({defaults: LEADERBOARD_SORT}),
+    computed: {
+        playsClass: (self) => (self.sortable && self.$root.ariaSort("ranked_plays", self.defaults) ? "" : "is-hidden-mobile"),
+    },
     template: `<p v-if="!entries.length" class="has-text-grey">Nobody is ranked yet.</p>
     <div v-else class="table-container"><table class="table is-fullwidth is-hoverable">
         <caption class="is-sr-only">{{ caption }}</caption>
         <thead><tr>
-            <th scope="col" class="is-numeric">Rank</th><th scope="col">Player</th><th scope="col" class="is-numeric">Performance</th>
-            <th scope="col" class="is-numeric">Accuracy</th><th v-if="detailed" scope="col" class="is-numeric is-hidden-mobile">Ranked plays</th>
+            <th scope="col" class="is-numeric">Rank</th><th scope="col">Player</th>
+            <th v-for="[field, label, extra] in [['performance', 'Performance', ''], ['accuracy', 'Accuracy', ''], ...(detailed ? [['ranked_plays', 'Ranked plays', playsClass]] : [])]" :key="field"
+                scope="col" class="is-numeric" :class="extra" :aria-sort="sortable ? $root.ariaSort(field, defaults) : null">
+                <sort-link v-if="sortable" :field="field" :label="label" :defaults="defaults" :toggle="false"></sort-link><template v-else>{{ label }}</template>
+            </th>
         </tr></thead>
         <tbody><tr v-for="entry in entries" :key="entry.user.id">
             <td class="is-numeric"><rank-cell :rank="entry.rank"></rank-cell></td>
             <td><a :href="$link.user(entry.user.username)">{{ entry.user.username }}</a></td>
             <td class="is-numeric">{{ $f.performance(entry.performance) }}</td>
             <td class="is-numeric">{{ $f.accuracy(entry.accuracy) }}</td>
-            <td v-if="detailed" class="is-numeric is-hidden-mobile">{{ $f.number(entry.ranked_play_count) }}</td>
+            <td v-if="detailed" class="is-numeric" :class="playsClass">{{ $f.number(entry.ranked_play_count) }}</td>
         </tr></tbody>
     </table></div>`,
 });

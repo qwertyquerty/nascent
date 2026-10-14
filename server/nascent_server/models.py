@@ -326,3 +326,4 @@ Index("ix_plays_ranked_performance", Play.performance.desc(), Play.id, postgresq
 Index("ix_plays_user_chart", Play.user_id, Play.chart_id, Play.rate_key)
 Index("ix_plays_chart_user", Play.chart_id, Play.user_id)
 Index("ix_plays_status", Play.status, Play.id)
+Index("ix_plays_submitted_at", Play.submitted_at)

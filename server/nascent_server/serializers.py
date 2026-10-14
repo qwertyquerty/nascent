@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Any
 
 from flask import current_app
@@ -22,11 +23,15 @@ def totals_out(stats: User | UserKeyStats, grade_counts: dict[str, int]) -> dict
     }
 
 
-def key_mode_out(stats: UserKeyStats, rank: int | None, ranked_players: int | None, grade_counts: dict[str, int]) -> dict[str, Any]:
+def key_mode_out(
+    stats: UserKeyStats, rank: int | None, ranked_players: int | None, grade_counts: dict[str, int], peak: tuple[int, date] | None = None
+) -> dict[str, Any]:
     return {
         "key_count": stats.key_count,
         "global_rank": rank,
         "ranked_players": ranked_players,
+        "peak_rank": peak[0] if peak else None,
+        "peak_rank_day": peak[1].isoformat() if peak else None,
         "performance": stats.performance,
         "accuracy": stats.accuracy,
         **totals_out(stats, grade_counts),

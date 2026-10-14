@@ -27,7 +27,7 @@
             </div>
             <div id="main-menu" class="navbar-menu" :class="{'is-active': menuOpen}">
                 <div class="navbar-start">
-                    <a v-for="[path, label, names] in [['/', 'Home', ['home']], ['/leaderboard', 'Leaderboard', ['leaderboard']], ['/charts', 'Charts', ['charts', 'chart']], ['/plays', 'Plays', ['plays', 'play']]]"
+                    <a v-for="[path, label, names] in [['/', 'Home', ['home']], ['/leaderboard', 'Leaderboard', ['leaderboard']], ['/charts', 'Charts', ['charts', 'chart']], ['/plays', 'Plays', ['plays', 'play']], ['/stats', 'Stats', ['stats']]]"
                         class="navbar-item" :class="{'is-active': names.includes(route.name)}" :href="path" :aria-current="names.includes(route.name) ? 'page' : null">{{ label }}</a>
                 </div>
                 <div class="navbar-end">
@@ -87,16 +87,8 @@
                 <h1 class="title">{{ view.keyCount }}K leaderboard</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} ranked players</p>
                 <key-tabs :current="view.keyCount" path="/leaderboard" :params="{sort: route.params.sort}"></key-tabs>
-                <div class="field is-grouped is-grouped-multiline is-align-items-center mb-4">
-                    <span class="mr-3" id="leaderboard-sort">Sort by</span>
-                    <div class="buttons has-addons mb-0" role="group" aria-labelledby="leaderboard-sort">
-                        <a v-for="[sort, label] in [['performance', 'Performance'], ['accuracy', 'Accuracy'], ['ranked_plays', 'Ranked plays']]"
-                            class="button is-small mb-0" :class="{'is-link is-selected': sort === view.sort}" :aria-current="sort === view.sort ? 'true' : null"
-                            :href="$link.to('/leaderboard', {key_count: view.keyCount, sort: sort === 'performance' ? null : sort})">{{ label }}</a>
-                    </div>
-                </div>
                 <pager :total="view.total" top></pager>
-                <player-table :entries="view.entries" detailed :caption="view.keyCount + 'K leaderboard'"></player-table>
+                <player-table :entries="view.entries" detailed sortable :caption="view.keyCount + 'K leaderboard'"></player-table>
                 <pager :total="view.total"></pager>
             </template>
 
@@ -165,6 +157,7 @@
                 <p class="subtitle is-6 has-text-grey">
                     <span v-if="view.strongest && view.strongest.global_rank" class="profile-standing">
                         {{ view.strongest.key_count }}K <rank-cell :rank="view.strongest.global_rank"></rank-cell> &middot; {{ $f.standing(view.strongest.global_rank, view.strongest.ranked_players) }} &middot;
+                        <template v-if="view.strongest.peak_rank">peak <span :title="$f.day(view.strongest.peak_rank_day)">{{ $f.rank(view.strongest.peak_rank) }}</span> &middot;</template>
                     </span>
                     Joined <rel-time :value="view.user.created_at"></rel-time> &middot; last played <rel-time :value="view.user.last_played_at"></rel-time>
                 </p>
@@ -192,6 +185,7 @@
                     <div v-if="view.history" class="column is-7">
                         <h2 class="title is-4">{{ view.keyCount }}K history</h2>
                         <history-graph :history="view.history"></history-graph>
+                        <skill-scatter class="mt-4" :key="view.keyCount" :username="view.user.username" :key-count="view.keyCount"></skill-scatter>
                     </div>
                     <div v-if="view.activity" class="column">
                         <h2 class="title is-4">Favorite charts</h2>
@@ -210,13 +204,14 @@
                     <table class="table is-fullwidth is-hoverable">
                         <caption class="is-sr-only">Stats per key mode</caption>
                         <thead><tr>
-                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Percentile</th><th scope="col" class="is-numeric">Performance</th>
+                            <th scope="col">Mode</th><th scope="col" class="is-numeric">Rank</th><th scope="col" class="is-numeric">Percentile</th><th scope="col" class="is-numeric is-hidden-mobile">Peak</th><th scope="col" class="is-numeric">Performance</th>
                             <th scope="col" class="is-numeric">Accuracy</th><th scope="col" class="is-numeric is-hidden-mobile">Ranked plays</th><th scope="col" class="is-numeric is-hidden-mobile">Time played</th>
                         </tr></thead>
                         <tbody><tr v-for="mode in view.user.key_modes" :key="mode.key_count">
                             <th scope="row">{{ mode.key_count }}K</th>
                             <td class="is-numeric"><rank-cell :rank="mode.global_rank"></rank-cell></td>
                             <td class="is-numeric">{{ $f.standing(mode.global_rank, mode.ranked_players) || "—" }}</td>
+                            <td class="is-numeric is-hidden-mobile"><span :title="mode.peak_rank_day ? $f.day(mode.peak_rank_day) : null">{{ $f.rank(mode.peak_rank) }}</span></td>
                             <td class="is-numeric">{{ $f.performance(mode.performance) }}</td>
                             <td class="is-numeric">{{ $f.accuracy(mode.accuracy) }}</td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.number(mode.ranked_play_count) }}</td>
@@ -236,6 +231,66 @@
                 <pager :total="view.total" top></pager>
                 <play-table :plays="view.plays" :caption="view.recent ? 'Recent plays' : view.keyCount + 'K best plays'"></play-table>
                 <pager :total="view.total"></pager>
+            </template>
+
+            <template v-else-if="route.name === 'stats'">
+                <h1 class="title">Stats</h1>
+                <p class="subtitle">Everything happening on Nascent</p>
+
+                <div class="columns is-multiline is-mobile">
+                    <div v-for="[label, value] in [
+                        ['Players', $f.number(view.stats.players)],
+                        ['Ranked players', $f.number(view.stats.ranked_players)],
+                        ['Plays', $f.number(view.stats.plays)],
+                        ['Ranked plays', $f.number(view.stats.ranked_plays)],
+                        ['Charts', $f.number(view.stats.charts)],
+                        ['Ranked charts', $f.number(view.stats.ranked_charts)],
+                        ['Time played', $f.playtime(view.stats.total_playtime_ms)],
+                        ['Plays this week', $f.number(view.activity.week.plays)],
+                        ['Active this week', $f.number(view.activity.week.active_players)],
+                        ['New this week', $f.number(view.activity.week.new_players)],
+                    ]" class="column is-one-fifth-desktop is-4-tablet is-6-mobile">
+                        <div class="box stat"><p class="stat-label">{{ label }}</p><p class="stat-value">{{ value }}</p></div>
+                    </div>
+                </div>
+
+                <h2 class="title is-4">Plays per day</h2>
+                <daily-bars class="mb-5" :days="view.activity.plays_per_day"></daily-bars>
+
+                <div class="columns">
+                    <div class="column is-7">
+                        <h2 class="title is-4">Popular this week</h2>
+                        <p v-if="!view.activity.popular_charts.length" class="has-text-grey">Nobody has played this week yet.</p>
+                        <div v-else class="table-container">
+                            <table class="table is-fullwidth is-hoverable">
+                                <caption class="is-sr-only">Most played charts this week</caption>
+                                <thead><tr><th scope="col">Chart</th><th scope="col" class="is-numeric">Keys</th><th scope="col" class="is-numeric">Plays</th><th scope="col" class="is-numeric is-hidden-mobile">Players</th></tr></thead>
+                                <tbody><tr v-for="entry in view.activity.popular_charts" :key="entry.chart.hash">
+                                    <td class="chart-name"><a :href="$link.chart(entry.chart.hash)">{{ entry.chart.artist }} - {{ entry.chart.title }}</a> <span class="has-text-grey">[{{ entry.chart.difficulty_name }}]</span></td>
+                                    <td class="is-numeric">{{ entry.chart.key_count }}K</td>
+                                    <td class="is-numeric">{{ $f.number(entry.plays) }}</td>
+                                    <td class="is-numeric is-hidden-mobile">{{ $f.number(entry.players) }}</td>
+                                </tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <h2 class="title is-4">Plays by key mode</h2>
+                        <ul class="share-bars mb-5" aria-label="Plays by key mode">
+                            <li v-for="mode in view.activity.key_modes" :key="mode.key_count">
+                                <span class="share-label">{{ mode.key_count }}K</span>
+                                <span class="share-track"><span class="share-fill" :style="{width: (mode.plays / view.keyPeak * 100) + '%'}"></span></span>
+                                <span class="share-value">{{ $f.number(mode.plays) }}</span>
+                            </li>
+                        </ul>
+                        <h2 class="title is-4">Grades</h2>
+                        <ul class="grade-counts" aria-label="Grades across every play">
+                            <li v-for="grade in 'XSABCDEF'" :key="grade" :title="view.gradeTotal ? ((view.activity.grades[grade] || 0) / view.gradeTotal * 100).toFixed(1) + '%' : null">
+                                <span class="grade" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.activity.grades[grade]) }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </template>
 
             <template v-else-if="route.name === 'charts'">
@@ -277,7 +332,7 @@
                         <div class="control">
                             <div class="select">
                                 <select name="sort" aria-label="Sort by" @change="$event.target.form.requestSubmit()">
-                                    <option v-for="[sort, label] in [['play_count', 'Plays'], ['difficulty', 'Difficulty'], ['length', 'Length']]" :value="sort" :selected="(route.params.sort || 'play_count') === sort">{{ label }}</option>
+                                    <option v-for="[sort, label] in [['play_count', 'Plays'], ['difficulty', 'Difficulty'], ['length', 'Length'], ['title', 'Title'], ['mapper', 'Mapper'], ['key_count', 'Keys']]" :value="sort" :selected="(route.params.sort || 'play_count') === sort">{{ label }}</option>
                                 </select>
                             </div>
                         </div>
@@ -299,8 +354,17 @@
                     <table class="table is-fullwidth is-hoverable">
                         <caption class="is-sr-only">Charts</caption>
                         <thead><tr>
-                            <th scope="col">Song</th><th scope="col" class="is-hidden-mobile">Mapper</th><th scope="col" class="is-numeric">Keys</th><th scope="col" class="is-numeric">Difficulty</th>
-                            <th scope="col" class="is-numeric is-hidden-mobile">Length</th><th scope="col" class="is-numeric is-hidden-mobile">Plays</th><th scope="col" class="is-hidden-mobile">Status</th>
+                            <th v-for="[field, label, classes, first] in [
+                                ['title', 'Song', '', 'asc'],
+                                ['mapper', 'Mapper', 'is-hidden-mobile', 'asc'],
+                                ['key_count', 'Keys', 'is-numeric', 'desc'],
+                                ['difficulty', 'Difficulty', 'is-numeric', 'desc'],
+                                ['length', 'Length', 'is-numeric is-hidden-mobile', 'desc'],
+                                ['play_count', 'Plays', 'is-numeric is-hidden-mobile', 'desc'],
+                            ]" :key="field" scope="col" :class="classes" :aria-sort="ariaSort(field, {sort: 'play_count', order: 'desc'})">
+                                <sort-link :field="field" :label="label" :defaults="{sort: 'play_count', order: 'desc'}" :first="first"></sort-link>
+                            </th>
+                            <th scope="col" class="is-hidden-mobile">Status</th>
                         </tr></thead>
                         <tbody><tr v-for="chart in view.charts" :key="chart.hash">
                             <td class="chart-name">

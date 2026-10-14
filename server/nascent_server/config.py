@@ -36,6 +36,7 @@ class Config:
     TICKET_MIN_ELAPSED_RATIO = 0.95
 
     STATS_CACHE_SECONDS = 30
+    STATS_ACTIVITY_CACHE_SECONDS = 300
     WEB_DIR = os.environ.get("NASCENT_WEB_DIR", str(Path(__file__).resolve().parents[1] / "web"))
 
     BEATMAP_MIRRORS = (
@@ -82,6 +83,7 @@ class Config:
 class TestConfig(Config):
     TESTING = True
     STATS_CACHE_SECONDS = 0
+    STATS_ACTIVITY_CACHE_SECONDS = 0
     SQLALCHEMY_DATABASE_URI = os.environ.get("NASCENT_TEST_DATABASE_URL", "sqlite://")
     SQLALCHEMY_ENGINE_OPTIONS = {}
     REDIS_URL = os.environ.get("NASCENT_TEST_REDIS_URL")

@@ -125,6 +125,7 @@ def get_timeline(play_id: int):
         "rate": replay.rate,
         "key_count": native.key_count,
         "end_time": replay.end_time,
+        "scroll_speed": replay.settings.get("scroll_speed"),
         "inputs": [[time, lane, pressed] for time, lane, pressed in replay.inputs],
         "notes": notes,
     }
