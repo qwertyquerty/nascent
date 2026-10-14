@@ -123,7 +123,14 @@ add_custom_target(portable_zip
 add_dependencies(portable_zip package_stage)
 
 if(WIN32)
-    find_program(NASCENT_ISCC NAMES ISCC iscc PATHS "C:/Program Files (x86)/Inno Setup 6" "C:/Program Files/Inno Setup 6")
+    find_program(NASCENT_ISCC NAMES ISCC iscc PATHS
+        "[HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Inno Setup 6_is1;InstallLocation]"
+        "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Inno Setup 6_is1;InstallLocation]"
+        "[HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Inno Setup 6_is1;InstallLocation]"
+        "$ENV{LOCALAPPDATA}/Programs/Inno Setup 6"
+        "C:/Program Files (x86)/Inno Setup 6"
+        "C:/Program Files/Inno Setup 6"
+    )
     file(TO_NATIVE_PATH "${nascent_root}" nascent_native_root)
     file(TO_NATIVE_PATH "${nascent_dist}" nascent_native_dist)
     file(TO_NATIVE_PATH "${PROJECT_SOURCE_DIR}/src/main/nascent.ico" nascent_native_icon)
@@ -178,8 +185,14 @@ endif()
 if(nascent_installer_commands)
     add_custom_target(installer ${nascent_installer_commands} COMMENT "${nascent_installer_comment}" VERBATIM)
 else()
+    if(WIN32)
+        set(nascent_installer_missing "Inno Setup 6.7 or newer was not found. Install it with: winget install JRSoftware.InnoSetup, then reconfigure CMake or pass -DNASCENT_ISCC=<path to ISCC.exe>")
+    else()
+        set(nascent_installer_missing "appimagetool was not found. Download it from https://github.com/AppImage/appimagetool/releases and reconfigure with -DNASCENT_APPIMAGETOOL=<path to appimagetool>")
+    endif()
+
     add_custom_target(installer
-        COMMAND ${CMAKE_COMMAND} -E echo "The installer needs Inno Setup on Windows or NASCENT_APPIMAGETOOL on Linux"
+        COMMAND ${CMAKE_COMMAND} -E echo "${nascent_installer_missing}"
         COMMAND ${CMAKE_COMMAND} -E false
         VERBATIM
     )

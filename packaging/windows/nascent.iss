@@ -1,3 +1,6 @@
+#if VER < EncodeVer(6, 7, 0)
+  #error Inno Setup 6.7 or newer is required
+#endif
 #ifndef AppVersion
   #error AppVersion must be defined
 #endif
@@ -41,7 +44,11 @@ UninstallDisplayIcon={app}\Nascent.exe
 UninstallDisplayName=Nascent
 Compression=lzma2
 SolidCompression=yes
-WizardStyle=modern
+WizardStyle=modern dark includetitlebar hidebevels
+WizardBackColor=#070a0e
+WizardBackImageFile=wizard\back_596x432.png,wizard\back_994x720.png,wizard\back_1272x922.png
+WizardImageFile=
+WizardSmallImageFile=wizard\small_58.png,wizard\small_87.png,wizard\small_116.png,wizard\small_145.png
 CloseApplications=yes
 RestartApplications=no
 
@@ -55,6 +62,7 @@ Type: filesandordirs; Name: "{app}\.nascent-update"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\assets\skins\default\display_font.ttf"; Flags: dontcopy
 
 [Icons]
 Name: "{userprograms}\Nascent"; Filename: "{app}\Nascent.exe"
@@ -70,3 +78,43 @@ Type: filesandordirs; Name: "{app}\.nascent-update"
 Type: files; Name: "{app}\Nascent.exe"
 Type: files; Name: "{app}\README.md"
 Type: dirifempty; Name: "{app}"
+
+[Code]
+const
+  FR_PRIVATE = $10;
+
+var
+  DisplayFontPath: String;
+
+function AddFontResourceEx(FileName: String; Flags: Cardinal; Reserved: Cardinal): Integer;
+  external 'AddFontResourceExW@gdi32.dll stdcall';
+
+function RemoveFontResourceEx(FileName: String; Flags: Cardinal; Reserved: Cardinal): Boolean;
+  external 'RemoveFontResourceExW@gdi32.dll stdcall';
+
+procedure UseDisplayFont(Heading: TNewStaticText);
+begin
+  Heading.Font.Name := 'Tomorrow';
+  Heading.Font.Style := [];
+end;
+
+procedure InitializeWizard;
+begin
+  ExtractTemporaryFile('display_font.ttf');
+  DisplayFontPath := ExpandConstant('{tmp}\display_font.ttf');
+
+  if AddFontResourceEx(DisplayFontPath, FR_PRIVATE, 0) > 0 then
+  begin
+    UseDisplayFont(WizardForm.WelcomeLabel1);
+    UseDisplayFont(WizardForm.FinishedHeadingLabel);
+    UseDisplayFont(WizardForm.PageNameLabel);
+  end
+  else
+    DisplayFontPath := '';
+end;
+
+procedure DeinitializeSetup;
+begin
+  if DisplayFontPath <> '' then
+    RemoveFontResourceEx(DisplayFontPath, FR_PRIVATE, 0);
+end;

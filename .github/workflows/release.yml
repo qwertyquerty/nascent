@@ -107,7 +107,7 @@ jobs:
 
       - name: Install Inno Setup
         if: runner.os == 'Windows'
-        run: choco install innosetup --no-progress -y
+        run: choco install innosetup --version 6.7.1 --no-progress -y
 
       - name: Install appimagetool
         if: runner.os == 'Linux'
