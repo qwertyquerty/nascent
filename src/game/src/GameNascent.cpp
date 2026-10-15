@@ -105,6 +105,7 @@ namespace nascent {
         input().bind(actions::LEFT, {InputManager::menu_left_key});
         input().bind(actions::RIGHT, {InputManager::menu_right_key});
         input().bind(actions::NEXT_FIELD, {InputManager::field_key});
+        input().bind(game_actions::CHART_MENU, {InputManager::chart_menu_key});
     }
 
     void GameNascent::on_back() {
