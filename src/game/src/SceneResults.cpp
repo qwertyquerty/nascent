@@ -44,6 +44,7 @@ namespace nascent {
     static constexpr float BANNER_START = 1.3f;
     static constexpr float BANNER_FADE = 0.35f;
     static constexpr float BANNER_SLIDE = 40.0f;
+    static constexpr float BANNER_GAP = 28.0f;
     static constexpr float BANNER_PULSE_SPEED = 4.0f;
     static constexpr float BANNER_GRADIENT_SPEED = 0.35f;
     static constexpr float PARTICLE_GRAVITY = 900.0f;
@@ -451,28 +452,13 @@ namespace nascent {
 
         double counted = summary.accuracy * ease_out(progress(elapsed, COUNT_START, COUNT_TIME));
         std::string accuracy_text = std::format("{:.2f}%", std::floor(counted * 10000.0) / 100.0);
-        std::string final_accuracy = std::format("{:.2f}%", std::floor(summary.accuracy * 10000.0) / 100.0);
         int32_t accuracy_x = x + Ui::px(110);
         draw_text(skin->display_font_large, accuracy_text, {accuracy_x, y + Ui::px(20)}, skin->color(SkinColor::TEXT));
 
         bool full_combo = summary.max_combo > 0 && summary.score_counts[(size_t)HitScore::MISS] == 0;
         float banner = ease_out(progress(elapsed, BANNER_START, BANNER_FADE));
-
-        if (banner > 0) {
-            int32_t banner_x = accuracy_x + text_bounds(skin->display_font_large, final_accuracy).size.x + Ui::px(36) + (int32_t)(Ui::pxf(BANNER_SLIDE) * (1.0f - banner));
-            int32_t banner_y = y + Ui::px(10);
-            float pulse = 0.85f + 0.15f * (float)std::sin(elapsed * BANNER_PULSE_SPEED);
-
-            if (full_combo) {
-                draw_text(skin->display_font_medium, "FULL COMBO", {banner_x, banner_y}, fade(skin->color(SkinColor::FULL_COMBO), banner * pulse));
-                banner_y += Ui::px(40);
-            }
-
-            if (new_best) {
-                olc::Pixel shine = skin->title_gradient_at(std::fmod(elapsed * BANNER_GRADIENT_SPEED, 1.0f), 0.5);
-                draw_text(skin->display_font_medium, "NEW PERSONAL BEST", {banner_x, banner_y}, fade(shine, banner * pulse));
-            }
-        }
+        float pulse = 0.85f + 0.15f * (float)std::sin(elapsed * BANNER_PULSE_SPEED);
+        olc::Pixel shine = skin->title_gradient_at(std::fmod(elapsed * BANNER_GRADIENT_SPEED, 1.0f), 0.5);
 
         y += Ui::px(80);
 
@@ -480,20 +466,35 @@ namespace nascent {
             return ease_out(progress(elapsed, ROWS_START + ROW_STAGGER * index, ROW_FADE));
         };
 
-        const std::tuple<const char*, std::string, olc::Pixel> stats[] = {
-            {"Max combo", std::format("{}", summary.max_combo), skin->color(full_combo ? SkinColor::FULL_COMBO : SkinColor::TEXT)},
-            {"Average error", std::format("{:+.1f} ms", summary.average_error), skin->color(SkinColor::TEXT)},
-            {"Diff", std::format("{:.2f}", summary.difficulty), skin->difficulty_color(summary.difficulty)},
-            {"Perf", std::format("{:.2f}", summary.performance), skin->color(SkinColor::TEXT)},
+        struct StatRow {
+            const char* label;
+            std::string value;
+            olc::Pixel color;
+            std::string_view badge;
+            olc::Pixel badge_color;
+        };
+
+        const StatRow stats[] = {
+            {"Max combo", std::format("{}", summary.max_combo), skin->color(full_combo ? SkinColor::FULL_COMBO : SkinColor::TEXT), full_combo ? "FULL COMBO" : "", skin->color(SkinColor::FULL_COMBO)},
+            {"Average error", std::format("{:+.1f} ms", summary.average_error), skin->color(SkinColor::TEXT), "", olc::BLANK},
+            {"Diff", std::format("{:.2f}", summary.difficulty), skin->difficulty_color(summary.difficulty), "", olc::BLANK},
+            {"Perf", std::format("{:.2f}", summary.performance), skin->color(SkinColor::TEXT), new_best ? "NEW PERSONAL BEST" : "", shine},
         };
 
         size_t row_index = 0;
 
-        for (const auto& [label, value, color] : stats) {
+        for (const StatRow& row : stats) {
             float alpha = row_fade(row_index++);
             int32_t slide = (int32_t)(Ui::pxf(ROW_SLIDE) * (1.0f - alpha));
-            draw_text(skin->display_font_medium, label, {x - slide, y}, fade(skin->color(SkinColor::TEXT_MUTED), alpha));
-            draw_text(skin->display_font_medium, value, {x + Ui::px(300) - slide, y}, fade(color, alpha));
+            int32_t value_x = x + Ui::px(300) - slide;
+            draw_text(skin->display_font_medium, row.label, {x - slide, y}, fade(skin->color(SkinColor::TEXT_MUTED), alpha));
+            draw_text(skin->display_font_medium, row.value, {value_x, y}, fade(row.color, alpha));
+
+            if (!row.badge.empty() && banner > 0) {
+                int32_t badge_x = value_x + text_bounds(skin->display_font_medium, row.value).size.x + Ui::px(BANNER_GAP) + (int32_t)(Ui::pxf(BANNER_SLIDE) * (1.0f - banner));
+                draw_text(skin->display_font_medium, row.badge, {badge_x, y}, fade(row.badge_color, banner * pulse));
+            }
+
             y += Ui::px(44);
         }
 
