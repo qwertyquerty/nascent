@@ -57,12 +57,14 @@ namespace nascent {
 
         bool chart_started = false;
         bool paused = false;
+        bool replay_paused = false;
         static inline bool show_hit_log = false;
         bool finished = false;
         bool audio_finished = false;
 
         void pause(double now);
         void resume(double now);
+        void toggle_replay_pause(double now);
         void feed_replay(double position, bool sounds);
         void seek_replay(double target, double now);
         void finish();
@@ -81,6 +83,7 @@ namespace nascent {
         void copy_diagnostics();
         nlohmann::json timing_diagnostics() const;
         void draw_timing_diagnostics(olc::PixelGameEngine* window) const;
+        void draw_replay_bar(olc::PixelGameEngine* window) const;
 
         public:
         void on_resize() override;

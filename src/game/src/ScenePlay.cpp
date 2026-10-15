@@ -19,6 +19,7 @@
 #include "SceneResults.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "StatusBar.h"
 #include "SubmissionQueue.h"
 #include "Util.h"
 #include "Utf8Path.h"
@@ -30,6 +31,7 @@
 #include "gse/concurrency/Async.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -54,6 +56,7 @@ namespace nascent {
     static constexpr float HIT_LOG_SCORE_X = 20.0f;
     static constexpr float HIT_LOG_ERROR_X = 80.0f;
     static constexpr uint8_t HIT_LOG_ROWS = 35;
+    static constexpr double REPLAY_LABEL_START = 1.5;
 
     static double start_position_ms() {
         return -SettingsManager::settings.play_start_delay * 1000.0;
@@ -451,7 +454,7 @@ namespace nascent {
 
     bool ScenePlay::can_skip_intro(double now) const {
         int32_t target = chart->intro_skip_ms();
-        return !finished && !paused && !waiting_for_ticket && target > 0 && session->song_position(now) < target;
+        return !replay && !finished && !paused && !waiting_for_ticket && target > 0 && session->song_position(now) < target;
     }
 
     void ScenePlay::skip_intro(double now) {
@@ -547,13 +550,29 @@ namespace nascent {
         paused = false;
         resumed_at = now;
 
-        if (chart_started && !audio_finished) {
+        if (chart_started && !audio_finished && !replay_paused) {
             game->audio().engine().Play(chart_audio_id);
         }
 
         game->audio().stop(skin->sound(SkinSound::IDLE_LOOP));
         session->reset_clock(paused_position, now);
         session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->input(), lane_keys)), now);
+    }
+
+    void ScenePlay::toggle_replay_pause(double now) {
+        replay_paused = !replay_paused;
+
+        if (replay_paused) {
+            paused_position = session->song_position(now);
+            game->audio().engine().Pause(chart_audio_id);
+            return;
+        }
+
+        session->reset_clock(paused_position, now);
+
+        if (chart_started && !audio_finished) {
+            game->audio().engine().Play(chart_audio_id);
+        }
     }
 
     void ScenePlay::update(float elapsed_time) {
@@ -585,7 +604,32 @@ namespace nascent {
             pause(now);
         }
 
-        if (paused) {
+        if (replay && !paused) {
+            if (input.key_pressed(olc::Key::SPACE)) {
+                toggle_replay_pause(now);
+            }
+
+            if (InputManager::reset_pressed(input)) {
+                replay_paused = false;
+                seek_replay(start_position_ms(), now);
+            }
+
+            bool back = input.take(actions::LEFT);
+
+            double from = replay_paused ? paused_position : session->song_position(now);
+            bool forward = !back && input.take(actions::RIGHT) && from < chart->get_chart_end_ms();
+
+            if (back || forward) {
+                seek_replay(from + (back ? -REPLAY_SEEK_MS : REPLAY_SEEK_MS), now);
+
+                if (replay_paused) {
+                    paused_position = session->song_position(now);
+                    game->audio().engine().Pause(chart_audio_id);
+                }
+            }
+        }
+
+        if (paused || replay_paused) {
             session->reset_clock(paused_position, now);
         }
         else if (waiting_for_ticket) {
@@ -599,14 +643,6 @@ namespace nascent {
         else {
             if (can_skip_intro(now) && input.key_pressed(InputManager::get_key(KeyBinding::SKIP_INTRO))) {
                 skip_intro(now);
-            }
-
-            if (replay) {
-                bool back = input.take(actions::LEFT);
-
-                if (back || input.take(actions::RIGHT)) {
-                    seek_replay(session->song_position(now) + (back ? -REPLAY_SEEK_MS : REPLAY_SEEK_MS), now);
-                }
             }
 
             if (!chart_started && session->song_position(now) >= -game->audio().engine().GetOutputLatencyMilliseconds()) {
@@ -693,9 +729,10 @@ namespace nascent {
         draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, skin->color(SkinColor::TEXT));
 
         if (replay) {
-            std::string banner = std::format("REPLAY    {}    ←/→  seek 5s", replay_label);
-            int32_t banner_width = text_bounds(skin->display_font_small, banner).size.x;
-            draw_text(skin->display_font_small, banner, {screensize.x / 2 - banner_width / 2, screensize.y - Ui::px(40)}, skin->color(SkinColor::TEXT_MUTED));
+            float edge = (float)screensize.x / 24;
+            std::string label = std::format("Replay  {}", replay_label);
+            int32_t label_width = text_bounds(skin->display_font_medium, label).size.x;
+            draw_text(skin->display_font_medium, label, {screensize.x / 2 - label_width / 2, (int)smoothstep(-edge, edge, (timer - SettingsManager::settings.play_start_delay - REPLAY_LABEL_START) * 2)}, skin->color(SkinColor::TEXT_MUTED));
         }
 
         if (ticket_hint_alpha > 0) {
@@ -762,5 +799,37 @@ namespace nascent {
             draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
         }
 
+        if (replay) {
+            draw_replay_bar(window);
+        }
     };
+
+    void ScenePlay::draw_replay_bar(olc::PixelGameEngine* window) const {
+        olc::vi2d screen = window->GetScreenSize();
+        int32_t bar_height = StatusBar::height();
+        int32_t top = screen.y - bar_height;
+        int32_t segment_gap = Ui::px(StatusBar::SEGMENT_GAP);
+        olc::Font& font = skin->display_font_small;
+
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, skin->color(SkinColor::STATUS_BAR_BACKGROUND));
+        window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, 1.0f}, skin->color(SkinColor::STATUS_BAR_EDGE));
+
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
+        int32_t baseline = top + (bar_height - metrics.size.y) / 2 - metrics.offset.y;
+        draw_text(font, replay_paused ? "Paused" : "Playing", {StatusBar::padding(), baseline}, skin->color(SkinColor::TEXT));
+
+        const std::array<std::string, 5> hints = {
+            replay_paused ? std::string("Space  play") : std::string("Space  pause"),
+            "←/→  seek 5s",
+            "Ctrl+R  restart",
+            std::format("{}  menu", InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE))),
+            "Esc  stop watching",
+        };
+        int32_t x = screen.x - StatusBar::padding() + segment_gap;
+
+        for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
+            x -= segment_gap + text_bounds(font, *hint).size.x;
+            draw_text(font, *hint, {x, baseline}, skin->color(SkinColor::TEXT_MUTED));
+        }
+    }
 }
