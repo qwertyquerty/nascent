@@ -30,10 +30,12 @@
 #include <iostream>
 
 namespace nascent {
-    SceneTitle::SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky) {
+    SceneTitle::SceneTitle(Skin* bg_skin, Skin* logo_skin, SceneList* list, EntityStarfield* sky, std::optional<TitleTrack> handoff) {
         this->bg_skin = bg_skin;
+        this->logo_skin = logo_skin;
         this->list = list;
         this->sky = sky;
+        this->handoff = std::move(handoff);
     };
 
     SceneTitle::~SceneTitle() {
@@ -47,10 +49,16 @@ namespace nascent {
         std::vector<std::filesystem::path> candidates;
         std::error_code ec;
 
-        for (const auto& folder : std::filesystem::directory_iterator(SettingsManager::song_directory(), ec)) {
-            for (const auto& file : std::filesystem::directory_iterator(folder.path(), ec)) {
-                if (std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), file.path().extension().string()) != CHART_FILE_EXTENSIONS.end()) {
-                    candidates.push_back(file.path());
+        for (const std::unique_ptr<Chart>& chart : list->chart_library().charts) {
+            candidates.push_back(chart->file_path);
+        }
+
+        if (candidates.empty()) {
+            for (const auto& folder : std::filesystem::directory_iterator(SettingsManager::song_directory(), ec)) {
+                for (const auto& file : std::filesystem::directory_iterator(folder.path(), ec)) {
+                    if (std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), file.path().extension().string()) != CHART_FILE_EXTENSIONS.end()) {
+                        candidates.push_back(file.path());
+                    }
                 }
             }
         }
@@ -80,10 +88,40 @@ namespace nascent {
         }
 
         if (bg_audio_id != -1) {
-            game->audio().engine().Stop(bg_audio_id);
+            game->audio().stop(bg_audio_id);
             game->audio().engine().UnloadSound(bg_audio_id);
         }
 
+        build_background(std::move(chart));
+        bg_audio_id = load_song_audio(game->audio().engine(), bg_chart->audio_path);
+        game->audio().apply_music_volume(bg_audio_id);
+        bg_clock.reset(0, now_ms());
+        return true;
+    }
+
+    bool SceneTitle::adopt_track(const TitleTrack& track) {
+        std::string error;
+        std::unique_ptr<Chart> chart = Chart::load(track.chart_path, 1.0, error);
+
+        if (chart == nullptr || track.audio_id == -1) {
+            if (track.audio_id != -1) {
+                game->audio().stop(track.audio_id);
+                game->audio().engine().UnloadSound(track.audio_id);
+            }
+
+            return false;
+        }
+
+        build_background(std::move(chart));
+        bg_audio_id = track.audio_id;
+        ma_sound_set_looping(game->audio().engine().GetSound(bg_audio_id), MA_FALSE);
+        bg_clock.reset(game->audio().engine().GetPositionMilliseconds(bg_audio_id), now_ms());
+        bg_started = true;
+        bg_fade = 0;
+        return true;
+    }
+
+    void SceneTitle::build_background(std::unique_ptr<Chart> chart) {
         bg_field.clear();
         bg_chart = std::move(chart);
 
@@ -97,11 +135,6 @@ namespace nascent {
         }
 
         layout_background();
-
-        bg_audio_id = load_song_audio(game->audio().engine(), bg_chart->audio_path);
-        game->audio().apply_music_volume(bg_audio_id);
-        bg_clock.reset(0, now_ms());
-        return true;
     }
 
     void SceneTitle::layout_background() {
@@ -148,12 +181,13 @@ namespace nascent {
             return;
         }
 
-        load_background();
+        if (!handoff || !adopt_track(*std::exchange(handoff, std::nullopt))) {
+            load_background();
+        }
 
-        logo_skin = std::make_unique<Skin>(game, "logo");
         logo_attempt = std::make_unique<Attempt>(logo_chart.get());
 
-        logo_field = std::make_unique<EntityField>(logo_chart.get(), logo_skin.get(), olc::vd2d{0, 0}, olc::vd2d{1, 1});
+        logo_field = std::make_unique<EntityField>(logo_chart.get(), logo_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1});
         logo_field->set_attempt(logo_attempt.get());
         logo_field->draw_notes_past_judge = false;
         logo_field->draw_judge_colors = true;

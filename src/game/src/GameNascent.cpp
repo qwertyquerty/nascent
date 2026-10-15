@@ -40,6 +40,7 @@ namespace nascent {
         release_scenes();
         scene_list.reset();
         sky.reset();
+        logo_skin.reset();
         skin.reset();
         text_cache_clear();
     };
@@ -65,14 +66,16 @@ namespace nascent {
         Ui::set_screen(window->GetScreenSize());
         skin = std::make_unique<Skin>(this, SettingsManager::settings.skin);
         skin->set_font_scale(Ui::scale());
+        logo_skin = std::make_unique<Skin>(this, "logo");
+        logo_skin->set_font_scale(Ui::scale());
         olc::vi2d screen = window->GetScreenSize();
         sky = std::make_unique<EntityStarfield>(skin.get(), olc::vd2d{(double)screen.x, (double)screen.y});
         sky->init();
 
-        scene_list = std::make_unique<SceneList>(skin.get(), sky.get());
+        scene_list = std::make_unique<SceneList>(skin.get(), logo_skin.get(), sky.get());
 
         toasts = &overlays().open(std::make_unique<ToastOverlay>(skin.get()));
-        scenes().reset(std::make_unique<SceneTitle>(skin.get(), scene_list.get(), sky.get()));
+        scenes().reset(std::make_unique<SceneTitle>(skin.get(), logo_skin.get(), scene_list.get(), sky.get()));
 
         RichPresence::set_enabled(SettingsManager::settings.discord_rich_presence);
     }

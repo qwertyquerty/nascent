@@ -5,7 +5,9 @@
 #include "gse/render/SpriteDecal.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace nascent {
@@ -17,8 +19,15 @@ namespace nascent {
     class SceneList;
     class Skin;
 
+    struct TitleTrack {
+        std::filesystem::path chart_path;
+        int audio_id = -1;
+    };
+
     class SceneTitle : public Scene {
         protected:
+        std::optional<TitleTrack> handoff;
+
         std::unique_ptr<Chart> logo_chart;
         std::unique_ptr<Attempt> logo_attempt;
         std::unique_ptr<EntityField> logo_field;
@@ -39,7 +48,7 @@ namespace nascent {
         int logo_audio_id = -1;
         int bg_audio_id = -1;
 
-        std::unique_ptr<Skin> logo_skin;
+        Skin* logo_skin;
         Skin* bg_skin;
         SceneList* list;
         EntityStarfield* sky;
@@ -54,6 +63,8 @@ namespace nascent {
         uint8_t get_field_count();
         std::unique_ptr<Chart> load_random_chart();
         bool load_background();
+        bool adopt_track(const TitleTrack& track);
+        void build_background(std::unique_ptr<Chart> chart);
         void layout_background();
         bool logo_playing();
         bool logo_finished();
@@ -75,7 +86,7 @@ namespace nascent {
         static constexpr float START_HINT_PULSE_SPEED = 2.5f;
         static constexpr int32_t UPDATE_NOTICE_BOTTOM = 48;
 
-        SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky);
+        SceneTitle(Skin* bg_skin, Skin* logo_skin, SceneList* list, EntityStarfield* sky, std::optional<TitleTrack> handoff = std::nullopt);
         ~SceneTitle();
         void on_create() override;
         void on_exit() override;

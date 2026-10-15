@@ -78,6 +78,7 @@ namespace nascent {
         float list_scroll_offset = 0;
 
         Skin* skin;
+        Skin* logo_skin;
         EntityStarfield* sky;
         bool active = false;
 
@@ -180,7 +181,8 @@ namespace nascent {
         static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;
         static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.json";
 
-        SceneList(Skin* skin, EntityStarfield* sky);
+        SceneList(Skin* skin, Skin* logo_skin, EntityStarfield* sky);
+        const ChartLibrary& chart_library() const;
         ~SceneList();
         void on_create() override;
         void on_enter() override;

@@ -238,7 +238,7 @@ namespace nascent {
             tap_errors.clear();
         }
 
-        if (input.take(actions::CONFIRM)) {
+        if (input.take(actions::CONFIRM) || input.take(actions::BACK)) {
             finish();
             return;
         }
@@ -354,7 +354,7 @@ namespace nascent {
             draw_text(skin->display_font_small, status_message, {x, y}, skin->color(SkinColor::TEXT_ERROR));
         }
 
-        std::string footer = "↑/↓:  change step        ←/→:  adjust (Shift for bigger steps)        Enter:  save and exit        Esc:  exit";
+        std::string footer = "↑/↓:  change step        ←/→:  adjust (Shift for bigger steps)        Enter/Esc:  save and exit";
 
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
         int32_t footer_bottom = field != nullptr && !field->upscroll ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;

@@ -66,8 +66,13 @@ namespace nascent {
         {2339429, "petit milady", "Koi wa Milk Tea (TV Size)"},
     };
 
-    SceneList::SceneList(Skin* skin, EntityStarfield* sky) {
+    const ChartLibrary& SceneList::chart_library() const {
+        return library;
+    }
+
+    SceneList::SceneList(Skin* skin, Skin* logo_skin, EntityStarfield* sky) {
         this->skin = skin;
+        this->logo_skin = logo_skin;
         this->sky = sky;
         difficulty_cache = std::make_unique<DifficultyCache>(user_config_directory(SettingsManager::APP_NAME) / DIFFICULTY_CACHE_FILE);
         difficulty_cache->load();
@@ -169,7 +174,7 @@ namespace nascent {
         }
 
         if (!visible.empty()) {
-            select_chart(selected_chart_index);
+            select_chart(selected_chart_index, false);
         }
 
         timer = 0;
@@ -284,7 +289,14 @@ namespace nascent {
 
         if (search.empty() && input.take(actions::BACK)) {
             game->audio().play_effect(skin->get_random_menu_pluck());
-            game->scenes().replace(std::make_unique<SceneTitle>(skin, this, sky));
+            std::optional<TitleTrack> track;
+
+            if (selected_chart_audio_id != -1 && preview_audio_chart != nullptr && game->audio().engine().IsPlaying(selected_chart_audio_id)) {
+                track = TitleTrack{preview_audio_chart->file_path, std::exchange(selected_chart_audio_id, -1)};
+                preview_audio_chart = nullptr;
+            }
+
+            game->scenes().replace(std::make_unique<SceneTitle>(skin, logo_skin, this, sky, std::move(track)));
             return false;
         }
 

@@ -19,6 +19,7 @@ namespace nascent {
     class GameNascent : public Game {
         protected:
         std::unique_ptr<Skin> skin;
+        std::unique_ptr<Skin> logo_skin;
         std::unique_ptr<EntityStarfield> sky;
         std::unique_ptr<SceneList> scene_list;
         float elapsed_time = 0;
