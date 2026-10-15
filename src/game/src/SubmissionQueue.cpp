@@ -2,7 +2,7 @@
 
 #include "Account.h"
 #include "Chart.h"
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "Replay.h"
 #include "ServerClient.h"
 #include "SettingsManager.h"

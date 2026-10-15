@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "ServerApi.h"
-#include "UiForm.h"
+#include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstddef>
@@ -61,7 +61,7 @@ namespace nascent {
         static constexpr size_t PREFETCH_ROWS = 10;
 
         SceneBrowser(Skin* skin, SceneList* list);
-        void init(Game*) override;
+        void on_create() override;
         void on_enter() override;
         void on_exit() override;
         void update(float) override;

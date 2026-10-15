@@ -1,12 +1,13 @@
 #include "SceneInput.h"
 #include "RichPresence.h"
 
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
-#include "KeyEvents.h"
+#include "gse/input/KeyEvents.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/render/Color.h"
 
 #include <algorithm>
 #include <cmath>
@@ -17,13 +18,12 @@ namespace nascent {
     static constexpr float LANE_GAP_RATIO = 0.18f;
     static constexpr uint8_t IDLE_NOTE_ALPHA = 70;
 
-    SceneInput::SceneInput(Skin* skin, Scene* return_scene, uint8_t key_count) {
+    SceneInput::SceneInput(Skin* skin, uint8_t key_count) {
         this->skin = skin;
-        this->return_scene = return_scene;
         this->key_count = std::clamp(key_count, MIN_KEY_COUNT, MAX_KEY_COUNT);
     }
 
-    void SceneInput::init(Game*) {
+    void SceneInput::on_create() {
         load_mode(key_count);
     }
 
@@ -35,7 +35,7 @@ namespace nascent {
     }
 
     void SceneInput::play_menu_sound() {
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
     }
 
     void SceneInput::load_mode(uint8_t key_count) {
@@ -67,7 +67,7 @@ namespace nascent {
             status_is_error = true;
         }
 
-        game->play_sound(skin->sound(SkinSound::HITSOUND));
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
 
         if (capture_all && lane + 1 < key_count) {
             selected_lane++;
@@ -93,11 +93,11 @@ namespace nascent {
     }
 
     void SceneInput::update(float elapsed_time) {
-        olc::PixelGameEngine* window = game->window;
+        Input& input = game->input();
         timer += elapsed_time;
 
         if (capturing) {
-            for (const KeyEvent& event : game->get_frame_key_events()) {
+            for (const KeyEvent& event : game->input().events()) {
                 if (event.pressed && event.time >= capture_time && event.key != olc::Key::NONE && event.key != InputManager::back_key && event.key != InputManager::exit_key) {
                     bind(event.key);
                     break;
@@ -107,26 +107,26 @@ namespace nascent {
             return;
         }
 
-        if (window->GetKey(InputManager::menu_left_key).bPressed) {
+        if (input.take(actions::LEFT)) {
             selected_lane = (uint8_t)((selected_lane + key_count - 1) % key_count);
             play_menu_sound();
         }
-        else if (window->GetKey(InputManager::menu_right_key).bPressed) {
+        else if (input.take(actions::RIGHT)) {
             selected_lane = (uint8_t)((selected_lane + 1) % key_count);
             play_menu_sound();
         }
-        else if (window->GetKey(InputManager::menu_up_key).bPressed && key_count < MAX_KEY_COUNT) {
+        else if (key_count < MAX_KEY_COUNT && input.take(actions::UP)) {
             load_mode((uint8_t)(key_count + 1));
             status.clear();
             play_menu_sound();
         }
-        else if (window->GetKey(InputManager::menu_down_key).bPressed && key_count > MIN_KEY_COUNT) {
+        else if (key_count > MIN_KEY_COUNT && input.take(actions::DOWN)) {
             load_mode((uint8_t)(key_count - 1));
             status.clear();
             play_menu_sound();
         }
-        else if (window->GetKey(InputManager::menu_start_key).bPressed) {
-            capture_all = window->GetKey(InputManager::keybind_mod1).bHeld;
+        else if (input.take(actions::CONFIRM)) {
+            capture_all = input.key_held(InputManager::keybind_mod1);
 
             if (capture_all) {
                 selected_lane = 0;
@@ -137,7 +137,7 @@ namespace nascent {
             status.clear();
             play_menu_sound();
         }
-        else if (InputManager::reset_pressed(window)) {
+        else if (InputManager::reset_pressed(input)) {
             reset();
         }
     }
@@ -152,7 +152,7 @@ namespace nascent {
         float total = size * key_count + gap * (key_count - 1);
         float left = (screen.x - total) / 2;
 
-        uint32_t held = InputManager::get_lane_keys_held(window, lane_keys);
+        uint32_t held = InputManager::get_lane_keys_held(game->input(), lane_keys);
         olc::FontRect metrics = text_bounds(skin->display_font_medium, "Hgjy");
 
         for (uint8_t lane = 0; lane < key_count; lane++) {

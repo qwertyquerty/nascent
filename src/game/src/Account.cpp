@@ -1,6 +1,6 @@
 #include "Account.h"
 
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "SettingsManager.h"
 #include "SettingsStore.h"
 

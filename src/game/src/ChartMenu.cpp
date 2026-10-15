@@ -3,50 +3,81 @@
 #include "Chart.h"
 #include "InputManager.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "Ui.h"
 #include "Utf8Path.h"
+#include "gse/Game.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 
 #include <algorithm>
 #include <format>
 #include <string>
+#include <utility>
 
 namespace nascent {
-    ChartMenu::Outcome ChartMenu::update(olc::PixelGameEngine* window) {
-        Outcome outcome;
+    bool ChartMenu::is_destructive(ChartAction action) {
+        return action == ChartAction::DELETE_CHART || action == ChartAction::DELETE_PACK;
+    }
 
-        if (window->GetKey(InputManager::back_key).bPressed || window->GetKey(InputManager::chart_menu_key).bPressed) {
-            outcome.close = true;
-            return outcome;
+    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, std::function<void(ChartAction)> on_action)
+        : skin(skin),
+          title(std::format("{} - {}", chart.info.artist, chart.info.title)),
+          subtitle(std::format("[{}]  in  {}", chart.info.difficulty_name, path_utf8(chart.file_path.parent_path().filename()))),
+          pack_count(pack_count),
+          on_action(std::move(on_action)) {}
+
+    olc::Pixel ChartMenu::backdrop() const {
+        return skin->color(SkinColor::MENU_DIM);
+    }
+
+    std::string ChartMenu::label(ChartAction action, bool confirming_action) const {
+        std::string pack_charts = pack_count == 1 ? std::string("1 chart") : std::format("{} charts", pack_count);
+
+        switch (action) {
+            case ChartAction::OPEN_WEBSITE:
+                return "Open on website";
+            case ChartAction::DELETE_CHART:
+                return confirming_action ? "Press Enter again to delete this chart" : "Delete chart";
+            default:
+                return confirming_action ? std::format("Press Enter again to delete the pack and its {}", pack_charts) : std::format("Delete pack ({})", pack_charts);
+        }
+    }
+
+    void ChartMenu::update(float) {
+        Input& input = game->input();
+
+        if (input.take(actions::BACK) || input.take(game_actions::CHART_MENU)) {
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+            close();
+            return;
         }
 
-        bool down = window->GetKey(InputManager::menu_down_key).bPressed;
+        bool down = input.take(actions::DOWN);
 
-        if (down || window->GetKey(InputManager::menu_up_key).bPressed) {
+        if (down || input.take(actions::UP)) {
             selected = (selected + (down ? 1 : ACTIONS.size() - 1)) % ACTIONS.size();
             confirming = false;
-            outcome.moved = true;
-            return outcome;
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+            return;
         }
 
-        if (!window->GetKey(InputManager::menu_start_key).bPressed) {
-            return outcome;
+        if (!input.take(actions::CONFIRM)) {
+            return;
         }
 
         ChartAction action = ACTIONS[selected];
 
-        if (action != ChartAction::OPEN_WEBSITE && !confirming) {
+        if (is_destructive(action) && !confirming) {
             confirming = true;
-            outcome.moved = true;
-            return outcome;
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+            return;
         }
 
-        outcome.close = true;
-        outcome.action = action;
-        return outcome;
+        close();
+        game->audio().play_effect(skin->get_random_menu_pluck());
+        on_action(action);
     }
 
-    void ChartMenu::draw(olc::PixelGameEngine* window, Skin* skin, const Chart& chart, size_t pack_count) const {
+    void ChartMenu::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
         olc::Font& title_font = skin->display_font_medium;
         olc::Font& row_font = skin->display_font_small;
@@ -56,21 +87,6 @@ namespace nascent {
         int32_t row_height = Ui::px(ROW_HEIGHT);
         int32_t row_inset = Ui::px(ROW_INSET);
         int32_t gap = Ui::px(GAP);
-
-        std::string title = std::format("{} - {}", chart.info.artist, chart.info.title);
-        std::string subtitle = std::format("[{}]  in  {}", chart.info.difficulty_name, path_utf8(chart.file_path.parent_path().filename()));
-        std::string pack_charts = pack_count == 1 ? std::string("1 chart") : std::format("{} charts", pack_count);
-
-        auto label = [&](ChartAction action, bool confirming_action) -> std::string {
-            switch (action) {
-                case ChartAction::OPEN_WEBSITE:
-                    return "Open on website";
-                case ChartAction::DELETE_CHART:
-                    return confirming_action ? "Press Enter again to delete this chart" : "Delete chart";
-                default:
-                    return confirming_action ? std::format("Press Enter again to delete the pack and its {}", pack_charts) : std::format("Delete pack ({})", pack_charts);
-            }
-        };
 
         int32_t content_width = std::max(text_bounds(title_font, title).size.x, text_bounds(row_font, subtitle).size.x);
 
@@ -86,7 +102,6 @@ namespace nascent {
         int32_t x = left + padding;
         int32_t y = top + padding;
 
-        window->FillRectDecal({0.0f, 0.0f}, {(float)screen.x, (float)screen.y}, skin->color(SkinColor::MENU_DIM));
         window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)height}, skin->color(SkinColor::MENU_BACKGROUND));
 
         draw_text(title_font, title, {x, y - title_metrics.offset.y}, skin->color(SkinColor::TEXT));
@@ -98,7 +113,7 @@ namespace nascent {
             ChartAction action = ACTIONS[index];
             bool is_selected = index == selected;
             bool is_confirming = is_selected && confirming;
-            bool danger = action != ChartAction::OPEN_WEBSITE;
+            bool danger = is_destructive(action);
 
             if (is_selected) {
                 window->FillRectDecal({(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));

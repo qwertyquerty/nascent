@@ -1,6 +1,6 @@
 #include "LocalReplays.h"
 
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "Replay.h"
 #include "SettingsManager.h"
 #include "Utf8Path.h"

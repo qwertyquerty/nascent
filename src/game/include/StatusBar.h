@@ -1,8 +1,8 @@
 #pragma once
 
 #include "ServerApi.h"
-#include "Util.h"
 #include "olcPixelGameEngine.h"
+#include "gse/render/SpriteDecal.h"
 
 #include <cstdint>
 #include <future>

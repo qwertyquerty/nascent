@@ -7,17 +7,20 @@
 #include "EntityFFT.h"
 #include "EntityField.h"
 #include "EntityStarfield.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
-#include "KeyEvents.h"
+#include "gse/input/KeyEvents.h"
 #include "SceneAccount.h"
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 #include "Updater.h"
 #include "Utf8Path.h"
+#include "gse/render/SpriteDecal.h"
+#include "gse/render/Color.h"
+#include "Util.h"
 
 #include <algorithm>
 #include <cmath>
@@ -77,8 +80,8 @@ namespace nascent {
         }
 
         if (bg_audio_id != -1) {
-            game->get_audio().Stop(bg_audio_id);
-            game->get_audio().UnloadSound(bg_audio_id);
+            game->audio().engine().Stop(bg_audio_id);
+            game->audio().engine().UnloadSound(bg_audio_id);
         }
 
         bg_field.clear();
@@ -88,7 +91,6 @@ namespace nascent {
 
         for (uint8_t i = 0; i < field_count; i++) {
             auto field = std::make_unique<EntityField>(bg_chart.get(), bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1});
-            field->init(this);
             field->draw_judge = false;
             field->scroll_speed = SettingsManager::settings.field_scroll_speed;
             bg_field.push_back(std::move(field));
@@ -96,8 +98,8 @@ namespace nascent {
 
         layout_background();
 
-        bg_audio_id = load_song_audio(game->get_audio(), bg_chart->audio_path);
-        game->apply_music_volume(bg_audio_id);
+        bg_audio_id = load_song_audio(game->audio().engine(), bg_chart->audio_path);
+        game->audio().apply_music_volume(bg_audio_id);
         bg_clock.reset(0, now_ms());
         return true;
     }
@@ -135,7 +137,7 @@ namespace nascent {
         start_hint = SpriteDecal::adopt(bg_skin->display_font_medium.RenderStringToDecal(START_HINT, olc::WHITE));
     }
 
-    void SceneTitle::init(Game* game) {
+    void SceneTitle::on_create() {
         RichPresence::in_menu("On the title screen");
         std::string error;
         sky->show(SkyView::TITLE);
@@ -162,16 +164,16 @@ namespace nascent {
 
         fft_l = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1}, 0);
         fft_l->opacity = BACKGROUND_DIM;
-        fft_l->init(this);
+        fft_l->init();
 
         fft_r = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1}, 1);
         fft_r->flipped = true;
         fft_r->mirrored = true;
         fft_r->opacity = BACKGROUND_DIM;
-        fft_r->init(this);
+        fft_r->init();
 
         if constexpr (PLAY_LOGO_INTRO) {
-            logo_audio_id = load_song_audio(game->get_audio(), logo_chart->audio_path);
+            logo_audio_id = load_song_audio(game->audio().engine(), logo_chart->audio_path);
         }
         else {
             logo_started = true;
@@ -186,7 +188,7 @@ namespace nascent {
     };
 
     bool SceneTitle::logo_playing() {
-        return logo_audio_id != -1 && game->get_audio().IsPlaying(logo_audio_id);
+        return logo_audio_id != -1 && game->audio().engine().IsPlaying(logo_audio_id);
     }
 
     bool SceneTitle::logo_finished() {
@@ -200,8 +202,8 @@ namespace nascent {
     void SceneTitle::on_exit() {
         for (int* id : {&logo_audio_id, &bg_audio_id}) {
             if (*id != -1) {
-                game->get_audio().Stop(*id);
-                game->get_audio().UnloadSound(*id);
+                game->audio().engine().Stop(*id);
+                game->audio().engine().UnloadSound(*id);
                 *id = -1;
             }
         }
@@ -215,15 +217,15 @@ namespace nascent {
             return;
         }
 
-        if (InputManager::update_pressed(game->window)) {
+        if (InputManager::update_pressed(game->input())) {
             Updater::start();
         }
 
-        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
+        if (game->input().take(actions::CONFIRM)) {
             bool sign_in_first = !Account::signed_in();
 
             if (bg_chart != nullptr) {
-                bool playing = !sign_in_first && bg_started && bg_audio_id != -1 && game->get_audio().IsPlaying(bg_audio_id);
+                bool playing = !sign_in_first && bg_started && bg_audio_id != -1 && game->audio().engine().IsPlaying(bg_audio_id);
                 list->select_chart_by_hash(bg_chart->gameplay_hash(), bg_chart->file_path, playing ? bg_audio_id : -1);
 
                 if (playing) {
@@ -231,13 +233,13 @@ namespace nascent {
                 }
             }
 
-            game->play_sound(bg_skin->get_random_menu_pluck());
+            game->audio().play_effect(bg_skin->get_random_menu_pluck());
 
             if (sign_in_first) {
-                game->set_scene(std::make_unique<SceneAccount>(bg_skin, list, sky, true));
+                game->scenes().replace(std::make_unique<SceneAccount>(bg_skin, list, sky, true));
             }
             else {
-                game->set_scene(list);
+                game->scenes().replace(list);
             }
 
             return;
@@ -249,21 +251,21 @@ namespace nascent {
 
         double now = now_ms();
         float step = std::min(elapsed_time, MAX_TIMER_STEP);
-        sky->update(this, step);
+        sky->update(step);
 
         if (timer > SettingsManager::settings.title_logo_start_delay && !logo_started) {
             logo_started = true;
-            game->get_audio().Play(logo_audio_id);
+            game->audio().engine().Play(logo_audio_id);
         }
 
-        if (bg_chart != nullptr && logo_finished() && !game->get_audio().IsPlaying(bg_audio_id)) {
+        if (bg_chart != nullptr && logo_finished() && !game->audio().engine().IsPlaying(bg_audio_id)) {
             if (bg_started) {
                 load_background();
             }
 
             bg_started = true;
             bg_fade = 0;
-            game->get_audio().Play(bg_audio_id);
+            game->audio().engine().Play(bg_audio_id);
         }
 
         if (bg_started) {
@@ -271,7 +273,7 @@ namespace nascent {
         }
 
         if (logo_audio_id != -1) {
-            logo_clock.sync(game->get_audio().GetPositionMilliseconds(logo_audio_id), now);
+            logo_clock.sync(game->audio().engine().GetPositionMilliseconds(logo_audio_id), now);
             logo_position = logo_clock.position_at(now);
         }
 
@@ -285,7 +287,7 @@ namespace nascent {
         logo_field->set_position(logo_position);
 
         if (bg_chart != nullptr) {
-            bg_clock.sync(game->get_audio().GetPositionMilliseconds(bg_audio_id), now);
+            bg_clock.sync(game->audio().engine().GetPositionMilliseconds(bg_audio_id), now);
             bg_position = bg_clock.position_at(now);
 
             for (auto& field : bg_field) {
@@ -294,8 +296,8 @@ namespace nascent {
                 field->opacity = bg_fade * BACKGROUND_DIM;
             }
 
-            if (game->get_audio().IsPlaying(bg_audio_id)) {
-                game->get_audio().CopyEngineBuffer(audio_buffer);
+            if (game->audio().engine().IsPlaying(bg_audio_id)) {
+                game->audio().engine().CopyEngineBuffer(audio_buffer);
                 fft_l->update_song_buffer(audio_buffer, elapsed_time);
                 fft_r->update_song_buffer(audio_buffer, elapsed_time);
             }

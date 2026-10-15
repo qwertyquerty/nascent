@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "SongClock.h"
-#include "Util.h"
+#include "gse/render/SpriteDecal.h"
 
 #include <cstdint>
 #include <memory>
@@ -77,7 +77,7 @@ namespace nascent {
 
         SceneTitle(Skin* bg_skin, SceneList* list, EntityStarfield* sky);
         ~SceneTitle();
-        void init(Game*) override;
+        void on_create() override;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

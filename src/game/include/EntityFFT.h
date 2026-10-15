@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <vector>
 
-#include "Entity.h"
 #include "olcPixelGameEngine.h"
 #include "kiss_fftr.h"
 
@@ -23,7 +22,7 @@ namespace nascent {
     inline constexpr double FFT_AVG_SMOOTHING_RATIO = 0.05;
     inline constexpr uint8_t FFT_BAR_ALPHA = 64;
 
-    class EntityFFT : public Entity {
+    class EntityFFT {
         protected:
         Skin* skin;
         kiss_fftr_cfg fft_cfg;
@@ -46,9 +45,8 @@ namespace nascent {
         EntityFFT(const EntityFFT&) = delete;
         EntityFFT& operator=(const EntityFFT&) = delete;
 
-        void init(Scene*) override;
-        void update(Scene*, float) override;
-        void draw(olc::PixelGameEngine*) override;
+        void init();
+        void draw(olc::PixelGameEngine*);
 
         void update_song_buffer(const std::vector<float>& buffer, float elasped_time);
     };

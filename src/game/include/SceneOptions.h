@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "ServerApi.h"
-#include "UiForm.h"
+#include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstdint>
@@ -89,7 +89,7 @@ namespace nascent {
         public:
         SceneOptions(Skin* skin);
         ~SceneOptions() override;
-        void init(Game*) override;
+        void on_create() override;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

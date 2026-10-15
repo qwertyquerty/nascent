@@ -1,12 +1,12 @@
 #include "EntityField.h"
 #include "Attempt.h"
 #include "Chart.h"
-#include "Entity.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "Util.h"
 
 #include "olcPixelGameEngine.h"
+#include "gse/render/SpriteDecal.h"
+#include "gse/anim/Easing.h"
 
 #include <algorithm>
 #include <array>
@@ -40,14 +40,6 @@ namespace nascent {
         note_size = size.x / (keys + keys * spacing - spacing);
         note_x_spacing = note_size * spacing;
     }
-
-    void EntityField::init(Scene*) {
-
-    };
-
-    void EntityField::update(Scene*, float) {
-
-    };
 
     void EntityField::draw(olc::PixelGameEngine* window) {
         int32_t screen_height = window->ScreenHeight();

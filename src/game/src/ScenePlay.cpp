@@ -5,14 +5,14 @@
 #include "Chart.h"
 #include "Const.h"
 #include "EntityField.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
-#include "KeyEvents.h"
+#include "gse/input/KeyEvents.h"
 #include "LocalBests.h"
 #include "PlaySession.h"
-#include "ProgressBar.h"
+#include "gse/ui/ProgressBar.h"
 #include "DifficultyCalculator.h"
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "Replay.h"
 #include "Results.h"
 #include "SceneResults.h"
@@ -21,9 +21,12 @@
 #include "SubmissionQueue.h"
 #include "Util.h"
 #include "Utf8Path.h"
-#include "TextCache.h"
+#include "gse/render/TextCache.h"
 #include "TimingBar.h"
-#include "Ui.h"
+#include "gse/ui/Ui.h"
+#include "gse/anim/Easing.h"
+#include "gse/render/Color.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <chrono>
@@ -51,10 +54,9 @@ namespace nascent {
         return -SettingsManager::settings.play_start_delay * 1000.0;
     }
 
-    ScenePlay::ScenePlay(Chart* chart, Skin* skin, Scene* return_scene) {
+    ScenePlay::ScenePlay(Chart* chart, Skin* skin) {
         this->chart = chart;
         this->skin = skin;
-        this->return_scene = return_scene;
     };
 
     void ScenePlay::finish() {
@@ -98,30 +100,30 @@ namespace nascent {
 
         int continuing_audio_id = -1;
 
-        if (chart_audio_id != -1 && game->get_audio().IsPlaying(chart_audio_id)) {
+        if (chart_audio_id != -1 && game->audio().engine().IsPlaying(chart_audio_id)) {
             continuing_audio_id = chart_audio_id;
             chart_audio_id = -1;
         }
 
-        game->set_scene(std::make_unique<SceneResults>(skin, return_scene, chart, std::move(summary), std::move(submission), continuing_audio_id));
+        game->scenes().replace(std::make_unique<SceneResults>(skin, chart, std::move(summary), std::move(submission), continuing_audio_id));
     }
 
     ScenePlay::~ScenePlay() {
     }
 
-    void ScenePlay::init(Game* game) {
+    void ScenePlay::on_create() {
         RichPresence::playing(*chart);
         request_ticket();
 
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
         start_attempt();
 
-        chart_audio_id = load_song_audio(game->get_audio(), chart->audio_path);
-        game->apply_music_volume(chart_audio_id);
+        chart_audio_id = load_song_audio(game->audio().engine(), chart->audio_path);
+        game->audio().apply_music_volume(chart_audio_id);
 
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
 
-        game->get_audio().SetPitch(chart_audio_id, chart->pitch);
+        game->audio().engine().SetPitch(chart_audio_id, chart->pitch);
     };
 
     void ScenePlay::start_attempt() {
@@ -156,7 +158,7 @@ namespace nascent {
         last_press_time.reset();
         closest_press_gap.reset();
         simultaneous_presses = 0;
-        game->reset_input_delay();
+        game->input().reset_delay();
     }
 
     void ScenePlay::request_ticket() {
@@ -166,7 +168,7 @@ namespace nascent {
     }
 
     bool ScenePlay::ticket_pending(double now) {
-        if (!ticket.valid() || ticket.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (!ticket.valid() || is_ready(ticket)) {
             return false;
         }
 
@@ -249,8 +251,8 @@ namespace nascent {
 
     std::vector<std::string> ScenePlay::diagnostics_lines(bool full) const {
         const Attempt& attempt = session->get_attempt();
-        olc::MiniAudio& audio = game->get_audio();
-        InputDelayStats delay = game->input_delay();
+        olc::MiniAudio& audio = game->audio().engine();
+        InputDelayStats delay = game->input().delay();
 
         uint32_t hits = 0;
         uint32_t early = 0;
@@ -295,7 +297,7 @@ namespace nascent {
                                       std::format("UR {:.1f} mean {:+.1f} ms", unstable_rate, mean_error),
                                       std::format("early {} late {}", early, late),
                                       std::format("windows {} ms", windows),
-                                      std::format("input {}", input_mode_name(game->get_input_mode())),
+                                      std::format("input {}", input_mode_name(game->input().mode())),
                                       std::format("input delay {:.2f} ms avg of {}", delay.average_ms(), delay.count),
                                       std::format("closest press gap {} same {}", press_gap, simultaneous_presses),
                                       std::format("offset input {:+} visual {:+} ms", session->audio_input_offset, session->audio_visual_offset),
@@ -350,8 +352,8 @@ namespace nascent {
     }
 
     nlohmann::json ScenePlay::timing_diagnostics() const {
-        InputDelayStats delay = game->input_delay();
-        olc::MiniAudio& audio = game->get_audio();
+        InputDelayStats delay = game->input().delay();
+        olc::MiniAudio& audio = game->audio().engine();
 
         return nlohmann::json{
             {"audio_backend", audio.GetBackendName()},
@@ -359,7 +361,7 @@ namespace nascent {
             {"audio_output_latency_ms", audio.GetOutputLatencyMilliseconds()},
             {"mp3_padding_ms", audio.GetStartOffsetMilliseconds(chart_audio_id)},
             {"clock_snaps", session->clock_snaps()},
-            {"input_mode", input_mode_name(game->get_input_mode())},
+            {"input_mode", input_mode_name(game->input().mode())},
             {"input_delay_average_ms", delay.average_ms()},
             {"input_delay_max_ms", delay.max_ms},
             {"input_delay_samples", delay.count},
@@ -408,22 +410,22 @@ namespace nascent {
 
     void ScenePlay::skip_intro(double now) {
         double target = chart->intro_skip_ms();
-        double latency = game->get_audio().GetOutputLatencyMilliseconds();
-        game->get_audio().Seek(chart_audio_id, (ma_uint64)std::lround(std::max(0.0, (target + latency) * chart->pitch)));
+        double latency = game->audio().engine().GetOutputLatencyMilliseconds();
+        game->audio().engine().Seek(chart_audio_id, (ma_uint64)std::lround(std::max(0.0, (target + latency) * chart->pitch)));
         session->reset_clock(target, now);
 
         if (!chart_started) {
             chart_started = true;
-            game->get_audio().Play(chart_audio_id);
+            game->audio().engine().Play(chart_audio_id);
         }
 
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
     }
 
     void ScenePlay::restart() {
-        game->get_audio().Stop(chart_audio_id);
-        game->get_audio().Seek(chart_audio_id, 0);
-        game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
+        game->audio().engine().Stop(chart_audio_id);
+        game->audio().engine().Seek(chart_audio_id, 0);
+        game->audio().stop(skin->sound(SkinSound::IDLE_LOOP));
         request_ticket();
 
         chart_started = false;
@@ -433,24 +435,25 @@ namespace nascent {
         restart_hold = 0;
         start_attempt();
 
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
     }
+
 
     void ScenePlay::on_exit() {
         if (chart_audio_id != -1) {
-            game->get_audio().Stop(chart_audio_id);
-            game->get_audio().UnloadSound(chart_audio_id);
+            game->audio().engine().Stop(chart_audio_id);
+            game->audio().engine().UnloadSound(chart_audio_id);
             chart_audio_id = -1;
         }
 
-        game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
+        game->audio().stop(skin->sound(SkinSound::IDLE_LOOP));
     }
 
     void ScenePlay::pause(double now) {
         paused = true;
         paused_position = session->song_position(now);
-        game->get_audio().Pause(chart_audio_id);
-        game->play_music(skin->sound(SkinSound::IDLE_LOOP), true);
+        game->audio().engine().Pause(chart_audio_id);
+        game->audio().play_music(skin->sound(SkinSound::IDLE_LOOP), true);
     }
 
     void ScenePlay::resume(double now) {
@@ -458,27 +461,28 @@ namespace nascent {
         resumed_at = now;
 
         if (chart_started && !audio_finished) {
-            game->get_audio().Play(chart_audio_id);
+            game->audio().engine().Play(chart_audio_id);
         }
 
-        game->stop_sound(skin->sound(SkinSound::IDLE_LOOP));
+        game->audio().stop(skin->sound(SkinSound::IDLE_LOOP));
         session->reset_clock(paused_position, now);
-        session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->window, lane_keys)), now);
+        session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->input(), lane_keys)), now);
     }
 
     void ScenePlay::update(float elapsed_time) {
         double now = now_ms();
-        bool pause_pressed = game->window->GetKey(InputManager::get_key(KeyBinding::PAUSE)).bPressed;
+        Input& input = game->input();
+        bool pause_pressed = input.key_pressed(InputManager::get_key(KeyBinding::PAUSE));
 
-        if (game->window->GetKey(InputManager::get_key(KeyBinding::DIAGNOSTICS)).bPressed) {
+        if (input.key_pressed(InputManager::get_key(KeyBinding::DIAGNOSTICS))) {
             show_hit_log = !show_hit_log;
         }
 
-        if (game->window->GetKey(InputManager::get_key(KeyBinding::COPY_DIAGNOSTICS)).bPressed) {
+        if (input.key_pressed(InputManager::get_key(KeyBinding::COPY_DIAGNOSTICS))) {
             copy_diagnostics();
         }
 
-        if (!finished && game->window->GetKey(InputManager::get_key(KeyBinding::RESTART)).bHeld) {
+        if (!finished && input.key_held(InputManager::get_key(KeyBinding::RESTART))) {
             restart_hold += elapsed_time;
 
             if (restart_hold >= RESTART_HOLD_TIME) {
@@ -507,28 +511,28 @@ namespace nascent {
 
             if (!ticket_pending(now)) {
                 waiting_for_ticket = false;
-                session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->window, lane_keys)), now);
+                session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->input(), lane_keys)), now);
             }
         }
         else {
-            if (can_skip_intro(now) && game->window->GetKey(InputManager::get_key(KeyBinding::SKIP_INTRO)).bPressed) {
+            if (can_skip_intro(now) && input.key_pressed(InputManager::get_key(KeyBinding::SKIP_INTRO))) {
                 skip_intro(now);
             }
 
-            if (!chart_started && session->song_position(now) >= -game->get_audio().GetOutputLatencyMilliseconds()) {
+            if (!chart_started && session->song_position(now) >= -game->audio().engine().GetOutputLatencyMilliseconds()) {
                 chart_started = true;
-                game->get_audio().Play(chart_audio_id);
+                game->audio().engine().Play(chart_audio_id);
             }
 
-            if (chart_started && !audio_finished && !game->get_audio().IsPlaying(chart_audio_id)) {
+            if (chart_started && !audio_finished && !game->audio().engine().IsPlaying(chart_audio_id)) {
                 audio_finished = true;
             }
 
             if (chart_started && !audio_finished) {
-                session->sync_clock(game->get_audio().GetPositionMilliseconds(chart_audio_id) / chart->pitch, now);
+                session->sync_clock(game->audio().engine().GetPositionMilliseconds(chart_audio_id) / chart->pitch, now);
             }
 
-            for (const KeyEvent& event : game->get_frame_key_events()) {
+            for (const KeyEvent& event : game->input().events()) {
                 std::optional<uint8_t> lane = InputManager::get_lane(lane_keys, event.key);
 
                 if (!lane) {
@@ -540,7 +544,7 @@ namespace nascent {
                     session->press(chart_lane(*lane), event.time);
 
                     if (SettingsManager::settings.field_hitsounds) {
-                        game->play_sound(skin->sound(SkinSound::HITSOUND));
+                        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
                     }
                 }
                 else {

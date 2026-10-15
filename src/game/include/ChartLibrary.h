@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Chart.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <atomic>
@@ -14,25 +15,6 @@
 
 namespace nascent {
     class DifficultyCache;
-
-    template <typename F>
-    void parallel_for(size_t count, F work) {
-        size_t thread_count = std::min<size_t>(std::max(1u, std::thread::hardware_concurrency()), std::max<size_t>(count, 1));
-        std::atomic<size_t> next = 0;
-        std::vector<std::thread> threads;
-
-        for (size_t t = 0; t < thread_count; t++) {
-            threads.emplace_back([&] {
-                for (size_t index = next++; index < count; index = next++) {
-                    work(index);
-                }
-            });
-        }
-
-        for (std::thread& thread : threads) {
-            thread.join();
-        }
-    }
 
     struct ChartLibrary {
         std::vector<std::unique_ptr<Chart>> charts;

@@ -1,6 +1,6 @@
 #include "Updater.h"
 
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "ServerClient.h"
 #include "SettingsManager.h"
 #include "Sha256.h"

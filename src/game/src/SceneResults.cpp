@@ -2,12 +2,15 @@
 #include "RichPresence.h"
 #include "Accuracy.h"
 #include "Chart.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
 #include "Skin.h"
 #include "StatusBar.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/render/SpriteDecal.h"
+#include "gse/render/Color.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <chrono>
@@ -23,26 +26,15 @@
 namespace nascent {
     static constexpr std::string_view BACK_HINT = "Enter / Esc  back to the song list";
 
-    static olc::Pixel blend(olc::Pixel below, olc::Pixel above) {
-        float a = above.a / 255.0f;
-        return olc::Pixel(
-            (uint8_t)(below.r * (1 - a) + above.r * a),
-            (uint8_t)(below.g * (1 - a) + above.g * a),
-            (uint8_t)(below.b * (1 - a) + above.b * a),
-            std::max(below.a, above.a)
-        );
-    }
-
-    SceneResults::SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id) {
+    SceneResults::SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id) {
         this->skin = skin;
-        this->return_scene = return_scene;
         this->chart = chart;
         this->summary = std::move(summary);
         this->submission = std::move(submission);
         this->song_audio_id = song_audio_id;
     }
 
-    void SceneResults::init(Game*) {
+    void SceneResults::on_create() {
         RichPresence::viewing_results(*chart, summary.accuracy, grade_name(summary.grade));
         layout_error_graph();
 
@@ -146,8 +138,8 @@ namespace nascent {
 
     void SceneResults::release_song() {
         if (song_audio_id != -1) {
-            game->get_audio().Stop(song_audio_id);
-            game->get_audio().UnloadSound(song_audio_id);
+            game->audio().engine().Stop(song_audio_id);
+            game->audio().engine().UnloadSound(song_audio_id);
             song_audio_id = -1;
         }
     }
@@ -157,18 +149,18 @@ namespace nascent {
     }
 
     void SceneResults::update(float) {
-        if (song_audio_id != -1 && !game->get_audio().IsPlaying(song_audio_id)) {
+        if (song_audio_id != -1 && !game->audio().engine().IsPlaying(song_audio_id)) {
             release_song();
         }
 
-        if (submission.valid() && submission.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (is_ready(submission)) {
             submitted = submission.get();
             RichPresence::refresh_profile();
         }
 
-        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
-            game->set_scene(return_scene);
+        if (game->input().take(actions::CONFIRM)) {
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+            game->scenes().pop();
         }
     }
 

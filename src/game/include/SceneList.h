@@ -3,10 +3,10 @@
 #include "ChartLibrary.h"
 #include "ChartMenu.h"
 #include "LeaderboardPanel.h"
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "SongClock.h"
 #include "StatusBar.h"
-#include "Util.h"
+#include "gse/render/SpriteDecal.h"
 
 #include <condition_variable>
 #include <cstddef>
@@ -93,7 +93,6 @@ namespace nascent {
 
         bool crossfade = false;
         float crossfade_timer = 0;
-        float audio_fadein_timer = 0;
 
         float pitch = 1.0;
 
@@ -117,7 +116,6 @@ namespace nascent {
 
         float widest_grade = -1.0f;
 
-        std::optional<ChartMenu> chart_menu;
         LeaderboardPanel leaderboards;
         bool show_leaderboards = false;
         bool recommended_started = false;
@@ -149,7 +147,8 @@ namespace nascent {
         void download_recommended();
         void draw_recommended(olc::PixelGameEngine* window);
         bool update_controls();
-        void update_chart_menu();
+        void open_chart_menu();
+        void handle_chart_action(ChartAction action);
         size_t pack_chart_count() const;
         void open_chart_website();
         void delete_charts(bool whole_pack);
@@ -159,6 +158,7 @@ namespace nascent {
         static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
         static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
         static constexpr float LENGTH_OFFSET = 90.0f;
+        static constexpr float PREVIEW_FADE_CURVE = 2.0f;
         static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
         static constexpr float GRADE_GAP = 8.0f;
         static constexpr int32_t LIST_ROW_HEIGHT = 100;
@@ -168,7 +168,7 @@ namespace nascent {
 
         SceneList(Skin* skin, EntityStarfield* sky);
         ~SceneList();
-        void init(Game*) override;
+        void on_create() override;
         void on_enter() override;
         void on_exit() override;
         void on_resize() override;

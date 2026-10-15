@@ -7,12 +7,12 @@
 #include "Const.h"
 #include "DifficultyCache.h"
 #include "EntityField.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
 #include "LocalBests.h"
 #include "LocalReplays.h"
-#include "Platform.h"
-#include "ProgressBar.h"
+#include "gse/Platform.h"
+#include "gse/ui/ProgressBar.h"
 #include "Results.h"
 #include "RichPresence.h"
 #include "SceneAccount.h"
@@ -25,16 +25,24 @@
 #include "ServerApi.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 #include "Utf8Path.h"
+#include "gse/render/SpriteDecal.h"
+#include "gse/util/Math.h"
+#include "gse/render/Color.h"
+#include "Util.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <initializer_list>
 #include <iostream>
+#include <numbers>
+#include <string_view>
 #include <utility>
 
 namespace nascent {
@@ -106,7 +114,7 @@ namespace nascent {
         }
     }
 
-    void SceneList::init(Game*) {
+    void SceneList::on_create() {
         if (!pending_selection_path.empty()) {
             std::string error;
             std::unique_ptr<Chart> chart = Chart::load(pending_selection_path, pitch, error);
@@ -148,14 +156,14 @@ namespace nascent {
                     stop_preview_audio();
                     selected_chart_audio_id = audio_id;
                     preview_audio_chart = library.charts[chart].get();
-                    audio_fadein_timer = 1.0f;
+                    game->audio().cancel_fade(selected_chart_audio_id);
                     audio_id = -1;
                 }
             }
 
             if (audio_id != -1) {
-                game->get_audio().Stop(audio_id);
-                game->get_audio().UnloadSound(audio_id);
+                game->audio().engine().Stop(audio_id);
+                game->audio().engine().UnloadSound(audio_id);
             }
         }
 
@@ -188,10 +196,7 @@ namespace nascent {
         collect_difficulties();
         leaderboards.update(elapsed_time, show_leaderboards && selected_chart != nullptr && !visible.empty(), selected_hash(), pitch);
 
-        if (chart_menu) {
-            update_chart_menu();
-        }
-        else if (!update_controls()) {
+        if (!update_controls()) {
             return;
         }
 
@@ -214,16 +219,16 @@ namespace nascent {
         double now = now_ms();
 
         if (selected_chart_audio_id != -1) {
-            game->apply_music_volume(selected_chart_audio_id, audio_fadein_timer * audio_fadein_timer);
+            game->audio().apply_music_volume(selected_chart_audio_id, game->audio().music_fade(selected_chart_audio_id));
         }
 
-        if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart && !game->get_audio().IsPlaying(selected_chart_audio_id)) {
-            game->get_audio().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
-            game->get_audio().Play(selected_chart_audio_id, true);
+        if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart && !game->audio().engine().IsPlaying(selected_chart_audio_id)) {
+            game->audio().engine().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
+            game->audio().engine().Play(selected_chart_audio_id, true);
         }
 
         if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart) {
-            preview_clock.sync(game->get_audio().GetPositionMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
+            preview_clock.sync(game->audio().engine().GetPositionMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
         }
         else {
             preview_clock.reset(selected_chart->info.preview_time / selected_chart->pitch, now);
@@ -231,10 +236,7 @@ namespace nascent {
 
         preview_position = preview_clock.position_at(now);
         field->set_position(preview_position);
-        field->opacity = selected_chart_audio_id != -1 && preview_audio_chart == selected_chart ? audio_fadein_timer : 0.0f;
-
-        float fade_in_time = SettingsManager::settings.list_preview_fade_in_time;
-        audio_fadein_timer = fade_in_time > 0 ? std::min(1.0f, audio_fadein_timer + elapsed_time / fade_in_time) : 1.0f;
+        field->opacity = selected_chart_audio_id != -1 && preview_audio_chart == selected_chart ? game->audio().fade_progress(selected_chart_audio_id) : 0.0f;
 
         timer += elapsed_time;
 
@@ -247,61 +249,63 @@ namespace nascent {
     };
 
     bool SceneList::update_controls() {
-        if (game->window->GetKey(InputManager::calibration_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneCalibration>(skin, this));
+        Input& input = game->input();
+
+        if (input.key_pressed(InputManager::calibration_key)) {
+            game->audio().play_effect(skin->get_random_menu_pluck());
+            game->scenes().push(std::make_unique<SceneCalibration>(skin));
             return false;
         }
 
-        if (game->window->GetKey(InputManager::account_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneAccount>(skin, this, sky));
+        if (input.key_pressed(InputManager::account_key)) {
+            game->audio().play_effect(skin->get_random_menu_pluck());
+            game->scenes().push(std::make_unique<SceneAccount>(skin, nullptr, sky));
             return false;
         }
 
-        if (game->window->GetKey(InputManager::browse_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneBrowser>(skin, this));
+        if (input.key_pressed(InputManager::browse_key)) {
+            game->audio().play_effect(skin->get_random_menu_pluck());
+            game->scenes().push(std::make_unique<SceneBrowser>(skin, this));
             return false;
         }
 
-        if (game->window->GetKey(InputManager::options_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneOptions>(skin));
+        if (input.key_pressed(InputManager::options_key)) {
+            game->audio().play_effect(skin->get_random_menu_pluck());
+            game->scenes().push(std::make_unique<SceneOptions>(skin));
             return false;
         }
 
-        if (game->window->GetKey(InputManager::input_key).bPressed) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneInput>(skin, this, selected_chart != nullptr ? selected_chart->info.key_count : (uint8_t)4));
+        if (input.key_pressed(InputManager::input_key)) {
+            game->audio().play_effect(skin->get_random_menu_pluck());
+            game->scenes().push(std::make_unique<SceneInput>(skin, selected_chart != nullptr ? selected_chart->info.key_count : (uint8_t)4));
             return false;
         }
 
-        if (game->window->GetKey(InputManager::back_key).bPressed && search.empty()) {
-            game->play_sound(skin->get_random_menu_pluck());
-            game->set_scene(std::make_unique<SceneTitle>(skin, this, sky));
+        if (search.empty() && input.take(actions::BACK)) {
+            game->audio().play_effect(skin->get_random_menu_pluck());
+            game->scenes().replace(std::make_unique<SceneTitle>(skin, this, sky));
             return false;
         }
 
         update_search();
 
-        if (game->window->GetKey(InputManager::leaderboard_key).bPressed) {
+        if (input.key_pressed(InputManager::leaderboard_key)) {
             show_leaderboards = !show_leaderboards;
             status_bar.set_leaderboards_shown(show_leaderboards);
             leaderboards.show_now();
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
         }
 
-        if (game->window->GetKey(InputManager::keybind_mod1).bHeld) {
-            if (game->window->GetKey(InputManager::menu_left_key).bPressed) {
+        if (input.key_held(InputManager::keybind_mod1)) {
+            if (input.take(actions::LEFT)) {
                 set_pitch(pitch - PITCH_INTERVAL);
             }
-            if (game->window->GetKey(InputManager::menu_right_key).bPressed) {
+            if (input.take(actions::RIGHT)) {
                 set_pitch(pitch + PITCH_INTERVAL);
             }
         }
 
-        if (library.charts.empty() && (!library_loading || recommended_started) && game->window->GetKey(InputManager::menu_start_key).bPressed) {
+        if (library.charts.empty() && (!library_loading || recommended_started) && input.take(actions::CONFIRM)) {
             download_recommended();
         }
 
@@ -309,25 +313,24 @@ namespace nascent {
             return false;
         }
 
-        if (game->window->GetKey(InputManager::chart_menu_key).bPressed) {
-            chart_menu = ChartMenu();
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
+        if (game->input().take(game_actions::CHART_MENU)) {
+            open_chart_menu();
             return true;
         }
 
-        if (game->window->GetKey(InputManager::random_chart_key).bPressed) {
+        if (input.key_pressed(InputManager::random_chart_key)) {
             select_chart(rand() % visible.size());
         }
 
-        if (game->window->GetKey(InputManager::menu_down_key).bPressed) {
+        if (input.take(actions::DOWN)) {
             select_chart(positive_modulo((selected_chart_index + 1), visible.size()));
         }
 
-        if (game->window->GetKey(InputManager::menu_up_key).bPressed) {
+        if (input.take(actions::UP)) {
             select_chart(positive_modulo((selected_chart_index - 1), visible.size()));
         }
 
-        int mwheel = game->window->GetMouseWheel();
+        int mwheel = input.mouse_wheel();
         if (mwheel != 0) {
             select_chart(positive_modulo(
                 selected_chart_index + ((mwheel < 0) - (mwheel > 0)),
@@ -335,8 +338,8 @@ namespace nascent {
             ));
         }
 
-        if (game->window->GetKey(InputManager::menu_start_key).bPressed) {
-            game->set_scene(std::make_unique<ScenePlay>(selected_chart, skin, this));
+        if (input.take(actions::CONFIRM)) {
+            game->scenes().push(std::make_unique<ScenePlay>(selected_chart, skin));
         }
 
         return true;
@@ -366,7 +369,7 @@ namespace nascent {
         selected_chart_index = index;
 
         if (sound) {
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
         }
 
         create_preview_field();
@@ -376,8 +379,8 @@ namespace nascent {
 
         if (selected_chart_audio_id != -1 && preview_audio_chart != nullptr && preview_audio_chart->audio_path == selected_chart->audio_path) {
             preview_audio_chart = selected_chart;
-            game->get_audio().SetPitch(selected_chart_audio_id, selected_chart->pitch);
-            preview_clock.reset(game->get_audio().GetPositionMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
+            game->audio().engine().SetPitch(selected_chart_audio_id, selected_chart->pitch);
+            preview_clock.reset(game->audio().engine().GetPositionMilliseconds(selected_chart_audio_id) / selected_chart->pitch, now);
         }
         else {
             preview_clock.reset(selected_chart->info.preview_time / selected_chart->pitch, now);
@@ -475,19 +478,18 @@ namespace nascent {
 
         stop_preview_audio();
 
-        selected_chart_audio_id = load_song_audio(game->get_audio(), selected_chart->audio_path);
+        selected_chart_audio_id = load_song_audio(game->audio().engine(), selected_chart->audio_path);
         preview_audio_chart = selected_chart;
-        audio_fadein_timer = 0.0f;
-        game->apply_music_volume(selected_chart_audio_id, 0.0f);
-        game->get_audio().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
-        game->get_audio().SetPitch(selected_chart_audio_id, selected_chart->pitch);
-        game->get_audio().Play(selected_chart_audio_id, true);
+        game->audio().fade_music(selected_chart_audio_id, 0.0f, 1.0f, SettingsManager::settings.list_preview_fade_in_time, false, PREVIEW_FADE_CURVE);
+        game->audio().engine().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
+        game->audio().engine().SetPitch(selected_chart_audio_id, selected_chart->pitch);
+        game->audio().engine().Play(selected_chart_audio_id, true);
     }
 
     void SceneList::stop_preview_audio() {
         if (selected_chart_audio_id != -1) {
-            game->get_audio().Stop(selected_chart_audio_id);
-            game->get_audio().UnloadSound(selected_chart_audio_id);
+            game->audio().stop(selected_chart_audio_id);
+            game->audio().engine().UnloadSound(selected_chart_audio_id);
             selected_chart_audio_id = -1;
             preview_audio_chart = nullptr;
         }
@@ -516,7 +518,7 @@ namespace nascent {
             start_library_load();
         }
 
-        if (!library_loading || game->is_transitioning()) {
+        if (!library_loading || game->scenes().is_transitioning()) {
             return;
         }
 
@@ -629,12 +631,11 @@ namespace nascent {
     }
 
     void SceneList::update_search() {
-        olc::PixelGameEngine* window = game->window;
         std::string before = search;
-        search += game->get_frame_text();
+        search += game->input().text();
 
-        for (int32_t keycode : window->GetKeyPressCache()) {
-            if (window->ConvertKeycode(keycode) == olc::Key::BACK && !search.empty()) {
+        for (olc::Key key : game->input().pressed_keys()) {
+            if (key == olc::Key::BACK && !search.empty()) {
                 search.pop_back();
 
                 while (!search.empty() && ((unsigned char)search.back() & 0xc0) == 0x80) {
@@ -643,7 +644,7 @@ namespace nascent {
             }
         }
 
-        if (window->GetKey(InputManager::back_key).bPressed) {
+        if (game->input().take(actions::BACK)) {
             search.clear();
         }
 
@@ -688,7 +689,7 @@ namespace nascent {
         }
 
         recommended_started = true;
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
     }
 
     void SceneList::draw_recommended(olc::PixelGameEngine* window) {
@@ -759,9 +760,6 @@ namespace nascent {
         draw_search(window);
         status_bar.draw(window, skin);
 
-        if (chart_menu && selected_chart != nullptr) {
-            chart_menu->draw(window, skin, *selected_chart, pack_chart_count());
-        }
     }
 
     size_t SceneList::pack_chart_count() const {
@@ -775,34 +773,25 @@ namespace nascent {
         });
     }
 
-    void SceneList::update_chart_menu() {
+    void SceneList::open_chart_menu() {
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, pack_chart_count(), [this](ChartAction action) {
+            handle_chart_action(action);
+        }));
+    }
+
+    void SceneList::handle_chart_action(ChartAction action) {
         if (selected_chart == nullptr || visible.empty()) {
-            chart_menu.reset();
             return;
         }
 
-        ChartMenu::Outcome outcome = chart_menu->update(game->window);
-
-        if (outcome.action) {
-            chart_menu.reset();
-            game->play_sound(skin->get_random_menu_pluck());
-
-            if (*outcome.action == ChartAction::OPEN_WEBSITE) {
+        switch (action) {
+            case ChartAction::OPEN_WEBSITE:
                 open_chart_website();
-            }
-            else {
-                delete_charts(*outcome.action == ChartAction::DELETE_PACK);
-            }
-
-            return;
-        }
-
-        if (outcome.close) {
-            chart_menu.reset();
-        }
-
-        if (outcome.close || outcome.moved) {
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
+                break;
+            default:
+                delete_charts(action == ChartAction::DELETE_PACK);
+                break;
         }
     }
 

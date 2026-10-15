@@ -2,16 +2,19 @@
 #include "RichPresence.h"
 
 #include "BeatmapDownloads.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
-#include "ProgressBar.h"
-#include "RowField.h"
+#include "gse/ui/ProgressBar.h"
+#include "gse/ui/RowField.h"
+#include "KeyBindField.h"
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "TextField.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/ui/TextField.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/render/Color.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <chrono>
@@ -29,11 +32,6 @@ namespace nascent {
     static constexpr uint8_t FIRST_KEY_COUNT = 4;
     static constexpr uint8_t LAST_KEY_COUNT = 10;
     static constexpr float SCROLL_SPEED = 14.0f;
-
-    template <typename T>
-    static bool is_ready(const std::future<T>& future) {
-        return future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-    }
 
     static int32_t text_width(olc::Font& font, const std::string& text) {
         return text.empty() ? 0 : text_bounds(font, text).size.x;
@@ -76,7 +74,7 @@ namespace nascent {
 
     SceneBrowser::SceneBrowser(Skin* skin, SceneList* list) : skin(skin), list(list) {}
 
-    void SceneBrowser::init(Game*) {
+    void SceneBrowser::on_create() {
         std::vector<std::string> key_options = {"Any"};
 
         for (uint8_t keys = FIRST_KEY_COUNT; keys <= LAST_KEY_COUNT; keys++) {
@@ -101,7 +99,7 @@ namespace nascent {
     }
 
     void SceneBrowser::on_exit() {
-        form.set_enabled(game->window, false);
+        form.set_enabled(false);
     }
 
     ChartQuery SceneBrowser::build_query() const {
@@ -160,12 +158,12 @@ namespace nascent {
     }
 
     void SceneBrowser::play_menu_sound() {
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
     }
 
     void SceneBrowser::focus_results(bool focused) {
         results_focused = focused && !results.empty();
-        form.set_enabled(game->window, !results_focused);
+        form.set_enabled(!results_focused);
     }
 
     bool SceneBrowser::download_selected() {
@@ -192,8 +190,9 @@ namespace nascent {
 
     void SceneBrowser::update(float elapsed_time) {
         olc::PixelGameEngine* window = game->window;
+        Input& input = game->input();
 
-        if (InputManager::switch_pressed(window)) {
+        if (InputManager::switch_pressed(input)) {
             bool was_focused = results_focused;
             focus_results(!results_focused);
 
@@ -202,14 +201,14 @@ namespace nascent {
             }
         }
         else if (!results_focused) {
-            UiForm::Action action = form.update(window, game->get_frame_text(), elapsed_time);
+            UiForm::Action action = form.update(input, elapsed_time);
 
             if (action == UiForm::Action::SUBMIT) {
                 focus_results(true);
             }
 
             if (action == UiForm::Action::MOVED || action == UiForm::Action::CHANGED) {
-                game->play_sound(skin->sound(SkinSound::HITSOUND));
+                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             }
             else if (action == UiForm::Action::SUBMIT) {
                 play_menu_sound();
@@ -217,27 +216,27 @@ namespace nascent {
         }
         else {
             size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / std::max(1, Ui::px(ROW_HEIGHT)));
-            int32_t wheel = window->GetMouseWheel();
+            int32_t wheel = input.mouse_wheel();
             size_t previous = selected;
 
-            if (window->GetKey(InputManager::menu_down_key).bPressed || wheel < 0) {
+            if (input.take(actions::DOWN) || wheel < 0) {
                 selected = std::min(selected + 1, results.size() - 1);
             }
-            else if (window->GetKey(InputManager::menu_up_key).bPressed || wheel > 0) {
+            else if (input.take(actions::UP) || wheel > 0) {
                 selected = selected > 0 ? selected - 1 : 0;
             }
-            else if (window->GetKey(olc::Key::PGDN).bPressed) {
+            else if (input.key_pressed(olc::Key::PGDN)) {
                 selected = std::min(selected + page, results.size() - 1);
             }
-            else if (window->GetKey(olc::Key::PGUP).bPressed) {
+            else if (input.key_pressed(olc::Key::PGUP)) {
                 selected = selected > page ? selected - page : 0;
             }
-            else if (window->GetKey(InputManager::menu_start_key).bPressed && download_selected()) {
+            else if (input.take(actions::CONFIRM) && download_selected()) {
                 play_menu_sound();
             }
 
             if (selected != previous) {
-                game->play_sound(skin->sound(SkinSound::HITSOUND));
+                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             }
         }
 
@@ -288,7 +287,7 @@ namespace nascent {
         draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(error.empty() ? SkinColor::TEXT_MUTED : SkinColor::TEXT_ERROR));
         y += Ui::px(60);
 
-        form.draw(window, skin, {x, y});
+        form.draw(window, *skin, {x, y});
 
         int32_t row_height = Ui::px(ROW_HEIGHT);
         int32_t row_padding = Ui::px(ROW_PADDING);

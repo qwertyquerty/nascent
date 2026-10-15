@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "ServerApi.h"
 #include "olcPixelGameEngine.h"
 
@@ -33,7 +33,6 @@ namespace nascent {
         float ticket_hint_alpha = 0;
 
         Skin* skin;
-        Scene* return_scene;
 
         double timer = 0;
         double paused_position = 0;
@@ -82,9 +81,9 @@ namespace nascent {
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
         static constexpr float TICKET_HINT_FADE_S = 0.3f;
 
-        ScenePlay(Chart* chart, Skin* skin, Scene* return_scene);
+        ScenePlay(Chart* chart, Skin* skin);
         ~ScenePlay();
-        void init(Game*) override;
+        void on_create() override;
         void on_exit() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;

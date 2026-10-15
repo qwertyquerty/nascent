@@ -12,10 +12,13 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "SubmissionQueue.h"
+#include "ToastOverlay.h"
 #include "Updater.h"
 #include "Utf8Path.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/render/Color.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <cctype>
@@ -45,12 +48,13 @@ namespace nascent {
         SubmissionQueue::start();
         Updater::check();
         LocalBests::load();
-        scene_transition_time = SettingsManager::settings.scene_transition_time;
-        set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
+        set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
+        audio().set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
 
         olc::Font::init();
 
-        init_input();
+        input().start();
+        bind_actions();
         use_blank_canvas();
 
         start_time = time(nullptr);
@@ -61,11 +65,12 @@ namespace nascent {
         skin->set_font_scale(Ui::scale());
         olc::vi2d screen = window->GetScreenSize();
         sky = std::make_unique<EntityStarfield>(skin.get(), olc::vd2d{(double)screen.x, (double)screen.y});
-        sky->init(nullptr);
+        sky->init();
 
         scene_list = std::make_unique<SceneList>(skin.get(), sky.get());
 
-        set_scene(std::make_unique<SceneTitle>(skin.get(), scene_list.get(), sky.get()));
+        toasts = &overlays().open(std::make_unique<ToastOverlay>(skin.get()));
+        scenes().reset(std::make_unique<SceneTitle>(skin.get(), scene_list.get(), sky.get()));
 
         RichPresence::set_enabled(SettingsManager::settings.discord_rich_presence);
     }
@@ -82,22 +87,29 @@ namespace nascent {
             sky->size = {(double)screen.x, (double)screen.y};
         }
 
-        if (scene_list != nullptr && scene_list->initialized && scene != scene_list.get()) {
+        if (scene_list != nullptr && scene_list->is_created() && !scenes().contains(scene_list.get()) && scenes().outgoing_scene() != scene_list.get()) {
             scene_list->on_resize();
         }
     }
 
+    void GameNascent::bind_actions() {
+        input().bind(actions::BACK, {InputManager::back_key});
+        input().bind(actions::CONFIRM, {InputManager::menu_start_key});
+        input().bind(actions::UP, {InputManager::menu_up_key});
+        input().bind(actions::DOWN, {InputManager::menu_down_key});
+        input().bind(actions::LEFT, {InputManager::menu_left_key});
+        input().bind(actions::RIGHT, {InputManager::menu_right_key});
+        input().bind(actions::NEXT_FIELD, {InputManager::field_key});
+    }
+
+    void GameNascent::on_back() {
+        audio().play_effect(skin->get_random_menu_pluck());
+    }
+
     void GameNascent::update(float elapsed_time) {
-        if (window->GetKey(InputManager::exit_key).bPressed) {
+        if (input().key_pressed(InputManager::exit_key)) {
             quit();
             return;
-        }
-
-        bool went_back = window->GetKey(InputManager::back_key).bPressed && scene != scene_list.get() && dynamic_cast<SceneTitle*>(scene) == nullptr;
-
-        if (went_back) {
-            play_sound(skin->get_random_menu_pluck());
-            set_scene(scene_list.get());
         }
 
         limit_frame_rate(SettingsManager::settings.frame_rate_limit);
@@ -106,20 +118,15 @@ namespace nascent {
         handle_dropped_files();
 
         for (SubmissionNotice& notice : SubmissionQueue::take_notices()) {
-            show_toast(std::move(notice.message), notice.is_error);
+            show_toast(std::move(notice.message), notice.is_error, ToastOverlay::DEFAULT_TIME);
         }
 
         if (std::optional<UpdateNotice> notice = Updater::take_notice()) {
-            show_toast(std::move(notice->message), notice->is_error);
+            show_toast(std::move(notice->message), notice->is_error, ToastOverlay::DEFAULT_TIME);
         }
-
-        toast_timer = std::max(0.0f, toast_timer - elapsed_time);
 
         this->elapsed_time = elapsed_time;
-
-        if (!went_back) {
-            scene->update(elapsed_time);
-        }
+        update_scene(elapsed_time);
         RichPresence::update(elapsed_time);
     }
 
@@ -132,33 +139,33 @@ namespace nascent {
             draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(100), Ui::px(30), skin->color(SkinColor::TEXT));
         }
 
-        draw_toast(window);
+        overlays().draw(window);
     }
 
     void GameNascent::show_toast(std::string message, bool is_error, float duration) {
-        toast = std::move(message);
-        toast_is_error = is_error;
-        toast_timer = duration;
+        if (toasts != nullptr) {
+            toasts->show(std::move(message), is_error, duration);
+        }
     }
 
     void GameNascent::notify(const std::string& message, bool is_error) {
-        show_toast(message, is_error);
+        show_toast(message, is_error, ToastOverlay::DEFAULT_TIME);
     }
 
     void GameNascent::handle_dropped_files() {
-        if (skin_import.valid() && skin_import.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (is_ready(skin_import)) {
             SkinImportResult result = skin_import.get();
 
             if (result.ok) {
-                show_toast(std::format("Imported the {} skin, choose it in options (F1)", result.name), false);
+                show_toast(std::format("Imported the {} skin, choose it in options (F1)", result.name), false, ToastOverlay::DEFAULT_TIME);
             }
             else {
-                show_toast(std::format("Could not import the skin: {}", result.error), true);
+                show_toast(std::format("Could not import the skin: {}", result.error), true, ToastOverlay::DEFAULT_TIME);
             }
         }
 
         for (auto it = beatmap_imports.begin(); it != beatmap_imports.end();) {
-            if (it->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            if (!is_ready(*it)) {
                 ++it;
                 continue;
             }
@@ -167,14 +174,14 @@ namespace nascent {
             it = beatmap_imports.erase(it);
 
             if (result.ok) {
-                show_toast(std::format("Imported {}", result.name), false);
+                show_toast(std::format("Imported {}", result.name), false, ToastOverlay::DEFAULT_TIME);
             }
             else {
-                show_toast(std::format("Could not import {}: {}", result.name, result.error), true);
+                show_toast(std::format("Could not import {}: {}", result.name, result.error), true, ToastOverlay::DEFAULT_TIME);
             }
         }
 
-        for (const std::string& file : get_frame_dropped_files()) {
+        for (const std::string& file : input().dropped_files()) {
             std::filesystem::path path = utf8_path(file);
             std::string extension = path_utf8(path.extension());
 
@@ -199,12 +206,12 @@ namespace nascent {
             }
 
             if (extension != ".zip") {
-                show_toast("Drop an osu! .osz beatmap or an Etterna noteskin .zip to import it", true);
+                show_toast("Drop an osu! .osz beatmap or an Etterna noteskin .zip to import it", true, ToastOverlay::DEFAULT_TIME);
                 continue;
             }
 
             if (skin_import.valid()) {
-                show_toast("Another skin is still importing", true);
+                show_toast("Another skin is still importing", true, ToastOverlay::DEFAULT_TIME);
                 continue;
             }
 
@@ -220,33 +227,5 @@ namespace nascent {
                 }
             });
         }
-    }
-
-    void GameNascent::draw_toast(olc::PixelGameEngine* window) {
-        if (toast_timer <= 0 || toast.empty()) {
-            return;
-        }
-
-        olc::Font& font = skin->display_font_small;
-        olc::FontRect bounds = text_bounds(font, toast);
-        olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t padding = Ui::px(TOAST_PADDING);
-        int32_t toast_top = Ui::px(TOAST_TOP);
-        int32_t width = bounds.size.x + padding * 2;
-        int32_t height = metrics.size.y + padding * 2;
-        int32_t x = (window->GetScreenSize().x - width) / 2;
-        float opacity = std::min(1.0f, toast_timer / TOAST_FADE_TIME);
-
-        olc::Pixel border = fade(skin->color(toast_is_error ? SkinColor::NEGATIVE : SkinColor::POSITIVE), opacity);
-        float left = (float)x;
-        float top = (float)toast_top;
-        float edge = std::max(1.0f, Ui::pxf(TOAST_BORDER));
-
-        window->FillRectDecal({left, top}, {(float)width, (float)height}, fade(skin->color(SkinColor::TOAST_BACKGROUND), opacity));
-        window->FillRectDecal({left, top}, {(float)width, edge}, border);
-        window->FillRectDecal({left, top + height - edge}, {(float)width, edge}, border);
-        window->FillRectDecal({left, top + edge}, {edge, height - edge * 2}, border);
-        window->FillRectDecal({left + width - edge, top + edge}, {edge, height - edge * 2}, border);
-        draw_text(font, toast, {x + padding, toast_top + padding - metrics.offset.y}, fade(skin->color(SkinColor::TEXT), opacity));
     }
 }

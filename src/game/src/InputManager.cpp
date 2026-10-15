@@ -25,16 +25,16 @@ namespace nascent {
 
     static_assert(KEY_NAMES.back() == "CAPS_LOCK" && KEY_NAMES.size() == (size_t)olc::Key::CAPS_LOCK + 1);
 
-    bool InputManager::switch_pressed(olc::PixelGameEngine* window) {
-        return window->GetKey(switch_modifier).bHeld && window->GetKey(switch_key).bPressed;
+    bool InputManager::switch_pressed(const Input& input) {
+        return input.key_held(switch_modifier) && input.key_pressed(switch_key);
     }
 
-    bool InputManager::reset_pressed(olc::PixelGameEngine* window) {
-        return window->GetKey(reset_modifier).bHeld && window->GetKey(reset_shortcut_key).bPressed;
+    bool InputManager::reset_pressed(const Input& input) {
+        return input.key_held(reset_modifier) && input.key_pressed(reset_shortcut_key);
     }
 
-    bool InputManager::update_pressed(olc::PixelGameEngine* window) {
-        return window->GetKey(update_modifier).bHeld && window->GetKey(update_key).bPressed;
+    bool InputManager::update_pressed(const Input& input) {
+        return input.key_held(update_modifier) && input.key_pressed(update_key);
     }
 
     std::optional<olc::Key> InputManager::key_from_name(std::string_view name) {
@@ -274,11 +274,11 @@ namespace nascent {
         return std::nullopt;
     }
 
-    uint32_t InputManager::get_lane_keys_held(olc::PixelGameEngine* window, const std::vector<olc::Key>& lane_keys) {
+    uint32_t InputManager::get_lane_keys_held(const Input& input, const std::vector<olc::Key>& lane_keys) {
         uint32_t keys = 0;
 
         for (size_t lane = 0; lane < lane_keys.size(); lane++) {
-            if (window->GetKey(lane_keys[lane]).bHeld) {
+            if (input.key_held(lane_keys[lane])) {
                 keys |= (1u << lane);
             }
         }

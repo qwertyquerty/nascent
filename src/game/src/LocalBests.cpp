@@ -1,6 +1,6 @@
 #include "LocalBests.h"
 
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "Replay.h"
 #include "Results.h"
 #include "SettingsManager.h"

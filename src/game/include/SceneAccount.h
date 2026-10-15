@@ -1,9 +1,9 @@
 #pragma once
 
 #include "EntityFFT.h"
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "ServerClient.h"
-#include "UiForm.h"
+#include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
 #include <future>
@@ -56,7 +56,7 @@ namespace nascent {
 
         public:
         SceneAccount(Skin* skin, Scene* next_scene, EntityStarfield* sky, bool pan_in = false);
-        void init(Game*) override;
+        void on_create() override;
         void on_enter() override;
         void on_exit() override;
         void update(float) override;

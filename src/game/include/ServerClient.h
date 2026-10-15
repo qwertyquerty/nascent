@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gse/concurrency/Async.h"
 #include "json.h"
 
 #include <functional>
@@ -21,19 +22,6 @@ namespace nascent {
         std::string error_code() const;
         std::string message() const;
     };
-
-    template <typename F>
-    auto run_detached(F&& work) -> std::future<decltype(work())> {
-        using Result = decltype(work());
-        auto promise = std::make_shared<std::promise<Result>>();
-        std::future<Result> future = promise->get_future();
-
-        std::thread([promise, work = std::forward<F>(work)]() mutable {
-            promise->set_value(work());
-        }).detach();
-
-        return future;
-    }
 
     std::string server_host(const std::string& address);
     std::string server_base_url(const std::string& address);

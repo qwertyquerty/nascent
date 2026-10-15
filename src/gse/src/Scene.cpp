@@ -1,10 +1,17 @@
-#include "Scene.h"
+#include "gse/Scene.h"
 
 namespace nascent {
-    Scene::Scene() {
+    bool Scene::is_created() const {
+        return created;
     }
 
-    void Scene::set_game(Game* game) {
+    void Scene::attach(Game* game) {
         this->game = game;
+        overlays.bind(game);
+
+        if (!created) {
+            created = true;
+            on_create();
+        }
     }
 }

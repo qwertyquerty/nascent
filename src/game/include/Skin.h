@@ -4,8 +4,9 @@
 #include "olcPGEX_TTF.h"
 #include "Accuracy.h"
 #include "Results.h"
-#include "Util.h"
+#include "gse/ui/Theme.h"
 #include "json.h"
+#include "gse/render/SpriteDecal.h"
 
 #include <algorithm>
 #include <array>
@@ -167,11 +168,6 @@ namespace nascent {
     inline constexpr size_t SKIN_COLOR_COUNT = SKIN_COLOR_NAMES.size();
     static_assert((size_t)SkinColor::GRADE_F + 1 == SKIN_COLOR_COUNT);
 
-    inline olc::Pixel fade(olc::Pixel color, double opacity) {
-        color.a = (uint8_t)std::lround(color.a * std::clamp(opacity, 0.0, 1.0));
-        return color;
-    }
-
     struct SkinManifest {
         std::string name;
         std::string inherits;
@@ -196,7 +192,7 @@ namespace nascent {
         std::string name;
     };
 
-    class Skin {
+    class Skin : public UiTheme {
         protected:
         Game* game;
         std::string id;
@@ -256,6 +252,9 @@ namespace nascent {
         olc::Decal* hit_score_decal(HitScore score) const;
         olc::Pixel title_gradient_at(double x, double y) const;
         olc::Pixel color(SkinColor color) const;
+        olc::Font& font(UiFont font) override;
+        olc::Pixel color(UiColor color) const override;
+        olc::Pixel accent(double position) const override;
         olc::Pixel judgement_color(HitScore score) const;
         olc::Pixel grade_color(Grade grade) const;
         int32_t sound(SkinSound sound);

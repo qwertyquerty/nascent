@@ -1,7 +1,6 @@
 #include "EntityStarfield.h"
-#include "Ui.h"
+#include "gse/ui/Ui.h"
 #include "Skin.h"
-#include "Util.h"
 
 #include "olcPixelGameEngine.h"
 
@@ -417,7 +416,7 @@ namespace nascent {
         return true;
     }
 
-    void EntityStarfield::init(Scene*) {
+    void EntityStarfield::init() {
         focal = (size.x / 2) / std::tan(STARFIELD_FOV / 2);
 
         build_sky();
@@ -433,7 +432,7 @@ namespace nascent {
         shooting_timer = random(3.0, STARFIELD_SHOOTING_MIN_DELAY);
     }
 
-    void EntityStarfield::update(Scene*, float elapsed_time) {
+    void EntityStarfield::update(float elapsed_time) {
         time += elapsed_time;
         update_camera();
 

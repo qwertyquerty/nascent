@@ -11,12 +11,11 @@ add_library(game
     src/EntityStarfield.cpp
     src/GameNascent.cpp
     src/InputManager.cpp
+    src/KeyBindField.cpp
     src/LeaderboardPanel.cpp
     src/LocalBests.cpp
     src/LocalReplays.cpp
-    src/ProgressBar.cpp
     src/RichPresence.cpp
-    src/RowField.cpp
     src/SceneAccount.cpp
     src/SceneBrowser.cpp
     src/SceneCalibration.cpp
@@ -32,10 +31,8 @@ add_library(game
     src/Skin.cpp
     src/StatusBar.cpp
     src/SubmissionQueue.cpp
-    src/TextCache.cpp
-    src/TextField.cpp
+    src/ToastOverlay.cpp
     src/TimingBar.cpp
-    src/UiForm.cpp
     src/Updater.cpp
     src/Util.cpp
 )

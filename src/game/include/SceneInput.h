@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstdint>
@@ -16,7 +16,6 @@ namespace nascent {
         static constexpr uint8_t MAX_KEY_COUNT = 10;
 
         Skin* skin;
-        Scene* return_scene;
 
         uint8_t key_count = 4;
         uint8_t selected_lane = 0;
@@ -37,8 +36,8 @@ namespace nascent {
         void draw_lanes(olc::PixelGameEngine* window, int32_t top) const;
 
         public:
-        SceneInput(Skin* skin, Scene* return_scene, uint8_t key_count);
-        void init(Game*) override;
+        SceneInput(Skin* skin, uint8_t key_count);
+        void on_create() override;
         void on_enter() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;

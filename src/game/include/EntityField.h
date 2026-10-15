@@ -3,16 +3,15 @@
 #include <cstdint>
 #include <optional>
 
-#include "Entity.h"
-#include "Util.h"
 #include "olcPixelGameEngine.h"
+#include "gse/render/SpriteDecal.h"
 
 namespace nascent {
     class Attempt;
     class Chart;
     class Skin;
 
-    class EntityField : public Entity {
+    class EntityField {
         protected:
         double note_size = 0;
         double note_x_spacing = 0;
@@ -54,9 +53,7 @@ namespace nascent {
         olc::vd2d size = {0, 0};
 
         EntityField(const Chart*, Skin*, olc::vd2d, olc::vd2d);
-        void init(Scene*) override;
-        void update(Scene*, float) override;
-        void draw(olc::PixelGameEngine*) override;
+        void draw(olc::PixelGameEngine*);
 
         void set_position(double position);
         void set_lane_gap(std::optional<double> gap);

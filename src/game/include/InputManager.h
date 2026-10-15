@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gse/input/Input.h"
 #include "olcPixelGameEngine.h"
 
 #include <array>
@@ -18,6 +19,10 @@ namespace nascent {
         COPY_DIAGNOSTICS,
         SKIP_INTRO
     };
+
+    namespace game_actions {
+        inline constexpr ActionId CHART_MENU = actions::FIRST_CUSTOM;
+    }
 
     struct KeyBindingInfo {
         const char* id;
@@ -64,9 +69,9 @@ namespace nascent {
 
         static const olc::Key keybind_mod1 = olc::Key::SHIFT;
 
-        static bool switch_pressed(olc::PixelGameEngine* window);
-        static bool reset_pressed(olc::PixelGameEngine* window);
-        static bool update_pressed(olc::PixelGameEngine* window);
+        static bool switch_pressed(const Input& input);
+        static bool reset_pressed(const Input& input);
+        static bool update_pressed(const Input& input);
         static std::optional<olc::Key> key_from_name(std::string_view name);
         static std::string_view key_name(olc::Key key);
         static std::string key_label(olc::Key key);
@@ -80,6 +85,6 @@ namespace nascent {
         static std::optional<KeyBinding> set_key(KeyBinding binding, olc::Key key);
         static std::optional<KeyBinding> reset_key(KeyBinding binding);
         static std::optional<uint8_t> get_lane(const std::vector<olc::Key>& lane_keys, olc::Key key);
-        static uint32_t get_lane_keys_held(olc::PixelGameEngine* window, const std::vector<olc::Key>& lane_keys);
+        static uint32_t get_lane_keys_held(const Input& input, const std::vector<olc::Key>& lane_keys);
     };
 }

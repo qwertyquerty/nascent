@@ -2,7 +2,7 @@
 
 #include "BeatmapDownloads.h"
 #include "EtternaSkin.h"
-#include "Game.h"
+#include "gse/Game.h"
 
 #include <cstdint>
 #include <future>
@@ -14,6 +14,7 @@ namespace nascent {
     class EntityStarfield;
     class SceneList;
     class Skin;
+    class ToastOverlay;
 
     class GameNascent : public Game {
         protected:
@@ -25,21 +26,15 @@ namespace nascent {
 
         std::future<SkinImportResult> skin_import;
         std::vector<std::future<BeatmapDownloads::ImportResult>> beatmap_imports;
-        std::string toast;
-        float toast_timer = 0;
-        bool toast_is_error = false;
+        ToastOverlay* toasts = nullptr;
 
+        void bind_actions();
         void handle_dropped_files();
         void on_screen_resize() override;
-        void show_toast(std::string message, bool is_error, float duration = TOAST_TIME);
-        void draw_toast(olc::PixelGameEngine* window);
+        void on_back() override;
+        void show_toast(std::string message, bool is_error, float duration);
 
         public:
-        static constexpr float TOAST_TIME = 5.0f;
-        static constexpr float TOAST_FADE_TIME = 0.5f;
-        static constexpr int32_t TOAST_PADDING = 16;
-        static constexpr int32_t TOAST_TOP = 60;
-        static constexpr int32_t TOAST_BORDER = 2;
 
         GameNascent(olc::PixelGameEngine* window);
         ~GameNascent();

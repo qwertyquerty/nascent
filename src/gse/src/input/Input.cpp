@@ -1,0 +1,219 @@
+#include "gse/input/Input.h"
+
+#include "gse/input/KeySource.h"
+#include "gse/input/TextInput.h"
+#include "gse/input/WindowHook.h"
+
+#include <optional>
+#include <utility>
+
+namespace nascent {
+    static const std::vector<KeyEvent> NO_EVENTS;
+    static const std::string NO_TEXT;
+    static const std::vector<std::string> NO_FILES;
+    static const std::vector<olc::Key> NO_KEYS;
+
+    Input::Input(olc::PixelGameEngine* window) : window(window) {
+        key_state = [window](olc::Key key) { return window->GetKey(key); };
+    }
+
+    Input::Input(KeyState key_state) : key_state(std::move(key_state)) {}
+
+    Input::~Input() {
+        if (window == nullptr) {
+            return;
+        }
+
+        stop_key_source();
+
+        if (hook_active) {
+            uninstall_window_hook();
+        }
+    }
+
+    void Input::start() {
+        if (window == nullptr) {
+            return;
+        }
+
+        hook_active = install_window_hook(&queue, window->sAppName);
+        input_mode = hook_active ? InputMode::WINDOW_MESSAGES : InputMode::POLLING;
+
+        if (std::optional<InputMode> source = start_key_source(&queue)) {
+            input_mode = *source;
+        }
+
+        set_window_hook_key_events(input_mode == InputMode::WINDOW_MESSAGES);
+    }
+
+    void Input::poll_key_events() {
+        double now = now_ms();
+
+        for (size_t index = 1; index < KEY_COUNT; index++) {
+            olc::Key key = (olc::Key)index;
+            queue.push(key, key_state(key).bHeld, now);
+        }
+    }
+
+    void Input::begin_frame() {
+        consumed.clear();
+
+        if (input_mode == InputMode::POLLING) {
+            poll_key_events();
+        }
+
+        frame_events = queue.drain();
+        frame_text = hook_active || window == nullptr ? queue.drain_text() : us_layout_text(window);
+        frame_dropped_files = queue.drain_dropped_files();
+        frame_pressed_keys.clear();
+
+        if (window != nullptr) {
+            for (int32_t keycode : window->GetKeyPressCache()) {
+                frame_pressed_keys.push_back(window->ConvertKeycode(keycode));
+            }
+        }
+    }
+
+    void Input::bind(ActionId action, std::initializer_list<olc::Key> keys) {
+        bindings[action] = keys;
+    }
+
+    bool Input::pressed(ActionId action) const {
+        if (suppressed > 0 || consumed.contains(action)) {
+            return false;
+        }
+
+        auto found = bindings.find(action);
+
+        if (found == bindings.end()) {
+            return false;
+        }
+
+        for (olc::Key bound : found->second) {
+            if (key_state(bound).bPressed) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool Input::held(ActionId action) const {
+        if (suppressed > 0) {
+            return false;
+        }
+
+        auto found = bindings.find(action);
+
+        if (found == bindings.end()) {
+            return false;
+        }
+
+        for (olc::Key bound : found->second) {
+            if (key_state(bound).bHeld) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool Input::take(ActionId action) {
+        if (!pressed(action)) {
+            return false;
+        }
+
+        consumed.insert(action);
+        return true;
+    }
+
+    void Input::consume(ActionId action) {
+        consumed.insert(action);
+    }
+
+    olc::HWButton Input::key(olc::Key key) const {
+        return suppressed > 0 ? olc::HWButton{} : key_state(key);
+    }
+
+    bool Input::key_pressed(olc::Key key) const {
+        return this->key(key).bPressed;
+    }
+
+    bool Input::key_held(olc::Key key) const {
+        return this->key(key).bHeld;
+    }
+
+    void Input::suppress() {
+        suppressed++;
+    }
+
+    void Input::restore() {
+        if (suppressed > 0) {
+            suppressed--;
+        }
+    }
+
+    bool Input::is_suppressed() const {
+        return suppressed > 0;
+    }
+
+    const std::vector<KeyEvent>& Input::events() const {
+        return suppressed > 0 ? NO_EVENTS : frame_events;
+    }
+
+    const std::string& Input::text() const {
+        return suppressed > 0 ? NO_TEXT : frame_text;
+    }
+
+    const std::vector<std::string>& Input::dropped_files() const {
+        return suppressed > 0 ? NO_FILES : frame_dropped_files;
+    }
+
+    const std::vector<olc::Key>& Input::pressed_keys() const {
+        return suppressed > 0 ? NO_KEYS : frame_pressed_keys;
+    }
+
+    int32_t Input::mouse_wheel() const {
+        return suppressed > 0 || window == nullptr ? 0 : window->GetMouseWheel();
+    }
+
+    olc::vi2d Input::mouse_position() const {
+        return window == nullptr ? olc::vi2d{-1, -1} : window->GetMousePos();
+    }
+
+    olc::HWButton Input::mouse(uint32_t button) const {
+        return suppressed > 0 || window == nullptr ? olc::HWButton{} : window->GetMouse(button);
+    }
+
+    olc::PixelGameEngine* Input::target() const {
+        return window;
+    }
+
+    KeyEventQueue& Input::event_queue() {
+        return queue;
+    }
+
+    InputMode Input::mode() const {
+        return input_mode;
+    }
+
+    InputDelayStats Input::delay() const {
+        return queue.input_delay();
+    }
+
+    void Input::reset_delay() {
+        queue.reset_input_delay();
+    }
+
+    SuppressedInput::SuppressedInput(Input& input, bool active) : input(input), active(active) {
+        if (active) {
+            input.suppress();
+        }
+    }
+
+    SuppressedInput::~SuppressedInput() {
+        if (active) {
+            input.restore();
+        }
+    }
+}

@@ -5,14 +5,17 @@
 #include "Attempt.h"
 #include "Chart.h"
 #include "EntityField.h"
-#include "Game.h"
-#include "RowField.h"
+#include "gse/Game.h"
+#include "gse/ui/RowField.h"
+#include "KeyBindField.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "TextField.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/TextField.h"
 #include "TimingBar.h"
-#include "Ui.h"
+#include "gse/ui/Ui.h"
+#include "gse/render/Color.h"
+#include "gse/concurrency/Async.h"
 
 #include <iostream>
 
@@ -74,7 +77,7 @@ namespace nascent {
 
     SceneOptions::~SceneOptions() = default;
 
-    void SceneOptions::init(Game* game) {
+    void SceneOptions::on_create() {
         RichPresence::in_menu("Changing settings");
         const Settings& settings = SettingsManager::settings;
 
@@ -176,7 +179,7 @@ namespace nascent {
         server_checked = settings.server_url;
 
         form.spacing = OPTIONS_FIELD_SPACING;
-        form.focus_field(game->window, 0);
+        form.focus_field(0);
 
         build_preview_chart();
         rebuild_preview();
@@ -192,13 +195,17 @@ namespace nascent {
         settings.master_volume = (uint8_t)master_volume_field->value;
         settings.music_volume = (uint8_t)music_volume_field->value;
         settings.effects_volume = (uint8_t)effects_volume_field->value;
-        game->set_volumes(SettingsManager::volume_gain(settings.master_volume), SettingsManager::volume_gain(settings.music_volume), SettingsManager::volume_gain(settings.effects_volume));
+        game->audio().set_volumes(SettingsManager::volume_gain(settings.master_volume), SettingsManager::volume_gain(settings.music_volume), SettingsManager::volume_gain(settings.effects_volume));
         settings.frame_rate_limit = frame_rates[frame_rate_field->selected];
         settings.show_fps = fps_counter_field->selected == 1;
         settings.discord_rich_presence = rich_presence_field->selected == 1;
         RichPresence::set_enabled(settings.discord_rich_presence);
-        settings.scene_transition_time = TRANSITION_OPTIONS[transition_field->selected].second;
-        game->scene_transition_time = settings.scene_transition_time;
+        float transition_time = TRANSITION_OPTIONS[transition_field->selected].second;
+
+        if (transition_time != settings.scene_transition_time) {
+            settings.scene_transition_time = transition_time;
+            game->set_transition(std::make_unique<FadeTransition>(transition_time));
+        }
         settings.display_fullscreen = fullscreen_field->selected == 1;
         settings.field_hitsounds = hitsounds_field->selected == 1;
         settings.field_mirror = mirror_field->selected == 1;
@@ -227,7 +234,7 @@ namespace nascent {
     }
 
     void SceneOptions::on_exit() {
-        form.set_enabled(game->window, false);
+        form.set_enabled(false);
         commit_server();
 
         if (std::exchange(changed, false)) {
@@ -236,14 +243,14 @@ namespace nascent {
     }
 
     void SceneOptions::update(float elapsed_time) {
-        UiForm::Action action = form.update(game->window, game->get_frame_text(), elapsed_time);
+        UiForm::Action action = form.update(game->input(), elapsed_time);
 
         if (action == UiForm::Action::CHANGED) {
             apply();
         }
 
         if (action == UiForm::Action::MOVED || action == UiForm::Action::CHANGED) {
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
         }
 
         update_server(elapsed_time);
@@ -264,7 +271,7 @@ namespace nascent {
         server_check_delay = std::max(0.0f, server_check_delay - elapsed_time);
         std::string url = server_host(server_typed);
 
-        if (server_check.valid() && server_check.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (is_ready(server_check)) {
             ApiResult<ServerHealth> result = server_check.get();
             server_checked = server_checking;
 
@@ -473,7 +480,7 @@ namespace nascent {
         viewport_top = y + Ui::px(HEADER_HEIGHT);
         viewport_bottom = footer_top - Ui::px(FOOTER_GAP);
         float edge_fade = Ui::pxf(EDGE_FADE);
-        form.draw(window, skin, {x, viewport_top - (int32_t)std::lround(scroll)});
+        form.draw(window, *skin, {x, viewport_top - (int32_t)std::lround(scroll)});
 
         float max_scroll = (float)std::max(0, form.height() - (viewport_bottom - viewport_top));
         olc::Pixel mask = skin->color(SkinColor::OPTIONS_MASK);

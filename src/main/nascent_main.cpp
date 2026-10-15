@@ -1,7 +1,7 @@
 #include "olcPixelGameEngine.h"
 
 #include "GameNascent.h"
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "SettingsManager.h"
 #include "Updater.h"
 

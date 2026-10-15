@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "SongClock.h"
 #include "olcPixelGameEngine.h"
 
@@ -24,7 +24,6 @@ namespace nascent {
         };
 
         Skin* skin;
-        Scene* return_scene;
 
         std::unique_ptr<Chart> chart;
         std::unique_ptr<EntityField> field;
@@ -49,9 +48,9 @@ namespace nascent {
         void finish();
 
         public:
-        SceneCalibration(Skin* skin, Scene* return_scene);
+        SceneCalibration(Skin* skin);
         ~SceneCalibration();
-        void init(Game*) override;
+        void on_create() override;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

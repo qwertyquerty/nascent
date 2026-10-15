@@ -1,10 +1,10 @@
 #pragma once
 
 #include "Results.h"
-#include "Scene.h"
+#include "gse/Scene.h"
 #include "ServerApi.h"
-#include "Util.h"
 #include "olcPixelGameEngine.h"
+#include "gse/render/SpriteDecal.h"
 
 #include <future>
 #include <optional>
@@ -17,7 +17,6 @@ namespace nascent {
     class SceneResults : public Scene {
         protected:
         Skin* skin;
-        Scene* return_scene;
         const Chart* chart;
         AttemptSummary summary;
         std::future<ApiResult<Submission>> submission;
@@ -35,8 +34,8 @@ namespace nascent {
         void draw_bottom_bar(olc::PixelGameEngine* window) const;
 
         public:
-        SceneResults(Skin* skin, Scene* return_scene, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id = -1);
-        void init(Game*) override;
+        SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id = -1);
+        void on_create() override;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

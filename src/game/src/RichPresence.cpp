@@ -5,6 +5,7 @@
 #include "ServerApi.h"
 #include "SettingsManager.h"
 #include "discord-rpc.hpp"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <chrono>
@@ -134,7 +135,7 @@ namespace nascent {
                 state.dirty = true;
             }
 
-            if (state.profile_request.valid() && state.profile_request.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            if (is_ready(state.profile_request)) {
                 ApiResult<Profile> result = state.profile_request.get();
 
                 if (result.ok() && state.requested_username == state.username) {

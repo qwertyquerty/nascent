@@ -3,16 +3,18 @@
 
 #include "Account.h"
 #include "EntityStarfield.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
-#include "RowField.h"
-#include "Platform.h"
+#include "gse/ui/RowField.h"
+#include "KeyBindField.h"
+#include "gse/Platform.h"
 #include "ServerApi.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "TextField.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/ui/TextField.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/concurrency/Async.h"
 
 #include <chrono>
 #include <format>
@@ -27,13 +29,13 @@ namespace nascent {
         this->pan_in = pan_in;
     }
 
-    void SceneAccount::init(Game*) {
+    void SceneAccount::on_create() {
         olc::vi2d window_size = game->window->GetScreenSize();
         double height = (double)window_size.y * FFT_HEIGHT_RATIO;
 
         fft = std::make_unique<EntityFFT>(skin, olc::vd2d{0, (double)window_size.y - height}, olc::vd2d{(double)window_size.x, height}, 0);
         fft->flipped = true;
-        fft->init(this);
+        fft->init();
     }
 
     void SceneAccount::on_enter() {
@@ -45,23 +47,23 @@ namespace nascent {
             sky->show(SkyView::ACCOUNT);
         }
 
-        game->play_music(skin->sound(SkinSound::ACCOUNT_LOOP), true);
+        game->audio().play_music(skin->sound(SkinSound::ACCOUNT_LOOP), true);
         status.clear();
         set_mode(Account::signed_in() ? Mode::SIGNED_IN : Mode::SIGN_IN);
     }
 
     void SceneAccount::on_exit() {
-        form.set_enabled(game->window, false);
-        game->stop_sound(skin->sound(SkinSound::ACCOUNT_LOOP));
+        form.set_enabled(false);
+        game->audio().stop(skin->sound(SkinSound::ACCOUNT_LOOP));
     }
 
     void SceneAccount::play_menu_sound() {
-        game->play_sound(skin->get_random_menu_pluck());
+        game->audio().play_effect(skin->get_random_menu_pluck());
     }
 
     void SceneAccount::set_mode(Mode mode) {
         this->mode = mode;
-        form.clear(game->window);
+        form.clear();
         login_field = email_field = password_field = nullptr;
         continue_button = profile_button = sign_out_button = nullptr;
 
@@ -69,7 +71,7 @@ namespace nascent {
             continue_button = &form.add<ButtonField>("Continue");
             profile_button = &form.add<ButtonField>("Open profile on website");
             sign_out_button = &form.add<ButtonField>("Sign out");
-            form.focus_field(game->window, 0);
+            form.focus_field(0);
             return;
         }
 
@@ -80,7 +82,7 @@ namespace nascent {
         }
 
         password_field = &form.add<TextField>("Password", "", true);
-        form.focus_field(game->window, 0);
+        form.focus_field(0);
     }
 
     void SceneAccount::submit() {
@@ -90,7 +92,7 @@ namespace nascent {
             return;
         }
 
-        form.set_enabled(game->window, false);
+        form.set_enabled(false);
         status_is_error = false;
 
         if (mode == Mode::REGISTER) {
@@ -112,12 +114,17 @@ namespace nascent {
 
         status = response.message();
         status_is_error = true;
-        form.set_enabled(game->window, true);
+        form.set_enabled(true);
     }
 
     void SceneAccount::leave() {
         play_menu_sound();
-        game->set_scene(next_scene);
+        if (next_scene != nullptr) {
+            game->scenes().replace(next_scene);
+        }
+        else {
+            game->scenes().pop();
+        }
     }
 
     void SceneAccount::sign_out() {
@@ -136,25 +143,29 @@ namespace nascent {
     }
 
     void SceneAccount::update(float elapsed_time) {
-        olc::PixelGameEngine* window = game->window;
+        Input& input = game->input();
+        sky->update(elapsed_time);
 
-        sky->update(this, elapsed_time);
-
-        if (skin->sound(SkinSound::ACCOUNT_LOOP) != -1 && game->get_audio().IsPlaying(skin->sound(SkinSound::ACCOUNT_LOOP))) {
-            game->get_audio().CopyEngineBuffer(audio_buffer);
+        if (skin->sound(SkinSound::ACCOUNT_LOOP) != -1 && game->audio().engine().IsPlaying(skin->sound(SkinSound::ACCOUNT_LOOP))) {
+            game->audio().engine().CopyEngineBuffer(audio_buffer);
             fft->update_song_buffer(audio_buffer, elapsed_time);
         }
 
         if (pending.valid()) {
-            if (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            if (is_ready(pending)) {
                 finish(pending.get());
             }
 
             return;
         }
 
+        if (next_scene != nullptr && input.take(actions::BACK)) {
+            leave();
+            return;
+        }
+
         if (mode == Mode::SIGNED_IN) {
-            UiForm::Action action = form.update(window, game->get_frame_text(), elapsed_time);
+            UiForm::Action action = form.update(input, elapsed_time);
 
             if (continue_button->take_pressed()) {
                 leave();
@@ -162,19 +173,19 @@ namespace nascent {
             else if (profile_button->take_pressed()) {
                 open_profile();
             }
-            else if (sign_out_button->take_pressed() || InputManager::switch_pressed(window)) {
+            else if (sign_out_button->take_pressed() || InputManager::switch_pressed(input)) {
                 sign_out();
             }
             else if (action == UiForm::Action::MOVED) {
-                game->play_sound(skin->sound(SkinSound::HITSOUND));
+                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             }
 
             return;
         }
 
-        UiForm::Action action = form.update(window, game->get_frame_text(), elapsed_time);
+        UiForm::Action action = form.update(input, elapsed_time);
 
-        if (InputManager::switch_pressed(window)) {
+        if (InputManager::switch_pressed(input)) {
             play_menu_sound();
             status.clear();
             set_mode(mode == Mode::SIGN_IN ? Mode::REGISTER : Mode::SIGN_IN);
@@ -184,7 +195,7 @@ namespace nascent {
             submit();
         }
         else if (action == UiForm::Action::MOVED) {
-            game->play_sound(skin->sound(SkinSound::HITSOUND));
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
         }
         else if (action == UiForm::Action::CHANGED) {
             play_menu_sound();
@@ -214,7 +225,7 @@ namespace nascent {
             y += Ui::px(60);
         }
 
-        y += form.draw(window, skin, {x, y});
+        y += form.draw(window, *skin, {x, y});
 
         if (!status.empty()) {
             draw_text(skin->display_font_small, status, {x, y}, skin->color(status_is_error ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));

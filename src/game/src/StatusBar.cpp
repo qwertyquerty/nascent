@@ -2,8 +2,10 @@
 
 #include "Account.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/render/SpriteDecal.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <array>
@@ -16,11 +18,6 @@
 #include <utility>
 
 namespace nascent {
-    template <typename T>
-    static bool is_ready(const std::future<T>& future) {
-        return future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-    }
-
     static std::string format_rank(std::optional<int64_t> rank) {
         return rank ? std::format("#{}", *rank) : std::string("Unranked");
     }

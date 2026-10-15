@@ -3,15 +3,15 @@
 #include "Accuracy.h"
 #include "Chart.h"
 #include "EntityField.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "InputManager.h"
-#include "KeyEvents.h"
+#include "gse/input/KeyEvents.h"
 #include "SettingsManager.h"
 #include "Skin.h"
-#include "Util.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 #include "Utf8Path.h"
+#include "gse/util/Math.h"
 
 #include <algorithm>
 #include <cmath>
@@ -91,15 +91,14 @@ namespace nascent {
         return (bool)ofs;
     }
 
-    SceneCalibration::SceneCalibration(Skin* skin, Scene* return_scene) {
+    SceneCalibration::SceneCalibration(Skin* skin) {
         this->skin = skin;
-        this->return_scene = return_scene;
     }
 
     SceneCalibration::~SceneCalibration() {
     }
 
-    void SceneCalibration::init(Game* game) {
+    void SceneCalibration::on_create() {
         RichPresence::in_menu("Calibrating offsets");
         visual_offset = SettingsManager::settings.field_audio_visual_offset;
         input_offset = SettingsManager::settings.field_audio_input_offset;
@@ -139,9 +138,9 @@ namespace nascent {
         std::filesystem::path click_path = std::filesystem::temp_directory_path() / "nascent_calibration_click.wav";
 
         if (write_click_track(click_path)) {
-            click_audio_id = game->get_audio().LoadSound(click_path.string());
-            game->apply_effects_volume(click_audio_id);
-            game->get_audio().Play(click_audio_id, true);
+            click_audio_id = game->audio().engine().LoadSound(click_path.string());
+            game->audio().apply_effects_volume(click_audio_id);
+            game->audio().engine().Play(click_audio_id, true);
         }
         else {
             status_message = std::format("Could not write the click track to {}", path_utf8(click_path));
@@ -153,8 +152,8 @@ namespace nascent {
 
     void SceneCalibration::on_exit() {
         if (click_audio_id != -1) {
-            game->get_audio().Stop(click_audio_id);
-            game->get_audio().UnloadSound(click_audio_id);
+            game->audio().engine().Stop(click_audio_id);
+            game->audio().engine().UnloadSound(click_audio_id);
             click_audio_id = -1;
         }
     }
@@ -208,51 +207,51 @@ namespace nascent {
         SettingsManager::settings.field_scroll_speed = (uint16_t)scroll_speed;
         SettingsManager::save();
 
-        game->play_sound(skin->get_random_menu_pluck());
-        game->set_scene(return_scene);
+        game->audio().play_effect(skin->get_random_menu_pluck());
+        game->scenes().pop();
     }
 
     void SceneCalibration::change_step(int32_t direction) {
         step = (Step)((int32_t)step + direction);
-        game->play_sound(skin->sound(SkinSound::HITSOUND));
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
     }
 
     void SceneCalibration::update(float) {
-        olc::PixelGameEngine* window = game->window;
+        Input& input = game->input();
         double now = now_ms();
 
         if (click_audio_id != -1) {
-            clock.sync(game->get_audio().GetPositionMilliseconds(click_audio_id), now);
+            clock.sync(game->audio().engine().GetPositionMilliseconds(click_audio_id), now);
         }
 
-        bool coarse = window->GetKey(InputManager::keybind_mod1).bHeld;
+        bool coarse = input.key_held(InputManager::keybind_mod1);
 
-        if (window->GetKey(InputManager::menu_left_key).bPressed) {
+        if (input.take(actions::LEFT)) {
             adjust(-1, coarse);
         }
 
-        if (window->GetKey(InputManager::menu_right_key).bPressed) {
+        if (input.take(actions::RIGHT)) {
             adjust(1, coarse);
         }
 
-        if (step == Step::INPUT_OFFSET && InputManager::reset_pressed(window)) {
+        if (step == Step::INPUT_OFFSET && InputManager::reset_pressed(input)) {
             tap_errors.clear();
         }
 
-        if (window->GetKey(InputManager::menu_start_key).bPressed) {
+        if (input.take(actions::CONFIRM)) {
             finish();
             return;
         }
 
-        if (window->GetKey(InputManager::menu_down_key).bPressed && step != Step::SCROLL_SPEED) {
+        if (step != Step::SCROLL_SPEED && input.take(actions::DOWN)) {
             change_step(1);
         }
 
-        if (window->GetKey(InputManager::menu_up_key).bPressed && step != Step::VISUAL_OFFSET) {
+        if (step != Step::VISUAL_OFFSET && input.take(actions::UP)) {
             change_step(-1);
         }
 
-        for (const KeyEvent& event : game->get_frame_key_events()) {
+        for (const KeyEvent& event : game->input().events()) {
             if (event.pressed && step == Step::INPUT_OFFSET && std::find(tap_keys.begin(), tap_keys.end(), event.key) != tap_keys.end()) {
                 record_tap(event.time);
             }
@@ -261,7 +260,7 @@ namespace nascent {
         if (field != nullptr) {
             field->scroll_speed = scroll_speed;
             field->set_position(clock.position_at(now) - visual_offset);
-            field->set_keys(InputManager::get_lane_keys_held(window, lane_keys));
+            field->set_keys(InputManager::get_lane_keys_held(input, lane_keys));
         }
     }
 

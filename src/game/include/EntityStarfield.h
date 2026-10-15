@@ -5,9 +5,8 @@
 #include <random>
 #include <vector>
 
-#include "Entity.h"
-#include "Util.h"
 #include "olcPixelGameEngine.h"
+#include "gse/render/SpriteDecal.h"
 
 namespace nascent {
     class Skin;
@@ -33,7 +32,7 @@ namespace nascent {
     inline constexpr double STARFIELD_SHOOTING_MIN_DELAY = 7.0;
     inline constexpr double STARFIELD_SHOOTING_MAX_DELAY = 18.0;
 
-    class EntityStarfield : public Entity {
+    class EntityStarfield {
         public:
         struct Direction {
             double x;
@@ -147,8 +146,8 @@ namespace nascent {
         void show(SkyView target);
         void pan_to(SkyView target, double seconds = STARFIELD_PAN_TIME);
 
-        void init(Scene*) override;
-        void update(Scene*, float) override;
-        void draw(olc::PixelGameEngine*) override;
+        void init();
+        void update(float elapsed_time);
+        void draw(olc::PixelGameEngine*);
     };
 }

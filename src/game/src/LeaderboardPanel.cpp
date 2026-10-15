@@ -3,8 +3,9 @@
 #include "Account.h"
 #include "Results.h"
 #include "Skin.h"
-#include "TextCache.h"
-#include "Ui.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <chrono>
@@ -14,7 +15,7 @@
 namespace nascent {
     template <typename T>
     static bool ready(const std::optional<T>& request) {
-        return request && request->result.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        return request && is_ready(request->result);
     }
 
     std::string LeaderboardPanel::key(const std::string& gameplay_hash, float pitch) {

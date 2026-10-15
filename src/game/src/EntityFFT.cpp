@@ -19,7 +19,7 @@ namespace nascent {
         kiss_fftr_free(fft_cfg);
     }
 
-    void EntityFFT::init(Scene*) {
+    void EntityFFT::init() {
         input.resize(FFT_WINDOW_SIZE, 0);
         output.resize((FFT_WINDOW_SIZE / 2) + 1, kiss_fft_cpx{0, 0});
         bins.resize(FFT_BAR_COUNT, 0);
@@ -29,10 +29,6 @@ namespace nascent {
         for (int edge = 0; edge <= FFT_BAR_COUNT; edge++) {
             bar_edges[edge] = FFT_MIN_FREQ * std::pow(FFT_MAX_FREQ / FFT_MIN_FREQ, (double)edge / FFT_BAR_COUNT);
         }
-    };
-
-    void EntityFFT::update(Scene*, float) {
-
     };
 
     void EntityFFT::draw(olc::PixelGameEngine* window) {

@@ -1,6 +1,6 @@
 #include "SettingsManager.h"
 
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "ServerClient.h"
 #include "SettingsStore.h"
 #include "json.h"

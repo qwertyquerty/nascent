@@ -1,10 +1,13 @@
 #include "Skin.h"
-#include "Game.h"
+#include "gse/Game.h"
 #include "Const.h"
-#include "Platform.h"
+#include "gse/Platform.h"
 #include "SettingsManager.h"
-#include "TextCache.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 #include "Utf8Path.h"
+#include "gse/render/SpriteDecal.h"
+#include "gse/render/Color.h"
 
 #include <algorithm>
 #include <charconv>
@@ -363,7 +366,7 @@ namespace nascent {
 
         for (std::optional<int32_t>& sound : sounds) {
             if (sound && *sound != -1) {
-                game->get_audio().UnloadSound(*sound);
+                game->audio().engine().UnloadSound(*sound);
             }
 
             sound.reset();
@@ -371,7 +374,7 @@ namespace nascent {
 
         if (menu_plucks) {
             for (int32_t sound : *menu_plucks) {
-                game->get_audio().UnloadSound(sound);
+                game->audio().engine().UnloadSound(sound);
             }
 
             menu_plucks.reset();
@@ -489,6 +492,40 @@ namespace nascent {
         return skin_manifest.colors[(size_t)color].value_or(olc::WHITE);
     }
 
+    olc::Font& Skin::font(UiFont font) {
+        switch (font) {
+            case UiFont::LARGE:
+                return display_font_large;
+            case UiFont::MEDIUM:
+                return display_font_medium;
+            default:
+                return display_font_small;
+        }
+    }
+
+    olc::Pixel Skin::color(UiColor color) const {
+        switch (color) {
+            case UiColor::TEXT_MUTED:
+                return this->color(SkinColor::TEXT_MUTED);
+            case UiColor::TEXT_FAINT:
+                return this->color(SkinColor::TEXT_FAINT);
+            case UiColor::INPUT_BACKGROUND:
+                return this->color(SkinColor::INPUT_BACKGROUND);
+            case UiColor::INPUT_BACKGROUND_FOCUSED:
+                return this->color(SkinColor::INPUT_BACKGROUND_FOCUSED);
+            case UiColor::PROGRESS_TRACK:
+                return this->color(SkinColor::PROGRESS_TRACK);
+            case UiColor::SEPARATOR:
+                return this->color(SkinColor::SEPARATOR);
+            default:
+                return this->color(SkinColor::TEXT);
+        }
+    }
+
+    olc::Pixel Skin::accent(double position) const {
+        return title_gradient_at(position, 0.5);
+    }
+
     olc::Pixel Skin::judgement_color(HitScore score) const {
         switch (score) {
             case HitScore::PERFECT:
@@ -534,7 +571,7 @@ namespace nascent {
 
         if (!slot) {
             std::optional<std::filesystem::path> path = find_sound(SOUND_STEMS[(size_t)sound]);
-            slot = path ? game->get_audio().LoadSound(path->string()) : -1;
+            slot = path ? game->audio().engine().LoadSound(path->string()) : -1;
         }
 
         return *slot;
@@ -551,7 +588,7 @@ namespace nascent {
                         std::filesystem::path path = directory / std::format("menu_pluck_{}{}", index, extension);
 
                         if (std::filesystem::exists(path, ec)) {
-                            int32_t sound = game->get_audio().LoadSound(path.string());
+                            int32_t sound = game->audio().engine().LoadSound(path.string());
 
                             if (sound != -1) {
                                 menu_plucks->push_back(sound);

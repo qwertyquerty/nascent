@@ -2,6 +2,7 @@ add_executable(core_tests
     test_audio.cpp
     test_charts.cpp
     test_difficulty.cpp
+    test_gse.cpp
     test_judging.cpp
     test_main.cpp
     test_replays.cpp
@@ -10,7 +11,7 @@ add_executable(core_tests
     test_settings.cpp
     test_updates.cpp
 )
-target_link_libraries(core_tests PRIVATE core)
+target_link_libraries(core_tests PRIVATE core gse)
 nascent_target_warnings(core_tests)
 nascent_target_runtime(core_tests)
 
