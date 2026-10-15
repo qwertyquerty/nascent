@@ -48,6 +48,7 @@ class SubmissionResult:
     chart_created: bool
     chart_rank: int | None
     key_mode: Standing | None
+    previous_best_performance: float | None = None
 
 
 def score_counts(simulation: nc.Simulation) -> dict[str, int]:
@@ -292,6 +293,10 @@ def submit_play(
 
     db.session.execute(select(User).where(User.id == user.id).with_for_update()).scalar_one()
 
+    previous_best_performance = db.session.scalar(
+        select(func.max(Play.performance)).where(Play.user_id == user.id, Play.chart_id == chart.id, Play.status.in_(COUNTED_PLAY_STATUSES))
+    )
+
     play = Play(
         user_id=user.id,
         chart_id=chart.id,
@@ -346,6 +351,7 @@ def submit_play(
         chart_created=chart_created,
         chart_rank=chart_rank(play),
         key_mode=key_mode,
+        previous_best_performance=float(previous_best_performance) if previous_best_performance is not None else None,
     )
 
 

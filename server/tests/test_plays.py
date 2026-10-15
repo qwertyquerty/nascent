@@ -97,3 +97,21 @@ def test_intro_skip_shortens_the_minimum_play_time(api, clock):
 
     skipped = submit(api, clock, token, make_replay(chart, seed=2), chart=chart, wait_minutes=playable_minutes)
     assert skipped.status_code == 201, skipped.get_json()
+
+
+def test_submission_reports_the_previous_best_performance_at_any_rate(api, clock):
+    rank_chart(api)
+    alice = api.token("alice")
+
+    first = submit(api, clock, alice, make_replay(CHART, seed=1)).get_json()
+    assert first["previous_best_performance"] is None
+
+    faster = submit(api, clock, alice, make_replay(CHART, rate=1.2, seed=2)).get_json()
+    assert faster["previous_best_performance"] == pytest.approx(first["play"]["performance"])
+
+    sloppy = submit(api, clock, alice, make_replay(CHART, seed=3, spread=60)).get_json()
+    best = max(first["play"]["performance"], faster["play"]["performance"])
+    assert sloppy["previous_best_performance"] == pytest.approx(best)
+
+    bob = api.token("bob")
+    assert submit(api, clock, bob, make_replay(CHART, seed=4)).get_json()["previous_best_performance"] is None

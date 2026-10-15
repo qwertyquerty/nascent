@@ -82,6 +82,7 @@ def submit():
         "chart_created": result.chart_created,
         "chart_rank": result.chart_rank,
         "key_mode": standing_out(result.key_mode) if result.key_mode is not None else None,
+        "previous_best_performance": result.previous_best_performance,
     }, 201
 
 
