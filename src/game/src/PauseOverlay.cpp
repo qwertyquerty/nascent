@@ -124,7 +124,7 @@ namespace nascent {
             y += Ui::pxf(ITEM_SPACING);
         }
 
-        std::string hint = std::format("↑/↓  choose        Enter  select        {}/Esc  continue",InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE)));
+        std::string hint = std::format("↑/↓  choose        Enter  select        {}/Esc  continue", InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE)));
         draw_text_centered(skin->display_font_small, hint, center_x, screen.y - Ui::pxf(HINT_BOTTOM), skin->color(SkinColor::TEXT_FAINT));
     }
 }

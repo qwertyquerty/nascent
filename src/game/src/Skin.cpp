@@ -374,7 +374,6 @@ namespace nascent {
         for (HitScore h : ALL_HIT_SCORES) {
             hit_score_decals[(size_t)h] = render_text_decal(display_font_large, hit_score_name(h), judgement_color(h));
         }
-
     }
 
     void Skin::unload_fonts() {
@@ -643,7 +642,9 @@ namespace nascent {
                 const auto& [low_value, low] = stops[index - 1];
                 const auto& [high_value, high] = stops[index];
                 double t = (difficulty - low_value) / std::max(1e-9, high_value - low_value);
-                auto mix = [t](uint8_t a, uint8_t b) { return (uint8_t)std::lround(a + (b - a) * t); };
+                auto mix = [t](uint8_t a, uint8_t b) {
+                    return (uint8_t)std::lround(a + (b - a) * t);
+                };
                 return olc::Pixel(mix(low.r, high.r), mix(low.g, high.g), mix(low.b, high.b), mix(low.a, high.a));
             }
         }
@@ -682,7 +683,9 @@ namespace nascent {
 
         if (grade == Grade::X) {
             double shine = 0.5 + 0.5 * std::sin(seconds * GRADE_SHIMMER_SPEED + baseline.x * 0.01);
-            auto mix = [shine](uint8_t channel) { return (uint8_t)std::lround(channel + (255 - channel) * shine * 0.7); };
+            auto mix = [shine](uint8_t channel) {
+                return (uint8_t)std::lround(channel + (255 - channel) * shine * 0.7);
+            };
             base = olc::Pixel(mix(base.r), mix(base.g), mix(base.b), base.a);
         }
 

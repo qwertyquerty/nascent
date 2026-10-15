@@ -14,7 +14,9 @@ namespace nascent {
     static const std::vector<olc::Key> NO_KEYS;
 
     Input::Input(olc::PixelGameEngine* window) : window(window) {
-        key_state = [window](olc::Key key) { return window->GetKey(key); };
+        key_state = [window](olc::Key key) {
+            return window->GetKey(key);
+        };
     }
 
     Input::Input(KeyState key_state) : key_state(std::move(key_state)) {}

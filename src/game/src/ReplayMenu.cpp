@@ -190,8 +190,8 @@ namespace nascent {
             draw_text(row_font, std::format("{:.2f}%", std::floor(entry.accuracy * 10000.0) / 100.0), {x + row_inset + Ui::px(ACCURACY_OFFSET), baseline}, text_color);
 
             std::string detail = downloading && *downloading == index ? std::string("Downloading...")
-                : entry.path                                         ? std::format("{}x    {}", entry.max_combo, short_date(entry.played_at))
-                                                                     : std::format("{}    {}x", entry.player, entry.max_combo);
+                : entry.path                                          ? std::format("{}x    {}", entry.max_combo, short_date(entry.played_at))
+                                                                      : std::format("{}    {}x", entry.player, entry.max_combo);
             draw_text(row_font, detail, {x + row_inset + Ui::px(DETAIL_OFFSET), baseline}, text_color);
             y += row_height;
         };

@@ -395,9 +395,9 @@ namespace nascent {
         if (result.previous_best_performance) {
             double change = result.play.performance - *result.previous_best_performance;
             segment(std::string(BEST_LABEL), {
-                {std::format("{:.2f}", *result.previous_best_performance), skin->color(SkinColor::TEXT)},
-                {std::format("{:+.2f}", change), change_color(*skin, change)},
-            });
+                                                 {std::format("{:.2f}", *result.previous_best_performance), skin->color(SkinColor::TEXT)},
+                                                 {std::format("{:+.2f}", change), change_color(*skin, change)},
+                                             });
         }
 
         if (result.chart_rank) {

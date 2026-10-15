@@ -785,7 +785,6 @@ namespace nascent {
         draw_list(window);
         draw_search(window);
         status_bar.draw(window, skin);
-
     }
 
     size_t SceneList::pack_chart_count() const {

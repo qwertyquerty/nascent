@@ -511,7 +511,9 @@ namespace nascent {
         olc::Pixel tail_color = shooting.tint;
         tail_color.a = 0;
 
-        auto point = [](olc::vd2d value) { return olc::vf2d{(float)value.x, (float)value.y}; };
+        auto point = [](olc::vd2d value) {
+            return olc::vf2d{(float)value.x, (float)value.y};
+        };
         MipDecal::Pick level = streak.pick((float)(half_width * 2.0 / STREAK_HEIGHT));
         window->DrawPolygonDecal(
             level.decal,

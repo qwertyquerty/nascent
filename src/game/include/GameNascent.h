@@ -36,7 +36,6 @@ namespace nascent {
         void show_toast(std::string message, bool is_error, float duration);
 
         public:
-
         GameNascent(olc::PixelGameEngine* window);
         ~GameNascent();
         void init() override;

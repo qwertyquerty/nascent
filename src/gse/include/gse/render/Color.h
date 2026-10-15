@@ -14,7 +14,9 @@ namespace nascent {
 
     inline olc::Pixel mix(olc::Pixel from, olc::Pixel to, double t) {
         t = std::clamp(t, 0.0, 1.0);
-        auto channel = [t](uint8_t a, uint8_t b) { return (uint8_t)std::lround(a + (b - a) * t); };
+        auto channel = [t](uint8_t a, uint8_t b) {
+            return (uint8_t)std::lround(a + (b - a) * t);
+        };
         return olc::Pixel(channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b), channel(from.a, to.a));
     }
 
