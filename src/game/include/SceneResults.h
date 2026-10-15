@@ -3,6 +3,7 @@
 #include "Results.h"
 #include "gse/Scene.h"
 #include "ServerApi.h"
+#include "gse/render/MipDecal.h"
 #include "olcPixelGameEngine.h"
 #include "gse/render/SpriteDecal.h"
 
@@ -25,7 +26,7 @@ namespace nascent {
 
         void release_song();
 
-        SpriteDecal background_image;
+        MipDecal background_image;
         SpriteDecal error_graph;
         olc::vi2d error_graph_pos;
 

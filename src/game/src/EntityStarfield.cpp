@@ -3,10 +3,13 @@
 #include "Skin.h"
 
 #include "olcPixelGameEngine.h"
+#include "gse/render/MipDecal.h"
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <numbers>
+#include <vector>
 
 namespace nascent {
     const std::array<EntityStarfield::PlanetLook, SKY_VIEW_COUNT> EntityStarfield::PLANET_LOOKS = {{
@@ -254,8 +257,20 @@ namespace nascent {
             }
         }
 
-        glow = SpriteDecal(std::move(glow_sprite), true);
-        flare = SpriteDecal(std::move(flare_sprite), true);
+        glow = MipDecal(std::move(glow_sprite));
+        flare = MipDecal(std::move(flare_sprite));
+
+        std::unique_ptr<olc::Sprite> streak_sprite = std::make_unique<olc::Sprite>(STREAK_WIDTH, STREAK_HEIGHT);
+
+        for (int32_t y = 0; y < STREAK_HEIGHT; y++) {
+            double across = std::sin(std::numbers::pi * (y + 0.5) / STREAK_HEIGHT);
+
+            for (int32_t x = 0; x < STREAK_WIDTH; x++) {
+                streak_sprite->SetPixel(x, y, olc::Pixel(255, 255, 255, alpha_of(across * across)));
+            }
+        }
+
+        streak = MipDecal(std::move(streak_sprite));
     }
 
     void EntityStarfield::build_planet(Planet& planet, const PlanetLook& look) {
@@ -333,8 +348,8 @@ namespace nascent {
             }
         }
 
-        planet.body = SpriteDecal(std::move(body_sprite), true);
-        planet.halo = SpriteDecal(std::move(halo_sprite), true);
+        planet.body = MipDecal(std::move(body_sprite));
+        planet.halo = MipDecal(std::move(halo_sprite));
     }
 
     EntityStarfield::Matrix EntityStarfield::view_matrix(SkyView target) const {
@@ -451,13 +466,14 @@ namespace nascent {
         }
     }
 
-    void EntityStarfield::draw_sprite(olc::PixelGameEngine* window, const SpriteDecal& sprite, olc::vd2d center, double size, olc::Pixel tint) const {
+    void EntityStarfield::draw_sprite(olc::PixelGameEngine* window, const MipDecal& sprite, olc::vd2d center, double size, olc::Pixel tint) const {
         if (center.x < -size || center.y < -size || center.x > this->size.x + size || center.y > this->size.y + size) {
             return;
         }
 
         float scale = (float)(size / STARFIELD_SPRITE_SIZE);
-        window->DrawDecal({(float)(center.x - size / 2), (float)(center.y - size / 2)}, sprite.get(), {scale, scale}, tint);
+        MipDecal::Pick level = sprite.pick(scale);
+        window->DrawDecal({(float)(center.x - size / 2), (float)(center.y - size / 2)}, level.decal, {scale / level.factor, scale / level.factor}, tint);
     }
 
     void EntityStarfield::draw_star(olc::PixelGameEngine* window, const Star& star) const {
@@ -485,15 +501,24 @@ namespace nascent {
     void EntityStarfield::draw_shooting_star(olc::PixelGameEngine* window, const ShootingStar& shooting) const {
         double envelope = std::sin(3.14159265 * std::clamp(shooting.age / shooting.life, 0.0, 1.0));
         olc::vd2d direction = shooting.velocity.norm();
-        olc::vd2d side = olc::vd2d{-direction.y, direction.x} * (1.2 * Ui::scale());
+        double half_width = STREAK_HALF_WIDTH * Ui::scale();
+        olc::vd2d side = olc::vd2d{-direction.y, direction.x} * half_width;
         olc::vd2d tail = shooting.pos - direction * shooting.length;
+        olc::vd2d tail_side = side * STREAK_TAIL_RATIO;
 
         olc::Pixel head_color = shooting.tint;
         head_color.a = alpha_of(envelope * 0.65 * light_level);
         olc::Pixel tail_color = shooting.tint;
         tail_color.a = 0;
 
-        window->GradientTriangleDecal(shooting.pos + side, shooting.pos - side, tail, head_color, head_color, tail_color);
+        auto point = [](olc::vd2d value) { return olc::vf2d{(float)value.x, (float)value.y}; };
+        MipDecal::Pick level = streak.pick((float)(half_width * 2.0 / STREAK_HEIGHT));
+        window->DrawPolygonDecal(
+            level.decal,
+            {point(shooting.pos + side), point(tail + tail_side), point(tail - tail_side), point(shooting.pos - side)},
+            {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}},
+            std::vector<olc::Pixel>{head_color, tail_color, tail_color, head_color}
+        );
 
         olc::Pixel glow_color = skin->color(SkinColor::SHOOTING_STAR_GLOW);
         glow_color.a = (uint8_t)std::lround(glow_color.a * alpha_of(envelope * 0.75 * light_level) / 255.0);
@@ -527,18 +552,22 @@ namespace nascent {
         }
 
         float angle = (float)std::atan2(north.x - center.x, -(north.y - center.y));
-        float half = STARFIELD_PLANET_SPRITE_SIZE / 2.0f;
         float scale = (float)(radius / (STARFIELD_PLANET_SPRITE_SIZE * STARFIELD_PLANET_BODY_RATIO));
         olc::vf2d position = {(float)center.x, (float)center.y};
-        olc::vf2d source = {(float)STARFIELD_PLANET_SPRITE_SIZE, (float)STARFIELD_PLANET_SPRITE_SIZE};
-
         uint8_t shade = alpha_of(light_level);
 
+        auto draw_level = [&](const MipDecal& image, olc::Pixel tint) {
+            MipDecal::Pick level = image.pick(scale);
+            olc::vf2d source = {(float)level.decal->sprite->width, (float)level.decal->sprite->height};
+            float level_scale = scale / level.factor;
+            window->DrawPartialRotatedDecal(position, level.decal, angle, source / 2.0f, {0, 0}, source, {level_scale, level_scale}, tint);
+        };
+
         window->SetDecalMode(olc::DecalMode::NORMAL);
-        window->DrawPartialRotatedDecal(position, planet.body.get(), angle, {half, half}, {0, 0}, source, {scale, scale}, olc::Pixel(shade, shade, shade));
+        draw_level(planet.body, olc::Pixel(shade, shade, shade));
 
         window->SetDecalMode(olc::DecalMode::ADDITIVE);
-        window->DrawPartialRotatedDecal(position, planet.halo.get(), angle, {half, half}, {0, 0}, source, {scale, scale}, olc::Pixel(255, 255, 255, shade));
+        draw_level(planet.halo, olc::Pixel(255, 255, 255, shade));
     }
 
     void EntityStarfield::draw(olc::PixelGameEngine* window) {

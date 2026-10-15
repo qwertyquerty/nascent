@@ -6,6 +6,7 @@
 #include "Results.h"
 #include "gse/ui/Theme.h"
 #include "json.h"
+#include "gse/render/MipDecal.h"
 #include "gse/render/SpriteDecal.h"
 
 #include <algorithm>
@@ -14,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <map>
 #include <memory>
 #include <optional>
@@ -199,7 +201,8 @@ namespace nascent {
         std::vector<std::filesystem::path> chain;
         SkinManifest skin_manifest;
 
-        std::array<std::optional<std::vector<SpriteDecal>>, SKIN_IMAGE_COUNT> images;
+        std::array<std::optional<std::vector<MipDecal>>, SKIN_IMAGE_COUNT> images;
+        std::array<std::vector<std::future<std::vector<std::unique_ptr<olc::Sprite>>>>, SKIN_IMAGE_COUNT> pending_images;
         std::array<std::optional<int32_t>, SKIN_SOUND_COUNT> sounds;
         std::optional<std::vector<int32_t>> menu_plucks;
         std::array<SpriteDecal, HIT_SCORE_COUNT> hit_score_decals;
@@ -213,7 +216,9 @@ namespace nascent {
         void unload_fonts();
         std::filesystem::path find(const std::string& file) const;
         std::optional<std::filesystem::path> find_sound(const std::string& stem) const;
-        const std::vector<SpriteDecal>& lane_images(SkinImage image);
+        std::vector<std::filesystem::path> image_paths(SkinImage image) const;
+        void start_image_loads();
+        const std::vector<MipDecal>& lane_images(SkinImage image);
 
         public:
         static constexpr const char* DEFAULT_SKIN = "default";
@@ -248,7 +253,7 @@ namespace nascent {
         const std::string& get_id() const;
         const SkinManifest& manifest() const;
 
-        olc::Decal* image(SkinImage image, uint8_t lane, uint8_t key_count);
+        const MipDecal* image(SkinImage image, uint8_t lane, uint8_t key_count);
         olc::Decal* hit_score_decal(HitScore score) const;
         olc::Pixel title_gradient_at(double x, double y) const;
         olc::Pixel color(SkinColor color) const;

@@ -6,6 +6,7 @@
 #include "gse/Scene.h"
 #include "SongClock.h"
 #include "StatusBar.h"
+#include "gse/render/MipDecal.h"
 #include "gse/render/SpriteDecal.h"
 
 #include <condition_variable>
@@ -49,7 +50,7 @@ namespace nascent {
 
         struct BackgroundLoadResult {
             uint64_t generation = 0;
-            std::unique_ptr<olc::Sprite> sprite;
+            std::vector<std::unique_ptr<olc::Sprite>> levels;
         };
 
         std::unique_ptr<DifficultyCache> difficulty_cache;
@@ -79,8 +80,8 @@ namespace nascent {
 
         StatusBar status_bar;
 
-        SpriteDecal background_image;
-        SpriteDecal old_background_image;
+        MipDecal background_image;
+        MipDecal old_background_image;
 
         uint64_t load_generation = 0;
         std::mutex background_load_mutex;
@@ -137,7 +138,7 @@ namespace nascent {
         void collect_difficulties();
 
         void request_background_load();
-        void apply_background_load(std::unique_ptr<olc::Sprite> sprite);
+        void apply_background_load(std::vector<std::unique_ptr<olc::Sprite>> levels);
         void background_load_loop();
         void stop_preview_audio();
         void draw_list(olc::PixelGameEngine* window);

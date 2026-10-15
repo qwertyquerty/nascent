@@ -164,9 +164,10 @@ namespace nascent {
             color.a = (held >> lane) & 1 ? 255 : selected ? 170
                                                           : IDLE_NOTE_ALPHA;
 
-            if (olc::Decal* note = skin->image(SkinImage::NOTE, lane, key_count)) {
-                float scale = size / note->sprite->width;
-                window->DrawDecal({lane_x, (float)top}, note, {scale, scale}, color);
+            if (const MipDecal* note = skin->image(SkinImage::NOTE, lane, key_count)) {
+                float scale = size / note->size().x;
+                MipDecal::Pick level = note->pick(scale);
+                window->DrawDecal({lane_x, (float)top}, level.decal, {scale / level.factor, scale / level.factor}, color);
             }
 
             float label_top = top + size + Ui::pxf(16);

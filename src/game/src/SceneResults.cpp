@@ -42,7 +42,7 @@ namespace nascent {
             auto sprite = std::make_unique<olc::Sprite>();
 
             if (sprite->LoadFromFile(chart->image_path.string()) == olc::OK) {
-                background_image = SpriteDecal(std::move(sprite), true);
+                background_image = MipDecal(std::move(sprite));
             }
         }
     }
@@ -313,7 +313,9 @@ namespace nascent {
 
         if (background_image) {
             olc::vf2d corners[4] = {{0.0f, 0.0f}, {0.0f, screen.y - 1.0f}, {screen.x - 1.0f, screen.y - 1.0f}, {screen.x - 1.0f, 0.0f}};
-            window->DrawWarpedDecal(background_image.get(), corners, skin->color(SkinColor::BACKGROUND_TINT));
+            olc::vf2d image_size = background_image.size();
+            float cover = std::max(screen.x / std::max(1.0f, image_size.x), screen.y / std::max(1.0f, image_size.y));
+            window->DrawWarpedDecal(background_image.pick(cover).decal, corners, skin->color(SkinColor::BACKGROUND_TINT));
         }
 
         int32_t x = screen.x / 24;

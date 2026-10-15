@@ -43,12 +43,16 @@ namespace nascent {
     static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
     static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
     static constexpr float SONG_PROGRESS_TOP = 40.0f;
-    static constexpr float DIAGNOSTICS_RIGHT = 570.0f;
+    static constexpr float DIAGNOSTICS_RIGHT = 20.0f;
     static constexpr float DIAGNOSTICS_TOP = 70.0f;
-    static constexpr float DIAGNOSTICS_LINE_HEIGHT = 18.0f;
-    static constexpr float DIAGNOSTICS_SCALE = 1.5f;
+    static constexpr float DIAGNOSTICS_LINE_GAP = 4.0f;
     static constexpr float DIAGNOSTICS_PADDING = 10.0f;
-    static constexpr size_t DIAGNOSTICS_MAX_CHARS = 45;
+    static constexpr float DIAGNOSTICS_MAX_WIDTH = 560.0f;
+    static constexpr float HIT_LOG_TOP = 160.0f;
+    static constexpr float HIT_LOG_SPACING = 26.0f;
+    static constexpr float HIT_LOG_SCORE_X = 20.0f;
+    static constexpr float HIT_LOG_ERROR_X = 80.0f;
+    static constexpr uint8_t HIT_LOG_ROWS = 35;
 
     static double start_position_ms() {
         return -SettingsManager::settings.play_start_delay * 1000.0;
@@ -376,30 +380,37 @@ namespace nascent {
     }
 
     void ScenePlay::draw_timing_diagnostics(olc::PixelGameEngine* window) const {
+        olc::Font& font = skin->display_font_small;
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
         std::vector<std::string> lines = diagnostics_lines(false);
-        float scale = Ui::pxf(DIAGNOSTICS_SCALE);
         float padding = Ui::pxf(DIAGNOSTICS_PADDING);
-        float line_height = Ui::pxf(DIAGNOSTICS_LINE_HEIGHT);
+        float line_height = (float)metrics.size.y + Ui::pxf(DIAGNOSTICS_LINE_GAP);
         float top = Ui::pxf(DIAGNOSTICS_TOP);
-        float x = (float)window->GetScreenSize().x - Ui::pxf(DIAGNOSTICS_RIGHT);
-        float char_size = scale * 8.0f;
-        float width = char_size * DIAGNOSTICS_MAX_CHARS + padding * 2;
-        float height = line_height * (float)(lines.size() - 1) + char_size + padding * 2;
+        float max_width = Ui::pxf(DIAGNOSTICS_MAX_WIDTH);
+        float width = 0;
 
-        window->FillRectDecal({x - padding, top - padding}, {width, height}, skin->color(SkinColor::DIAGNOSTICS_BACKGROUND));
+        for (std::string& line : lines) {
+            if (text_bounds(font, line).size.x > max_width) {
+                while (!line.empty() && text_bounds(font, line + "...").size.x > max_width) {
+                    line.pop_back();
+
+                    while (!line.empty() && ((unsigned char)line.back() & 0xc0) == 0x80) {
+                        line.pop_back();
+                    }
+                }
+
+                line += "...";
+            }
+
+            width = std::max(width, (float)text_bounds(font, line).size.x);
+        }
+
+        float x = (float)window->GetScreenSize().x - Ui::pxf(DIAGNOSTICS_RIGHT) - width - padding;
+        float height = line_height * (float)lines.size() - Ui::pxf(DIAGNOSTICS_LINE_GAP) + padding * 2;
+        window->FillRectDecal({x - padding, top - padding}, {width + padding * 2, height}, skin->color(SkinColor::DIAGNOSTICS_BACKGROUND));
 
         for (size_t index = 0; index < lines.size(); index++) {
-            std::string line = lines[index];
-
-            for (char& c : line) {
-                c = (unsigned char)c < 0x80 ? c : '?';
-            }
-
-            if (line.size() > DIAGNOSTICS_MAX_CHARS) {
-                line = line.substr(0, DIAGNOSTICS_MAX_CHARS - 3) + "...";
-            }
-
-            window->DrawStringDecal({x, top + (float)index * line_height}, line, skin->color(SkinColor::TEXT), {scale, scale});
+            draw_text(font, lines[index], olc::vf2d{x, top + (float)index * line_height - metrics.offset.y}, skin->color(SkinColor::TEXT), 1.0f);
         }
     }
 
@@ -607,41 +618,48 @@ namespace nascent {
         }
 
         uint8_t l = 0;
-        const float vspacing = Ui::pxf(26);
-        const float log_top = Ui::pxf(160);
-        const float log_scale = Ui::pxf(2);
-        const float score_x = Ui::pxf(20);
-        const float error_x = Ui::pxf(80);
-        const uint8_t vlen = 35;
+        olc::Font& log_font = skin->display_font_small;
+        olc::FontRect log_metrics = text_bounds(log_font, "Hgjy");
+        const float vspacing = Ui::pxf(HIT_LOG_SPACING);
+        const float log_top = Ui::pxf(HIT_LOG_TOP) - log_metrics.offset.y;
+        const float score_x = Ui::pxf(HIT_LOG_SCORE_X);
+        const float error_x = Ui::pxf(HIT_LOG_ERROR_X);
+
         if (show_hit_log) {
             draw_timing_diagnostics(window);
         }
+
+        auto log_line = [&](std::string_view score, olc::Pixel score_color, std::string_view error) {
+            draw_text(log_font, score, olc::vf2d{score_x, log_top + vspacing * l}, score_color, 1.0f);
+
+            if (!error.empty()) {
+                draw_text(log_font, error, olc::vf2d{error_x, log_top + vspacing * l}, skin->color(SkinColor::TEXT), 1.0f);
+            }
+
+            l += 1;
+        };
 
         for (int64_t i = attempt.soonest_scored_hit_index; show_hit_log && i >= 0 && i < (int64_t)attempt.judged_hits.size(); i--) {
             const JudgedHit& jhit = attempt.judged_hits[i];
 
             if (jhit.hit) {
-                window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.hit_score)), skin->judgement_color(jhit.hit_score), {log_scale, log_scale});
-                window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("  {:+}ms", jhit.hit_err), skin->color(SkinColor::TEXT), {log_scale, log_scale});
+                log_line(std::format("{}", hit_score_acc(jhit.hit_score)), skin->judgement_color(jhit.hit_score), std::format("{:+}ms", jhit.hit_err));
 
-                l += 1;
-                if (l >= vlen) {
+                if (l >= HIT_LOG_ROWS) {
                     break;
                 }
 
                 if (jhit.chart_hit.hit_type == HitType::HOLD) {
                     if (jhit.released) {
-                        window->DrawStringDecal({score_x, log_top + vspacing * l}, std::format("{}", hit_score_acc(jhit.release_score)), skin->judgement_color(jhit.release_score), {log_scale, log_scale});
-                        window->DrawStringDecal({error_x, log_top + vspacing * l}, std::format("R {:+}ms", jhit.release_err), skin->color(SkinColor::TEXT), {log_scale, log_scale});
+                        log_line(std::format("{}", hit_score_acc(jhit.release_score)), skin->judgement_color(jhit.release_score), std::format("R {:+}ms", jhit.release_err));
                     }
                     else {
-                        window->DrawStringDecal({score_x, log_top + vspacing * l}, "...", skin->color(SkinColor::TEXT_MUTED), {log_scale, log_scale});
+                        log_line("...", skin->color(SkinColor::TEXT_MUTED), "");
                     }
-                    l += 1;
                 }
             }
 
-            if (l >= vlen) {
+            if (l >= HIT_LOG_ROWS) {
                 break;
             }
         }

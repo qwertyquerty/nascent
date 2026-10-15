@@ -7,6 +7,8 @@
 #include "olcPixelGameEngine.h"
 #include "gse/render/SpriteDecal.h"
 #include "gse/anim/Easing.h"
+#include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 
 #include <algorithm>
 #include <array>
@@ -54,7 +56,7 @@ namespace nascent {
                 int32_t jl_x = pos.x + (column * (note_size + note_x_spacing));
 
                 bool held = get_key(display_column(column));
-                olc::Decal* receptor = skin->image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
+                olc::Decal* receptor = sized_image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
                 olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
                 color.a = held ? 255 : manifest.receptor_alpha.value_or(judge_alpha);
 
@@ -94,7 +96,7 @@ namespace nascent {
 
             if ((screen_hit_y - hit_height) < pos.y + size.y) {
                 bool textured_body = manifest.hold_style == HoldStyle::STRETCH || manifest.hold_style == HoldStyle::TILE;
-                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && textured_body ? skin->image(SkinImage::HOLD_BODY, column, key_count) : nullptr;
+                olc::Decal* hold_body = hit.hit_type == HitType::HOLD && textured_body ? sized_image(SkinImage::HOLD_BODY, column, key_count) : nullptr;
 
                 if (hold_body != nullptr) {
                     double tail_y = screen_hit_y - hit_height + note_size / 2;
@@ -111,7 +113,7 @@ namespace nascent {
                         draw_hold_body(window, hold_body, hit_x, body_top, body_bottom, with_opacity(note_color(hit_x, screen_hit_y, window)));
                     }
 
-                    olc::Decal* cap = skin->image(SkinImage::HOLD_CAP, column, key_count);
+                    olc::Decal* cap = sized_image(SkinImage::HOLD_CAP, column, key_count);
 
                     if (cap != nullptr && tail_y < body_bottom && cap->sprite->width > 0) {
                         double cap_height = note_size * cap->sprite->height / cap->sprite->width;
@@ -133,15 +135,15 @@ namespace nascent {
                             break;
                         }
 
-                        draw_square(window, skin->image(SkinImage::NOTE, column, key_count), hit_x, hold_smear_y, with_opacity(hold_color));
+                        draw_square(window, sized_image(SkinImage::NOTE, column, key_count), hit_x, hold_smear_y, with_opacity(hold_color));
                     }
                 }
 
                 if (hold_body != nullptr && holding) {
-                    draw_square(window, skin->image(SkinImage::HOLD_HEAD, column, key_count), hit_x, std::min(screen_hit_y, jl_y), with_opacity(note_color(hit_x, jl_y, window)));
+                    draw_square(window, sized_image(SkinImage::HOLD_HEAD, column, key_count), hit_x, std::min(screen_hit_y, jl_y), with_opacity(note_color(hit_x, jl_y, window)));
                 }
                 else if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
-                    olc::Decal* head = skin->image(hit.hit_type == HitType::HOLD ? SkinImage::HOLD_HEAD : SkinImage::NOTE, column, key_count);
+                    olc::Decal* head = sized_image(hit.hit_type == HitType::HOLD ? SkinImage::HOLD_HEAD : SkinImage::NOTE, column, key_count);
                     draw_square(window, head, hit_x, screen_hit_y, with_opacity(note_color(hit_x, screen_hit_y, window)));
                 }
             }
@@ -168,10 +170,7 @@ namespace nascent {
                 uint32_t combo = attempt->get_combo();
 
                 if (!combo_decal || combo != last_rendered_combo) {
-                    combo_decal = SpriteDecal::adopt(skin->display_font_large.RenderStringToDecal(
-                        std::format("{}", combo),
-                        olc::WHITE
-                    ));
+                    combo_decal = render_text_decal(skin->display_font_large, std::format("{}", combo), olc::WHITE);
                     last_rendered_combo = combo;
                 }
 
@@ -190,9 +189,13 @@ namespace nascent {
         }
 
         if (debug) {
-            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 20)}, std::format("POS {:.1f}", position), skin->color(SkinColor::TEXT), {2.0f, 2.0f});
-            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 40)}, std::format("MB {}", chart->meter_beat_at(position)), skin->color(SkinColor::TEXT), {2.0f, 2.0f});
-            window->DrawStringDecal({(float)(pos.x + 20), (float)(pos.y + 60)}, std::format("SB {}", chart->section_beat_at(position)), skin->color(SkinColor::TEXT), {2.0f, 2.0f});
+            olc::Font& font = skin->display_font_small;
+            olc::FontRect metrics = text_bounds(font, "Hgjy");
+            float line = (float)metrics.size.y + Ui::pxf(4);
+            olc::vf2d corner = {(float)pos.x + Ui::pxf(20), (float)pos.y + Ui::pxf(20) - metrics.offset.y};
+            draw_text(font, std::format("POS {:.1f}", position), corner, skin->color(SkinColor::TEXT), 1.0f);
+            draw_text(font, std::format("MB {}", chart->meter_beat_at(position)), corner + olc::vf2d{0.0f, line}, skin->color(SkinColor::TEXT), 1.0f);
+            draw_text(font, std::format("SB {}", chart->section_beat_at(position)), corner + olc::vf2d{0.0f, line * 2}, skin->color(SkinColor::TEXT), 1.0f);
         }
     };
 
@@ -202,6 +205,16 @@ namespace nascent {
         }
 
         return skin->title_gradient_at(x / window->GetScreenSize().x, flip_y(y) / window->GetScreenSize().y);
+    }
+
+    olc::Decal* EntityField::sized_image(SkinImage image, uint8_t column, uint8_t key_count) const {
+        const MipDecal* decal = skin->image(image, column, key_count);
+
+        if (decal == nullptr || decal->size().x <= 0) {
+            return nullptr;
+        }
+
+        return decal->pick((float)(note_size / decal->size().x)).decal;
     }
 
     void EntityField::draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const {

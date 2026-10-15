@@ -134,7 +134,7 @@ namespace nascent {
         layout_background();
 
         logo_skin->set_font_scale(Ui::scale());
-        start_hint = SpriteDecal::adopt(bg_skin->display_font_medium.RenderStringToDecal(START_HINT, olc::WHITE));
+        start_hint = render_text_decal(bg_skin->display_font_medium, START_HINT, olc::WHITE);
     }
 
     void SceneTitle::on_create() {

@@ -8,6 +8,7 @@
 #include "Utf8Path.h"
 #include "gse/render/SpriteDecal.h"
 #include "gse/render/Color.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <charconv>
@@ -320,6 +321,7 @@ namespace nascent {
 
         title_gradient = std::make_unique<olc::Sprite>(find(GRADIENT_FILE).string());
         load_fonts();
+        start_image_loads();
     }
 
     void Skin::load_fonts() {
@@ -339,10 +341,10 @@ namespace nascent {
         }
 
         for (HitScore h : ALL_HIT_SCORES) {
-            hit_score_decals[(size_t)h] = SpriteDecal::adopt(display_font_large.RenderStringToDecal(std::string(hit_score_name(h)), judgement_color(h)));
+            hit_score_decals[(size_t)h] = render_text_decal(display_font_large, hit_score_name(h), judgement_color(h));
         }
 
-        game_paused_decal = SpriteDecal::adopt(display_font_large.RenderStringToDecal("Game Paused", color(SkinColor::TEXT)));
+        game_paused_decal = render_text_decal(display_font_large, "Game Paused", color(SkinColor::TEXT));
     }
 
     void Skin::unload_fonts() {
@@ -380,8 +382,12 @@ namespace nascent {
             menu_plucks.reset();
         }
 
-        for (std::optional<std::vector<SpriteDecal>>& slot : images) {
+        for (std::optional<std::vector<MipDecal>>& slot : images) {
             slot.reset();
+        }
+
+        for (auto& pending : pending_images) {
+            pending.clear();
         }
 
         chain.clear();
@@ -423,42 +429,66 @@ namespace nascent {
         return std::nullopt;
     }
 
-    const std::vector<SpriteDecal>& Skin::lane_images(SkinImage image) {
-        std::optional<std::vector<SpriteDecal>>& slot = images[(size_t)image];
+    std::vector<std::filesystem::path> Skin::image_paths(SkinImage image) const {
+        std::vector<std::filesystem::path> paths;
+        std::error_code ec;
+        std::string stem = IMAGE_SLOTS[(size_t)image].stem;
+
+        for (const std::filesystem::path& directory : chain) {
+            for (uint8_t lane = 1; lane <= MAX_LANES; lane++) {
+                std::filesystem::path path = directory / std::format("{}_{}.png", stem, lane);
+
+                if (!std::filesystem::exists(path, ec)) {
+                    break;
+                }
+
+                paths.push_back(path);
+            }
+
+            if (paths.empty() && std::filesystem::exists(directory / (stem + ".png"), ec)) {
+                paths.push_back(directory / (stem + ".png"));
+            }
+
+            if (!paths.empty()) {
+                break;
+            }
+        }
+
+        return paths;
+    }
+
+    void Skin::start_image_loads() {
+        for (size_t index = 0; index < SKIN_IMAGE_COUNT; index++) {
+            pending_images[index].clear();
+
+            for (const std::filesystem::path& path : image_paths((SkinImage)index)) {
+                pending_images[index].push_back(run_detached([path] {
+                    return MipDecal::build_levels(std::make_unique<olc::Sprite>(path.string()));
+                }));
+            }
+        }
+    }
+
+    const std::vector<MipDecal>& Skin::lane_images(SkinImage image) {
+        std::optional<std::vector<MipDecal>>& slot = images[(size_t)image];
 
         if (!slot) {
             slot.emplace();
-            std::error_code ec;
-            std::string stem = IMAGE_SLOTS[(size_t)image].stem;
             bool clamp = image != SkinImage::HOLD_BODY || skin_manifest.hold_style != HoldStyle::TILE;
 
-            for (const std::filesystem::path& directory : chain) {
-                for (uint8_t lane = 1; lane <= MAX_LANES; lane++) {
-                    std::filesystem::path path = directory / std::format("{}_{}.png", stem, lane);
-
-                    if (!std::filesystem::exists(path, ec)) {
-                        break;
-                    }
-
-                    slot->emplace_back(std::make_unique<olc::Sprite>(path.string()), true, clamp);
-                }
-
-                if (slot->empty() && std::filesystem::exists(directory / (stem + ".png"), ec)) {
-                    slot->emplace_back(std::make_unique<olc::Sprite>((directory / (stem + ".png")).string()), true, clamp);
-                }
-
-                if (!slot->empty()) {
-                    break;
-                }
+            for (auto& pending : pending_images[(size_t)image]) {
+                slot->emplace_back(pending.get(), clamp);
             }
+
+            pending_images[(size_t)image].clear();
         }
 
         std::optional<SkinImage> fallback = IMAGE_SLOTS[(size_t)image].fallback;
         return slot->empty() && fallback ? lane_images(*fallback) : *slot;
     }
 
-    olc::Decal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count) {
-        const std::vector<SpriteDecal>& decals = lane_images(image);
+    const MipDecal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count) {
+        const std::vector<MipDecal>& decals = lane_images(image);
 
         if (decals.empty()) {
             return nullptr;
@@ -471,7 +501,8 @@ namespace nascent {
             index = (size_t)mapping->second[lane] - 1;
         }
 
-        return decals[index % decals.size()].get();
+        const MipDecal& chosen = decals[index % decals.size()];
+        return chosen ? &chosen : nullptr;
     }
 
     olc::Decal* Skin::hit_score_decal(HitScore score) const {

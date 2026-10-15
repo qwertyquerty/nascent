@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "olcPixelGameEngine.h"
-#include "gse/render/SpriteDecal.h"
+#include "gse/render/MipDecal.h"
 
 namespace nascent {
     class Skin;
@@ -69,8 +69,8 @@ namespace nascent {
             Direction direction;
             Direction north;
             double angular_radius = 0;
-            SpriteDecal body;
-            SpriteDecal halo;
+            MipDecal body;
+            MipDecal halo;
         };
 
         struct View {
@@ -98,8 +98,9 @@ namespace nascent {
 
         Skin* skin;
         std::mt19937 rng;
-        SpriteDecal glow;
-        SpriteDecal flare;
+        MipDecal glow;
+        MipDecal flare;
+        MipDecal streak;
         std::array<Planet, SKY_VIEW_COUNT> planets;
         std::array<View, SKY_VIEW_COUNT> views;
         std::vector<Star> stars;
@@ -133,10 +134,15 @@ namespace nascent {
         void anchor_view(SkyView target);
         void update_camera();
         bool project(const Direction& direction, olc::vd2d& screen, double& depth) const;
-        void draw_sprite(olc::PixelGameEngine* window, const SpriteDecal& sprite, olc::vd2d center, double size, olc::Pixel tint) const;
+        void draw_sprite(olc::PixelGameEngine* window, const MipDecal& sprite, olc::vd2d center, double size, olc::Pixel tint) const;
         void draw_star(olc::PixelGameEngine* window, const Star& star) const;
         void draw_shooting_star(olc::PixelGameEngine* window, const ShootingStar& shooting) const;
         void draw_planet(olc::PixelGameEngine* window, const Planet& planet) const;
+
+        static constexpr int32_t STREAK_WIDTH = 4;
+        static constexpr int32_t STREAK_HEIGHT = 32;
+        static constexpr double STREAK_HALF_WIDTH = 2.0;
+        static constexpr double STREAK_TAIL_RATIO = 0.35;
 
         public:
         olc::vd2d size = {0, 0};

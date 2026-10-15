@@ -211,7 +211,7 @@ namespace nascent {
         }
 
         if (load_result && load_result->generation == load_generation) {
-            apply_background_load(std::move(load_result->sprite));
+            apply_background_load(std::move(load_result->levels));
         }
 
         crossfade_timer = std::max(0.0f, (crossfade_timer - elapsed_time * 6));
@@ -461,13 +461,13 @@ namespace nascent {
             }
 
             std::lock_guard<std::mutex> lock(background_load_mutex);
-            completed_background_load = BackgroundLoadResult{request.generation, std::move(sprite)};
+            completed_background_load = BackgroundLoadResult{request.generation, MipDecal::build_levels(std::move(sprite))};
         }
     }
 
-    void SceneList::apply_background_load(std::unique_ptr<olc::Sprite> sprite) {
+    void SceneList::apply_background_load(std::vector<std::unique_ptr<olc::Sprite>> levels) {
         old_background_image = std::move(background_image);
-        background_image = SpriteDecal(std::move(sprite), true);
+        background_image = MipDecal(std::move(levels));
 
         crossfade_timer = 1;
         crossfade = true;
@@ -898,12 +898,17 @@ namespace nascent {
             *channel = (uint8_t)std::min(255, *channel + background_brightening);
         }
 
+        auto cover_scale = [&](const MipDecal& image) {
+            olc::vf2d size = image.size();
+            return std::max(screensize.x / std::max(1.0f, size.x), screensize.y / std::max(1.0f, size.y));
+        };
+
         if (background_image) {
-            window->DrawWarpedDecal(background_image.get(), rect, fade(background_tint, 1 - crossfade_timer));
+            window->DrawWarpedDecal(background_image.pick(cover_scale(background_image)).decal, rect, fade(background_tint, 1 - crossfade_timer));
         }
 
         if (old_background_image) {
-            window->DrawWarpedDecal(old_background_image.get(), rect, fade(background_tint, crossfade_timer));
+            window->DrawWarpedDecal(old_background_image.pick(cover_scale(old_background_image)).decal, rect, fade(background_tint, crossfade_timer));
         }
 
         int32_t row_height = Ui::px(LIST_ROW_HEIGHT);

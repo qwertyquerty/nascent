@@ -10,6 +10,7 @@ namespace nascent {
     class Attempt;
     class Chart;
     class Skin;
+    enum class SkinImage : uint8_t;
 
     class EntityField {
         protected:
@@ -62,6 +63,7 @@ namespace nascent {
         double overlay_y(double height) const;
         olc::Pixel with_opacity(olc::Pixel color) const;
         olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
+        olc::Decal* sized_image(SkinImage image, uint8_t column, uint8_t key_count) const;
         void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
         void draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const;
         void set_attempt(const Attempt* attempt);
