@@ -72,9 +72,10 @@ namespace nascent {
         }
     }
 
-    SceneResults::SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id, bool new_best) {
+    SceneResults::SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id, bool new_best, std::string replay_label) {
         this->skin = skin;
         this->new_best = new_best;
+        this->replay_label = std::move(replay_label);
         this->chart = chart;
         this->summary = std::move(summary);
         this->submission = std::move(submission);
@@ -351,6 +352,11 @@ namespace nascent {
                 x += width(part.first);
             }
         };
+
+        if (!replay_label.empty()) {
+            message(std::format("Replay of {}", replay_label), skin->color(SkinColor::TEXT_MUTED));
+            return;
+        }
 
         if (!submission.valid() && !submitted) {
             message("Not submitted: sign in to submit your plays", skin->color(SkinColor::TEXT_FAINT));

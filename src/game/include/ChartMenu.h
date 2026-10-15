@@ -14,6 +14,7 @@ namespace nascent {
     class Skin;
 
     enum class ChartAction : uint8_t {
+        WATCH_REPLAY,
         TOGGLE_FAVORITE,
         OPEN_WEBSITE,
         DELETE_CHART,
@@ -34,7 +35,7 @@ namespace nascent {
         std::string label(ChartAction action, bool confirming_action) const;
 
         public:
-        static constexpr std::array<ChartAction, 4> ACTIONS = {ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
+        static constexpr std::array<ChartAction, 5> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
         static constexpr int32_t MIN_WIDTH = 720;
         static constexpr int32_t SCREEN_MARGIN = 120;
         static constexpr int32_t PADDING = 32;

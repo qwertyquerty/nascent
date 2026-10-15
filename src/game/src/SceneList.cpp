@@ -789,6 +789,9 @@ namespace nascent {
         }
 
         switch (action) {
+            case ChartAction::WATCH_REPLAY:
+                open_replay_menu();
+                break;
             case ChartAction::TOGGLE_FAVORITE:
                 toggle_favorite();
                 break;
@@ -799,6 +802,26 @@ namespace nascent {
                 delete_charts(action == ChartAction::DELETE_PACK);
                 break;
         }
+    }
+
+    void SceneList::open_replay_menu() {
+        overlays.open(std::make_unique<ReplayMenu>(skin, *selected_chart, selected_hash(), pitch, [this](Replay replay, std::string label) {
+            watch_replay(std::move(replay), std::move(label));
+        }));
+    }
+
+    void SceneList::watch_replay(Replay replay, std::string label) {
+        if (selected_chart == nullptr) {
+            return;
+        }
+
+        if (!replay.chart.gameplay_hash.empty() && replay.chart.gameplay_hash != selected_hash()) {
+            game->notify("That replay was recorded on a different version of this chart", true);
+            return;
+        }
+
+        selected_chart->set_pitch(replay.rate);
+        game->scenes().push(std::make_unique<ScenePlay>(selected_chart, skin, std::move(replay), std::move(label)));
     }
 
     void SceneList::toggle_favorite() {

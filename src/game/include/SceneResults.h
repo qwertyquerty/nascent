@@ -26,6 +26,7 @@ namespace nascent {
         std::optional<ApiResult<Submission>> submitted;
         int song_audio_id = -1;
         bool new_best = false;
+        std::string replay_label;
 
         ParticleEmitter particles;
         float elapsed = 0;
@@ -44,7 +45,7 @@ namespace nascent {
         void draw_bottom_bar(olc::PixelGameEngine* window) const;
 
         public:
-        SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id = -1, bool new_best = false);
+        SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id = -1, bool new_best = false, std::string replay_label = {});
         void on_create() override;
         void on_exit() override;
         void on_resize() override;

@@ -3,6 +3,7 @@
 #include "ChartLibrary.h"
 #include "ChartMenu.h"
 #include "LeaderboardPanel.h"
+#include "ReplayMenu.h"
 #include "gse/Scene.h"
 #include "SongClock.h"
 #include "StatusBar.h"
@@ -155,6 +156,8 @@ namespace nascent {
         bool update_controls(float elapsed_time);
         void open_chart_menu();
         void handle_chart_action(ChartAction action);
+        void open_replay_menu();
+        void watch_replay(Replay replay, std::string label);
         void toggle_favorite();
         size_t pack_chart_count() const;
         void open_chart_website();

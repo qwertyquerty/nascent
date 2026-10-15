@@ -34,6 +34,8 @@ namespace nascent {
         std::string pack_charts = pack_count == 1 ? std::string("1 chart") : std::format("{} charts", pack_count);
 
         switch (action) {
+            case ChartAction::WATCH_REPLAY:
+                return "Watch a replay";
             case ChartAction::TOGGLE_FAVORITE:
                 return favorite ? "Remove from favorites" : "Add to favorites";
             case ChartAction::OPEN_WEBSITE:

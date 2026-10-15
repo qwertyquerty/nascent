@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Replay.h"
 #include "gse/Scene.h"
 #include "ServerApi.h"
 #include "olcPixelGameEngine.h"
@@ -36,6 +37,10 @@ namespace nascent {
 
         Skin* skin;
 
+        std::optional<Replay> replay;
+        std::string replay_label;
+        size_t replay_cursor = 0;
+
         double timer = 0;
         double paused_position = 0;
         std::optional<double> resumed_at;
@@ -58,6 +63,8 @@ namespace nascent {
 
         void pause(double now);
         void resume(double now);
+        void feed_replay(double position, bool sounds);
+        void seek_replay(double target, double now);
         void finish();
         void start_attempt();
         void request_ticket();
@@ -79,11 +86,13 @@ namespace nascent {
         void on_resize() override;
         static constexpr float RESTART_HOLD_TIME = 0.3f;
         static constexpr double PAUSE_COOLDOWN_MS = 1000.0;
+        static constexpr double REPLAY_SEEK_MS = 5000.0;
         static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
         static constexpr float TICKET_HINT_FADE_S = 0.3f;
 
         ScenePlay(Chart* chart, Skin* skin);
+        ScenePlay(Chart* chart, Skin* skin, Replay replay, std::string replay_label);
         ~ScenePlay();
         void on_create() override;
         void on_exit() override;

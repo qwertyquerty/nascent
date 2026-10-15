@@ -90,15 +90,15 @@ namespace nascent {
         return folders;
     }
 
-    std::vector<LocalScore> LocalReplays::scores(const std::string& gameplay_hash, long rate) {
+    static std::vector<LocalScore> load_scores(const std::string& gameplay_hash, std::optional<long> rate) {
         std::vector<LocalScore> scores;
         std::error_code ec;
 
-        for (const auto& file : std::filesystem::directory_iterator(replay_folder(directory(), gameplay_hash), ec)) {
+        for (const auto& file : std::filesystem::directory_iterator(replay_folder(LocalReplays::directory(), gameplay_hash), ec)) {
             std::string error;
             std::optional<Replay> replay = load_replay(file.path(), error);
 
-            if (!replay || std::lround(replay->rate * 100.0f) != rate) {
+            if (!replay || (rate && std::lround(replay->rate * 100.0f) != *rate)) {
                 continue;
             }
 
@@ -106,7 +106,7 @@ namespace nascent {
                 continue;
             }
 
-            scores.push_back({replay->result.accuracy, replay->result.max_combo, replay->played_at});
+            scores.push_back({replay->result.accuracy, replay->result.max_combo, replay->played_at, replay->rate, file.path()});
         }
 
         std::sort(scores.begin(), scores.end(), [](const LocalScore& a, const LocalScore& b) {
@@ -114,5 +114,13 @@ namespace nascent {
         });
 
         return scores;
+    }
+
+    std::vector<LocalScore> LocalReplays::scores(const std::string& gameplay_hash, long rate) {
+        return load_scores(gameplay_hash, rate);
+    }
+
+    std::vector<LocalScore> LocalReplays::all_scores(const std::string& gameplay_hash) {
+        return load_scores(gameplay_hash, std::nullopt);
     }
 }

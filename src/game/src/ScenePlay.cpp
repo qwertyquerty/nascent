@@ -64,11 +64,27 @@ namespace nascent {
         this->skin = skin;
     };
 
+    ScenePlay::ScenePlay(Chart* chart, Skin* skin, Replay replay, std::string replay_label) : ScenePlay(chart, skin) {
+        this->replay = std::move(replay);
+        this->replay_label = std::move(replay_label);
+    }
+
     void ScenePlay::finish() {
         finished = true;
 
         const Attempt& attempt = session->get_attempt();
         AttemptSummary summary = summarize_attempt(attempt, DifficultyCalculator::calculate(*chart));
+
+        if (replay) {
+            int continuing_audio_id = -1;
+
+            if (chart_audio_id != -1 && game->audio().engine().IsPlaying(chart_audio_id)) {
+                continuing_audio_id = std::exchange(chart_audio_id, -1);
+            }
+
+            game->scenes().replace(std::make_unique<SceneResults>(skin, chart, std::move(summary), std::future<ApiResult<Submission>>(), continuing_audio_id, false, replay_label));
+            return;
+        }
 
         std::error_code ec;
         std::filesystem::path relative = std::filesystem::relative(chart->file_path, SettingsManager::song_directory(), ec);
@@ -143,7 +159,12 @@ namespace nascent {
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
         session->reset_clock(start_position_ms(), now_ms());
-        mirror = settings.field_mirror;
+        mirror = replay ? replay->settings.mirror : settings.field_mirror;
+        replay_cursor = 0;
+
+        if (replay) {
+            session->audio_input_offset = 0;
+        }
 
         field = std::make_unique<EntityField>(chart, skin, olc::vd2d{((double)window_size.x - field_width) / 2, 0}, olc::vd2d{field_width, (double)window_size.y});
         field->set_attempt(&session->get_attempt());
@@ -157,6 +178,11 @@ namespace nascent {
         field->draw_combo = settings.field_show_combo;
         field->judgement_height = settings.field_judgement_height / 100.0;
         field->combo_height = settings.field_combo_height / 100.0;
+
+        if (replay && replay->settings.scroll_speed > 0) {
+            field->scroll_speed = replay->settings.scroll_speed;
+        }
+
         timer = 0;
         frames_played = 0;
         frame_time_total = 0;
@@ -169,6 +195,12 @@ namespace nascent {
     }
 
     void ScenePlay::request_ticket() {
+        if (replay) {
+            ticket = std::shared_future<ApiResult<PlayTicket>>();
+            waiting_for_ticket = false;
+            return;
+        }
+
         ticket = Account::signed_in() ? ServerApi::request_ticket(*chart).share() : std::shared_future<ApiResult<PlayTicket>>();
         ticket_requested_at = now_ms();
         waiting_for_ticket = ticket.valid();
@@ -456,6 +488,42 @@ namespace nascent {
         game->audio().play_effect(skin->get_random_menu_pluck());
     }
 
+    void ScenePlay::feed_replay(double position, bool sounds) {
+        while (replay_cursor < replay->inputs.size() && replay->inputs[replay_cursor].time <= position) {
+            const AttemptInput& input = replay->inputs[replay_cursor++];
+            session->apply(input);
+
+            if (sounds && input.pressed && SettingsManager::settings.field_hitsounds) {
+                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+            }
+        }
+    }
+
+    void ScenePlay::seek_replay(double target, double now) {
+        double kept_timer = timer;
+        target = std::clamp(target, start_position_ms(), (double)chart->get_chart_end_ms());
+        start_attempt();
+        timer = kept_timer;
+        session->reset_clock(target, now);
+        feed_replay(target, false);
+        session->update(now);
+        audio_finished = false;
+
+        if (target >= 0) {
+            double latency = game->audio().engine().GetOutputLatencyMilliseconds();
+            game->audio().engine().Seek(chart_audio_id, (ma_uint64)std::lround((target + latency) * chart->pitch));
+
+            if (!chart_started) {
+                chart_started = true;
+                game->audio().engine().Play(chart_audio_id);
+            }
+        }
+        else {
+            game->audio().engine().Stop(chart_audio_id);
+            game->audio().engine().Seek(chart_audio_id, 0);
+            chart_started = false;
+        }
+    }
 
     void ScenePlay::on_exit() {
         if (chart_audio_id != -1) {
@@ -533,6 +601,14 @@ namespace nascent {
                 skip_intro(now);
             }
 
+            if (replay) {
+                bool back = input.take(actions::LEFT);
+
+                if (back || input.take(actions::RIGHT)) {
+                    seek_replay(session->song_position(now) + (back ? -REPLAY_SEEK_MS : REPLAY_SEEK_MS), now);
+                }
+            }
+
             if (!chart_started && session->song_position(now) >= -game->audio().engine().GetOutputLatencyMilliseconds()) {
                 chart_started = true;
                 game->audio().engine().Play(chart_audio_id);
@@ -546,7 +622,15 @@ namespace nascent {
                 session->sync_clock(game->audio().engine().GetPositionMilliseconds(chart_audio_id) / chart->pitch, now);
             }
 
+            if (replay) {
+                feed_replay(session->song_position(now), true);
+            }
+
             for (const KeyEvent& event : game->input().events()) {
+                if (replay) {
+                    break;
+                }
+
                 std::optional<uint8_t> lane = InputManager::get_lane(lane_keys, event.key);
 
                 if (!lane) {
@@ -607,6 +691,12 @@ namespace nascent {
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
         draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, skin->color(SkinColor::TEXT));
+
+        if (replay) {
+            std::string banner = std::format("REPLAY    {}    ←/→  seek 5s", replay_label);
+            int32_t banner_width = text_bounds(skin->display_font_small, banner).size.x;
+            draw_text(skin->display_font_small, banner, {screensize.x / 2 - banner_width / 2, screensize.y - Ui::px(40)}, skin->color(SkinColor::TEXT_MUTED));
+        }
 
         if (ticket_hint_alpha > 0) {
             std::string waiting_hint = "Waiting for server...";
