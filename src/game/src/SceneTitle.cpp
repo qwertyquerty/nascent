@@ -11,6 +11,7 @@
 #include "InputManager.h"
 #include "gse/input/KeyEvents.h"
 #include "SceneAccount.h"
+#include "QuitOverlay.h"
 #include "SceneList.h"
 #include "SettingsManager.h"
 #include "Skin.h"
@@ -253,6 +254,12 @@ namespace nascent {
 
         if (InputManager::update_pressed(game->input())) {
             Updater::start();
+        }
+
+        if (game->input().take(actions::BACK)) {
+            game->audio().play_effect(bg_skin->sound(SkinSound::HITSOUND));
+            overlays.open(std::make_unique<QuitOverlay>(bg_skin));
+            return;
         }
 
         if (game->input().take(actions::CONFIRM)) {
