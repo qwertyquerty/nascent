@@ -18,11 +18,12 @@ namespace nascent {
         return action == ChartAction::DELETE_CHART || action == ChartAction::DELETE_PACK;
     }
 
-    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, std::function<void(ChartAction)> on_action)
+    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action)
         : skin(skin),
           title(std::format("{} - {}", chart.info.artist, chart.info.title)),
           subtitle(std::format("[{}]  in  {}", chart.info.difficulty_name, path_utf8(chart.file_path.parent_path().filename()))),
           pack_count(pack_count),
+          favorite(favorite),
           on_action(std::move(on_action)) {}
 
     olc::Pixel ChartMenu::backdrop() const {
@@ -33,6 +34,8 @@ namespace nascent {
         std::string pack_charts = pack_count == 1 ? std::string("1 chart") : std::format("{} charts", pack_count);
 
         switch (action) {
+            case ChartAction::TOGGLE_FAVORITE:
+                return favorite ? "Remove from favorites" : "Add to favorites";
             case ChartAction::OPEN_WEBSITE:
                 return "Open on website";
             case ChartAction::DELETE_CHART:

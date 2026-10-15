@@ -2,6 +2,7 @@
 
 #include "Account.h"
 #include "EntityStarfield.h"
+#include "Favorites.h"
 #include "InputManager.h"
 #include "LocalBests.h"
 #include "olcPixelGameEngine.h"
@@ -48,6 +49,7 @@ namespace nascent {
         SubmissionQueue::start();
         Updater::check();
         LocalBests::load();
+        Favorites::load();
         set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
         audio().set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
 

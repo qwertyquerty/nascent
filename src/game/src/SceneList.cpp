@@ -7,6 +7,7 @@
 #include "Const.h"
 #include "DifficultyCache.h"
 #include "EntityField.h"
+#include "Favorites.h"
 #include "gse/Game.h"
 #include "InputManager.h"
 #include "LocalBests.h"
@@ -196,7 +197,7 @@ namespace nascent {
         collect_difficulties();
         leaderboards.update(elapsed_time, show_leaderboards && selected_chart != nullptr && !visible.empty(), selected_hash(), pitch);
 
-        if (!update_controls()) {
+        if (!update_controls(elapsed_time)) {
             return;
         }
 
@@ -248,7 +249,7 @@ namespace nascent {
         list_scroll_offset *= std::abs(list_scroll_offset) > 1.0 ? (std::pow(0.005, elapsed_time * 2)) : 0;
     };
 
-    bool SceneList::update_controls() {
+    bool SceneList::update_controls(float elapsed_time) {
         Input& input = game->input();
 
         if (input.key_pressed(InputManager::calibration_key)) {
@@ -322,11 +323,11 @@ namespace nascent {
             select_chart(rand() % visible.size());
         }
 
-        if (input.take(actions::DOWN)) {
+        if (down_repeat.update(input.take(actions::DOWN), input.held(actions::DOWN), elapsed_time)) {
             select_chart(positive_modulo((selected_chart_index + 1), visible.size()));
         }
 
-        if (input.take(actions::UP)) {
+        if (up_repeat.update(input.take(actions::UP), input.held(actions::UP), elapsed_time)) {
             select_chart(positive_modulo((selected_chart_index - 1), visible.size()));
         }
 
@@ -610,6 +611,8 @@ namespace nascent {
                 library.lengths_ms[index] / pitch / 1000.0,
                 rating ? std::optional<double>(*rating) : std::nullopt,
                 best != nullptr ? std::optional<double>(best->accuracy) : std::nullopt,
+                index < library.bpms.size() && library.bpms[index].main > 0 ? std::optional<double>(library.bpms[index].main * pitch) : std::nullopt,
+                Favorites::contains(library.hashes[index]),
             };
 
             if (!matches_search(query, subject)) {
@@ -775,7 +778,7 @@ namespace nascent {
 
     void SceneList::open_chart_menu() {
         game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
-        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, pack_chart_count(), [this](ChartAction action) {
+        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, pack_chart_count(), Favorites::contains(selected_hash()), [this](ChartAction action) {
             handle_chart_action(action);
         }));
     }
@@ -786,12 +789,25 @@ namespace nascent {
         }
 
         switch (action) {
+            case ChartAction::TOGGLE_FAVORITE:
+                toggle_favorite();
+                break;
             case ChartAction::OPEN_WEBSITE:
                 open_chart_website();
                 break;
             default:
                 delete_charts(action == ChartAction::DELETE_PACK);
                 break;
+        }
+    }
+
+    void SceneList::toggle_favorite() {
+        bool added = Favorites::toggle(selected_hash());
+        game->notify(added ? std::format("Added {} to favorites", selected_chart->info.title) : std::format("Removed {} from favorites", selected_chart->info.title));
+        refresh_search();
+
+        if (!visible.empty()) {
+            select_chart(selected_chart_index, false);
         }
     }
 
@@ -926,6 +942,22 @@ namespace nascent {
         float grade_gap = Ui::pxf(GRADE_GAP);
         float grade_indent = std::max(0.0f, Ui::pxf(GRADE_SCREEN_MARGIN) + widest_grade + grade_gap - list_margin);
         float bar_width = Ui::pxf(DIFFICULTY_BAR_WIDTH);
+        olc::Font& detail_font = skin->display_font_small;
+        float detail_gap = Ui::pxf(DETAIL_GAP);
+
+        auto widest = [&](std::initializer_list<std::string_view> samples) {
+            int32_t width = 0;
+
+            for (std::string_view sample : samples) {
+                width = std::max(width, text_bounds(detail_font, sample).size.x);
+            }
+
+            return (float)width;
+        };
+
+        float difficulty_column = bar_width + detail_gap;
+        float length_column = difficulty_column + widest({"00.00", "44.44", "88.88"}) + detail_gap;
+        float bpm_column = length_column + widest({"00:00", "44:44", "88:88"}) + detail_gap;
         const ProgressBar difficulty_bar({bar_width, std::max(1.0f, Ui::pxf(DIFFICULTY_BAR_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK));
         wanted_difficulties.clear();
 
@@ -950,6 +982,14 @@ namespace nascent {
             olc::Pixel text_color = skin->color(index == selected_chart_index ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
             draw_text(skin->display_font_medium, chart->info.title, {(int)x, (int)y}, text_color);
+
+            if (Favorites::contains(library.hashes[chart_index])) {
+                olc::FontRect title_bounds = text_bounds(skin->display_font_medium, chart->info.title);
+                float radius = Ui::pxf(FAVORITE_RADIUS);
+                olc::vf2d star = {x + title_bounds.offset.x + title_bounds.size.x + Ui::pxf(FAVORITE_GAP) + radius, y + title_bounds.offset.y + title_bounds.size.y / 2.0f};
+                olc::Pixel star_color = skin->color(SkinColor::ATTENTION);
+                favorite_star.draw(window, star, radius, index == selected_chart_index ? star_color : fade(star_color, DIFFICULTY_IDLE_OPACITY));
+            }
             draw_text(skin->display_font_small, library.details[chart_index], {(int)x, (int)y + Ui::px(36)}, text_color);
 
             std::optional<float> rating = get_difficulty(chart_index);
@@ -966,11 +1006,19 @@ namespace nascent {
 
             if (rating) {
                 olc::Pixel number_color = index == selected_chart_index ? rating_color : fade(rating_color, DIFFICULTY_IDLE_OPACITY);
-                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + bar_width + Ui::pxf(12)), (int)y + Ui::px(58)}, number_color);
+                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + difficulty_column), (int)y + Ui::px(58)}, number_color);
             }
 
             int64_t length_ms = std::llround(library.lengths_ms[chart_index] / pitch);
-            draw_text(skin->display_font_small, std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60), {(int)(x + bar_width + Ui::pxf(LENGTH_OFFSET)), (int)y + Ui::px(58)}, text_color);
+            draw_text(skin->display_font_small, std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60), {(int)(x + length_column), (int)y + Ui::px(58)}, text_color);
+
+            if (chart_index < library.bpms.size() && library.bpms[chart_index].main > 0) {
+                const BpmRange& bpm = library.bpms[chart_index];
+                long low = std::lround(bpm.min * pitch);
+                long high = std::lround(bpm.max * pitch);
+                std::string bpm_text = low == high ? std::format("{} BPM", std::lround(bpm.main * pitch)) : std::format("{}-{} BPM", low, high);
+                draw_text(skin->display_font_small, bpm_text, {(int)(x + bpm_column), (int)y + Ui::px(58)}, text_color);
+            }
 
             const LocalBest* best = LocalBests::lookup(library.hashes[chart_index], pitch);
 

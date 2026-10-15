@@ -14,6 +14,7 @@ namespace nascent {
     class Skin;
 
     enum class ChartAction : uint8_t {
+        TOGGLE_FAVORITE,
         OPEN_WEBSITE,
         DELETE_CHART,
         DELETE_PACK
@@ -25,6 +26,7 @@ namespace nascent {
         std::string title;
         std::string subtitle;
         size_t pack_count;
+        bool favorite;
         std::function<void(ChartAction)> on_action;
         size_t selected = 0;
         bool confirming = false;
@@ -32,7 +34,7 @@ namespace nascent {
         std::string label(ChartAction action, bool confirming_action) const;
 
         public:
-        static constexpr std::array<ChartAction, 3> ACTIONS = {ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
+        static constexpr std::array<ChartAction, 4> ACTIONS = {ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
         static constexpr int32_t MIN_WIDTH = 720;
         static constexpr int32_t SCREEN_MARGIN = 120;
         static constexpr int32_t PADDING = 32;
@@ -42,7 +44,7 @@ namespace nascent {
 
         static bool is_destructive(ChartAction action);
 
-        ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, std::function<void(ChartAction)> on_action);
+        ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action);
 
         void update(float elapsed_time) override;
         void draw(olc::PixelGameEngine* window) override;

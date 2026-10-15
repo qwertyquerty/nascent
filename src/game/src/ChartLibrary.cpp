@@ -75,6 +75,7 @@ namespace nascent {
                 library.search_texts.push_back(ascii_lowercase(std::format("{} {} {} {} {} {}", info.title, info.title_unicode, info.artist, info.artist_unicode, info.mapper, info.difficulty_name)));
                 library.details.push_back(std::format("[{}] - {} // {}", info.difficulty_name, info.artist, info.mapper));
                 library.lengths_ms.push_back((double)entry.chart->get_duration_ms() * entry.chart->pitch);
+                library.bpms.push_back(entry.chart->bpm_range());
                 library.charts.push_back(std::move(entry.chart));
             }
 
@@ -123,6 +124,7 @@ namespace nascent {
             library.search_texts.push_back(search_texts[index]);
             library.details.push_back(details[index]);
             library.lengths_ms.push_back(lengths_ms[index]);
+            library.bpms.push_back(bpms[index]);
         }
 
         return library;

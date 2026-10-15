@@ -2,6 +2,7 @@
 
 #include "gse/Scene.h"
 #include "ServerApi.h"
+#include "gse/ui/KeyRepeat.h"
 #include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
@@ -38,6 +39,8 @@ namespace nascent {
         std::vector<ServerChart> results;
         int64_t total = 0;
         size_t selected = 0;
+        KeyRepeat up_repeat;
+        KeyRepeat down_repeat;
         float scroll = 0;
 
         ChartQuery wanted;

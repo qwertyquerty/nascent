@@ -13,6 +13,7 @@ add_library(game
     src/InputManager.cpp
     src/KeyBindField.cpp
     src/LeaderboardPanel.cpp
+    src/Favorites.cpp
     src/LocalBests.cpp
     src/LocalReplays.cpp
     src/PauseOverlay.cpp

@@ -218,11 +218,13 @@ namespace nascent {
             size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / std::max(1, Ui::px(ROW_HEIGHT)));
             int32_t wheel = input.mouse_wheel();
             size_t previous = selected;
+            bool down = down_repeat.update(input.take(actions::DOWN), input.held(actions::DOWN), elapsed_time);
+            bool up = up_repeat.update(input.take(actions::UP), input.held(actions::UP), elapsed_time);
 
-            if (input.take(actions::DOWN) || wheel < 0) {
+            if (down || wheel < 0) {
                 selected = std::min(selected + 1, results.size() - 1);
             }
-            else if (input.take(actions::UP) || wheel > 0) {
+            else if (up || wheel > 0) {
                 selected = selected > 0 ? selected - 1 : 0;
             }
             else if (input.key_pressed(olc::Key::PGDN)) {

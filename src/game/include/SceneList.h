@@ -7,7 +7,9 @@
 #include "SongClock.h"
 #include "StatusBar.h"
 #include "gse/render/MipDecal.h"
+#include "gse/render/ShapeSprite.h"
 #include "gse/render/SpriteDecal.h"
+#include "gse/ui/KeyRepeat.h"
 
 #include <condition_variable>
 #include <cstddef>
@@ -79,6 +81,8 @@ namespace nascent {
         bool active = false;
 
         StatusBar status_bar;
+        KeyRepeat up_repeat;
+        KeyRepeat down_repeat;
 
         MipDecal background_image;
         MipDecal old_background_image;
@@ -117,6 +121,7 @@ namespace nascent {
 
         float widest_grade = -1.0f;
 
+        StarSprite favorite_star = StarSprite(FAVORITE_INNER_RATIO);
         LeaderboardPanel leaderboards;
         bool show_leaderboards = false;
         bool recommended_started = false;
@@ -147,9 +152,10 @@ namespace nascent {
         olc::vi2d side_panel_size(olc::vi2d screen) const;
         void download_recommended();
         void draw_recommended(olc::PixelGameEngine* window);
-        bool update_controls();
+        bool update_controls(float elapsed_time);
         void open_chart_menu();
         void handle_chart_action(ChartAction action);
+        void toggle_favorite();
         size_t pack_chart_count() const;
         void open_chart_website();
         void delete_charts(bool whole_pack);
@@ -159,8 +165,11 @@ namespace nascent {
         static constexpr double DIFFICULTY_IDLE_OPACITY = 0.75;
         static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
         static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
-        static constexpr float LENGTH_OFFSET = 90.0f;
+        static constexpr float DETAIL_GAP = 20.0f;
         static constexpr float PREVIEW_FADE_CURVE = 2.0f;
+        static constexpr float FAVORITE_GAP = 14.0f;
+        static constexpr float FAVORITE_RADIUS = 9.0f;
+        static constexpr float FAVORITE_INNER_RATIO = 0.45f;
         static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
         static constexpr float GRADE_GAP = 8.0f;
         static constexpr int32_t LIST_ROW_HEIGHT = 100;
