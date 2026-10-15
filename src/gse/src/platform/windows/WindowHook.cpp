@@ -1,4 +1,5 @@
 #include "gse/input/WindowHook.h"
+#include "gse/Platform.h"
 #include "gse/input/KeySource.h"
 
 #include <atomic>
@@ -123,6 +124,7 @@ namespace nascent {
     static constexpr LPARAM KEY_REPEAT_FLAG = 1 << 30;
     static std::atomic<KeyEventQueue*> hooked_queue = nullptr;
     static std::atomic<bool> hook_key_events = true;
+    static std::atomic<bool> cursor_hidden = false;
     static std::atomic<WNDPROC> original_window_proc = nullptr;
     static HWND hooked_window = nullptr;
     static std::wstring window_title;
@@ -159,6 +161,11 @@ namespace nascent {
     }
 
     static LRESULT CALLBACK nascent_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+        if (msg == WM_SETCURSOR && cursor_hidden && LOWORD(lparam) == HTCLIENT) {
+            SetCursor(nullptr);
+            return TRUE;
+        }
+
         if (msg == WM_SETTEXT && !window_title.empty()) {
             lparam = (LPARAM)window_title.c_str();
         }
@@ -274,6 +281,18 @@ namespace nascent {
         }
 
         hooked_window = nullptr;
+    }
+
+    void set_cursor_hidden(bool hidden) {
+        if (cursor_hidden.exchange(hidden) == hidden || hooked_window == nullptr) {
+            return;
+        }
+
+        POINT point;
+
+        if (GetCursorPos(&point) && WindowFromPoint(point) == hooked_window) {
+            PostMessageW(hooked_window, WM_SETCURSOR, (WPARAM)hooked_window, MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+        }
     }
 
     void set_window_hook_key_events(bool enabled) {

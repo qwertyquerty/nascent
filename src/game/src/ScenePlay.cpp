@@ -143,6 +143,7 @@ namespace nascent {
 
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
         start_attempt();
+        load_background();
 
         chart_audio_id = load_song_audio(game->audio().engine(), chart->audio_path);
         game->audio().apply_music_volume(chart_audio_id);
@@ -536,6 +537,7 @@ namespace nascent {
         }
 
         game->audio().stop(skin->sound(SkinSound::IDLE_LOOP));
+        set_cursor_hidden(false);
     }
 
     void ScenePlay::pause(double now) {
@@ -559,6 +561,47 @@ namespace nascent {
         session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->input(), lane_keys)), now);
     }
 
+    void ScenePlay::use_background(const MipDecal* background) {
+        borrowed_background = background;
+    }
+
+    void ScenePlay::load_background() {
+        if (borrowed_background != nullptr) {
+            background_fade = 1.0f;
+            return;
+        }
+
+        if (SettingsManager::settings.field_background_brightness == 0 || chart->info.image_file.empty()) {
+            return;
+        }
+
+        std::filesystem::path path = chart->image_path;
+        background_load = run_detached([path] {
+            auto sprite = std::make_unique<olc::Sprite>();
+
+            if (sprite->LoadFromFile(path.string()) != olc::OK) {
+                return std::vector<std::unique_ptr<olc::Sprite>>();
+            }
+
+            return MipDecal::build_levels(std::move(sprite));
+        });
+    }
+
+    void ScenePlay::draw_background(olc::PixelGameEngine* window) const {
+        uint8_t brightness = SettingsManager::settings.field_background_brightness;
+        const MipDecal* image = borrowed_background != nullptr ? borrowed_background : &background_image;
+
+        if (!*image || brightness == 0 || background_fade <= 0) {
+            return;
+        }
+
+        olc::vi2d screen = window->GetScreenSize();
+        olc::vf2d size = image->size();
+        float cover = std::max(screen.x / std::max(1.0f, size.x), screen.y / std::max(1.0f, size.y));
+        olc::vf2d corners[4] = {{0.0f, 0.0f}, {0.0f, screen.y - 1.0f}, {screen.x - 1.0f, screen.y - 1.0f}, {screen.x - 1.0f, 0.0f}};
+        window->DrawWarpedDecal(image->pick(cover).decal, corners, fade(olc::WHITE, brightness / 100.0 * background_fade));
+    }
+
     void ScenePlay::toggle_replay_pause(double now) {
         replay_paused = !replay_paused;
 
@@ -577,6 +620,15 @@ namespace nascent {
 
     void ScenePlay::update(float elapsed_time) {
         double now = now_ms();
+        set_cursor_hidden(!paused);
+
+        if (is_ready(background_load)) {
+            background_image = MipDecal(background_load.get());
+        }
+
+        if (background_image && background_fade < 1.0f) {
+            background_fade = std::min(1.0f, background_fade + elapsed_time / BACKGROUND_FADE_TIME);
+        }
         Input& input = game->input();
         bool pause_pressed = input.key_pressed(InputManager::get_key(KeyBinding::PAUSE));
 
@@ -713,6 +765,7 @@ namespace nascent {
         olc::vi2d screensize = window->GetScreenSize();
         const Attempt& attempt = session->get_attempt();
 
+        draw_background(window);
         field->draw(window);
 
         double position = paused ? paused_position : session->song_position(now_ms());

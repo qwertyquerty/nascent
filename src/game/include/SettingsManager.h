@@ -28,6 +28,7 @@ namespace nascent {
         uint8_t field_timing_bar_width = 5; // % of the screen height
         bool field_mirror = false;
         bool field_hitsounds = false;
+        uint8_t field_background_brightness = 0;
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;

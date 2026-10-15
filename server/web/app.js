@@ -234,7 +234,11 @@ const loaders = {
 
     async leaderboard({params}, keyCounts) {
         const keyCount = params.key_count ?? keyCounts[0];
-        return {title: `${keyCount}K leaderboard`, keyCount, ...(await api("/leaderboards/performance", {key_count: keyCount, sort: params.sort, ...paged(params)}))};
+        const [board, top] = await Promise.all([
+            api("/leaderboards/performance", {key_count: keyCount, sort: params.sort, ...paged(params)}),
+            api("/leaderboards/performance", {key_count: keyCount, limit: 3}),
+        ]);
+        return {title: `${keyCount}K leaderboard`, keyCount, podium: top.entries, ...board};
     },
 
     async plays({params}, keyCounts) {
@@ -887,6 +891,21 @@ app.component("pager", {
             </li>
         </ul>
     </nav>`,
+});
+
+app.component("podium", {
+    props: {entries: Array},
+    computed: {
+        places: (self) => [1, 0, 2].map((index) => self.entries[index]).filter(Boolean),
+    },
+    template: `<div v-if="entries.length" class="podium" aria-label="Top three players">
+        <a v-for="entry in places" :key="entry.user.id" class="podium-place" :class="'rank-' + entry.rank" :href="$link.user(entry.user.username)">
+            <span class="podium-name">{{ entry.user.username }}</span>
+            <span class="podium-performance">{{ $f.performance(entry.performance) }}</span>
+            <span class="podium-accuracy">{{ $f.accuracy(entry.accuracy) }}</span>
+            <span class="podium-block" :title="['', 'First place', 'Second place', 'Third place'][entry.rank]">{{ entry.rank }}</span>
+        </a>
+    </div>`,
 });
 
 app.component("player-table", {

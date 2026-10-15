@@ -53,6 +53,7 @@ namespace nascent {
 
         struct BackgroundLoadResult {
             uint64_t generation = 0;
+            std::string image_path;
             std::vector<std::unique_ptr<olc::Sprite>> levels;
         };
 
@@ -88,6 +89,7 @@ namespace nascent {
 
         MipDecal background_image;
         MipDecal old_background_image;
+        std::string background_image_path;
 
         uint64_t load_generation = 0;
         std::mutex background_load_mutex;
@@ -145,7 +147,8 @@ namespace nascent {
         void collect_difficulties();
 
         void request_background_load();
-        void apply_background_load(std::vector<std::unique_ptr<olc::Sprite>> levels);
+        void apply_background_load(std::string image_path, std::vector<std::unique_ptr<olc::Sprite>> levels);
+        const MipDecal* background_for(const Chart& chart) const;
         void background_load_loop();
         void stop_preview_audio();
         void draw_list(olc::PixelGameEngine* window);

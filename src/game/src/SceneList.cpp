@@ -217,7 +217,7 @@ namespace nascent {
         }
 
         if (load_result && load_result->generation == load_generation) {
-            apply_background_load(std::move(load_result->levels));
+            apply_background_load(std::move(load_result->image_path), std::move(load_result->levels));
         }
 
         crossfade_timer = std::max(0.0f, (crossfade_timer - elapsed_time * 6));
@@ -352,7 +352,9 @@ namespace nascent {
         }
 
         if (input.take(actions::CONFIRM)) {
-            game->scenes().push(std::make_unique<ScenePlay>(selected_chart, skin));
+            auto play = std::make_unique<ScenePlay>(selected_chart, skin);
+            play->use_background(background_for(*selected_chart));
+            game->scenes().push(std::move(play));
         }
 
         return true;
@@ -432,6 +434,14 @@ namespace nascent {
         return selected_chart != nullptr ? selected_chart->gameplay_hash() : std::string();
     }
 
+    const MipDecal* SceneList::background_for(const Chart& chart) const {
+        if (!background_image || chart.info.image_file.empty() || background_image_path != chart.image_path.string()) {
+            return nullptr;
+        }
+
+        return &background_image;
+    }
+
     void SceneList::request_background_load() {
         load_generation++;
 
@@ -474,13 +484,14 @@ namespace nascent {
             }
 
             std::lock_guard<std::mutex> lock(background_load_mutex);
-            completed_background_load = BackgroundLoadResult{request.generation, MipDecal::build_levels(std::move(sprite))};
+            completed_background_load = BackgroundLoadResult{request.generation, request.image_path, MipDecal::build_levels(std::move(sprite))};
         }
     }
 
-    void SceneList::apply_background_load(std::vector<std::unique_ptr<olc::Sprite>> levels) {
+    void SceneList::apply_background_load(std::string image_path, std::vector<std::unique_ptr<olc::Sprite>> levels) {
         old_background_image = std::move(background_image);
         background_image = MipDecal(std::move(levels));
+        background_image_path = std::move(image_path);
 
         crossfade_timer = 1;
         crossfade = true;
@@ -833,7 +844,9 @@ namespace nascent {
         }
 
         selected_chart->set_pitch(replay.rate);
-        game->scenes().push(std::make_unique<ScenePlay>(selected_chart, skin, std::move(replay), std::move(label)));
+        auto play = std::make_unique<ScenePlay>(selected_chart, skin, std::move(replay), std::move(label));
+        play->use_background(background_for(*selected_chart));
+        game->scenes().push(std::move(play));
     }
 
     void SceneList::toggle_favorite() {
@@ -990,7 +1003,8 @@ namespace nascent {
             return (float)width;
         };
 
-        float difficulty_column = bar_width + detail_gap;
+        float keys_column = bar_width + detail_gap;
+        float difficulty_column = keys_column + widest({"10K", "44K", "88K"}) + detail_gap;
         float length_column = difficulty_column + widest({"00.00", "44.44", "88.88"}) + detail_gap;
         float bpm_column = length_column + widest({"00:00", "44:44", "88:88"}) + detail_gap;
         const ProgressBar difficulty_bar({bar_width, std::max(1.0f, Ui::pxf(DIFFICULTY_BAR_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK));
@@ -1038,6 +1052,7 @@ namespace nascent {
             olc::Pixel bar_color = rating_color;
             bar_color.a = index == selected_chart_index ? 255 : 140;
             difficulty_bar.draw(window, {x, y + Ui::pxf(50)}, fill, bar_color);
+            draw_text(skin->display_font_small, std::format("{}K", chart->info.key_count), {(int)(x + keys_column), (int)y + Ui::px(58)}, text_color);
 
             if (rating) {
                 olc::Pixel number_color = index == selected_chart_index ? rating_color : fade(rating_color, DIFFICULTY_IDLE_OPACITY);

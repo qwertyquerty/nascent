@@ -36,6 +36,7 @@ namespace nascent {
         ChoiceField* mirror_field = nullptr;
         ChoiceField* hitsounds_field = nullptr;
         SliderField* lane_width_field = nullptr;
+        SliderField* background_brightness_field = nullptr;
         ChoiceField* lane_gap_field = nullptr;
         std::vector<int16_t> lane_gaps;
         SliderField* judge_offset_field = nullptr;

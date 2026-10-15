@@ -135,6 +135,7 @@ namespace nascent {
 
         form.add<SectionField>("Playfield");
         lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width_percent, LANE_WIDTH_MIN, LANE_WIDTH_MAX, PERCENT_STEP, "%");
+        background_brightness_field = &form.add<SliderField>("Background brightness", settings.field_background_brightness, 0, 100, PERCENT_STEP, "%");
 
         lane_gaps = {-1};
 
@@ -210,6 +211,7 @@ namespace nascent {
         settings.field_hitsounds = hitsounds_field->selected == 1;
         settings.field_mirror = mirror_field->selected == 1;
         settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
+        settings.field_background_brightness = (uint8_t)background_brightness_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
         settings.field_judge_line_percent = (uint8_t)judge_offset_field->value;
         settings.field_upscroll = scroll_direction_field->selected == 1;

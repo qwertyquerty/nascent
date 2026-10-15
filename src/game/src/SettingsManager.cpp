@@ -32,6 +32,7 @@ namespace nascent {
         field_timing_bar_width,
         field_mirror,
         field_hitsounds,
+        field_background_brightness,
         title_logo_start_delay,
         title_field_count,
         title_h_scroll_rate,

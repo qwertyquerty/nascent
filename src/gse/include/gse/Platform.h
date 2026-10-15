@@ -15,4 +15,5 @@ namespace nascent {
     bool copy_to_clipboard(const std::string& text);
     bool open_url(const std::string& url);
     std::string platform_description();
+    void set_cursor_hidden(bool hidden);
 }

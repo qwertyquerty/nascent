@@ -2,6 +2,7 @@
 
 #include "Replay.h"
 #include "gse/Scene.h"
+#include "gse/render/MipDecal.h"
 #include "ServerApi.h"
 #include "olcPixelGameEngine.h"
 
@@ -58,6 +59,12 @@ namespace nascent {
         bool chart_started = false;
         bool paused = false;
         bool replay_paused = false;
+
+        MipDecal background_image;
+        const MipDecal* borrowed_background = nullptr;
+        std::future<std::vector<std::unique_ptr<olc::Sprite>>> background_load;
+        float background_fade = 0;
+
         static inline bool show_hit_log = false;
         bool finished = false;
         bool audio_finished = false;
@@ -84,18 +91,22 @@ namespace nascent {
         nlohmann::json timing_diagnostics() const;
         void draw_timing_diagnostics(olc::PixelGameEngine* window) const;
         void draw_replay_bar(olc::PixelGameEngine* window) const;
+        void load_background();
+        void draw_background(olc::PixelGameEngine* window) const;
 
         public:
         void on_resize() override;
         static constexpr float RESTART_HOLD_TIME = 0.3f;
         static constexpr double PAUSE_COOLDOWN_MS = 1000.0;
         static constexpr double REPLAY_SEEK_MS = 5000.0;
+        static constexpr float BACKGROUND_FADE_TIME = 0.4f;
         static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
         static constexpr float TICKET_HINT_FADE_S = 0.3f;
 
         ScenePlay(Chart* chart, Skin* skin);
         ScenePlay(Chart* chart, Skin* skin, Replay replay, std::string replay_label);
+        void use_background(const MipDecal* background);
         ~ScenePlay();
         void on_create() override;
         void on_exit() override;

@@ -88,6 +88,7 @@
                 <h1 class="title">{{ view.keyCount }}K leaderboard</h1>
                 <p class="subtitle">{{ $f.number(view.total) }} ranked players</p>
                 <key-tabs :current="view.keyCount" path="/leaderboard" :params="{sort: route.params.sort}"></key-tabs>
+                <podium :entries="view.podium"></podium>
                 <pager :total="view.total" top></pager>
                 <player-table :entries="view.entries" detailed sortable :caption="view.keyCount + 'K leaderboard'"></player-table>
                 <pager :total="view.total"></pager>

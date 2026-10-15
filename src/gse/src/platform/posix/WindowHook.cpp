@@ -1,4 +1,5 @@
 #include "gse/input/WindowHook.h"
+#include "gse/Platform.h"
 
 namespace nascent {
     bool install_window_hook(KeyEventQueue*, const std::string&) {
@@ -9,5 +10,8 @@ namespace nascent {
     }
 
     void set_window_hook_key_events(bool) {
+    }
+
+    void set_cursor_hidden(bool) {
     }
 }

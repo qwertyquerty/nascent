@@ -37,6 +37,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    font-variant-numeric: tabular-nums;
 }
 
 #app {
@@ -239,22 +240,12 @@ a.navbar-item.is-active:focus-within {
 }
 
 .grade-X {
-    animation: grade-glow 4s linear infinite;
+    animation: grade-glow 4s linear infinite, grade-shimmer 2.1s ease-in-out infinite;
 }
 
-.grade-X::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
-    transform: translateX(-130%);
-    animation: grade-shine 3.2s ease-in-out infinite;
-    pointer-events: none;
-}
-
-@keyframes grade-shine {
-    0%, 55% { transform: translateX(-130%); }
-    100% { transform: translateX(130%); }
+@keyframes grade-shimmer {
+    0%, 100% { color: var(--grade-x); }
+    50% { color: color-mix(in srgb, var(--grade-x) 30%, white); }
 }
 
 @keyframes grade-glow {
@@ -290,13 +281,71 @@ a.navbar-item.is-active:focus-within {
 .rank-2 { --medal: var(--rank-2); }
 .rank-3 { --medal: var(--rank-3); }
 
+.podium {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 1rem;
+    margin: 1.5rem 0 2rem;
+}
+
+.podium-place {
+    display: flex;
+    flex: 0 1 12rem;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    text-align: center;
+    color: inherit;
+}
+
+.podium-name {
+    max-width: 100%;
+    overflow: hidden;
+    font-family: var(--nascent-display);
+    font-size: 1.15rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.podium-place:hover .podium-name {
+    text-decoration: underline;
+}
+
+.podium-performance {
+    font-family: var(--nascent-display);
+    font-size: 1.4rem;
+    color: var(--medal);
+}
+
+.podium-accuracy {
+    color: var(--bulma-text-weak);
+}
+
+.podium-block {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+    font-family: var(--nascent-display);
+    font-size: 2rem;
+    color: var(--medal);
+    background: linear-gradient(to top, color-mix(in srgb, var(--medal) 4%, transparent), color-mix(in srgb, var(--medal) 26%, transparent));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--medal) 70%, transparent), 0 -0.4em 1.2em color-mix(in srgb, var(--medal) 12%, transparent);
+}
+
+.podium-place.rank-1 .podium-block { height: 7rem; }
+.podium-place.rank-2 .podium-block { height: 5rem; }
+.podium-place.rank-3 .podium-block { height: 3.75rem; }
+
 .table td,
 .table th {
     vertical-align: middle;
 }
 
 .is-numeric {
-    font-variant-numeric: tabular-nums;
     text-align: right !important;
     white-space: nowrap;
 }
@@ -361,10 +410,6 @@ a.navbar-item.is-active:focus-within {
 .play-grade.grade-X,
 .play-grade.grade-S {
     text-shadow: 0 0 0.35em color-mix(in srgb, currentColor 75%, transparent), 0 0 0.9em color-mix(in srgb, currentColor 35%, transparent);
-}
-
-.difficulty-number {
-    font-variant-numeric: tabular-nums;
 }
 
 .play-stat .stat-value {
@@ -479,7 +524,6 @@ a.navbar-item.is-active:focus-within {
 }
 
 .replay-clock {
-    font-variant-numeric: tabular-nums;
     min-width: 3rem;
 }
 
@@ -494,10 +538,6 @@ a.navbar-item.is-active:focus-within {
     justify-content: space-between;
     gap: 0.75rem;
     margin-bottom: 0.75rem;
-}
-
-.history-value {
-    font-variant-numeric: tabular-nums;
 }
 
 .history-value .stat-value {
@@ -680,14 +720,22 @@ a.navbar-item.is-active:focus-within {
 
 .share-value {
     text-align: right;
-    font-variant-numeric: tabular-nums;
-}
-
-.replay-share {
-    font-variant-numeric: tabular-nums;
 }
 
 @media screen and (max-width: 768px) {
+    .podium {
+        gap: 0.5rem;
+    }
+
+    .podium-name,
+    .podium-performance {
+        font-size: 1rem;
+    }
+
+    .podium-accuracy {
+        font-size: 0.85rem;
+    }
+
     .replay-viewer {
         grid-template-columns: minmax(0, 1fr);
         gap: 0.75rem;
@@ -730,13 +778,8 @@ a.navbar-item.is-active:focus-within {
         opacity: 0.6;
     }
 
-    .grade-X,
-    .grade-X::after {
+    .grade-X {
         animation: none;
-    }
-
-    .grade-X::after {
-        display: none;
     }
 }
 
