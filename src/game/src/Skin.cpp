@@ -375,7 +375,6 @@ namespace nascent {
             hit_score_decals[(size_t)h] = render_text_decal(display_font_large, hit_score_name(h), judgement_color(h));
         }
 
-        game_paused_decal = render_text_decal(display_font_large, "Game Paused", color(SkinColor::TEXT));
     }
 
     void Skin::unload_fonts() {

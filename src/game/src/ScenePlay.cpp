@@ -9,6 +9,7 @@
 #include "InputManager.h"
 #include "gse/input/KeyEvents.h"
 #include "LocalBests.h"
+#include "PauseOverlay.h"
 #include "PlaySession.h"
 #include "gse/ui/ProgressBar.h"
 #include "DifficultyCalculator.h"
@@ -441,6 +442,10 @@ namespace nascent {
         game->audio().stop(skin->sound(SkinSound::IDLE_LOOP));
         request_ticket();
 
+        if (PauseOverlay* pause_menu = overlays.find<PauseOverlay>()) {
+            pause_menu->close();
+        }
+
         chart_started = false;
         paused = false;
         resumed_at.reset();
@@ -464,6 +469,7 @@ namespace nascent {
 
     void ScenePlay::pause(double now) {
         paused = true;
+        overlays.open(std::make_unique<PauseOverlay>(*this, skin));
         paused_position = session->song_position(now);
         game->audio().engine().Pause(chart_audio_id);
         game->audio().play_music(skin->sound(SkinSound::IDLE_LOOP), true);
@@ -507,12 +513,7 @@ namespace nascent {
             restart_hold = 0;
         }
 
-        if (paused) {
-            if (pause_pressed) {
-                resume(now);
-            }
-        }
-        else if ((pause_pressed && (!resumed_at || now - *resumed_at >= PAUSE_COOLDOWN_MS)) || !game->window->IsFocused()) {
+        if (!paused && ((pause_pressed && (!resumed_at || now - *resumed_at >= PAUSE_COOLDOWN_MS)) || !game->window->IsFocused())) {
             pause(now);
         }
 
@@ -671,11 +672,5 @@ namespace nascent {
             draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
         }
 
-        if (paused) {
-            olc::Decal* paused_decal = skin->game_paused_decal.get();
-
-            window->FillRectDecal({0, 0}, screensize, skin->color(SkinColor::PAUSE_OVERLAY));
-            window->DrawDecal({(float)((double)screensize.x / 2 - (double)paused_decal->sprite->width / 2), (float)((double)screensize.y / 2 - (double)paused_decal->sprite->height / 2)}, paused_decal);
-        }
     };
 }

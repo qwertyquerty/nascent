@@ -19,6 +19,8 @@ namespace nascent {
     class Skin;
 
     class ScenePlay : public Scene {
+        friend class PauseOverlay;
+
         protected:
         Chart* chart;
         std::unique_ptr<PlaySession> session;

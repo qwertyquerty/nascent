@@ -15,6 +15,7 @@ add_library(game
     src/LeaderboardPanel.cpp
     src/LocalBests.cpp
     src/LocalReplays.cpp
+    src/PauseOverlay.cpp
     src/RichPresence.cpp
     src/SceneAccount.cpp
     src/SceneBrowser.cpp

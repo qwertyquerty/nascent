@@ -255,8 +255,6 @@ namespace nascent {
         olc::Font display_font_medium;
         olc::Font display_font_small;
 
-        SpriteDecal game_paused_decal;
-
         Skin(Game* game, const std::string& id);
         ~Skin();
         Skin(const Skin&) = delete;
