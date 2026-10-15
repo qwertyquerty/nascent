@@ -12,7 +12,9 @@
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cmath>
+#include <numbers>
 #include <cctype>
 #include <format>
 #include <fstream>
@@ -87,9 +89,14 @@ namespace nascent {
     }
 
     void SkinManifest::apply_colors(const nlohmann::json& config) {
-        auto entries = config.is_object() ? config.find("colors") : config.end();
+        if (!config.is_object()) {
+            return;
+        }
 
-        if (!config.is_object() || entries == config.end() || !entries->is_object()) {
+        apply_difficulty_scale(config);
+        auto entries = config.find("colors");
+
+        if (entries == config.end() || !entries->is_object()) {
             return;
         }
 
@@ -111,6 +118,30 @@ namespace nascent {
 
             colors[(size_t)(slot - SKIN_COLOR_NAMES.begin())] = color;
         }
+    }
+
+    void SkinManifest::apply_difficulty_scale(const nlohmann::json& config) {
+        auto scale = config.find("difficulty_scale");
+
+        if (scale == config.end() || !scale->is_array()) {
+            return;
+        }
+
+        std::vector<std::pair<double, olc::Pixel>> stops;
+
+        for (const nlohmann::json& stop : *scale) {
+            std::optional<olc::Pixel> color = stop.is_array() && stop.size() == 2 && stop[0].is_number() && stop[1].is_string() ? parse_color(stop[1].get<std::string>()) : std::nullopt;
+
+            if (!color) {
+                std::cerr << "Skin difficulty_scale entries must look like [difficulty, \"#rrggbb\"]" << std::endl;
+                return;
+            }
+
+            stops.emplace_back(stop[0].get<double>(), *color);
+        }
+
+        std::sort(stops.begin(), stops.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        difficulty_scale = std::move(stops);
     }
 
     void SkinManifest::apply(const nlohmann::json& config) {
@@ -595,6 +626,68 @@ namespace nascent {
             default:
                 return color(SkinColor::GRADE_F);
         }
+    }
+
+    olc::Pixel Skin::difficulty_color(double difficulty) const {
+        const auto& stops = skin_manifest.difficulty_scale;
+
+        if (stops.empty()) {
+            return title_gradient_at(difficulty / DIFFICULTY_GRADIENT_MAX, 0.5);
+        }
+
+        if (difficulty <= stops.front().first) {
+            return stops.front().second;
+        }
+
+        for (size_t index = 1; index < stops.size(); index++) {
+            if (difficulty <= stops[index].first) {
+                const auto& [low_value, low] = stops[index - 1];
+                const auto& [high_value, high] = stops[index];
+                double t = (difficulty - low_value) / std::max(1e-9, high_value - low_value);
+                auto mix = [t](uint8_t a, uint8_t b) { return (uint8_t)std::lround(a + (b - a) * t); };
+                return olc::Pixel(mix(low.r, high.r), mix(low.g, high.g), mix(low.b, high.b), mix(low.a, high.a));
+            }
+        }
+
+        return stops.back().second;
+    }
+
+    olc::Pixel Skin::rank_color(int64_t rank) const {
+        switch (rank) {
+            case 1:
+                return color(SkinColor::RANK_FIRST);
+            case 2:
+                return color(SkinColor::RANK_SECOND);
+            case 3:
+                return color(SkinColor::RANK_THIRD);
+            default:
+                return color(SkinColor::TEXT_MUTED);
+        }
+    }
+
+    void Skin::draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale, float opacity) const {
+        std::string_view text = grade_name(grade);
+        olc::Pixel base = grade_color(grade);
+        double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
+        if (grade == Grade::X || grade == Grade::S) {
+            olc::Pixel glow = grade == Grade::X ? title_gradient_at(std::fmod(seconds * GRADE_GLOW_CYCLE + baseline.x * 0.001, 1.0), 0.5) : base;
+            float radius = std::max(1.0f, Ui::pxf(GRADE_GLOW_RADIUS) * scale);
+            glow = fade(glow, GRADE_GLOW_ALPHA * opacity);
+
+            for (int step = 0; step < GRADE_GLOW_STEPS; step++) {
+                double angle = step * 2.0 * std::numbers::pi / GRADE_GLOW_STEPS;
+                draw_text(font, text, {baseline.x + (float)std::cos(angle) * radius, baseline.y + (float)std::sin(angle) * radius}, glow, scale);
+            }
+        }
+
+        if (grade == Grade::X) {
+            double shine = 0.5 + 0.5 * std::sin(seconds * GRADE_SHIMMER_SPEED + baseline.x * 0.01);
+            auto mix = [shine](uint8_t channel) { return (uint8_t)std::lround(channel + (255 - channel) * shine * 0.7); };
+            base = olc::Pixel(mix(base.r), mix(base.g), mix(base.b), base.a);
+        }
+
+        draw_text(font, text, baseline, fade(base, opacity), scale);
     }
 
     int32_t Skin::sound(SkinSound sound) {

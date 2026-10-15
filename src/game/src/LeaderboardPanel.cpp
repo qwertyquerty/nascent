@@ -138,8 +138,8 @@ namespace nascent {
                 }
             }
 
-            draw_text(row_font, std::format("#{}", rank), {x, baseline}, skin->color(SkinColor::TEXT_MUTED));
-            draw_text(row_font, grade_name(grade), {x + Ui::px(GRADE_OFFSET), baseline}, skin->grade_color(grade));
+            draw_text(row_font, std::format("#{}", rank), {x, baseline}, skin->rank_color(rank));
+            skin->draw_grade(grade, row_font, {(float)(x + Ui::px(GRADE_OFFSET)), (float)baseline});
             draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + Ui::px(ACCURACY_OFFSET), baseline}, skin->color(SkinColor::TEXT));
             draw_text(row_font, name, {name_x, baseline}, skin->color(highlight ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
             draw_text(row_font, combo_text, {right - combo_width, baseline}, skin->color(SkinColor::TEXT_MUTED));

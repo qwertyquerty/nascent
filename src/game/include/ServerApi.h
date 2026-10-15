@@ -226,6 +226,7 @@ namespace nascent {
         bool chart_created = false;
         std::optional<int64_t> chart_rank;
         std::optional<Standing> key_mode;
+        std::optional<double> previous_best_performance;
     };
 
     class ServerApi {

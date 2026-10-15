@@ -374,17 +374,17 @@ namespace nascent {
             int32_t title_baseline = row_y + Ui::px(8) - title_metrics.offset.y;
             draw_text(title_font, fit_text(title_font, title, panel_width - status_width - row_padding * 3), {panel_x + row_padding, title_baseline}, color);
 
-            std::string details = std::format(
-                "{}K      {:.2f}      {}      {} notes      {}      mapped by {}",
-                chart.key_count,
-                chart.difficulty,
-                format_length(chart.duration_ms),
-                chart.note_count,
-                chart.status,
-                chart.mapper
-            );
+            std::string keys = std::format("{}K      ", chart.key_count);
+            std::string difficulty = std::format("{:.2f}", chart.difficulty);
+            std::string details = std::format("      {}      {} notes      {}      mapped by {}", format_length(chart.duration_ms), chart.note_count, chart.status, chart.mapper);
             int32_t detail_baseline = row_y + row_height - Ui::px(16) - (detail_metrics.size.y + detail_metrics.offset.y);
-            draw_text(detail_font, fit_text(detail_font, details, panel_width - status_width - row_padding * 3), {panel_x + row_padding, detail_baseline}, skin->color(SkinColor::TEXT_MUTED));
+            int32_t detail_x = panel_x + row_padding;
+            int32_t detail_room = panel_width - status_width - row_padding * 3;
+            draw_text(detail_font, keys, {detail_x, detail_baseline}, skin->color(SkinColor::TEXT_MUTED));
+            detail_x += text_width(detail_font, keys);
+            draw_text(detail_font, difficulty, {detail_x, detail_baseline}, skin->difficulty_color(chart.difficulty));
+            detail_x += text_width(detail_font, difficulty);
+            draw_text(detail_font, fit_text(detail_font, details, std::max(0, detail_room - (detail_x - panel_x - row_padding))), {detail_x, detail_baseline}, skin->color(SkinColor::TEXT_MUTED));
 
             int32_t status_x = panel_x + panel_width - row_padding - text_width(detail_font, status);
             draw_text(detail_font, status, {status_x, title_baseline}, status_color);

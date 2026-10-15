@@ -88,6 +88,8 @@ namespace nascent {
 
         Replay replay = make_replay(attempt, summary, replay_chart, chart->pitch, replay_settings, current_utc_timestamp());
         replay.diagnostics = timing_diagnostics();
+        const LocalBest* previous_best = LocalBests::lookup(chart->gameplay_hash(), chart->pitch);
+        bool new_best = previous_best != nullptr && summary.accuracy > previous_best->accuracy;
         LocalBests::record(chart->gameplay_hash(), chart->pitch, summary, replay.played_at);
 
         std::string error;
@@ -109,7 +111,7 @@ namespace nascent {
             chart_audio_id = -1;
         }
 
-        game->scenes().replace(std::make_unique<SceneResults>(skin, chart, std::move(summary), std::move(submission), continuing_audio_id));
+        game->scenes().replace(std::make_unique<SceneResults>(skin, chart, std::move(summary), std::move(submission), continuing_audio_id, new_best));
     }
 
     ScenePlay::~ScenePlay() {

@@ -42,6 +42,11 @@ namespace nascent {
             return value.is_number() ? value.get<double>() : 0.0;
         }
 
+        std::optional<double> get_optional_double(const json& object, const char* key) {
+            const json& value = field(object, key);
+            return value.is_number() ? std::optional<double>(value.get<double>()) : std::nullopt;
+        }
+
         std::string get_string(const json& object, const char* key) {
             const json& value = field(object, key);
             return value.is_string() ? value.get<std::string>() : std::string();
@@ -439,6 +444,7 @@ namespace nascent {
             submission.chart = parse_chart(field(j, "chart"));
             submission.chart_created = get_bool(j, "chart_created");
             submission.chart_rank = get_optional_int(j, "chart_rank");
+            submission.previous_best_performance = get_optional_double(j, "previous_best_performance");
 
             if (field(j, "key_mode").is_object()) {
                 submission.key_mode = parse_standing(j["key_mode"]);

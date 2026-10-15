@@ -109,9 +109,12 @@ namespace nascent {
         GRADE_D,
         GRADE_E,
         GRADE_F,
+        RANK_FIRST,
+        RANK_SECOND,
+        RANK_THIRD,
     };
 
-    inline constexpr std::array<const char*, 53> SKIN_COLOR_NAMES = {
+    inline constexpr std::array<const char*, 56> SKIN_COLOR_NAMES = {
         "screen_background",
         "text",
         "text_muted",
@@ -165,10 +168,13 @@ namespace nascent {
         "grade_d",
         "grade_e",
         "grade_f",
+        "rank_1",
+        "rank_2",
+        "rank_3",
     };
 
     inline constexpr size_t SKIN_COLOR_COUNT = SKIN_COLOR_NAMES.size();
-    static_assert((size_t)SkinColor::GRADE_F + 1 == SKIN_COLOR_COUNT);
+    static_assert((size_t)SkinColor::RANK_THIRD + 1 == SKIN_COLOR_COUNT);
 
     struct SkinManifest {
         std::string name;
@@ -184,9 +190,11 @@ namespace nascent {
         std::optional<uint8_t> receptor_alpha;
         std::map<uint8_t, std::vector<uint8_t>> lane_images;
         std::array<std::optional<olc::Pixel>, SKIN_COLOR_COUNT> colors;
+        std::vector<std::pair<double, olc::Pixel>> difficulty_scale;
 
         void apply(const nlohmann::json& config);
         void apply_colors(const nlohmann::json& config);
+        void apply_difficulty_scale(const nlohmann::json& config);
     };
 
     struct SkinInfo {
@@ -231,6 +239,12 @@ namespace nascent {
         static constexpr uint16_t DISPLAY_FONT_LARGE_SIZE = 72;
         static constexpr uint16_t DISPLAY_FONT_MEDIUM_SIZE = 36;
         static constexpr uint16_t DISPLAY_FONT_SMALL_SIZE = 18;
+        static constexpr double DIFFICULTY_GRADIENT_MAX = 100.0;
+        static constexpr double GRADE_GLOW_CYCLE = 0.25;
+        static constexpr float GRADE_GLOW_RADIUS = 3.0f;
+        static constexpr double GRADE_GLOW_ALPHA = 0.16;
+        static constexpr int GRADE_GLOW_STEPS = 8;
+        static constexpr double GRADE_SHIMMER_SPEED = 3.0;
 
         static std::filesystem::path builtin_skins_directory();
         static std::filesystem::path user_skins_directory();
@@ -262,6 +276,9 @@ namespace nascent {
         olc::Pixel accent(double position) const override;
         olc::Pixel judgement_color(HitScore score) const;
         olc::Pixel grade_color(Grade grade) const;
+        olc::Pixel difficulty_color(double difficulty) const;
+        olc::Pixel rank_color(int64_t rank) const;
+        void draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale = 1.0f, float opacity = 1.0f) const;
         int32_t sound(SkinSound sound);
         int32_t get_random_menu_pluck();
     };

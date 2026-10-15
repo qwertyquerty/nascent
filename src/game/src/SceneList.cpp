@@ -959,12 +959,14 @@ namespace nascent {
             }
 
             float fill = rating ? std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f) : 0.0f;
-            olc::Pixel bar_color = skin->title_gradient_at(fill, 0.5);
+            olc::Pixel rating_color = rating ? skin->difficulty_color(*rating) : skin->color(SkinColor::TEXT_MUTED);
+            olc::Pixel bar_color = rating_color;
             bar_color.a = index == selected_chart_index ? 255 : 140;
             difficulty_bar.draw(window, {x, y + Ui::pxf(50)}, fill, bar_color);
 
             if (rating) {
-                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + bar_width + Ui::pxf(12)), (int)y + Ui::px(58)}, text_color);
+                olc::Pixel number_color = index == selected_chart_index ? rating_color : fade(rating_color, DIFFICULTY_IDLE_OPACITY);
+                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + bar_width + Ui::pxf(12)), (int)y + Ui::px(58)}, number_color);
             }
 
             int64_t length_ms = std::llround(library.lengths_ms[chart_index] / pitch);
@@ -977,7 +979,7 @@ namespace nascent {
                 std::string_view grade_text = grade_name(grade);
                 olc::FontRect grade_bounds = text_bounds(skin->display_font_large, grade_text);
                 float grade_center_y = y + Ui::pxf(18);
-                draw_text(skin->display_font_large, grade_text, {(int)(x - grade_gap - grade_bounds.size.x - grade_bounds.offset.x), (int)(grade_center_y - grade_bounds.size.y / 2 - grade_bounds.offset.y)}, skin->grade_color(grade));
+                skin->draw_grade(grade, skin->display_font_large, {x - grade_gap - grade_bounds.size.x - grade_bounds.offset.x, grade_center_y - grade_bounds.size.y / 2.0f - grade_bounds.offset.y});
             }
         }
 

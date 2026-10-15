@@ -156,6 +156,7 @@ namespace nascent {
 
         public:
         static constexpr float DIFFICULTY_BAR_MAX = 100.0f;
+        static constexpr double DIFFICULTY_IDLE_OPACITY = 0.75;
         static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
         static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
         static constexpr float LENGTH_OFFSET = 90.0f;
