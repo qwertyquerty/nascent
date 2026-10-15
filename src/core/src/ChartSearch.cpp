@@ -85,6 +85,8 @@ namespace nascent {
                 {"len", "length"},
                 {"key", "keys"},
                 {"note", "notes"},
+                {"fav", "favorite"},
+                {"favourite", "favorite"},
             };
 
             for (const auto& [alias, name] : aliases) {
@@ -97,7 +99,7 @@ namespace nascent {
         }
 
         bool is_search_field(const std::string& field) {
-            static const char* fields[] = {"keys", "difficulty", "length", "notes", "played", "grade", "artist", "title", "mapper"};
+            static const char* fields[] = {"keys", "difficulty", "length", "notes", "played", "grade", "artist", "title", "mapper", "bpm", "favorite"};
             return std::any_of(std::begin(fields), std::end(fields), [&](const char* name) { return field == name; });
         }
 
@@ -115,14 +117,15 @@ namespace nascent {
                                                                         : true;
             }
 
-            if (filter.field == "played") {
+            if (filter.field == "played" || filter.field == "favorite") {
                 std::optional<bool> wanted = parse_bool(filter.value);
 
                 if (!wanted || (filter.op != "=" && filter.op != "!=")) {
                     return true;
                 }
 
-                return (subject.best_accuracy.has_value() == *wanted) == (filter.op == "=");
+                bool actual = filter.field == "played" ? subject.best_accuracy.has_value() : subject.favorite;
+                return (actual == *wanted) == (filter.op == "=");
             }
 
             if (filter.field == "grade") {
@@ -151,6 +154,10 @@ namespace nascent {
 
             if (filter.field == "length") {
                 return compare(subject.length_seconds, filter.op, *wanted, SEARCH_TOLERANCE);
+            }
+
+            if (filter.field == "bpm") {
+                return subject.bpm && compare(*subject.bpm, filter.op, *wanted, SEARCH_TOLERANCE);
             }
 
             return subject.difficulty && compare(*subject.difficulty, filter.op, *wanted, SEARCH_TOLERANCE);

@@ -27,6 +27,7 @@ namespace nascent {
         void press(uint8_t key, double event_time);
         void release(uint8_t key, double event_time);
         void set_keys(uint32_t keys, double now);
+        void apply(const AttemptInput& input);
         void update(double now);
 
         double song_position(double now) const;

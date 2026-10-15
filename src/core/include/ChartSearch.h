@@ -30,6 +30,8 @@ namespace nascent {
         double length_seconds = 0;
         std::optional<double> difficulty;
         std::optional<double> best_accuracy;
+        std::optional<double> bpm;
+        bool favorite = false;
     };
 
     std::string ascii_lowercase(std::string text);

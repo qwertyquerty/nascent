@@ -84,6 +84,25 @@ NASCENT_TEST(osu_conversion) {
     CHECK(mode_error == "not an osu!mania beatmap");
 }
 
+NASCENT_TEST(bpm_range) {
+    ChartInfo info;
+    info.key_count = 4;
+    std::vector<Hit> hits = {{0, HitType::HIT, 1000, 1000}, {1, HitType::HIT, 11000, 11000}};
+    std::string error;
+    std::unique_ptr<Chart> chart = Chart::create(info, hits, {{0, 500.0f, 4}, {3000, 375.0f, 4}, {20000, 100.0f, 4}}, error);
+    CHECK(chart != nullptr);
+
+    if (chart) {
+        BpmRange range = chart->bpm_range();
+        CHECK(std::abs(range.main - 160.0) < 0.01);
+        CHECK(std::abs(range.min - 120.0) < 0.01);
+        CHECK(std::abs(range.max - 160.0) < 0.01);
+    }
+
+    std::unique_ptr<Chart> steady = Chart::create(info, hits, {{0, 500.0f, 4}}, error);
+    CHECK(steady && std::abs(steady->bpm_range().main - 120.0) < 0.01 && steady->bpm_range().min == steady->bpm_range().max);
+}
+
 NASCENT_TEST(intro_skip) {
     auto chart_with_first_note = [](int32_t time) {
         ChartInfo info;

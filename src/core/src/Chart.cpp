@@ -7,10 +7,12 @@
 #include "Utf8Path.h"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <tuple>
 
 namespace nascent {
@@ -282,6 +284,50 @@ namespace nascent {
 
     uint8_t Chart::unpitched_key_count() const {
         return unpitched_info.key_count;
+    }
+
+    BpmRange Chart::bpm_range() const {
+        BpmRange range;
+
+        if (unpitched_timing_points.empty()) {
+            return range;
+        }
+
+        int32_t start = INT32_MAX;
+        int32_t end = INT32_MIN;
+
+        for (const Hit& hit : unpitched_hits) {
+            start = std::min(start, hit.time);
+            end = std::max(end, hit.hit_type == HitType::HOLD ? hit.end_time : hit.time);
+        }
+
+        if (unpitched_hits.empty()) {
+            start = end = unpitched_timing_points.front().time;
+        }
+
+        std::map<int64_t, double> durations;
+        bool any = false;
+
+        for (size_t index = 0; index < unpitched_timing_points.size(); index++) {
+            const ChartTimingPoint& point = unpitched_timing_points[index];
+            int32_t from = index == 0 ? std::min(point.time, start) : point.time;
+            int32_t to = index + 1 < unpitched_timing_points.size() ? unpitched_timing_points[index + 1].time : std::max(end, point.time);
+            double covered = (double)std::min(to, end) - std::max(from, start);
+            double bpm = 60000.0 / point.beat_length;
+
+            if (covered <= 0 && (any || index + 1 < unpitched_timing_points.size())) {
+                continue;
+            }
+
+            range.min = any ? std::min(range.min, bpm) : bpm;
+            range.max = any ? std::max(range.max, bpm) : bpm;
+            durations[std::llround(bpm * BPM_PRECISION)] += std::max(0.0, covered);
+            any = true;
+        }
+
+        auto longest = std::max_element(durations.begin(), durations.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+        range.main = longest != durations.end() ? longest->first / BPM_PRECISION : 0;
+        return range;
     }
 
     int32_t Chart::get_duration_ms() const {

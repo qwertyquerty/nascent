@@ -31,6 +31,15 @@ namespace nascent {
         attempt.set_keys(keys, to_input_time(now));
     }
 
+    void PlaySession::apply(const AttemptInput& input) {
+        if (input.pressed) {
+            attempt.press(input.key, input.time);
+        }
+        else {
+            attempt.release(input.key, input.time);
+        }
+    }
+
     void PlaySession::update(double now) {
         attempt.update(to_input_time(now));
     }

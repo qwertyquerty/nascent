@@ -19,10 +19,10 @@ static ChartInfo search_info() {
     return info;
 }
 
-static bool matches(const std::string& search, std::optional<double> difficulty = 24.0, std::optional<double> best = std::nullopt) {
+static bool matches(const std::string& search, std::optional<double> difficulty = 24.0, std::optional<double> best = std::nullopt, bool favorite = false) {
     ChartInfo info = search_info();
     std::string text = ascii_lowercase(std::string("Ether Strike Akira Complex Someone Insane"));
-    SearchSubject subject{info, text, 900, 125.0, difficulty, best};
+    SearchSubject subject{info, text, 900, 125.0, difficulty, best, 180.0, favorite};
     return matches_search(parse_search(search), subject);
 }
 
@@ -57,6 +57,13 @@ NASCENT_TEST(search_matching) {
     CHECK(matches("artist!=camellia"));
     CHECK(!matches("title!=ether"));
     CHECK(matches("diff>nonsense"));
+    CHECK(matches("bpm=180"));
+    CHECK(matches("bpm>=170 bpm<200"));
+    CHECK(!matches("bpm>200"));
+    CHECK(!matches("fav=yes"));
+    CHECK(matches("fav=yes", 24.0, std::nullopt, true));
+    CHECK(matches("favorite!=yes"));
+    CHECK(!matches("favourite=no", 24.0, std::nullopt, true));
 }
 
 NASCENT_TEST(search_local_bests) {

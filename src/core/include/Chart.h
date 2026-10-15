@@ -40,6 +40,12 @@ namespace nascent {
     void to_json(nlohmann::json& j, const ChartTimingPoint& p);
     void from_json(const nlohmann::json& j, ChartTimingPoint& p);
 
+    struct BpmRange {
+        double main = 0;
+        double min = 0;
+        double max = 0;
+    };
+
     class Chart {
         private:
         ChartInfo unpitched_info;
@@ -67,6 +73,7 @@ namespace nascent {
         float pitch = 1.0;
 
         static constexpr std::string_view CHART_HASH_FORMAT = "nascent-chart-v2";
+        static constexpr double BPM_PRECISION = 100.0;
 
         static std::unique_ptr<Chart> load(const std::filesystem::path& path, float pitch, std::string& error);
         static std::unique_ptr<Chart> parse(const nlohmann::json& data, float pitch, std::string& error);
@@ -78,6 +85,7 @@ namespace nascent {
         void set_pitch(float);
         void pitched_timing(float pitch, std::vector<Hit>& out_hits, std::vector<ChartTimingPoint>& out_timing_points) const;
         uint8_t unpitched_key_count() const;
+        BpmRange bpm_range() const;
 
         nlohmann::json serialize() const;
         const std::string& gameplay_hash() const;
