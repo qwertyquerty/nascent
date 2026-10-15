@@ -221,14 +221,46 @@ a.navbar-item.is-active:focus-within {
     text-decoration: none;
 }
 
-.grade-X { color: rgb(255, 240, 160); }
-.grade-S { color: rgb(255, 210, 80); }
-.grade-A { color: rgb(110, 220, 120); }
-.grade-B { color: rgb(90, 170, 255); }
-.grade-C { color: rgb(190, 120, 255); }
-.grade-D { color: rgb(255, 150, 70); }
-.grade-E { color: rgb(240, 90, 90); }
-.grade-F { color: rgb(150, 150, 150); }
+.grade-X { color: var(--grade-x); }
+.grade-S { color: var(--grade-s); }
+.grade-A { color: var(--grade-a); }
+.grade-B { color: var(--grade-b); }
+.grade-C { color: var(--grade-c); }
+.grade-D { color: var(--grade-d); }
+.grade-E { color: var(--grade-e); }
+.grade-F { color: var(--grade-f); }
+
+.grade-X,
+.grade-S {
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
+    text-shadow: 0 0 0.45em color-mix(in srgb, currentColor 65%, transparent);
+}
+
+.grade-X {
+    animation: grade-glow 4s linear infinite;
+}
+
+.grade-X::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+    transform: translateX(-130%);
+    animation: grade-shine 3.2s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes grade-shine {
+    0%, 55% { transform: translateX(-130%); }
+    100% { transform: translateX(130%); }
+}
+
+@keyframes grade-glow {
+    0%, 100% { text-shadow: 0 0 0.45em color-mix(in srgb, var(--nascent-cyan) 70%, transparent); }
+    50% { text-shadow: 0 0 0.45em color-mix(in srgb, var(--nascent-green) 70%, transparent); }
+}
 
 .grade-counts {
     display: flex;
@@ -243,12 +275,20 @@ a.navbar-item.is-active:focus-within {
 }
 
 .rank-medal {
-    font-weight: 700;
+    display: inline-block;
+    min-width: 2.6em;
+    padding: 0 0.5em;
+    border-radius: 999px;
+    font-family: var(--nascent-display);
+    text-align: center;
+    color: var(--medal);
+    background: color-mix(in srgb, var(--medal) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--medal) 50%, transparent), 0 0 0.6em color-mix(in srgb, var(--medal) 18%, transparent);
 }
 
-.rank-1 { color: #ffd34d; }
-.rank-2 { color: #c9d3dd; }
-.rank-3 { color: #e09a5a; }
+.rank-1 { --medal: var(--rank-1); }
+.rank-2 { --medal: var(--rank-2); }
+.rank-3 { --medal: var(--rank-3); }
 
 .table td,
 .table th {
@@ -318,6 +358,15 @@ a.navbar-item.is-active:focus-within {
     padding: 0 0.3em;
 }
 
+.play-grade.grade-X,
+.play-grade.grade-S {
+    text-shadow: 0 0 0.35em color-mix(in srgb, currentColor 75%, transparent), 0 0 0.9em color-mix(in srgb, currentColor 35%, transparent);
+}
+
+.difficulty-number {
+    font-variant-numeric: tabular-nums;
+}
+
 .play-stat .stat-value {
     font-size: 1.35rem;
 }
@@ -325,10 +374,7 @@ a.navbar-item.is-active:focus-within {
 .difficulty-value {
     font-size: 3rem;
     line-height: 1.1;
-    background: var(--nascent-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    text-shadow: 0 0 0.5em color-mix(in srgb, currentColor 35%, transparent);
 }
 
 .judgement-count {
@@ -339,12 +385,12 @@ a.navbar-item.is-active:focus-within {
     font-family: var(--nascent-display);
 }
 
-.judgement-perfect { color: rgb(255, 221, 68); }
-.judgement-amazing { color: rgb(204, 153, 0); }
-.judgement-great { color: rgb(51, 204, 51); }
-.judgement-good { color: rgb(60, 140, 255); }
-.judgement-bad { color: rgb(204, 204, 204); }
-.judgement-miss { color: rgb(255, 70, 70); }
+.judgement-perfect { color: var(--judgement-perfect); }
+.judgement-amazing { color: var(--judgement-amazing); }
+.judgement-great { color: var(--judgement-great); }
+.judgement-good { color: var(--judgement-good); }
+.judgement-bad { color: var(--judgement-bad); }
+.judgement-miss { color: var(--judgement-miss); }
 
 .density-graph,
 .hit-error-graph {
@@ -682,6 +728,15 @@ a.navbar-item.is-active:focus-within {
     .logo-loader img {
         animation: none;
         opacity: 0.6;
+    }
+
+    .grade-X,
+    .grade-X::after {
+        animation: none;
+    }
+
+    .grade-X::after {
+        display: none;
     }
 }
 

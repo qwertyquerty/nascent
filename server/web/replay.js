@@ -1,10 +1,10 @@
 const HIT_SCORES = {
-    PERFECT: {color: "rgb(255, 221, 68)", weight: 100},
-    AMAZING: {color: "rgb(204, 153, 0)", weight: 95},
-    GREAT: {color: "rgb(51, 204, 51)", weight: 70},
-    GOOD: {color: "rgb(0, 102, 255)", weight: 40},
-    BAD: {color: "rgb(204, 204, 204)", weight: 10},
-    MISS: {color: "rgb(255, 0, 0)", weight: 0},
+    PERFECT: {color: PALETTE.colors.judgement_perfect, weight: 100},
+    AMAZING: {color: PALETTE.colors.judgement_amazing, weight: 95},
+    GREAT: {color: PALETTE.colors.judgement_great, weight: 70},
+    GOOD: {color: PALETTE.colors.judgement_good, weight: 40},
+    BAD: {color: PALETTE.colors.judgement_bad, weight: 10},
+    MISS: {color: PALETTE.colors.judgement_miss, weight: 0},
 };
 
 const MISS_DELAY_MS = 160;

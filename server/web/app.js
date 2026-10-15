@@ -1,4 +1,32 @@
 const API = document.querySelector('meta[name="nascent-api"]').content;
+
+for (const [name, value] of Object.entries(PALETTE.colors)) {
+    document.documentElement.style.setProperty(`--${name.replaceAll("_", "-")}`, value);
+}
+
+function difficultyColor(value) {
+    const stops = PALETTE.difficulty_scale;
+    const rgb = (hex) => [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+    const number = Number(value ?? 0);
+
+    if (number <= stops[0][0]) {
+        return stops[0][1];
+    }
+
+    for (let index = 1; index < stops.length; index++) {
+        const [high, highColor] = stops[index];
+
+        if (number <= high) {
+            const [low, lowColor] = stops[index - 1];
+            const t = (number - low) / Math.max(1e-9, high - low);
+            const from = rgb(lowColor);
+            const to = rgb(highColor);
+            return `rgb(${from.map((channel, part) => Math.round(channel + (to[part] - channel) * t)).join(", ")})`;
+        }
+    }
+
+    return stops[stops.length - 1][1];
+}
 const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases/latest";
 const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases/latest";
 const PAGE_SIZE = 50;
@@ -16,7 +44,7 @@ const SCATTER_HEIGHT = 280;
 const SCATTER_PAD = {left: 46, right: 12, top: 12, bottom: 30};
 const SCATTER_PLAYS = 100;
 const DAILY_HEIGHT = 120;
-const GRADE_COLORS = {X: "rgb(255, 240, 160)", S: "rgb(255, 210, 80)", A: "rgb(110, 220, 120)", B: "rgb(90, 170, 255)", C: "rgb(190, 120, 255)", D: "rgb(255, 150, 70)", E: "rgb(240, 90, 90)", F: "rgb(150, 150, 150)"};
+const GRADE_COLORS = Object.fromEntries([..."XSABCDEF"].map((grade) => [grade, PALETTE.colors[`grade_${grade.toLowerCase()}`]]));
 const LEADERBOARD_SORT = {sort: "performance", order: "desc"};
 const CHART_SORT = {sort: "play_count", order: "desc"};
 
@@ -87,6 +115,7 @@ const format = {
     length: (ms) => `${Math.floor(ms / 60000)}:${String(Math.round(ms / 1000) % 60).padStart(2, "0")}`,
     playtime: (ms) => `${Math.floor(ms / 3600000).toLocaleString()}h ${Math.floor(ms / 60000) % 60}m`,
     error: (ms) => `${ms >= 0 ? "+" : ""}${Number(ms).toFixed(1)} ms`,
+    difficultyColor,
     standing(rank, players) {
         if (!rank || !players) {
             return "";
@@ -410,7 +439,12 @@ app.component("rel-time", {
 
 app.component("rank-cell", {
     props: {rank: Number},
-    template: `<span :class="rank <= 3 ? 'rank-medal rank-' + rank : null">{{ $f.rank(rank) }}</span>`,
+    template: `<span :class="rank <= 3 ? 'rank-medal rank-' + rank : null" :title="rank <= 3 ? ['', 'First place', 'Second place', 'Third place'][rank] : null">{{ $f.rank(rank) }}</span>`,
+});
+
+app.component("difficulty-value", {
+    props: {value: Number},
+    template: `<span class="difficulty-number" :style="{color: $f.difficultyColor(value)}">{{ $f.performance(value) }}</span>`,
 });
 
 app.component("player-search", {
@@ -735,7 +769,7 @@ app.component("skill-scatter", {
             <template v-else>
                 <p class="skill-summary is-size-7 has-text-grey">
                     Accuracy against difficulty for the top {{ plays.length }} {{ keyCount }}K plays &middot; average {{ $f.accuracy(average) }}
-                    <template v-if="hardest"> &middot; hardest S: {{ $f.performance(hardest.difficulty) }}</template>
+                    <template v-if="hardest"> &middot; hardest S: <difficulty-value :value="hardest.difficulty"></difficulty-value></template>
                 </p>
                 <svg :viewBox="'0 0 ${SCATTER_WIDTH} ${SCATTER_HEIGHT}'" role="img" :aria-label="'Accuracy against difficulty for ' + plays.length + ' best plays'">
                     <line v-for="tick in yTicks" :key="'y' + tick.value" :x1="${SCATTER_PAD.left}" :x2="${SCATTER_WIDTH - SCATTER_PAD.right}" :y1="tick.position" :y2="tick.position" class="scatter-grid"></line>

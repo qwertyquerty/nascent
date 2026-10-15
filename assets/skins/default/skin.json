@@ -48,9 +48,9 @@
         "judgement_perfect": "#ffdd44",
         "judgement_amazing": "#cc9900",
         "judgement_great": "#33cc33",
-        "judgement_good": "#0066ff",
+        "judgement_good": "#3c8cff",
         "judgement_bad": "#cccccc",
-        "judgement_miss": "#ff0000",
+        "judgement_miss": "#ff4646",
         "grade_x": "#fff0a0",
         "grade_s": "#ffd250",
         "grade_a": "#6edc78",
@@ -58,6 +58,20 @@
         "grade_c": "#be78ff",
         "grade_d": "#ff9646",
         "grade_e": "#f05a5a",
-        "grade_f": "#969696"
-    }
+        "grade_f": "#969696",
+        "rank_1": "#ffd34d",
+        "rank_2": "#c9d3dd",
+        "rank_3": "#e09a5a"
+    },
+    "difficulty_scale": [
+        [0, "#6fa8ff"],
+        [15, "#00b1e1"],
+        [25, "#00f59a"],
+        [35, "#ffe066"],
+        [45, "#ff9a3c"],
+        [55, "#ff4d6d"],
+        [70, "#c04dff"],
+        [85, "#7a5cff"],
+        [100, "#f2eaff"]
+    ]
 }

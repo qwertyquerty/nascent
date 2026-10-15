@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css" integrity="sha384-tl5h4XuWmVzPeVWU0x8bx0j/5iMwCBduLEgZ+2lH4Wjda+4+q3mpCww74dgAB3OX" crossorigin="anonymous">
     <link rel="stylesheet" href="/app.css">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" integrity="sha384-W/1Fp/LgAYO/oTn9Gs+PbeWuMuq1eQCnUMPCeg8POmMYchhzxctjEqtbiCIxDOON" crossorigin="anonymous"></script>
+    <script src="/palette.js" defer></script>
     <script src="/replay.js" defer></script>
     <script src="/app.js" defer></script>
 </head>
@@ -114,15 +115,15 @@
 
                 <div class="play-summary box">
                     <span class="grade play-grade" :class="'grade-' + view.play.grade">{{ view.play.grade }}</span>
-                    <div v-for="[label, value, extra] in [
+                    <div v-for="[label, value, extra, color] in [
                         ['Accuracy', $f.accuracy(view.play.accuracy)],
                         ['Performance', view.play.ranked ? $f.performance(view.play.performance) : 'Unranked'],
                         ['Rate', $f.rate(view.play.rate), view.play.rate !== 1 ? 'rate-changed' : ''],
                         ['Max combo', $f.number(view.play.max_combo)],
                         ['Mean error', $f.error(view.play.average_error)],
-                        ['Difficulty', $f.performance(view.play.difficulty)],
+                        ['Difficulty', $f.performance(view.play.difficulty), 'difficulty-number', $f.difficultyColor(view.play.difficulty)],
                     ]" class="play-stat">
-                        <p class="stat-label">{{ label }}</p><p class="stat-value" :class="extra">{{ value }}</p>
+                        <p class="stat-label">{{ label }}</p><p class="stat-value" :class="extra" :style="color ? {color} : null">{{ value }}</p>
                     </div>
                     <div v-if="view.leaderboard" class="play-stat">
                         <p class="stat-label">Leaderboard at {{ $f.rate(view.leaderboard.rate) }}</p>
@@ -375,7 +376,7 @@
                             </td>
                             <td class="is-hidden-mobile">{{ chart.mapper }}</td>
                             <td class="is-numeric">{{ chart.key_count }}K</td>
-                            <td class="is-numeric">{{ $f.performance(chart.difficulty) }}</td>
+                            <td class="is-numeric"><difficulty-value :value="chart.difficulty"></difficulty-value></td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.length(chart.duration_ms) }}</td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.number(chart.play_count) }}</td>
                             <td class="is-hidden-mobile"><span class="tag" :class="chart.status === 'ranked' ? 'is-success is-dark' : 'is-light'">{{ chart.status }}</span></td>
@@ -400,7 +401,7 @@
                 <div class="chart-headline box">
                     <div class="chart-difficulty">
                         <p class="stat-label">Difficulty at {{ $f.rate(view.rate) }}</p>
-                        <p class="difficulty-value">{{ $f.performance(view.difficulty) }}</p>
+                        <p class="difficulty-value" :style="{color: $f.difficultyColor(view.difficulty)}">{{ $f.performance(view.difficulty) }}</p>
                     </div>
                     <div v-for="[label, value] in [
                         ['Keys', view.chart.key_count + 'K'],
