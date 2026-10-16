@@ -4,6 +4,7 @@
 #include "Replay.h"
 #include "ServerApi.h"
 #include "gse/Overlay.h"
+#include "gse/ui/Layout.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstddef>
@@ -46,6 +47,7 @@ namespace nascent {
 
         ReplayMenu(Skin* skin, const Chart& chart, const std::string& gameplay_hash, float rate, WatchCallback on_watch);
 
+        void on_open() override;
         void update(float elapsed_time) override;
         void draw(olc::PixelGameEngine* window) override;
         olc::Pixel backdrop() const override;
@@ -62,6 +64,11 @@ namespace nascent {
         std::string online_status = "Loading the leaderboard...";
         std::future<ApiResult<Replay>> download;
         std::optional<size_t> downloading;
+        Hotspots spots;
+        Rect panel;
+        olc::vi2d last_mouse = {-1, -1};
+
+        void choose();
 
         size_t count() const;
         const Choice& choice(size_t index) const;

@@ -3,6 +3,8 @@
 #include "gse/input/KeyEvents.h"
 #include "olcPixelGameEngine.h"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
@@ -28,6 +30,7 @@ namespace nascent {
     class Input {
         public:
         using KeyState = std::function<olc::HWButton(olc::Key)>;
+        static constexpr size_t MOUSE_BUTTONS = 3;
 
         protected:
         olc::PixelGameEngine* window = nullptr;
@@ -41,6 +44,10 @@ namespace nascent {
         std::vector<olc::Key> frame_pressed_keys;
         std::unordered_map<ActionId, std::vector<olc::Key>> bindings;
         std::unordered_set<ActionId> consumed;
+        std::unordered_set<ActionId> injected;
+        std::array<bool, MOUSE_BUTTONS> consumed_clicks = {};
+        bool back_clicked = false;
+        bool wheel_consumed = false;
         int suppressed = 0;
 
         void poll_key_events();
@@ -60,6 +67,7 @@ namespace nascent {
         bool held(ActionId action) const;
         bool take(ActionId action);
         void consume(ActionId action);
+        void inject(ActionId action);
 
         olc::HWButton key(olc::Key key) const;
         bool key_pressed(olc::Key key) const;
@@ -76,6 +84,9 @@ namespace nascent {
         int32_t mouse_wheel() const;
         olc::vi2d mouse_position() const;
         olc::HWButton mouse(uint32_t button) const;
+        bool clicked(uint32_t button = 0) const;
+        bool take_click(uint32_t button = 0);
+        int32_t take_wheel();
         olc::PixelGameEngine* target() const;
         KeyEventQueue& event_queue();
         InputMode mode() const;

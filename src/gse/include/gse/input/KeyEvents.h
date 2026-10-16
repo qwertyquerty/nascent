@@ -47,6 +47,7 @@ namespace nascent {
         std::array<bool, KEY_COUNT> held = {};
         std::string text;
         std::vector<std::string> dropped_files;
+        int32_t back_clicks = 0;
         InputDelayStats delay_stats;
 
         public:
@@ -57,6 +58,8 @@ namespace nascent {
         std::string drain_text();
         void push_dropped_files(std::vector<std::string> files);
         std::vector<std::string> drain_dropped_files();
+        void push_back_click();
+        bool drain_back_click();
         void record_delay(double delay_ms);
         InputDelayStats input_delay() const;
         void reset_input_delay();

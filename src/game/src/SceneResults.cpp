@@ -252,6 +252,10 @@ namespace nascent {
             RichPresence::refresh_profile();
         }
 
+        if (spots.take_click(game->input())) {
+            game->input().inject(actions::CONFIRM);
+        }
+
         if (game->input().take(actions::CONFIRM)) {
             game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             game->scenes().pop();
@@ -309,7 +313,8 @@ namespace nascent {
         };
 
         int32_t right = screen.x - padding - width(BACK_HINT);
-        draw_text(font, BACK_HINT, {right, baseline}, skin->color(SkinColor::TEXT_MUTED));
+        spots.clear();
+        draw_hints(window, font, {{std::string(BACK_HINT), 0}}, {(float)right, (float)baseline}, (float)segment_gap, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
 
         int32_t left_limit = right - segment_gap;
         int32_t x = padding;

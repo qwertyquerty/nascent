@@ -1,6 +1,9 @@
 #include "gse/ui/TextField.h"
 
+#include "gse/render/Color.h"
 #include "gse/render/TextCache.h"
+#include "gse/ui/Layout.h"
+#include "gse/ui/RowField.h"
 #include "gse/ui/Ui.h"
 
 #include <algorithm>
@@ -127,7 +130,11 @@ namespace nascent {
         int32_t padding = Ui::px(PADDING);
         int32_t caret_inset = Ui::px(CARET_INSET);
         int32_t box_top = position.y + label_metrics.size.y + Ui::px(LABEL_GAP);
-        window->FillRectDecal({(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}, theme.color(focused ? UiColor::INPUT_BACKGROUND_FOCUSED : UiColor::INPUT_BACKGROUND));
+        bool hovered = Rect{{(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}}.contains(window->GetMousePos());
+        olc::Pixel background = theme.color(UiColor::INPUT_BACKGROUND);
+        olc::Pixel focused_background = theme.color(UiColor::INPUT_BACKGROUND_FOCUSED);
+        olc::Pixel hover_background = hovered ? mix(background, focused_background, RowField::HOVER_MIX) : background;
+        window->FillRectDecal({(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}, focused ? focused_background : hover_background);
 
         size_t end = focused ? std::min(cursor, value.size()) : value.size();
         std::string shown = secret ? std::string(character_count(value, value.size()), '*') : value;

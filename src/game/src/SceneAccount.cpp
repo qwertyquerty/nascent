@@ -65,7 +65,7 @@ namespace nascent {
         this->mode = mode;
         form.clear();
         login_field = email_field = password_field = nullptr;
-        continue_button = profile_button = sign_out_button = nullptr;
+        continue_button = profile_button = sign_out_button = switch_button = nullptr;
 
         if (mode == Mode::SIGNED_IN) {
             continue_button = &form.add<ButtonField>("Continue");
@@ -82,6 +82,7 @@ namespace nascent {
         }
 
         password_field = &form.add<TextField>("Password", "", true);
+        switch_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "Create an account instead" : "Sign in instead");
         form.focus_field(0);
     }
 
@@ -142,6 +143,38 @@ namespace nascent {
         status_is_error = !opened;
     }
 
+    bool SceneAccount::update_footer(Input& input) {
+        std::optional<int32_t> spot = footer_spots.take_click(input);
+
+        if (!spot) {
+            return false;
+        }
+
+        switch (*spot) {
+            case SPOT_BACK:
+                input.inject(actions::BACK);
+                return false;
+            case SPOT_CONFIRM:
+                input.inject(actions::CONFIRM);
+                return false;
+            case SPOT_SUBMIT:
+                play_menu_sound();
+                submit();
+                return true;
+            default:
+                if (mode == Mode::SIGNED_IN) {
+                    sign_out();
+                }
+                else {
+                    play_menu_sound();
+                    status.clear();
+                    set_mode(mode == Mode::SIGN_IN ? Mode::REGISTER : Mode::SIGN_IN);
+                }
+
+                return true;
+        }
+    }
+
     void SceneAccount::update(float elapsed_time) {
         Input& input = game->input();
         sky->update(elapsed_time);
@@ -156,6 +189,10 @@ namespace nascent {
                 finish(pending.get());
             }
 
+            return;
+        }
+
+        if (update_footer(input)) {
             return;
         }
 
@@ -183,9 +220,15 @@ namespace nascent {
             return;
         }
 
+        if (form.focused_field() == password_field && input.take(actions::CONFIRM)) {
+            play_menu_sound();
+            submit();
+            return;
+        }
+
         UiForm::Action action = form.update(input, elapsed_time);
 
-        if (InputManager::switch_pressed(input)) {
+        if (switch_button->take_pressed() || InputManager::switch_pressed(input)) {
             play_menu_sound();
             status.clear();
             set_mode(mode == Mode::SIGN_IN ? Mode::REGISTER : Mode::SIGN_IN);
@@ -231,21 +274,23 @@ namespace nascent {
             draw_text(skin->display_font_small, status, {x, y}, skin->color(status_is_error ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
         }
 
-        std::string footer;
+        std::vector<Hint> footer;
 
         if (mode == Mode::SIGNED_IN) {
-            footer = "↑/↓:  choose        Enter:  select        Ctrl+Tab:  sign out        Esc:  back";
+            footer = {{"↑/↓:  choose"}, {"Enter:  select", SPOT_CONFIRM}, {"Ctrl+Tab:  sign out", SPOT_SWITCH}, {"Esc:  back", SPOT_BACK}};
         }
         else {
-            footer = std::format(
-                "Tab:  field        Enter:  {}        Ctrl+Tab:  {}        Esc:  play offline",
-                mode == Mode::SIGN_IN ? "sign in" : "create account",
-                mode == Mode::SIGN_IN ? "create an account" : "sign in instead"
-            );
+            footer = {
+                {"Tab:  field"},
+                {std::format("Enter:  {}", mode == Mode::SIGN_IN ? "sign in" : "create account"), SPOT_SUBMIT},
+                {std::format("Ctrl+Tab:  {}", mode == Mode::SIGN_IN ? "create an account" : "sign in instead"), SPOT_SWITCH},
+                {"Esc:  play offline", SPOT_BACK},
+            };
         }
 
-        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
+        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, "Hgjy");
         int32_t footer_bottom = screen.y - screen.y / 12;
-        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, skin->color(SkinColor::TEXT_MUTED));
+        footer_spots.clear();
+        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::pxf(FOOTER_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), footer_spots);
     }
 }

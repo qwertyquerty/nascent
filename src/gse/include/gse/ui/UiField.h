@@ -16,6 +16,12 @@ namespace nascent {
         virtual bool update(Input&, float) {
             return false;
         }
+        virtual bool click(olc::vf2d, Input&) {
+            return false;
+        }
+        virtual bool drag(olc::vf2d) {
+            return false;
+        }
         virtual int32_t draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const = 0;
         virtual bool is_filled() const {
             return true;

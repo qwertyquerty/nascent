@@ -102,6 +102,11 @@ namespace nascent {
         return Ui::px(PADDING);
     }
 
+    std::optional<StatusAction> StatusBar::take_click(Input& input, uint32_t button) const {
+        std::optional<int32_t> found = hotspots.take_click(input, button);
+        return found ? std::optional<StatusAction>((StatusAction)*found) : std::nullopt;
+    }
+
     void StatusBar::draw(olc::PixelGameEngine* window, Skin* skin) const {
         olc::vi2d screen = window->GetScreenSize();
         int32_t bar_height = height();
@@ -144,12 +149,30 @@ namespace nascent {
                 break;
         }
 
-        const std::array<std::string_view, 8> hints = {leaderboards_shown ? "Tab  preview" : "Tab  scores", "Shift ←/→  rate", "F1  options", "F3  calibration", username.empty() ? "F4  sign in" : "F4  account", "F5  browse", "F6  input", "F7  chart"};
+        const std::array<std::pair<std::string_view, StatusAction>, 8> hints = {{
+            {leaderboards_shown ? "Tab  preview" : "Tab  scores", StatusAction::TOGGLE_SCORES},
+            {"Shift ←/→  rate", StatusAction::RATE},
+            {"F1  options", StatusAction::OPTIONS},
+            {"F3  calibration", StatusAction::CALIBRATION},
+            {username.empty() ? "F4  sign in" : "F4  account", StatusAction::ACCOUNT},
+            {"F5  browse", StatusAction::BROWSE},
+            {"F6  input", StatusAction::INPUT},
+            {"F7  chart", StatusAction::CHART_MENU},
+        }};
         int32_t hint_x = screen.x - padding() + segment_gap;
+        olc::vf2d mouse = window->GetMousePos();
+        hotspots.clear();
+
+        auto hotspot = [&](int32_t left, int32_t right, StatusAction action) {
+            Rect area = {{(float)left - segment_gap / 2.0f, (float)top}, {(float)(right - left) + segment_gap, (float)bar_height}};
+            hotspots.add(area, (int32_t)action);
+            return area.contains(mouse);
+        };
 
         for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
-            hint_x -= segment_gap + width(*hint);
-            draw_text(font, *hint, {hint_x, baseline}, skin->color(SkinColor::TEXT_MUTED));
+            hint_x -= segment_gap + width(hint->first);
+            bool hovered = hotspot(hint_x, hint_x + width(hint->first), hint->second);
+            draw_text(font, hint->first, {hint_x, baseline}, skin->color(hovered ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
         }
 
         int32_t status_x = hint_x - segment_gap - width(status);
@@ -174,7 +197,8 @@ namespace nascent {
         std::string rate_value = std::format("{:.2f}x", rate);
         int32_t rate_value_x = dot_x - radius - segment_gap - width(rate_value);
         int32_t rate_label_x = rate_value_x - label_gap - width("Rate");
-        draw_text(font, "Rate", {rate_label_x, baseline}, skin->color(SkinColor::TEXT_MUTED));
+        bool rate_hovered = hotspot(rate_label_x, rate_value_x + width(rate_value), StatusAction::RATE);
+        draw_text(font, "Rate", {rate_label_x, baseline}, skin->color(rate_hovered ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
         draw_text(font, rate_value, {rate_value_x, baseline}, skin->color(std::abs(rate - 1.0f) < 0.001f ? SkinColor::TEXT : SkinColor::ATTENTION));
         int32_t left_limit = rate_label_x - segment_gap;
         bool left_full = false;

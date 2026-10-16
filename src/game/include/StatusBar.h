@@ -3,6 +3,7 @@
 #include "ServerApi.h"
 #include "olcPixelGameEngine.h"
 #include "gse/render/SpriteDecal.h"
+#include "gse/ui/Layout.h"
 
 #include <cstdint>
 #include <future>
@@ -11,6 +12,17 @@
 
 namespace nascent {
     class Skin;
+
+    enum class StatusAction : int32_t {
+        TOGGLE_SCORES,
+        RATE,
+        OPTIONS,
+        CALIBRATION,
+        ACCOUNT,
+        BROWSE,
+        INPUT,
+        CHART_MENU
+    };
 
     class StatusBar {
         protected:
@@ -38,6 +50,7 @@ namespace nascent {
 
         mutable SpriteDecal dot;
         mutable int32_t dot_radius = 0;
+        mutable Hotspots hotspots;
 
         void poll_heartbeat();
         void poll_profile();
@@ -60,5 +73,6 @@ namespace nascent {
         void set_leaderboards_shown(bool shown);
         void update(float elapsed_time);
         void draw(olc::PixelGameEngine* window, Skin* skin) const;
+        std::optional<StatusAction> take_click(Input& input, uint32_t button = 0) const;
     };
 }

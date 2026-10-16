@@ -620,7 +620,7 @@ namespace nascent {
 
     void ScenePlay::update(float elapsed_time) {
         double now = now_ms();
-        set_cursor_hidden(!paused);
+        set_cursor_hidden(!paused && !replay);
 
         if (is_ready(background_load)) {
             background_image = MipDecal(background_load.get());
@@ -657,19 +657,28 @@ namespace nascent {
         }
 
         if (replay && !paused) {
-            if (input.key_pressed(olc::Key::SPACE)) {
+            std::optional<int32_t> spot = replay_spots.take_click(input);
+
+            if (spot == REPLAY_MENU) {
+                pause(now);
+            }
+            else if (spot == REPLAY_STOP) {
+                input.inject(actions::BACK);
+            }
+
+            if (input.key_pressed(olc::Key::SPACE) || spot == REPLAY_TOGGLE) {
                 toggle_replay_pause(now);
             }
 
-            if (InputManager::reset_pressed(input)) {
+            if (InputManager::reset_pressed(input) || spot == REPLAY_RESTART) {
                 replay_paused = false;
                 seek_replay(start_position_ms(), now);
             }
 
-            bool back = input.take(actions::LEFT);
+            bool back = input.take(actions::LEFT) || spot == REPLAY_BACK;
 
             double from = replay_paused ? paused_position : session->song_position(now);
-            bool forward = !back && input.take(actions::RIGHT) && from < chart->get_chart_end_ms();
+            bool forward = !back && (input.take(actions::RIGHT) || spot == REPLAY_FORWARD) && from < chart->get_chart_end_ms();
 
             if (back || forward) {
                 seek_replay(from + (back ? -REPLAY_SEEK_MS : REPLAY_SEEK_MS), now);
@@ -871,18 +880,16 @@ namespace nascent {
         int32_t baseline = top + (bar_height - metrics.size.y) / 2 - metrics.offset.y;
         draw_text(font, replay_paused ? "Paused" : "Playing", {StatusBar::padding(), baseline}, skin->color(SkinColor::TEXT));
 
-        const std::array<std::string, 5> hints = {
-            replay_paused ? std::string("Space  play") : std::string("Space  pause"),
-            "←/→  seek 5s",
-            "Ctrl+R  restart",
-            std::format("{}  menu", InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE))),
-            "Esc  stop watching",
+        std::vector<Hint> hints = {
+            {replay_paused ? "Space  play" : "Space  pause", REPLAY_TOGGLE},
+            {"←  -5s", REPLAY_BACK},
+            {"→  +5s", REPLAY_FORWARD},
+            {"Ctrl+R  restart", REPLAY_RESTART},
+            {std::format("{}  menu", InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE))), REPLAY_MENU},
+            {"Esc  stop watching", REPLAY_STOP},
         };
-        int32_t x = screen.x - StatusBar::padding() + segment_gap;
-
-        for (auto hint = hints.rbegin(); hint != hints.rend(); ++hint) {
-            x -= segment_gap + text_bounds(font, *hint).size.x;
-            draw_text(font, *hint, {x, baseline}, skin->color(SkinColor::TEXT_MUTED));
-        }
+        float x = screen.x - StatusBar::padding() - hints_width(font, hints, (float)segment_gap);
+        replay_spots.clear();
+        draw_hints(window, font, hints, {x, (float)baseline}, (float)segment_gap, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), replay_spots);
     }
 }

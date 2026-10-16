@@ -1,6 +1,7 @@
 #include "ToastOverlay.h"
 
 #include "Skin.h"
+#include "gse/Game.h"
 #include "gse/render/Color.h"
 #include "gse/render/TextCache.h"
 #include "gse/ui/Ui.h"
@@ -19,6 +20,11 @@ namespace nascent {
 
     void ToastOverlay::update(float elapsed_time) {
         timer = std::max(0.0f, timer - elapsed_time);
+        Input& input = game->input();
+
+        if (timer > FADE_TIME && input.clicked(0) && area.contains(input.mouse_position()) && input.take_click(0)) {
+            timer = FADE_TIME;
+        }
     }
 
     bool ToastOverlay::is_modal() const {
@@ -27,6 +33,7 @@ namespace nascent {
 
     void ToastOverlay::draw(olc::PixelGameEngine* window) {
         if (timer <= 0 || message.empty()) {
+            area = {};
             return;
         }
 
@@ -44,6 +51,7 @@ namespace nascent {
         float left = (float)x;
         float top = (float)toast_top;
         float edge = std::max(1.0f, Ui::pxf(BORDER));
+        area = {{left, top}, {(float)width, (float)height}};
 
         window->FillRectDecal({left, top}, {(float)width, (float)height}, fade(skin->color(SkinColor::TOAST_BACKGROUND), opacity));
         window->FillRectDecal({left, top}, {(float)width, edge}, border);

@@ -4,6 +4,7 @@
 #include "gse/Scene.h"
 #include "ServerApi.h"
 #include "gse/fx/ParticleEmitter.h"
+#include "gse/ui/Layout.h"
 #include "gse/render/MipDecal.h"
 #include "olcPixelGameEngine.h"
 #include "gse/render/SpriteDecal.h"
@@ -29,6 +30,7 @@ namespace nascent {
         std::string replay_label;
 
         ParticleEmitter particles;
+        mutable Hotspots spots;
         float elapsed = 0;
         bool slammed = false;
 

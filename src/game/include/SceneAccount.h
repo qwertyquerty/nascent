@@ -3,6 +3,7 @@
 #include "EntityFFT.h"
 #include "gse/Scene.h"
 #include "ServerClient.h"
+#include "gse/ui/Layout.h"
 #include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
@@ -19,6 +20,10 @@ namespace nascent {
 
     class SceneAccount : public Scene {
         protected:
+        Hotspots footer_spots;
+
+        bool update_footer(Input& input);
+
         enum class Mode {
             SIGN_IN,
             REGISTER,
@@ -38,6 +43,7 @@ namespace nascent {
         ButtonField* continue_button = nullptr;
         ButtonField* profile_button = nullptr;
         ButtonField* sign_out_button = nullptr;
+        ButtonField* switch_button = nullptr;
 
         std::unique_ptr<EntityFFT> fft;
         std::vector<float> audio_buffer;
@@ -57,6 +63,12 @@ namespace nascent {
         public:
         SceneAccount(Skin* skin, Scene* next_scene, EntityStarfield* sky, bool pan_in = false);
         void on_create() override;
+
+        static constexpr int32_t SPOT_CONFIRM = 0;
+        static constexpr int32_t SPOT_SWITCH = 1;
+        static constexpr int32_t SPOT_BACK = 2;
+        static constexpr int32_t SPOT_SUBMIT = 3;
+        static constexpr float FOOTER_GAP = 48.0f;
         void on_enter() override;
         void on_exit() override;
         void update(float) override;

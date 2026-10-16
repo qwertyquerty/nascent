@@ -58,8 +58,15 @@ namespace nascent {
         return std::format("{} (#{})", choice.player, choice.rank);
     }
 
+    void ReplayMenu::on_open() {
+        last_mouse = game->input().mouse_position();
+    }
+
     void ReplayMenu::update(float) {
         Input& input = game->input();
+        olc::vi2d mouse = input.mouse_position();
+        bool mouse_moved = mouse != last_mouse;
+        last_mouse = mouse;
 
         if (is_ready(board)) {
             ApiResult<ChartLeaderboard> result = board.get();
@@ -93,7 +100,7 @@ namespace nascent {
             return;
         }
 
-        if (input.take(actions::BACK) || input.take(game_actions::CHART_MENU)) {
+        if (input.take(actions::BACK) || input.take(game_actions::CHART_MENU) || input.take_click(1) || (input.clicked(0) && !panel.contains(mouse) && input.take_click(0))) {
             game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             close();
             return;
@@ -104,6 +111,18 @@ namespace nascent {
         }
 
         selected = std::min(selected, count() - 1);
+
+        if (std::optional<int32_t> hovered = spots.at(mouse); hovered && mouse_moved && (size_t)*hovered != selected && (size_t)*hovered < count()) {
+            selected = (size_t)*hovered;
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+        }
+
+        if (std::optional<int32_t> clicked = spots.take_click(input); clicked && (size_t)*clicked < count()) {
+            selected = (size_t)*clicked;
+            choose();
+            return;
+        }
+
         bool down = input.take(actions::DOWN);
 
         if (down || input.take(actions::UP)) {
@@ -112,10 +131,12 @@ namespace nascent {
             return;
         }
 
-        if (!input.take(actions::CONFIRM)) {
-            return;
+        if (input.take(actions::CONFIRM)) {
+            choose();
         }
+    }
 
+    void ReplayMenu::choose() {
         const Choice& picked = choice(selected);
 
         if (!picked.path) {
@@ -158,6 +179,8 @@ namespace nascent {
         int32_t y = top + padding;
 
         window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)height}, skin->color(SkinColor::MENU_BACKGROUND));
+        panel = {{(float)left, (float)top}, {(float)width, (float)height}};
+        spots.clear();
 
         draw_text(title_font, "Watch a replay", {x, y - title_metrics.offset.y}, skin->color(SkinColor::TEXT));
         y += title_metrics.size.y + gap;
@@ -179,6 +202,7 @@ namespace nascent {
             bool is_selected = index == selected;
             int32_t baseline = y + (row_height - row_metrics.size.y) / 2 - row_metrics.offset.y;
             olc::Pixel text_color = skin->color(is_selected ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
+            spots.add({{(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}}, (int32_t)index);
 
             if (is_selected) {
                 window->FillRectDecal({(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));

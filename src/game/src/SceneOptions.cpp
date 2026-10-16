@@ -244,8 +244,33 @@ namespace nascent {
         }
     }
 
+    bool SceneOptions::update_footer(Input& input) {
+        std::optional<int32_t> clicked = footer_spots.take_click(input);
+
+        if (!clicked) {
+            return false;
+        }
+
+        if (*clicked == FOOTER_BACK) {
+            input.inject(actions::BACK);
+        }
+        else if (*clicked == FOOTER_CONFIRM) {
+            input.inject(actions::CONFIRM);
+        }
+        else if (KeyBindField* key_field = dynamic_cast<KeyBindField*>(form.focused_field()); key_field != nullptr && key_field->reset_binding()) {
+            return true;
+        }
+
+        return false;
+    }
+
     void SceneOptions::update(float elapsed_time) {
+        bool reset = update_footer(game->input());
         UiForm::Action action = form.update(game->input(), elapsed_time);
+
+        if (reset) {
+            action = UiForm::Action::CHANGED;
+        }
 
         if (action == UiForm::Action::CHANGED) {
             apply();
@@ -434,22 +459,22 @@ namespace nascent {
         scroll += (scroll_target - scroll) * std::min(1.0f, elapsed_time * SCROLL_SPEED);
     }
 
-    std::string SceneOptions::footer_text() const {
+    std::vector<Hint> SceneOptions::footer_hints() const {
         const KeyBindField* key_field = dynamic_cast<const KeyBindField*>(form.focused_field());
 
         if (key_field != nullptr && key_field->is_capturing()) {
-            return "Press the new key";
+            return {{"Press the new key"}};
         }
 
         if (key_field != nullptr) {
-            return "↑/↓:  choose        Enter:  rebind        Delete:  reset        Esc:  back";
+            return {{"↑/↓:  choose"}, {"Enter:  rebind", FOOTER_CONFIRM}, {"Delete:  reset", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
         }
 
         if (server_field != nullptr && form.focused_field() == server_field) {
-            return "Type an address        ↑/↓:  choose        Esc:  save and go back";
+            return {{"Type an address"}, {"↑/↓:  choose"}, {"Esc:  save and go back", FOOTER_BACK}};
         }
 
-        return "↑/↓:  choose        ←/→:  change        Esc:  back";
+        return {{"↑/↓:  choose"}, {"←/→:  change"}, {"Esc:  back", FOOTER_BACK}};
     }
 
     void SceneOptions::draw_scrollbar(olc::PixelGameEngine* window, int32_t x) const {
@@ -474,7 +499,6 @@ namespace nascent {
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
 
-        std::string footer = footer_text();
         olc::FontRect footer_metrics = text_bounds(skin->display_font_small, "Hgjy");
         int32_t footer_bottom = screen.y - screen.y / 12;
         int32_t footer_top = footer_bottom - (footer_metrics.offset.y + footer_metrics.size.y);
@@ -482,6 +506,7 @@ namespace nascent {
         viewport_top = y + Ui::px(HEADER_HEIGHT);
         viewport_bottom = footer_top - Ui::px(FOOTER_GAP);
         float edge_fade = Ui::pxf(EDGE_FADE);
+        form.set_clip(viewport_top, viewport_bottom);
         form.draw(window, *skin, {x, viewport_top - (int32_t)std::lround(scroll)});
 
         float max_scroll = (float)std::max(0, form.height() - (viewport_bottom - viewport_top));
@@ -517,6 +542,7 @@ namespace nascent {
             draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, skin->color(SkinColor::TEXT_MUTED));
         }
 
-        draw_text(skin->display_font_small, footer, {x, footer_top}, skin->color(SkinColor::TEXT_MUTED));
+        footer_spots.clear();
+        draw_hints(window, skin->display_font_small, footer_hints(), {(float)x, (float)footer_top}, Ui::pxf(FOOTER_HINT_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), footer_spots);
     }
 }

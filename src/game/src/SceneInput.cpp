@@ -92,9 +92,82 @@ namespace nascent {
         play_menu_sound();
     }
 
+    void SceneInput::start_capture(bool all) {
+        capture_all = all;
+
+        if (capture_all) {
+            selected_lane = 0;
+        }
+
+        capturing = true;
+        capture_time = now_ms();
+        status.clear();
+        play_menu_sound();
+    }
+
+    void SceneInput::change_mode(int32_t direction) {
+        uint8_t next = (uint8_t)std::clamp((int32_t)key_count + direction, (int32_t)MIN_KEY_COUNT, (int32_t)MAX_KEY_COUNT);
+
+        if (next == key_count) {
+            return;
+        }
+
+        load_mode(next);
+        status.clear();
+        play_menu_sound();
+    }
+
+    bool SceneInput::update_mouse(Input& input) {
+        if (int32_t wheel = input.take_wheel(); wheel != 0) {
+            change_mode(wheel > 0 ? 1 : -1);
+            return true;
+        }
+
+        std::optional<int32_t> clicked = spots.take_click(input);
+
+        if (!clicked) {
+            return false;
+        }
+
+        switch (*clicked) {
+            case SPOT_MODE_DOWN:
+                change_mode(-1);
+                break;
+            case SPOT_MODE_UP:
+                change_mode(1);
+                break;
+            case SPOT_REBIND:
+                start_capture(false);
+                break;
+            case SPOT_REBIND_ALL:
+                start_capture(true);
+                break;
+            case SPOT_RESET:
+                reset();
+                break;
+            case SPOT_BACK:
+                input.inject(actions::BACK);
+                return false;
+            default:
+                selected_lane = (uint8_t)(*clicked - SPOT_LANE);
+                start_capture(false);
+                break;
+        }
+
+        return true;
+    }
+
     void SceneInput::update(float elapsed_time) {
         Input& input = game->input();
         timer += elapsed_time;
+
+        if (!capturing && update_mouse(input)) {
+            return;
+        }
+
+        if (capturing && spots.take_click(input) == SPOT_BACK) {
+            input.inject(actions::BACK);
+        }
 
         if (capturing) {
             for (const KeyEvent& event : game->input().events()) {
@@ -116,26 +189,13 @@ namespace nascent {
             play_menu_sound();
         }
         else if (key_count < MAX_KEY_COUNT && input.take(actions::UP)) {
-            load_mode((uint8_t)(key_count + 1));
-            status.clear();
-            play_menu_sound();
+            change_mode(1);
         }
         else if (key_count > MIN_KEY_COUNT && input.take(actions::DOWN)) {
-            load_mode((uint8_t)(key_count - 1));
-            status.clear();
-            play_menu_sound();
+            change_mode(-1);
         }
         else if (input.take(actions::CONFIRM)) {
-            capture_all = input.key_held(InputManager::keybind_mod1);
-
-            if (capture_all) {
-                selected_lane = 0;
-            }
-
-            capturing = true;
-            capture_time = now_ms();
-            status.clear();
-            play_menu_sound();
+            start_capture(input.key_held(InputManager::keybind_mod1));
         }
         else if (InputManager::reset_pressed(input)) {
             reset();
@@ -171,7 +231,10 @@ namespace nascent {
             }
 
             float label_top = top + size + Ui::pxf(16);
-            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + Ui::pxf(24)}, skin->color(SkinColor::INPUT_LANE_BACKGROUND));
+            Rect lane_area = {{lane_x, (float)top}, {size, label_top + (float)metrics.size.y + Ui::pxf(24) - top}};
+            spots.add(lane_area, SPOT_LANE + lane);
+            olc::Pixel lane_background = skin->color(SkinColor::INPUT_LANE_BACKGROUND);
+            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + Ui::pxf(24)}, !capturing && lane_area.contains(window->GetMousePos()) ? mix(lane_background, skin->color(SkinColor::TEXT), 0.12) : lane_background);
 
             std::string label = waiting ? "?" : InputManager::key_label(lane_keys[lane]);
             olc::Font* font = &skin->display_font_medium;
@@ -214,11 +277,14 @@ namespace nascent {
         draw_text(skin->display_font_small, "Lane keys used while playing. Changes are saved as you make them.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
         y += Ui::px(70);
 
+        spots.clear();
         draw_text(skin->display_font_medium, "Key mode", {x, y}, skin->color(SkinColor::TEXT_MUTED));
         draw_text(skin->display_font_medium, std::format("{}K", key_count), {x + Ui::px(300), y}, skin->color(SkinColor::TEXT));
+        float mode_buttons = (float)(x + Ui::px(300)) + text_bounds(skin->display_font_medium, "10K").size.x + Ui::pxf(BUTTON_GAP);
+        draw_hints(window, skin->display_font_medium, {{"-", SPOT_MODE_DOWN}, {"+", SPOT_MODE_UP}}, {mode_buttons, (float)y}, Ui::pxf(BUTTON_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
 
         bool custom = InputManager::is_custom_lane_keys(key_count);
-        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::px(400), y}, skin->color(custom ? SkinColor::ATTENTION : SkinColor::TEXT_FAINT));
+        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::px(460), y}, skin->color(custom ? SkinColor::ATTENTION : SkinColor::TEXT_FAINT));
 
         draw_lanes(window, (int32_t)(screen.y * 0.38));
 
@@ -235,11 +301,10 @@ namespace nascent {
             draw_text(skin->display_font_small, line, {(screen.x - bounds.size.x) / 2 - bounds.offset.x, (int32_t)(screen.y * 0.72)}, line_color);
         }
 
-        std::string footer = capturing ? "Press any key to bind it        Esc:  back"
-                                       : "←/→:  lane        ↑/↓:  key mode        Enter:  rebind        Shift+Enter:  rebind all        Ctrl+R:  reset        Esc:  back";
-
-        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
+        std::vector<Hint> footer = capturing ? std::vector<Hint>{{"Press any key to bind it"}, {"Esc:  back", SPOT_BACK}}
+                                             : std::vector<Hint>{{"←/→:  lane"}, {"↑/↓:  key mode"}, {"Enter:  rebind", SPOT_REBIND}, {"Shift+Enter:  rebind all", SPOT_REBIND_ALL}, {"Ctrl+R:  reset", SPOT_RESET}, {"Esc:  back", SPOT_BACK}};
+        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, "Hgjy");
         int32_t footer_bottom = screen.y - screen.y / 12;
-        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, skin->color(SkinColor::TEXT_MUTED));
+        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::pxf(FOOTER_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
     }
 }

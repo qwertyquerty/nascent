@@ -218,6 +218,12 @@ namespace nascent {
                 case WM_DROPFILES:
                     queue->push_dropped_files(take_dropped_files((HDROP)wparam));
                     return 0;
+                case WM_XBUTTONDOWN:
+                    if (GET_XBUTTON_WPARAM(wparam) == XBUTTON1) {
+                        queue->push_back_click();
+                    }
+
+                    return TRUE;
             }
         }
 

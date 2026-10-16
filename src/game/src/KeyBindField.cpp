@@ -36,12 +36,7 @@ namespace nascent {
                 return false;
             }
 
-            if (input.key_pressed(olc::Key::DEL) && InputManager::get_key(binding) != KEY_BINDINGS[(size_t)binding].default_key) {
-                swapped = InputManager::reset_key(binding);
-                return true;
-            }
-
-            return false;
+            return input.key_pressed(olc::Key::DEL) && reset_binding();
         }
 
         for (size_t index = 1; index < (size_t)olc::Key::ENUM_END; index++) {
@@ -58,8 +53,27 @@ namespace nascent {
         return false;
     }
 
+    bool KeyBindField::click(olc::vf2d, Input&) {
+        if (!capturing) {
+            capturing = true;
+            consumed = true;
+            blink_timer = 0;
+        }
+
+        return false;
+    }
+
     bool KeyBindField::consumes_navigation() const {
         return capturing || consumed;
+    }
+
+    bool KeyBindField::reset_binding() {
+        if (InputManager::get_key(binding) == KEY_BINDINGS[(size_t)binding].default_key) {
+            return false;
+        }
+
+        swapped = InputManager::reset_key(binding);
+        return true;
     }
 
     bool KeyBindField::is_capturing() const {

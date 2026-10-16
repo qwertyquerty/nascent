@@ -3,6 +3,7 @@
 #include "gse/Scene.h"
 #include "ServerApi.h"
 #include "gse/ui/KeyRepeat.h"
+#include "gse/ui/Layout.h"
 #include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
@@ -41,6 +42,10 @@ namespace nascent {
         size_t selected = 0;
         KeyRepeat up_repeat;
         KeyRepeat down_repeat;
+        Hotspots result_spots;
+        Hotspots hint_spots;
+
+        bool update_mouse(Input& input);
         float scroll = 0;
 
         ChartQuery wanted;
@@ -65,6 +70,10 @@ namespace nascent {
 
         SceneBrowser(Skin* skin, SceneList* list);
         void on_create() override;
+
+        static constexpr int32_t HINT_BACK = 0;
+        static constexpr int32_t HINT_CONFIRM = 1;
+        static constexpr int32_t HINT_SWITCH = 2;
         void on_enter() override;
         void on_exit() override;
         void update(float) override;

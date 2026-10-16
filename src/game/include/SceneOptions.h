@@ -2,6 +2,7 @@
 
 #include "gse/Scene.h"
 #include "ServerApi.h"
+#include "gse/ui/Layout.h"
 #include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
@@ -64,6 +65,7 @@ namespace nascent {
 
         float scroll = 0;
         float scroll_target = 0;
+        Hotspots footer_spots;
         int32_t viewport_top = 0;
         int32_t viewport_bottom = 0;
 
@@ -84,8 +86,14 @@ namespace nascent {
         void build_preview_chart();
         void rebuild_preview();
         void update_preview(float elapsed_time);
-        std::string footer_text() const;
+        std::vector<Hint> footer_hints() const;
+        bool update_footer(Input& input);
         void draw_scrollbar(olc::PixelGameEngine* window, int32_t x) const;
+
+        static constexpr int32_t FOOTER_BACK = 0;
+        static constexpr int32_t FOOTER_CONFIRM = 1;
+        static constexpr int32_t FOOTER_RESET = 2;
+        static constexpr float FOOTER_HINT_GAP = 48.0f;
 
         public:
         SceneOptions(Skin* skin);

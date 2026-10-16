@@ -254,37 +254,138 @@ namespace nascent {
         list_scroll_offset *= std::abs(list_scroll_offset) > 1.0 ? (std::pow(0.005, elapsed_time * 2)) : 0;
     };
 
+    bool SceneList::run_status_action(StatusAction action, bool secondary) {
+        if (secondary && action != StatusAction::RATE) {
+            return false;
+        }
+
+        switch (action) {
+            case StatusAction::TOGGLE_SCORES:
+                show_leaderboards = !show_leaderboards;
+                status_bar.set_leaderboards_shown(show_leaderboards);
+                leaderboards.show_now();
+                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+                return false;
+            case StatusAction::RATE:
+                set_pitch(pitch + (secondary ? -PITCH_INTERVAL : PITCH_INTERVAL));
+                return false;
+            case StatusAction::CHART_MENU:
+                if (visible.empty()) {
+                    return false;
+                }
+
+                open_chart_menu();
+                return true;
+            default:
+                break;
+        }
+
+        game->audio().play_effect(skin->get_random_menu_pluck());
+
+        switch (action) {
+            case StatusAction::CALIBRATION:
+                game->scenes().push(std::make_unique<SceneCalibration>(skin));
+                break;
+            case StatusAction::ACCOUNT:
+                game->scenes().push(std::make_unique<SceneAccount>(skin, nullptr, sky));
+                break;
+            case StatusAction::BROWSE:
+                game->scenes().push(std::make_unique<SceneBrowser>(skin, this));
+                break;
+            case StatusAction::OPTIONS:
+                game->scenes().push(std::make_unique<SceneOptions>(skin));
+                break;
+            default:
+                game->scenes().push(std::make_unique<SceneInput>(skin, selected_chart != nullptr ? selected_chart->info.key_count : (uint8_t)4));
+                break;
+        }
+
+        return true;
+    }
+
+    void SceneList::play_selected() {
+        auto play = std::make_unique<ScenePlay>(selected_chart, skin);
+        play->use_background(background_for(*selected_chart));
+        game->scenes().push(std::move(play));
+    }
+
+    bool SceneList::update_mouse(Input& input) {
+        for (uint32_t button : {0u, 1u}) {
+            if (std::optional<StatusAction> action = status_bar.take_click(input, button)) {
+                if (run_status_action(*action, button == 1)) {
+                    return true;
+                }
+            }
+        }
+
+        if (std::optional<int32_t> spot = ui_spots.take_click(input)) {
+            if (*spot == SPOT_SEARCH_CLEAR) {
+                search.clear();
+                apply_search(!visible.empty() ? visible[selected_chart_index] : SIZE_MAX);
+
+                if (!visible.empty()) {
+                    select_chart(selected_chart_index, false);
+                }
+            }
+            else if (*spot == SPOT_DOWNLOAD) {
+                download_recommended();
+            }
+            else if (*spot == SPOT_BROWSE) {
+                return run_status_action(StatusAction::BROWSE, false);
+            }
+
+            return false;
+        }
+
+        if (visible.empty()) {
+            return false;
+        }
+
+        for (uint32_t button : {0u, 1u}) {
+            std::optional<int32_t> row = row_spots.take_click(input, button);
+
+            if (!row) {
+                continue;
+            }
+
+            int32_t offset = *row - ROW_SPOT_CENTER;
+
+            if (offset != 0) {
+                select_chart(positive_modulo(selected_chart_index + offset, visible.size()));
+            }
+
+            if (button == 1) {
+                open_chart_menu();
+                return true;
+            }
+
+            if (offset == 0) {
+                play_selected();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool SceneList::update_controls(float elapsed_time) {
         Input& input = game->input();
 
-        if (input.key_pressed(InputManager::calibration_key)) {
-            game->audio().play_effect(skin->get_random_menu_pluck());
-            game->scenes().push(std::make_unique<SceneCalibration>(skin));
+        if (update_mouse(input)) {
             return false;
         }
 
-        if (input.key_pressed(InputManager::account_key)) {
-            game->audio().play_effect(skin->get_random_menu_pluck());
-            game->scenes().push(std::make_unique<SceneAccount>(skin, nullptr, sky));
-            return false;
-        }
-
-        if (input.key_pressed(InputManager::browse_key)) {
-            game->audio().play_effect(skin->get_random_menu_pluck());
-            game->scenes().push(std::make_unique<SceneBrowser>(skin, this));
-            return false;
-        }
-
-        if (input.key_pressed(InputManager::options_key)) {
-            game->audio().play_effect(skin->get_random_menu_pluck());
-            game->scenes().push(std::make_unique<SceneOptions>(skin));
-            return false;
-        }
-
-        if (input.key_pressed(InputManager::input_key)) {
-            game->audio().play_effect(skin->get_random_menu_pluck());
-            game->scenes().push(std::make_unique<SceneInput>(skin, selected_chart != nullptr ? selected_chart->info.key_count : (uint8_t)4));
-            return false;
+        for (auto [key, action] : {
+                 std::pair{InputManager::calibration_key, StatusAction::CALIBRATION},
+                 std::pair{InputManager::account_key, StatusAction::ACCOUNT},
+                 std::pair{InputManager::browse_key, StatusAction::BROWSE},
+                 std::pair{InputManager::options_key, StatusAction::OPTIONS},
+                 std::pair{InputManager::input_key, StatusAction::INPUT},
+             }) {
+            if (input.key_pressed(key)) {
+                run_status_action(action, false);
+                return false;
+            }
         }
 
         if (search.empty() && input.take(actions::BACK)) {
@@ -303,10 +404,7 @@ namespace nascent {
         update_search();
 
         if (input.key_pressed(InputManager::leaderboard_key)) {
-            show_leaderboards = !show_leaderboards;
-            status_bar.set_leaderboards_shown(show_leaderboards);
-            leaderboards.show_now();
-            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+            run_status_action(StatusAction::TOGGLE_SCORES, false);
         }
 
         if (input.key_held(InputManager::keybind_mod1)) {
@@ -352,9 +450,7 @@ namespace nascent {
         }
 
         if (input.take(actions::CONFIRM)) {
-            auto play = std::make_unique<ScenePlay>(selected_chart, skin);
-            play->use_background(background_for(*selected_chart));
-            game->scenes().push(std::move(play));
+            play_selected();
         }
 
         return true;
@@ -706,6 +802,8 @@ namespace nascent {
         std::string count = std::format("{} / {}", visible.size(), library.size());
         int32_t count_width = text_bounds(font, count).size.x;
         draw_text(font, search, {padding, baseline}, skin->color(SkinColor::TEXT));
+        float clear_x = (float)padding + text_bounds(font, search).size.x + Ui::pxf(HINT_GAP);
+        draw_hints(window, font, {{"Esc  clear", SPOT_SEARCH_CLEAR}}, {clear_x, (float)baseline}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), ui_spots);
         draw_text(font, count, {screensize.x - padding - count_width, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
     }
 
@@ -765,10 +863,10 @@ namespace nascent {
 
         y += Ui::px(30);
 
-        std::string hint = !all_started ? "Enter:  download recommended songs        F5:  browse charts"
-            : any_failed                ? "Enter:  retry failed downloads        F5:  browse charts"
-                                        : "Downloading...        F5:  browse charts";
-        draw_text(skin->display_font_small, hint, {x, y}, skin->color(SkinColor::TEXT_MUTED));
+        Hint download = !all_started ? Hint{"Enter:  download recommended songs", SPOT_DOWNLOAD}
+            : any_failed             ? Hint{"Enter:  retry failed downloads", SPOT_DOWNLOAD}
+                                     : Hint{"Downloading...", -1};
+        draw_hints(window, skin->display_font_small, {download, {"F5:  browse charts", SPOT_BROWSE}}, {(float)x, (float)y}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), ui_spots);
     }
 
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
@@ -782,6 +880,8 @@ namespace nascent {
     }
 
     void SceneList::draw(olc::PixelGameEngine* window) {
+        row_spots.clear();
+        ui_spots.clear();
         draw_list(window);
         draw_search(window);
         status_bar.draw(window, skin);
@@ -1027,7 +1127,10 @@ namespace nascent {
 
             double distance = std::abs((float)screensize.y / 2 - y) / Ui::scale();
             float x = list_margin + grade_indent + Ui::pxf(std::pow(std::max(300.0 - distance, 0.0) / 50.0, 2));
-            olc::Pixel text_color = skin->color(index == selected_chart_index ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
+            Rect row_area = {{0.0f, y - Ui::pxf(ROW_HIT_ABOVE)}, {(float)side_panel_position(screensize).x, (float)row_height}};
+            row_spots.add(row_area, ROW_SPOT_CENTER + (index - selected_chart_index));
+            bool hovered = index != selected_chart_index && row_area.contains(window->GetMousePos());
+            olc::Pixel text_color = skin->color(index == selected_chart_index || hovered ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
             draw_text(skin->display_font_medium, chart->info.title, {(int)x, (int)y}, text_color);
 

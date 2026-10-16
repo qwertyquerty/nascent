@@ -127,6 +127,8 @@ namespace nascent {
 
         StarSprite favorite_star = StarSprite(FAVORITE_INNER_RATIO);
         LeaderboardPanel leaderboards;
+        Hotspots row_spots;
+        Hotspots ui_spots;
         bool show_leaderboards = false;
         bool recommended_started = false;
 
@@ -158,6 +160,9 @@ namespace nascent {
         void download_recommended();
         void draw_recommended(olc::PixelGameEngine* window);
         bool update_controls(float elapsed_time);
+        bool update_mouse(Input& input);
+        bool run_status_action(StatusAction action, bool secondary);
+        void play_selected();
         void open_chart_menu();
         void handle_chart_action(ChartAction action);
         void open_replay_menu();
@@ -180,6 +185,12 @@ namespace nascent {
         static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
         static constexpr float GRADE_GAP = 8.0f;
         static constexpr int32_t LIST_ROW_HEIGHT = 100;
+        static constexpr int32_t ROW_HIT_ABOVE = 34;
+        static constexpr int32_t ROW_SPOT_CENTER = 1000;
+        static constexpr int32_t SPOT_SEARCH_CLEAR = 1;
+        static constexpr int32_t SPOT_DOWNLOAD = 2;
+        static constexpr int32_t SPOT_BROWSE = 3;
+        static constexpr float HINT_GAP = 36.0f;
         static constexpr int32_t RECOMMENDED_ROW_HEIGHT = 30;
         static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;
         static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.json";

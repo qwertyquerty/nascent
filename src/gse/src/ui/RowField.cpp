@@ -1,6 +1,8 @@
 #include "gse/ui/RowField.h"
 
+#include "gse/render/Color.h"
 #include "gse/render/TextCache.h"
+#include "gse/ui/Layout.h"
 #include "gse/ui/ProgressBar.h"
 #include "gse/ui/Ui.h"
 
@@ -67,7 +69,11 @@ namespace nascent {
         int32_t row_height = height();
         int32_t padding = Ui::px(PADDING);
         int32_t caret_inset = Ui::px(CARET_INSET);
-        window->FillRectDecal({(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}, theme.color(focused ? UiColor::INPUT_BACKGROUND_FOCUSED : UiColor::INPUT_BACKGROUND));
+        bool hovered = Rect{{(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}}.contains(window->GetMousePos());
+        olc::Pixel background = theme.color(UiColor::INPUT_BACKGROUND);
+        olc::Pixel focused_background = theme.color(UiColor::INPUT_BACKGROUND_FOCUSED);
+        olc::Pixel hover_background = hovered ? mix(background, focused_background, HOVER_MIX) : background;
+        window->FillRectDecal({(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}, focused ? focused_background : hover_background);
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = position.y + (row_height - metrics.size.y) / 2 - metrics.offset.y;
@@ -75,6 +81,8 @@ namespace nascent {
 
         std::string value = display_value(focused);
         int32_t value_x = position.x + row_width - padding - text_width(font, value);
+        value_left = value_x - position.x;
+        value_right = value_left + text_width(font, value);
         draw_text(font, value, {value_x, baseline}, value_color(theme, focused));
 
         if (focused && shows_caret() && std::fmod(blink_timer, 1.0f) < 0.5f) {
@@ -95,9 +103,57 @@ namespace nascent {
 
     ChoiceField::ChoiceField(std::string label, std::vector<std::string> options, size_t selected) : RowField(std::move(label)), options(std::move(options)), selected(selected) {}
 
-    std::string ChoiceField::display_value(bool focused) const {
-        const std::string& value = options.empty() ? std::string() : options[std::min(selected, options.size() - 1)];
-        return focused ? std::format("←  {}  →", value) : value;
+    const std::string& ChoiceField::current() const {
+        static const std::string empty;
+        return options.empty() ? empty : options[std::min(selected, options.size() - 1)];
+    }
+
+    std::string ChoiceField::display_value(bool) const {
+        return std::string();
+    }
+
+    int32_t ChoiceField::draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const {
+        int32_t row_height = RowField::draw(window, theme, position, focused);
+        olc::Font& font = theme.font(UiFont::SMALL);
+        olc::FontRect metrics = text_bounds(font, "Hgjy");
+        int32_t baseline = position.y + (row_height - metrics.size.y) / 2 - metrics.offset.y;
+        float gap = Ui::pxf(ARROW_GAP);
+        float left_width = (float)text_width(font, "←");
+        float right_width = (float)text_width(font, "→");
+        float widest = 0;
+
+        for (const std::string& option : options) {
+            widest = std::max(widest, (float)text_width(font, option));
+        }
+
+        float right_x = (float)(width() - Ui::px(PADDING)) - right_width;
+        float slot_right = right_x - gap;
+        float slot_left = slot_right - widest;
+        float left_x = slot_left - gap - left_width;
+        previous_left = left_x;
+        previous_right = left_x + left_width;
+        value_left = (int32_t)slot_left;
+        value_right = (int32_t)slot_right;
+
+        const std::string& value = current();
+        float value_x = slot_left + (widest - (float)text_width(font, value)) / 2.0f;
+        draw_text(font, value, olc::vf2d{(float)position.x + value_x, (float)baseline}, value_color(theme, focused), 1.0f);
+
+        olc::vf2d mouse = olc::vf2d(window->GetMousePos()) - olc::vf2d{(float)position.x, (float)position.y};
+        bool hovered = mouse.x >= 0 && mouse.y >= 0 && mouse.x <= width() && mouse.y <= row_height;
+
+        if (options.size() < 2) {
+            return row_height;
+        }
+
+        float slack = Ui::pxf(ARROW_SLACK);
+        bool over_previous = hovered && mouse.x >= left_x - slack && mouse.x <= previous_right + slack;
+        bool over_next = hovered && !over_previous && mouse.x >= slot_left;
+        olc::Pixel idle = theme.color(focused || hovered ? UiColor::TEXT_MUTED : UiColor::TEXT_FAINT);
+        olc::Pixel active = theme.color(UiColor::TEXT);
+        draw_text(font, "←", olc::vf2d{(float)position.x + left_x, (float)baseline}, over_previous ? active : idle, 1.0f);
+        draw_text(font, "→", olc::vf2d{(float)position.x + right_x, (float)baseline}, over_next ? active : idle, 1.0f);
+        return row_height;
     }
 
     bool ChoiceField::update(Input& input, float elapsed_time) {
@@ -118,6 +174,17 @@ namespace nascent {
         }
 
         return false;
+    }
+
+    bool ChoiceField::click(olc::vf2d point, Input&) {
+        if (options.size() < 2) {
+            return false;
+        }
+
+        float slack = Ui::pxf(ARROW_SLACK);
+        bool previous = point.x >= previous_left - slack && point.x <= previous_right + slack;
+        selected = previous ? (selected + options.size() - 1) % options.size() : (selected + 1) % options.size();
+        return true;
     }
 
     SliderField::SliderField(std::string label, int32_t value, int32_t minimum, int32_t maximum, int32_t step, std::string unit) : RowField(std::move(label)), value(std::clamp(value, minimum, maximum)), minimum(minimum), maximum(maximum), step(step), unit(std::move(unit)) {}
@@ -145,6 +212,30 @@ namespace nascent {
         return value != before;
     }
 
+    bool SliderField::set_from_point(float x) {
+        float bar_left = Ui::pxf(BAR_LEFT);
+        float bar_width = Ui::pxf(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
+        float fraction = std::clamp((x - bar_left) / std::max(1.0f, bar_width), 0.0f, 1.0f);
+        int32_t steps = step > 0 ? (int32_t)std::lround(fraction * (maximum - minimum) / step) : 0;
+        int32_t next = std::clamp(minimum + steps * step, minimum, maximum);
+
+        if (next == value) {
+            return false;
+        }
+
+        value = next;
+        return true;
+    }
+
+    bool SliderField::click(olc::vf2d point, Input&) {
+        dragging_bar = point.x >= Ui::pxf(BAR_LEFT) - Ui::pxf(PADDING) && point.x <= Ui::pxf(WIDTH - BAR_RIGHT_GAP) + Ui::pxf(PADDING);
+        return dragging_bar && set_from_point(point.x);
+    }
+
+    bool SliderField::drag(olc::vf2d point) {
+        return dragging_bar && set_from_point(point.x);
+    }
+
     int32_t SliderField::draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const {
         int32_t row_height = RowField::draw(window, theme, position, focused);
         float bar_width = Ui::pxf(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
@@ -168,6 +259,11 @@ namespace nascent {
         consumed = input.take(actions::CONFIRM);
         pressed = pressed || consumed;
         return consumed;
+    }
+
+    bool ButtonField::click(olc::vf2d, Input&) {
+        pressed = true;
+        return true;
     }
 
     bool ButtonField::consumes_navigation() const {

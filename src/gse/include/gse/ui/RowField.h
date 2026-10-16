@@ -12,6 +12,8 @@ namespace nascent {
     class RowField : public UiField {
         protected:
         float blink_timer = 0;
+        mutable int32_t value_left = 0;
+        mutable int32_t value_right = 0;
 
         virtual std::string display_value(bool focused) const = 0;
         virtual olc::Pixel value_color(UiTheme& theme, bool focused) const;
@@ -22,6 +24,7 @@ namespace nascent {
         static constexpr int32_t WIDTH = 640;
         static constexpr int32_t HEIGHT = 40;
         static constexpr int32_t PADDING = 14;
+        static constexpr double HOVER_MIX = 0.5;
 
         static int32_t width();
         static int32_t height();
@@ -37,21 +40,33 @@ namespace nascent {
 
     class ChoiceField : public RowField {
         protected:
+        mutable float previous_left = 0;
+        mutable float previous_right = 0;
+
         std::string display_value(bool focused) const override;
+        const std::string& current() const;
 
         public:
+        static constexpr int32_t ARROW_GAP = 14;
+        static constexpr int32_t ARROW_SLACK = 10;
+
         std::vector<std::string> options;
         size_t selected = 0;
 
         ChoiceField(std::string label, std::vector<std::string> options, size_t selected = 0);
 
         bool update(Input& input, float elapsed_time) override;
+        bool click(olc::vf2d point, Input& input) override;
+        int32_t draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const override;
     };
 
     class SliderField : public RowField {
         protected:
         KeyRepeat left_repeat;
         KeyRepeat right_repeat;
+        bool dragging_bar = false;
+
+        bool set_from_point(float x);
 
         std::string display_value(bool focused) const override;
 
@@ -69,6 +84,8 @@ namespace nascent {
         SliderField(std::string label, int32_t value, int32_t minimum, int32_t maximum, int32_t step, std::string unit);
 
         bool update(Input& input, float elapsed_time) override;
+        bool click(olc::vf2d point, Input& input) override;
+        bool drag(olc::vf2d point) override;
         int32_t draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const override;
     };
 
@@ -83,6 +100,7 @@ namespace nascent {
         ButtonField(std::string label);
 
         bool update(Input& input, float elapsed_time) override;
+        bool click(olc::vf2d point, Input& input) override;
         bool consumes_navigation() const override;
         bool take_pressed();
     };

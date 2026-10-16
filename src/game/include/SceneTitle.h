@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gse/Scene.h"
+#include "gse/ui/Layout.h"
 #include "SongClock.h"
 #include "gse/render/SpriteDecal.h"
 
@@ -70,6 +71,8 @@ namespace nascent {
         bool logo_finished();
         void draw_update_notice(olc::PixelGameEngine* window);
 
+        Hotspots spots;
+
         public:
         static constexpr const char* LOGO_CHART_PATH = "assets/logo/logo.json";
         static constexpr bool PLAY_LOGO_INTRO = false;
@@ -85,6 +88,7 @@ namespace nascent {
         static constexpr int32_t START_HINT_GAP = 24;
         static constexpr float START_HINT_PULSE_SPEED = 2.5f;
         static constexpr int32_t UPDATE_NOTICE_BOTTOM = 48;
+        static constexpr int32_t SPOT_UPDATE = 0;
 
         SceneTitle(Skin* bg_skin, Skin* logo_skin, SceneList* list, EntityStarfield* sky, std::optional<TitleTrack> handoff = std::nullopt);
         ~SceneTitle();

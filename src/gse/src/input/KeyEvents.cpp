@@ -113,4 +113,14 @@ namespace nascent {
         std::lock_guard<std::mutex> lock(mutex);
         return std::exchange(dropped_files, {});
     }
+
+    void KeyEventQueue::push_back_click() {
+        std::lock_guard<std::mutex> lock(mutex);
+        back_clicks++;
+    }
+
+    bool KeyEventQueue::drain_back_click() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return std::exchange(back_clicks, 0) > 0;
+    }
 }

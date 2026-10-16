@@ -256,6 +256,13 @@ namespace nascent {
             Updater::start();
         }
 
+        if (spots.take_click(game->input()) == SPOT_UPDATE) {
+            Updater::start();
+        }
+        else if (game->input().take_click(0)) {
+            game->input().inject(actions::CONFIRM);
+        }
+
         if (game->input().take(actions::BACK)) {
             game->audio().play_effect(bg_skin->sound(SkinSound::HITSOUND));
             overlays.open(std::make_unique<QuitOverlay>(bg_skin));
@@ -381,11 +388,13 @@ namespace nascent {
 
         olc::vi2d screen = window->GetScreenSize();
         int32_t width = text_bounds(bg_skin->display_font_small, text).size.x;
-        draw_text(bg_skin->display_font_small, text, {(screen.x - width) / 2, screen.y - Ui::px(UPDATE_NOTICE_BOTTOM)}, color);
+        bool clickable = update.status == UpdateStatus::AVAILABLE || update.status == UpdateStatus::FAILED;
+        draw_hints(window, bg_skin->display_font_small, {{text, clickable ? SPOT_UPDATE : -1}}, {(float)((screen.x - width) / 2), (float)(screen.y - Ui::px(UPDATE_NOTICE_BOTTOM))}, 0.0f, color, bg_skin->color(SkinColor::TEXT), spots);
     }
 
     void SceneTitle::draw(olc::PixelGameEngine* window) {
         sky->draw(window);
+        spots.clear();
 
         if (!loaded) {
             draw_update_notice(window);

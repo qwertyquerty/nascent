@@ -1,5 +1,7 @@
 #include "gse/ui/UiForm.h"
 
+#include "gse/ui/Layout.h"
+#include "gse/ui/RowField.h"
 #include "gse/ui/Ui.h"
 
 #include <algorithm>
@@ -97,9 +99,83 @@ namespace nascent {
         return nullptr;
     }
 
+    void UiForm::set_clip(int32_t top, int32_t bottom) {
+        clip = std::pair{top, bottom};
+    }
+
+    std::optional<size_t> UiForm::field_at(olc::vf2d point) const {
+        float width = (float)RowField::width();
+
+        if (clip && (point.y < clip->first || point.y > clip->second)) {
+            return std::nullopt;
+        }
+
+        for (size_t index = 0; index < field_tops.size() && index < fields.size(); index++) {
+            Rect area = {{(float)origin.x, (float)(origin.y + field_tops[index])}, {width, (float)(field_bottoms[index] - field_tops[index])}};
+
+            if (fields[index]->focusable() && area.contains(point)) {
+                return index;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    bool UiForm::contains(olc::vf2d point) const {
+        return field_at(point).has_value();
+    }
+
+    olc::vf2d UiForm::field_origin(size_t index) const {
+        return {(float)origin.x, (float)(origin.y + (index < field_tops.size() ? field_tops[index] : 0))};
+    }
+
+    std::optional<UiForm::Action> UiForm::update_mouse(Input& input) {
+        olc::vf2d mouse = input.mouse_position();
+
+        if (dragging) {
+            if (input.mouse(0).bHeld && *dragging < fields.size()) {
+                if (fields[*dragging]->drag(mouse - field_origin(*dragging))) {
+                    return Action::CHANGED;
+                }
+            }
+            else {
+                dragging.reset();
+            }
+        }
+
+        if (!input.clicked(0)) {
+            return std::nullopt;
+        }
+
+        std::optional<size_t> hit = field_at(mouse);
+
+        if (!hit) {
+            return std::nullopt;
+        }
+
+        input.take_click(0);
+        bool moved = *hit != focus;
+
+        if (moved) {
+            focus_field(*hit);
+        }
+
+        dragging = *hit;
+
+        if (fields[focus]->click(mouse - field_origin(focus), input)) {
+            return Action::CHANGED;
+        }
+
+        return moved ? Action::MOVED : Action::NONE;
+    }
+
     UiForm::Action UiForm::update(Input& input, float elapsed_time) {
         if (!enabled || fields.empty()) {
             return Action::NONE;
+        }
+
+        if (std::optional<Action> clicked = update_mouse(input)) {
+            return *clicked;
         }
 
         bool changed = fields[focus]->update(input, elapsed_time);
@@ -159,6 +235,7 @@ namespace nascent {
 
     int32_t UiForm::draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position) const {
         int32_t y = position.y;
+        origin = position;
         field_tops.assign(fields.size(), 0);
         field_bottoms.assign(fields.size(), 0);
 
@@ -173,6 +250,10 @@ namespace nascent {
     }
 
     const UiField* UiForm::focused_field() const {
+        return fields.empty() ? nullptr : fields[focus].get();
+    }
+
+    UiField* UiForm::focused_field() {
         return fields.empty() ? nullptr : fields[focus].get();
     }
 

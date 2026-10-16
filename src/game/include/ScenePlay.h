@@ -3,6 +3,7 @@
 #include "Replay.h"
 #include "gse/Scene.h"
 #include "gse/render/MipDecal.h"
+#include "gse/ui/Layout.h"
 #include "ServerApi.h"
 #include "olcPixelGameEngine.h"
 
@@ -59,6 +60,7 @@ namespace nascent {
         bool chart_started = false;
         bool paused = false;
         bool replay_paused = false;
+        mutable Hotspots replay_spots;
 
         MipDecal background_image;
         const MipDecal* borrowed_background = nullptr;
@@ -99,6 +101,12 @@ namespace nascent {
         static constexpr float RESTART_HOLD_TIME = 0.3f;
         static constexpr double PAUSE_COOLDOWN_MS = 1000.0;
         static constexpr double REPLAY_SEEK_MS = 5000.0;
+        static constexpr int32_t REPLAY_TOGGLE = 0;
+        static constexpr int32_t REPLAY_BACK = 1;
+        static constexpr int32_t REPLAY_FORWARD = 2;
+        static constexpr int32_t REPLAY_RESTART = 3;
+        static constexpr int32_t REPLAY_MENU = 4;
+        static constexpr int32_t REPLAY_STOP = 5;
         static constexpr float BACKGROUND_FADE_TIME = 0.4f;
         static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;

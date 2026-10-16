@@ -188,11 +188,60 @@ namespace nascent {
         return true;
     }
 
+    bool SceneBrowser::update_mouse(Input& input) {
+        if (std::optional<int32_t> hint = hint_spots.take_click(input)) {
+            if (*hint == HINT_BACK) {
+                input.inject(actions::BACK);
+            }
+            else if (*hint == HINT_CONFIRM) {
+                input.inject(actions::CONFIRM);
+            }
+            else {
+                bool was_focused = results_focused;
+                focus_results(!results_focused);
+
+                if (results_focused != was_focused) {
+                    play_menu_sound();
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        if (results_focused && input.clicked(0) && form.contains(input.mouse_position())) {
+            focus_results(false);
+            play_menu_sound();
+            return false;
+        }
+
+        std::optional<int32_t> row = result_spots.take_click(input);
+
+        if (!row || (size_t)*row >= results.size()) {
+            return false;
+        }
+
+        if (results_focused && selected == (size_t)*row) {
+            if (download_selected()) {
+                play_menu_sound();
+            }
+
+            return true;
+        }
+
+        selected = (size_t)*row;
+        focus_results(true);
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+        return true;
+    }
+
     void SceneBrowser::update(float elapsed_time) {
         olc::PixelGameEngine* window = game->window;
         Input& input = game->input();
+        bool clicked = update_mouse(input);
 
-        if (InputManager::switch_pressed(input)) {
+        if (!clicked && InputManager::switch_pressed(input)) {
             bool was_focused = results_focused;
             focus_results(!results_focused);
 
@@ -200,7 +249,7 @@ namespace nascent {
                 play_menu_sound();
             }
         }
-        else if (!results_focused) {
+        else if (!clicked && !results_focused) {
             UiForm::Action action = form.update(input, elapsed_time);
 
             if (action == UiForm::Action::SUBMIT) {
@@ -214,7 +263,7 @@ namespace nascent {
                 play_menu_sound();
             }
         }
-        else {
+        else if (!clicked) {
             size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / std::max(1, Ui::px(ROW_HEIGHT)));
             int32_t wheel = input.mouse_wheel();
             size_t previous = selected;
@@ -290,6 +339,8 @@ namespace nascent {
         y += Ui::px(60);
 
         form.draw(window, *skin, {x, y});
+        result_spots.clear();
+        hint_spots.clear();
 
         int32_t row_height = Ui::px(ROW_HEIGHT);
         int32_t row_padding = Ui::px(ROW_PADDING);
@@ -329,6 +380,7 @@ namespace nascent {
             bool downloading = download != nullptr && (download_state == BeatmapDownloads::State::DOWNLOADING || download_state == BeatmapDownloads::State::EXTRACTING);
             olc::vf2d box_position = {(float)panel_x, row_top};
             olc::vf2d box_size = {(float)panel_width, (float)row_height - Ui::pxf(6)};
+            result_spots.add({box_position, box_size}, (int32_t)index);
             uint8_t highlight = is_selected ? (results_focused ? 36 : 16) : 0;
             olc::Pixel selection = fade(skin->color(SkinColor::BROWSER_HIGHLIGHT), highlight / 255.0);
 
@@ -392,13 +444,13 @@ namespace nascent {
             draw_text(detail_font, status, {status_x, title_baseline}, status_color);
         }
 
-        std::vector<std::string> hints = results_focused ? std::vector<std::string>{"↑/↓:  chart", "Enter:  download", "Ctrl+Tab:  filters", "Esc:  back"}
-                                                         : std::vector<std::string>{"Tab, ↑/↓:  filter", "←/→:  change", "Enter:  next", "Ctrl+Tab:  results", "Esc:  back"};
+        std::vector<Hint> hints = results_focused ? std::vector<Hint>{{"↑/↓:  chart"}, {"Enter:  download", HINT_CONFIRM}, {"Ctrl+Tab:  filters", HINT_SWITCH}, {"Esc:  back", HINT_BACK}}
+                                                  : std::vector<Hint>{{"Tab, ↑/↓:  filter"}, {"←/→:  change"}, {"Enter:  next", HINT_CONFIRM}, {"Ctrl+Tab:  results", HINT_SWITCH}, {"Esc:  back", HINT_BACK}};
         int32_t hint_line_height = Ui::px(HINT_LINE_HEIGHT);
         int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * hint_line_height;
 
-        for (const std::string& hint : hints) {
-            draw_text(detail_font, hint, {x, hint_baseline}, skin->color(SkinColor::TEXT_MUTED));
+        for (const Hint& hint : hints) {
+            draw_hints(window, detail_font, {hint}, {(float)x, (float)hint_baseline}, 0.0f, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), hint_spots);
             hint_baseline += hint_line_height;
         }
     }

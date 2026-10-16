@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gse/Overlay.h"
+#include "gse/ui/Layout.h"
 #include "olcPixelGameEngine.h"
 
 #include <array>
@@ -31,6 +32,11 @@ namespace nascent {
         std::function<void(ChartAction)> on_action;
         size_t selected = 0;
         bool confirming = false;
+        Hotspots spots;
+        Rect panel;
+        olc::vi2d last_mouse = {-1, -1};
+
+        void activate();
 
         std::string label(ChartAction action, bool confirming_action) const;
 
@@ -47,6 +53,7 @@ namespace nascent {
 
         ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action);
 
+        void on_open() override;
         void update(float elapsed_time) override;
         void draw(olc::PixelGameEngine* window) override;
         olc::Pixel backdrop() const override;

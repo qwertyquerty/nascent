@@ -11,6 +11,14 @@
 
 namespace nascent {
     class UiForm {
+        public:
+        enum class Action {
+            NONE,
+            MOVED,
+            CHANGED,
+            SUBMIT
+        };
+
         protected:
         std::vector<std::unique_ptr<UiField>> fields;
         size_t focus = 0;
@@ -19,8 +27,14 @@ namespace nascent {
         bool enabled = true;
         mutable std::vector<int32_t> field_tops;
         mutable std::vector<int32_t> field_bottoms;
+        mutable olc::vi2d origin = {0, 0};
+        std::optional<std::pair<int32_t, int32_t>> clip;
+        std::optional<size_t> dragging;
 
         std::optional<size_t> step_focus(size_t from, bool forward, bool wrap) const;
+        std::optional<size_t> field_at(olc::vf2d point) const;
+        olc::vf2d field_origin(size_t index) const;
+        std::optional<Action> update_mouse(Input& input);
 
         public:
         static constexpr int32_t FIELD_SPACING = 28;
@@ -28,13 +42,6 @@ namespace nascent {
         int32_t spacing = FIELD_SPACING;
         olc::Key reverse_modifier = olc::Key::SHIFT;
         olc::Key blocking_modifier = olc::Key::CTRL;
-
-        enum class Action {
-            NONE,
-            MOVED,
-            CHANGED,
-            SUBMIT
-        };
 
         template <typename T, typename... Args>
         T& add(Args&&... args) {
@@ -49,6 +56,9 @@ namespace nascent {
         bool is_empty() const;
         const UiField* first_unfilled() const;
         const UiField* focused_field() const;
+        UiField* focused_field();
+        void set_clip(int32_t top, int32_t bottom);
+        bool contains(olc::vf2d point) const;
         int32_t focused_top() const;
         int32_t focused_bottom() const;
         int32_t height() const;

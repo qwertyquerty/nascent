@@ -59,6 +59,10 @@ namespace nascent {
 
     void Input::begin_frame() {
         consumed.clear();
+        injected.clear();
+        consumed_clicks.fill(false);
+        wheel_consumed = false;
+        back_clicked = queue.drain_back_click();
 
         if (input_mode == InputMode::POLLING) {
             poll_key_events();
@@ -83,6 +87,10 @@ namespace nascent {
     bool Input::pressed(ActionId action) const {
         if (suppressed > 0 || consumed.contains(action)) {
             return false;
+        }
+
+        if ((action == actions::BACK && back_clicked) || injected.contains(action)) {
+            return true;
         }
 
         auto found = bindings.find(action);
@@ -133,6 +141,11 @@ namespace nascent {
         consumed.insert(action);
     }
 
+    void Input::inject(ActionId action) {
+        injected.insert(action);
+        consumed.erase(action);
+    }
+
     olc::HWButton Input::key(olc::Key key) const {
         return suppressed > 0 ? olc::HWButton{} : key_state(key);
     }
@@ -176,7 +189,26 @@ namespace nascent {
     }
 
     int32_t Input::mouse_wheel() const {
-        return suppressed > 0 || window == nullptr ? 0 : window->GetMouseWheel();
+        return suppressed > 0 || window == nullptr || wheel_consumed ? 0 : window->GetMouseWheel();
+    }
+
+    int32_t Input::take_wheel() {
+        int32_t wheel = mouse_wheel();
+        wheel_consumed = true;
+        return wheel;
+    }
+
+    bool Input::clicked(uint32_t button) const {
+        return button < MOUSE_BUTTONS && !consumed_clicks[button] && mouse(button).bPressed;
+    }
+
+    bool Input::take_click(uint32_t button) {
+        if (!clicked(button)) {
+            return false;
+        }
+
+        consumed_clicks[button] = true;
+        return true;
     }
 
     olc::vi2d Input::mouse_position() const {

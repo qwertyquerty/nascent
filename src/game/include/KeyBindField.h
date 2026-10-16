@@ -25,7 +25,9 @@ namespace nascent {
 
         void on_blur() override;
         bool update(Input& input, float elapsed_time) override;
+        bool click(olc::vf2d point, Input& input) override;
         bool consumes_navigation() const override;
         bool is_capturing() const;
+        bool reset_binding();
     };
 }

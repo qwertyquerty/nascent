@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gse/Scene.h"
+#include "gse/ui/Layout.h"
 #include "SongClock.h"
 #include "olcPixelGameEngine.h"
 
@@ -46,11 +47,24 @@ namespace nascent {
         void record_tap(double event_time);
         double get_average_tap_error();
         void finish();
+        bool update_mouse(Input& input, bool coarse);
+
+        Hotspots spots;
 
         public:
         SceneCalibration(Skin* skin);
         ~SceneCalibration();
         void on_create() override;
+
+        static constexpr int32_t SPOT_STEP = 0;
+        static constexpr int32_t SPOT_MINUS = 10;
+        static constexpr int32_t SPOT_PLUS = 20;
+        static constexpr int32_t SPOT_CLEAR_TAPS = 30;
+        static constexpr int32_t SPOT_SAVE = 31;
+        static constexpr int32_t VALUE_COLUMN = 380;
+        static constexpr int32_t BUTTON_GAP = 28;
+        static constexpr int32_t ROW_HEIGHT = 48;
+        static constexpr float FOOTER_GAP = 48.0f;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

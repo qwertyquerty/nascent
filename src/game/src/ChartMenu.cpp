@@ -47,12 +47,35 @@ namespace nascent {
         }
     }
 
+    void ChartMenu::on_open() {
+        last_mouse = game->input().mouse_position();
+    }
+
     void ChartMenu::update(float) {
         Input& input = game->input();
+        olc::vi2d mouse = input.mouse_position();
+        bool mouse_moved = mouse != last_mouse;
+        last_mouse = mouse;
 
-        if (input.take(actions::BACK) || input.take(game_actions::CHART_MENU)) {
+        if (input.take(actions::BACK) || input.take(game_actions::CHART_MENU) || input.take_click(1) || (input.clicked(0) && !panel.contains(mouse) && input.take_click(0))) {
             game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             close();
+            return;
+        }
+
+        if (std::optional<int32_t> hovered = spots.at(mouse); hovered && mouse_moved && (size_t)*hovered != selected) {
+            selected = (size_t)*hovered;
+            confirming = false;
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+        }
+
+        if (std::optional<int32_t> clicked = spots.take_click(input)) {
+            if ((size_t)*clicked != selected) {
+                selected = (size_t)*clicked;
+                confirming = false;
+            }
+
+            activate();
             return;
         }
 
@@ -65,10 +88,12 @@ namespace nascent {
             return;
         }
 
-        if (!input.take(actions::CONFIRM)) {
-            return;
+        if (input.take(actions::CONFIRM)) {
+            activate();
         }
+    }
 
+    void ChartMenu::activate() {
         ChartAction action = ACTIONS[selected];
 
         if (is_destructive(action) && !confirming) {
@@ -108,6 +133,8 @@ namespace nascent {
         int32_t y = top + padding;
 
         window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)height}, skin->color(SkinColor::MENU_BACKGROUND));
+        panel = {{(float)left, (float)top}, {(float)width, (float)height}};
+        spots.clear();
 
         draw_text(title_font, title, {x, y - title_metrics.offset.y}, skin->color(SkinColor::TEXT));
         y += title_metrics.size.y + gap;
@@ -119,6 +146,7 @@ namespace nascent {
             bool is_selected = index == selected;
             bool is_confirming = is_selected && confirming;
             bool danger = is_destructive(action);
+            spots.add({{(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}}, (int32_t)index);
 
             if (is_selected) {
                 window->FillRectDecal({(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));

@@ -216,6 +216,44 @@ namespace nascent {
         game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
     }
 
+    bool SceneCalibration::update_mouse(Input& input, bool coarse) {
+        if (int32_t wheel = input.take_wheel(); wheel != 0) {
+            adjust(wheel > 0 ? 1 : -1, coarse);
+        }
+
+        std::optional<int32_t> clicked = spots.take_click(input);
+
+        if (!clicked) {
+            return false;
+        }
+
+        if (*clicked == SPOT_SAVE) {
+            finish();
+            return true;
+        }
+
+        if (*clicked == SPOT_CLEAR_TAPS) {
+            tap_errors.clear();
+            return false;
+        }
+
+        Step target = (Step)(*clicked % 10);
+
+        if (target != step) {
+            step = target;
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+        }
+
+        if (*clicked >= SPOT_PLUS) {
+            adjust(1, coarse);
+        }
+        else if (*clicked >= SPOT_MINUS) {
+            adjust(-1, coarse);
+        }
+
+        return false;
+    }
+
     void SceneCalibration::update(float) {
         Input& input = game->input();
         double now = now_ms();
@@ -225,6 +263,10 @@ namespace nascent {
         }
 
         bool coarse = input.key_held(InputManager::keybind_mod1);
+
+        if (update_mouse(input, coarse)) {
+            return;
+        }
 
         if (input.take(actions::LEFT)) {
             adjust(-1, coarse);
@@ -331,11 +373,21 @@ namespace nascent {
             std::format("{}", scroll_speed)
         };
 
+        spots.clear();
+        olc::Font& row_font = skin->display_font_medium;
+        olc::FontRect row_metrics = text_bounds(row_font, "Hgjy");
+        olc::vf2d mouse = window->GetMousePos();
+
         for (int i = 0; i < 3; i++) {
-            olc::Pixel color = skin->color(i == step_index ? SkinColor::TEXT : SkinColor::TEXT_FAINT);
-            draw_text(skin->display_font_medium, std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
-            draw_text(skin->display_font_medium, values[i], {x + Ui::px(380), y}, color);
-            y += Ui::px(48);
+            Rect row = {{(float)x, (float)(y + row_metrics.offset.y)}, {Ui::pxf(VALUE_COLUMN), (float)row_metrics.size.y}};
+            spots.add(row.inflated(Ui::pxf(6)), SPOT_STEP + i);
+            bool active = i == step_index || row.contains(mouse);
+            olc::Pixel color = skin->color(active ? SkinColor::TEXT : SkinColor::TEXT_FAINT);
+            draw_text(row_font, std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
+            draw_text(row_font, values[i], {x + Ui::px(VALUE_COLUMN), y}, color);
+            float button_x = (float)(x + Ui::px(VALUE_COLUMN)) + text_bounds(row_font, "+000 ms").size.x + Ui::pxf(BUTTON_GAP);
+            draw_hints(window, row_font, {{"-", SPOT_MINUS + i}, {"+", SPOT_PLUS + i}}, {button_x, (float)y}, Ui::pxf(BUTTON_GAP), skin->color(i == step_index ? SkinColor::TEXT_MUTED : SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), spots);
+            y += Ui::px(ROW_HEIGHT);
         }
 
         y += Ui::px(30);
@@ -346,7 +398,7 @@ namespace nascent {
                 : std::format("{} taps, average error {:+.1f} ms{}", tap_errors.size(), get_average_tap_error(), tap_errors.size() < MIN_TAPS_FOR_SUGGESTION ? " (keep tapping)" : "");
             draw_text(skin->display_font_small, taps, {x, y}, skin->color(SkinColor::TEXT));
             y += Ui::px(26);
-            draw_text(skin->display_font_small, "Ctrl+R: clear taps", {x, y}, skin->color(SkinColor::TEXT_MUTED));
+            draw_hints(window, skin->display_font_small, {{"Ctrl+R: clear taps", SPOT_CLEAR_TAPS}}, {(float)x, (float)y}, 0.0f, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
             y += Ui::px(40);
         }
 
@@ -354,11 +406,10 @@ namespace nascent {
             draw_text(skin->display_font_small, status_message, {x, y}, skin->color(SkinColor::TEXT_ERROR));
         }
 
-        std::string footer = "↑/↓:  change step        ←/→:  adjust (Shift for bigger steps)        Enter/Esc:  save and exit";
-
-        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, footer);
+        std::vector<Hint> footer = {{"↑/↓:  change step"}, {"←/→ or wheel:  adjust (Shift for bigger steps)"}, {"Enter/Esc:  save and exit", SPOT_SAVE}};
+        olc::FontRect footer_bounds = text_bounds(skin->display_font_small, "Hgjy");
         int32_t footer_bottom = field != nullptr && !field->upscroll ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;
 
-        draw_text(skin->display_font_small, footer, {x, footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y)}, skin->color(SkinColor::TEXT_MUTED));
+        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::pxf(FOOTER_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
     }
 }

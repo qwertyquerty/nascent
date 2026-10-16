@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gse/Overlay.h"
+#include "gse/ui/Layout.h"
 
 #include <cstdint>
 #include <string>
@@ -14,6 +15,7 @@ namespace nascent {
         std::string message;
         float timer = 0;
         bool is_error = false;
+        Rect area;
 
         public:
         static constexpr float DEFAULT_TIME = 5.0f;
