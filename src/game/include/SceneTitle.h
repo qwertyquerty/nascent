@@ -36,7 +36,10 @@ namespace nascent {
         double logo_position = 0;
 
         std::unique_ptr<Chart> bg_chart;
-        std::vector<std::unique_ptr<EntityField>> bg_field;
+        size_t logo_note_cursor = 0;
+        double logo_light_position = 0;
+        std::vector<double> letter_hit_time;
+        std::vector<double> letter_hold_end;
         SongClock bg_clock;
         double bg_position = 0;
 
@@ -66,7 +69,6 @@ namespace nascent {
         float shown_progress = 0;
         float reveal = 0;
 
-        uint8_t get_field_count();
         std::unique_ptr<Chart> load_random_chart(std::vector<std::filesystem::path> candidates);
         bool load_background();
         void update_loading(float elapsed_time);
@@ -76,7 +78,7 @@ namespace nascent {
         float cover_opacity() const;
         bool adopt_track(const TitleTrack& track);
         void build_background(std::unique_ptr<Chart> chart);
-        void layout_background();
+        void update_logo_lights();
         bool logo_playing();
         bool logo_finished();
         void draw_update_notice(olc::PixelGameEngine* window);
@@ -102,6 +104,7 @@ namespace nascent {
         static constexpr float STARFIELD_FADE_IN_TIME = 0.5f;
         static constexpr float BACKGROUND_FADE_IN_TIME = 1.0f;
         static constexpr float BACKGROUND_DIM = 0.5f;
+        static constexpr double LOGO_LIGHT_FADE_MS = 250.0;
         static constexpr const char* START_HINT = "PRESS ENTER TO START";
         static constexpr int32_t START_HINT_GAP = 24;
         static constexpr float START_HINT_PULSE_SPEED = 2.5f;

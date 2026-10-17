@@ -55,10 +55,21 @@ namespace nascent {
             for (uint8_t column = 0; column < key_count; column++) {
                 int32_t jl_x = pos.x + (column * (note_size + note_x_spacing));
 
-                bool held = get_key(display_column(column));
+                uint8_t lane = display_column(column);
+                bool held = get_key(lane);
+                float light = held ? 1.0f : (lane < lane_light.size() ? std::clamp(lane_light[lane], 0.0f, 1.0f) : 0.0f);
                 olc::Decal* receptor = sized_image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
                 olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors && note_gradient ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
-                color.a = held ? 255 : manifest.receptor_alpha.value_or(judge_alpha);
+                uint8_t base = manifest.receptor_alpha.value_or(judge_alpha);
+                color.a = (uint8_t)std::lround(base + (255 - base) * light);
+
+                if (!lane_light.empty() && light > 0.0f) {
+                    olc::Pixel glow = Skin::glow_color(color, light);
+
+                    for (olc::vf2d offset : Skin::glow_offsets(std::max(1.0f, Ui::pxf(Skin::GRADE_GLOW_RADIUS)))) {
+                        draw_square(window, receptor, jl_x + offset.x, jl_y + offset.y, with_opacity(glow));
+                    }
+                }
 
                 draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
             }

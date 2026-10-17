@@ -29,6 +29,7 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <limits>
 #include <utility>
 
 namespace nascent {
@@ -41,10 +42,6 @@ namespace nascent {
     };
 
     SceneTitle::~SceneTitle() {
-    }
-
-    uint8_t SceneTitle::get_field_count() {
-        return std::max<uint8_t>(SettingsManager::settings.title_field_count, 2);
     }
 
     std::unique_ptr<Chart> SceneTitle::load_random_chart(std::vector<std::filesystem::path> candidates) {
@@ -126,31 +123,56 @@ namespace nascent {
     }
 
     void SceneTitle::build_background(std::unique_ptr<Chart> chart) {
-        bg_field.clear();
         bg_chart = std::move(chart);
-
-        uint8_t field_count = get_field_count();
-
-        for (uint8_t i = 0; i < field_count; i++) {
-            auto field = std::make_unique<EntityField>(bg_chart.get(), bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1});
-            field->draw_judge = false;
-            field->scroll_speed = SettingsManager::settings.field_scroll_speed;
-            field->opacity = 0.0f;
-            bg_field.push_back(std::move(field));
-        }
-
-        layout_background();
+        logo_note_cursor = 0;
+        logo_light_position = 0;
+        letter_hit_time.clear();
+        letter_hold_end.clear();
     }
 
-    void SceneTitle::layout_background() {
-        olc::vi2d window_size = game->window->GetScreenSize();
-        size_t count = bg_field.size();
+    static size_t chart_letter(uint8_t key, uint8_t key_count, size_t letters) {
+        if (key_count == 0 || letters == 0) {
+            return 0;
+        }
 
-        for (size_t i = 0; i < count; i++) {
-            double width = (double)window_size.x / (double)(count - 1);
-            bg_field[i]->pos = {width * (double)i, 0};
-            bg_field[i]->size = {width, (double)window_size.y};
-            bg_field[i]->set_lane_gap(std::nullopt);
+        return std::min(letters - 1, (size_t)((key + 0.5) * (double)letters / key_count));
+    }
+
+    void SceneTitle::update_logo_lights() {
+        size_t letters = logo_field->get_key_count();
+
+        if (letter_hit_time.size() != letters) {
+            letter_hit_time.assign(letters, -std::numeric_limits<double>::infinity());
+            letter_hold_end.assign(letters, -std::numeric_limits<double>::infinity());
+            logo_note_cursor = 0;
+        }
+
+        if (bg_chart != nullptr && bg_started) {
+            if (bg_position < logo_light_position) {
+                std::fill(letter_hit_time.begin(), letter_hit_time.end(), -std::numeric_limits<double>::infinity());
+                std::fill(letter_hold_end.begin(), letter_hold_end.end(), -std::numeric_limits<double>::infinity());
+                logo_note_cursor = 0;
+            }
+
+            logo_light_position = bg_position;
+            const std::vector<Hit>& hits = bg_chart->hits;
+
+            while (logo_note_cursor < hits.size() && hits[logo_note_cursor].time <= bg_position) {
+                const Hit& hit = hits[logo_note_cursor++];
+                size_t letter = chart_letter(hit.key, bg_chart->info.key_count, letters);
+                letter_hit_time[letter] = hit.time;
+
+                if (hit.hit_type == HitType::HOLD) {
+                    letter_hold_end[letter] = std::max(letter_hold_end[letter], (double)hit.end_time);
+                }
+            }
+        }
+
+        logo_field->lane_light.resize(letters);
+
+        for (size_t letter = 0; letter < letters; letter++) {
+            double since = bg_position - std::max(letter_hit_time[letter], letter_hold_end[letter]);
+            logo_field->lane_light[letter] = bg_position < letter_hold_end[letter] ? 1.0f : (float)std::clamp(1.0 - since / LOGO_LIGHT_FADE_MS, 0.0, 1.0);
         }
     }
 
@@ -169,7 +191,6 @@ namespace nascent {
         fft_l->size = {(double)window_size.x, (double)window_size.y * 0.28};
         fft_r->pos = {0, (double)window_size.y - (double)window_size.y * 0.28};
         fft_r->size = {(double)window_size.x, (double)window_size.y * 0.28};
-        layout_background();
 
         logo_skin->set_font_scale(Ui::scale());
         start_hint = render_text_decal(bg_skin->display_font_medium, START_HINT, olc::WHITE);
@@ -354,23 +375,14 @@ namespace nascent {
             bg_clock.sync(game->audio().engine().GetPositionMilliseconds(bg_audio_id), now);
             bg_position = bg_clock.position_at(now);
 
-            for (auto& field : bg_field) {
-                field->pos.x -= step * SettingsManager::settings.title_h_scroll_rate * Ui::scale();
-                field->set_position(bg_position);
-                field->opacity = bg_fade * BACKGROUND_DIM;
-            }
-
             if (game->audio().engine().IsPlaying(bg_audio_id)) {
                 game->audio().engine().CopyEngineBuffer(audio_buffer);
                 fft_l->update_song_buffer(audio_buffer, elapsed_time);
                 fft_r->update_song_buffer(audio_buffer, elapsed_time);
             }
-
-            if (bg_field.size() > 1 && bg_field[1]->pos.x <= 0) {
-                layout_background();
-            }
         }
 
+        update_logo_lights();
         reveal = std::min(reveal + step, LOADING_BAR_FADE_TIME + STARFIELD_FADE_IN_TIME);
         timer += step;
     };
@@ -436,12 +448,6 @@ namespace nascent {
     }
 
     void SceneTitle::draw_loading(olc::PixelGameEngine* window) {
-        for (auto& field : bg_field) {
-            float opacity = std::exchange(field->opacity, 1.0f);
-            field->draw(window);
-            field->opacity = opacity;
-        }
-
         float logo_opacity = std::exchange(logo_field->opacity, 1.0f);
         logo_field->draw(window);
         logo_field->opacity = logo_opacity;
@@ -489,15 +495,7 @@ namespace nascent {
             draw_cover(window, cover_opacity());
         }
 
-        for (auto& field : bg_field) {
-            field->draw(window);
-        }
-
         if (bg_started && bg_chart != nullptr) {
-            logo_field->clear_keys();
-            if (bg_chart->timing_point_at(bg_position) != nullptr) {
-                logo_field->set_key(bg_chart->section_beat_at(bg_position) % logo_field->get_key_count());
-            }
             fft_l->draw(window);
             fft_r->draw(window);
         }
