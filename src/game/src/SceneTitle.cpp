@@ -3,7 +3,6 @@
 #include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
-#include "Const.h"
 #include "EntityFFT.h"
 #include "EntityField.h"
 #include "EntityStarfield.h"
@@ -16,6 +15,7 @@
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "gse/render/TextCache.h"
+#include "gse/ui/ProgressBar.h"
 #include "gse/ui/Ui.h"
 #include "Updater.h"
 #include "Utf8Path.h"
@@ -29,6 +29,7 @@
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <utility>
 
 namespace nascent {
     SceneTitle::SceneTitle(Skin* bg_skin, Skin* logo_skin, SceneList* list, EntityStarfield* sky, std::optional<TitleTrack> handoff) {
@@ -46,23 +47,8 @@ namespace nascent {
         return std::max<uint8_t>(SettingsManager::settings.title_field_count, 2);
     }
 
-    std::unique_ptr<Chart> SceneTitle::load_random_chart() {
-        std::vector<std::filesystem::path> candidates;
+    std::unique_ptr<Chart> SceneTitle::load_random_chart(std::vector<std::filesystem::path> candidates) {
         std::error_code ec;
-
-        for (const std::unique_ptr<Chart>& chart : list->chart_library().charts) {
-            candidates.push_back(chart->file_path);
-        }
-
-        if (candidates.empty()) {
-            for (const auto& folder : std::filesystem::directory_iterator(SettingsManager::song_directory(), ec)) {
-                for (const auto& file : std::filesystem::directory_iterator(folder.path(), ec)) {
-                    if (std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), file.path().extension().string()) != CHART_FILE_EXTENSIONS.end()) {
-                        candidates.push_back(file.path());
-                    }
-                }
-            }
-        }
 
         for (int32_t attempt = 0; attempt < RANDOM_CHART_ATTEMPTS && !candidates.empty(); attempt++) {
             size_t index = (size_t)std::rand() % candidates.size();
@@ -81,7 +67,24 @@ namespace nascent {
     }
 
     bool SceneTitle::load_background() {
-        std::unique_ptr<Chart> chart = load_random_chart();
+        if (SettingsManager::settings.title_songs == TitleSongs::NONE) {
+            return false;
+        }
+
+        if (!list->library_available()) {
+            waiting_for_library = true;
+            return false;
+        }
+
+        std::unique_ptr<Chart> chart;
+
+        if (SettingsManager::settings.title_songs == TitleSongs::FAVORITES) {
+            chart = load_random_chart(list->chart_paths(true).value_or(std::vector<std::filesystem::path>()));
+        }
+
+        if (chart == nullptr) {
+            chart = load_random_chart(list->chart_paths(false).value_or(std::vector<std::filesystem::path>()));
+        }
 
         if (chart == nullptr) {
             std::cerr << "No chart in " << SettingsManager::settings.list_song_directory << " could be loaded for the title screen background" << std::endl;
@@ -102,7 +105,7 @@ namespace nascent {
 
     bool SceneTitle::adopt_track(const TitleTrack& track) {
         std::string error;
-        std::unique_ptr<Chart> chart = Chart::load(track.chart_path, 1.0, error);
+        std::unique_ptr<Chart> chart = SettingsManager::settings.title_songs == TitleSongs::NONE ? nullptr : Chart::load(track.chart_path, 1.0, error);
 
         if (chart == nullptr || track.audio_id == -1) {
             if (track.audio_id != -1) {
@@ -132,6 +135,7 @@ namespace nascent {
             auto field = std::make_unique<EntityField>(bg_chart.get(), bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1});
             field->draw_judge = false;
             field->scroll_speed = SettingsManager::settings.field_scroll_speed;
+            field->opacity = 0.0f;
             bg_field.push_back(std::move(field));
         }
 
@@ -218,6 +222,8 @@ namespace nascent {
         logo_clock.max_error = SettingsManager::settings.field_audio_sync_max_error;
         bg_clock.max_error = SettingsManager::settings.field_audio_sync_max_error;
 
+        loading = !list->library_available();
+        reveal = loading ? 0.0f : LOADING_BAR_FADE_TIME + STARFIELD_FADE_IN_TIME;
         loaded = true;
         on_resize();
     };
@@ -269,6 +275,11 @@ namespace nascent {
             return;
         }
 
+        if (loaded && bar_opacity() > 0.0f) {
+            update_loading(elapsed_time);
+            return;
+        }
+
         if (game->input().take(actions::CONFIRM)) {
             bool sign_in_first = !Account::signed_in();
 
@@ -304,6 +315,11 @@ namespace nascent {
         if (timer > SettingsManager::settings.title_logo_start_delay && !logo_started) {
             logo_started = true;
             game->audio().engine().Play(logo_audio_id);
+        }
+
+        if (waiting_for_library && list->library_available()) {
+            waiting_for_library = false;
+            load_background();
         }
 
         if (bg_chart != nullptr && logo_finished() && !game->audio().engine().IsPlaying(bg_audio_id)) {
@@ -355,6 +371,7 @@ namespace nascent {
             }
         }
 
+        reveal = std::min(reveal + step, LOADING_BAR_FADE_TIME + STARFIELD_FADE_IN_TIME);
         timer += step;
     };
 
@@ -392,6 +409,68 @@ namespace nascent {
         draw_hints(window, bg_skin->display_font_small, {{text, clickable ? SPOT_UPDATE : -1}}, {(float)((screen.x - width) / 2), (float)(screen.y - Ui::px(UPDATE_NOTICE_BOTTOM))}, 0.0f, color, bg_skin->color(SkinColor::TEXT), spots);
     }
 
+    void SceneTitle::update_loading(float elapsed_time) {
+        float step = std::min(elapsed_time, MAX_TIMER_STEP);
+
+        if (!loading) {
+            reveal += step;
+            return;
+        }
+
+        shown_progress += (list->library_progress() - shown_progress) * std::min(1.0f, step * LOADING_BAR_SPEED);
+
+        if (!list->library_available()) {
+            return;
+        }
+
+        if (waiting_for_library) {
+            waiting_for_library = false;
+            load_background();
+        }
+
+        warmup_frames++;
+
+        if (warmup_frames > WARMUP_FRAMES && shown_progress >= 0.99f) {
+            loading = false;
+        }
+    }
+
+    void SceneTitle::draw_loading(olc::PixelGameEngine* window) {
+        for (auto& field : bg_field) {
+            float opacity = std::exchange(field->opacity, 1.0f);
+            field->draw(window);
+            field->opacity = opacity;
+        }
+
+        float logo_opacity = std::exchange(logo_field->opacity, 1.0f);
+        logo_field->draw(window);
+        logo_field->opacity = logo_opacity;
+        fft_l->draw(window);
+        fft_r->draw(window);
+
+        draw_cover(window, 1.0f);
+
+        float opacity = bar_opacity();
+        olc::vf2d screen = olc::vf2d(window->GetScreenSize());
+        olc::vf2d size = {Ui::pxf(LOADING_BAR_WIDTH), std::max(1.0f, Ui::pxf(LOADING_BAR_HEIGHT))};
+        ProgressBar bar(size, fade(bg_skin->color(SkinColor::PROGRESS_TRACK), LOADING_TRACK_OPACITY * opacity));
+        bar.draw(window, (screen - size) / 2.0f, shown_progress, fade(bg_skin->accent(0.5), LOADING_FILL_OPACITY * opacity));
+    }
+
+    void SceneTitle::draw_cover(olc::PixelGameEngine* window, float opacity) {
+        olc::Pixel cover = bg_skin->color(SkinColor::SCREEN_BACKGROUND);
+        cover.a = 255;
+        window->FillRectDecal({0.0f, 0.0f}, olc::vf2d(window->GetScreenSize()), fade(cover, opacity));
+    }
+
+    float SceneTitle::bar_opacity() const {
+        return loading ? 1.0f : 1.0f - std::clamp(reveal / LOADING_BAR_FADE_TIME, 0.0f, 1.0f);
+    }
+
+    float SceneTitle::cover_opacity() const {
+        return loading ? 1.0f : 1.0f - std::clamp((reveal - LOADING_BAR_FADE_TIME) / STARFIELD_FADE_IN_TIME, 0.0f, 1.0f);
+    }
+
     void SceneTitle::draw(olc::PixelGameEngine* window) {
         sky->draw(window);
         spots.clear();
@@ -399,6 +478,15 @@ namespace nascent {
         if (!loaded) {
             draw_update_notice(window);
             return;
+        }
+
+        if (bar_opacity() > 0.0f) {
+            draw_loading(window);
+            return;
+        }
+
+        if (cover_opacity() > 0.0f) {
+            draw_cover(window, cover_opacity());
         }
 
         for (auto& field : bg_field) {

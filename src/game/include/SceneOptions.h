@@ -14,6 +14,7 @@
 
 namespace nascent {
     class Attempt;
+    class ButtonField;
     class Chart;
     class ChoiceField;
     class EntityField;
@@ -29,10 +30,12 @@ namespace nascent {
         UiForm form;
 
         ChoiceField* skin_field = nullptr;
+        ChoiceField* note_gradient_field = nullptr;
         ChoiceField* frame_rate_field = nullptr;
         ChoiceField* fps_counter_field = nullptr;
         ChoiceField* rich_presence_field = nullptr;
         ChoiceField* transition_field = nullptr;
+        ChoiceField* title_music_field = nullptr;
         ChoiceField* fullscreen_field = nullptr;
         ChoiceField* mirror_field = nullptr;
         ChoiceField* hitsounds_field = nullptr;
@@ -46,6 +49,9 @@ namespace nascent {
         SliderField* judgement_height_field = nullptr;
         ChoiceField* combo_field = nullptr;
         SliderField* combo_height_field = nullptr;
+        ChoiceField* accuracy_field = nullptr;
+        ChoiceField* average_error_field = nullptr;
+        ChoiceField* error_deviation_field = nullptr;
         ChoiceField* timing_bar_field = nullptr;
         SliderField* timing_bar_height_field = nullptr;
         SliderField* timing_bar_length_field = nullptr;
@@ -55,6 +61,7 @@ namespace nascent {
         SliderField* effects_volume_field = nullptr;
         std::vector<KeyBindField*> key_fields;
         TextField* server_field = nullptr;
+        ButtonField* data_folder_button = nullptr;
         std::string status;
 
         std::string server_typed;

@@ -372,7 +372,7 @@ namespace nascent {
         }
 
         for (HitScore h : ALL_HIT_SCORES) {
-            hit_score_decals[(size_t)h] = render_text_decal(display_font_large, hit_score_name(h), judgement_color(h));
+            hit_score_decals[(size_t)h] = render_text_decal(display_font_large, hit_score_name(h), olc::WHITE);
         }
     }
 
@@ -409,6 +409,14 @@ namespace nascent {
             }
 
             menu_plucks.reset();
+        }
+
+        if (hitsound_voices) {
+            for (int32_t sound : *hitsound_voices) {
+                game->audio().engine().UnloadSound(sound);
+            }
+
+            hitsound_voices.reset();
         }
 
         for (std::optional<std::vector<MipDecal>>& slot : images) {
@@ -665,6 +673,34 @@ namespace nascent {
         }
     }
 
+    std::array<olc::vf2d, Skin::GRADE_GLOW_STEPS> Skin::glow_offsets(float radius) {
+        std::array<olc::vf2d, GRADE_GLOW_STEPS> offsets;
+
+        for (int step = 0; step < GRADE_GLOW_STEPS; step++) {
+            double angle = step * 2.0 * std::numbers::pi / GRADE_GLOW_STEPS;
+            offsets[step] = {(float)std::cos(angle) * radius, (float)std::sin(angle) * radius};
+        }
+
+        return offsets;
+    }
+
+    olc::Pixel Skin::glow_color(olc::Pixel color, float opacity) {
+        return fade(color, GRADE_GLOW_ALPHA * opacity);
+    }
+
+    void Skin::draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity) const {
+        std::string_view text = hit_score_name(score);
+        olc::Pixel base = judgement_color(score);
+
+        if (score == HitScore::PERFECT) {
+            for (olc::vf2d offset : glow_offsets(std::max(1.0f, Ui::pxf(GRADE_GLOW_RADIUS)))) {
+                draw_text(font, text, baseline + offset, glow_color(base, opacity), 1.0f);
+            }
+        }
+
+        draw_text(font, text, baseline, fade(base, opacity), 1.0f);
+    }
+
     void Skin::draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale, float opacity) const {
         std::string_view text = grade_name(grade);
         olc::Pixel base = grade_color(grade);
@@ -672,12 +708,10 @@ namespace nascent {
 
         if (grade == Grade::X || grade == Grade::S) {
             olc::Pixel glow = grade == Grade::X ? title_gradient_at(std::fmod(seconds * GRADE_GLOW_CYCLE + baseline.x * 0.001, 1.0), 0.5) : base;
-            float radius = std::max(1.0f, Ui::pxf(GRADE_GLOW_RADIUS) * scale);
-            glow = fade(glow, GRADE_GLOW_ALPHA * opacity);
+            glow = glow_color(glow, opacity);
 
-            for (int step = 0; step < GRADE_GLOW_STEPS; step++) {
-                double angle = step * 2.0 * std::numbers::pi / GRADE_GLOW_STEPS;
-                draw_text(font, text, {baseline.x + (float)std::cos(angle) * radius, baseline.y + (float)std::sin(angle) * radius}, glow, scale);
+            for (olc::vf2d offset : glow_offsets(std::max(1.0f, Ui::pxf(GRADE_GLOW_RADIUS) * scale))) {
+                draw_text(font, text, baseline + offset, glow, scale);
             }
         }
 
@@ -701,6 +735,28 @@ namespace nascent {
         }
 
         return *slot;
+    }
+
+    int32_t Skin::hitsound_voice() {
+        if (!hitsound_voices) {
+            hitsound_voices.emplace();
+
+            if (std::optional<std::filesystem::path> path = find_sound(SOUND_STEMS[(size_t)SkinSound::HITSOUND])) {
+                for (size_t index = 0; index < HITSOUND_VOICES; index++) {
+                    int32_t id = game->audio().engine().LoadSound(path->string());
+
+                    if (id != -1) {
+                        hitsound_voices->push_back(id);
+                    }
+                }
+            }
+        }
+
+        if (hitsound_voices->empty()) {
+            return -1;
+        }
+
+        return (*hitsound_voices)[next_hitsound_voice++ % hitsound_voices->size()];
     }
 
     int32_t Skin::get_random_menu_pluck() {

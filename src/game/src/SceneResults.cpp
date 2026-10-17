@@ -480,8 +480,8 @@ namespace nascent {
         };
 
         const StatRow stats[] = {
-            {"Max combo", std::format("{}", summary.max_combo), skin->color(full_combo ? SkinColor::FULL_COMBO : SkinColor::TEXT), full_combo ? "FULL COMBO" : "", skin->color(SkinColor::FULL_COMBO)},
-            {"Average error", std::format("{:+.1f} ms", summary.average_error), skin->color(SkinColor::TEXT), "", olc::BLANK},
+            {"Combo", std::format("{}", summary.max_combo), skin->color(full_combo ? SkinColor::FULL_COMBO : SkinColor::TEXT), full_combo ? "FULL COMBO" : "", skin->color(SkinColor::FULL_COMBO)},
+            {"Error", std::format("{:+.1f} ± {:.1f} ms", summary.average_error, summary.error_deviation), skin->color(SkinColor::TEXT), "", olc::BLANK},
             {"Diff", std::format("{:.2f}", summary.difficulty), skin->difficulty_color(summary.difficulty), "", olc::BLANK},
             {"Perf", std::format("{:.2f}", summary.performance), skin->color(SkinColor::TEXT), new_best ? "NEW PERSONAL BEST" : "", shine},
         };
@@ -514,7 +514,7 @@ namespace nascent {
             float alpha = row_fade(row_index++);
             int32_t slide = (int32_t)(Ui::pxf(ROW_SLIDE) * (1.0f - alpha));
             uint32_t count = (uint32_t)std::lround(summary.score_counts[(size_t)score] * alpha);
-            draw_text(skin->display_font_medium, std::string(hit_score_name(score)), {counts_x + slide, counts_y}, fade(skin->judgement_color(score), alpha));
+            skin->draw_judgement(score, skin->display_font_medium, olc::vf2d{(float)(counts_x + slide), (float)counts_y}, alpha);
             draw_text(skin->display_font_medium, std::format("{}", count), {counts_x + Ui::px(260) + slide, counts_y}, fade(skin->color(SkinColor::TEXT), alpha));
             counts_y += Ui::px(44);
         }

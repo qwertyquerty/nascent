@@ -57,6 +57,8 @@ namespace nascent {
     static constexpr float HIT_LOG_ERROR_X = 80.0f;
     static constexpr uint8_t HIT_LOG_ROWS = 35;
     static constexpr double REPLAY_LABEL_START = 1.5;
+    static constexpr int32_t STAT_TOP = 40;
+    static constexpr int32_t STAT_SPACING = 40;
 
     static double start_position_ms() {
         return -SettingsManager::settings.play_start_delay * 1000.0;
@@ -177,6 +179,7 @@ namespace nascent {
         field->judge_height = window_size.y * settings.field_judge_line_percent / 100.0;
         field->upscroll = settings.field_upscroll;
         field->mirror = mirror;
+        field->note_gradient = settings.field_note_gradient;
         field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
         field->draw_hit_score = settings.field_show_judgement;
         field->draw_combo = settings.field_show_combo;
@@ -498,7 +501,7 @@ namespace nascent {
             session->apply(input);
 
             if (sounds && input.pressed && SettingsManager::settings.field_hitsounds) {
-                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+                game->audio().play_effect(skin->hitsound_voice());
             }
         }
     }
@@ -739,7 +742,7 @@ namespace nascent {
                     session->press(chart_lane(*lane), event.time);
 
                     if (SettingsManager::settings.field_hitsounds) {
-                        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+                        game->audio().play_effect(skin->hitsound_voice());
                     }
                 }
                 else {
@@ -783,8 +786,24 @@ namespace nascent {
         float progress = (float)((position - chart_start) / chart_length);
         ProgressBar({Ui::pxf(SONG_PROGRESS_WIDTH), std::max(1.0f, Ui::pxf(SONG_PROGRESS_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, {screensize.x - Ui::pxf(SONG_PROGRESS_RIGHT), Ui::pxf(SONG_PROGRESS_TOP)}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
 
-        draw_text(skin->display_font_medium, std::format("{:.2f}%", attempt.get_accuracy() * 100), Ui::px(20), Ui::px(40), skin->color(SkinColor::TEXT));
-        draw_text(skin->display_font_medium, std::format("{:.1f}ms", attempt.get_avg_err()), Ui::px(20), Ui::px(80), skin->color(SkinColor::TEXT));
+        const Settings& settings = SettingsManager::settings;
+        int32_t stat_y = Ui::px(STAT_TOP);
+
+        std::string error_text = settings.field_show_average_error ? std::format("{:+.1f}", attempt.get_avg_err()) : std::string();
+
+        if (settings.field_show_error_deviation) {
+            error_text += std::format("{}± {:.1f}", error_text.empty() ? "" : " ", attempt.get_err_deviation());
+        }
+
+        for (auto [shown, text] : {
+                 std::pair{settings.field_show_accuracy, std::format("{:.2f}%", attempt.get_accuracy() * 100)},
+                 std::pair{!error_text.empty(), error_text + " ms"},
+             }) {
+            if (shown) {
+                draw_text(skin->display_font_medium, text, Ui::px(20), stat_y, skin->color(SkinColor::TEXT));
+                stat_y += Ui::px(STAT_SPACING);
+            }
+        }
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
@@ -856,8 +875,7 @@ namespace nascent {
             }
         }
 
-        if (SettingsManager::settings.field_show_timing_bar) {
-            const Settings& settings = SettingsManager::settings;
+        if (settings.field_show_timing_bar) {
             draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
         }
 

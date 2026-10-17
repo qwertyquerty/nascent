@@ -24,6 +24,7 @@
 #include "ScenePlay.h"
 #include "SceneTitle.h"
 #include "ServerApi.h"
+#include "GameNascent.h"
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "gse/render/TextCache.h"
@@ -66,8 +67,32 @@ namespace nascent {
         {2339429, "petit milady", "Koi wa Milk Tea (TV Size)"},
     };
 
-    const ChartLibrary& SceneList::chart_library() const {
-        return library;
+    std::optional<std::vector<std::filesystem::path>> SceneList::chart_paths(bool favorites_only) {
+        std::lock_guard<std::mutex> lock(library_load_mutex);
+        const ChartLibrary* source = completed_library_load ? &*completed_library_load : (library_loaded ? &library : nullptr);
+
+        if (source == nullptr) {
+            return std::nullopt;
+        }
+
+        std::vector<std::filesystem::path> paths;
+
+        for (size_t index = 0; index < source->charts.size() && index < source->hashes.size(); index++) {
+            if (!favorites_only || Favorites::contains(source->hashes[index])) {
+                paths.push_back(source->charts[index]->file_path);
+            }
+        }
+
+        return paths;
+    }
+
+    bool SceneList::library_available() {
+        std::lock_guard<std::mutex> lock(library_load_mutex);
+        return library_loaded || completed_library_load.has_value();
+    }
+
+    float SceneList::library_progress() {
+        return library_available() ? 1.0f : library_load_progress.fraction();
     }
 
     SceneList::SceneList(Skin* skin, Skin* logo_skin, EntityStarfield* sky) {
@@ -84,6 +109,8 @@ namespace nascent {
         difficulty_worker = std::thread([this] {
             difficulty_loop();
         });
+
+        start_library_load();
     };
 
     SceneList::~SceneList() {
@@ -130,7 +157,9 @@ namespace nascent {
             }
         }
 
-        start_library_load();
+        if (!library_loading) {
+            start_library_load();
+        }
     };
 
     void SceneList::on_enter() {
@@ -514,6 +543,7 @@ namespace nascent {
         field->draw_judge = false;
         field->upscroll = SettingsManager::settings.field_upscroll;
         field->mirror = SettingsManager::settings.field_mirror;
+        field->note_gradient = SettingsManager::settings.field_note_gradient;
         field->set_position(preview_position);
         field->opacity = opacity;
     }
@@ -622,12 +652,14 @@ namespace nascent {
         }
 
         library_loading = true;
+        library_load_progress.done = 0;
+        library_load_progress.total = 0;
         std::filesystem::path song_directory = SettingsManager::song_directory();
         float load_pitch = pitch;
         DifficultyCache* cache = difficulty_cache.get();
 
         library_loader = std::thread([this, song_directory, load_pitch, cache] {
-            ChartLibrary loaded = load_chart_library(song_directory, load_pitch, *cache);
+            ChartLibrary loaded = load_chart_library(song_directory, load_pitch, *cache, &library_load_progress);
             std::lock_guard<std::mutex> lock(library_load_mutex);
             completed_library_load = std::move(loaded);
         });
@@ -660,6 +692,7 @@ namespace nascent {
         }
 
         apply_library(std::move(*loaded));
+        library_loaded = true;
 
         if (std::exchange(library_reload_pending, false)) {
             start_library_load();
@@ -804,7 +837,7 @@ namespace nascent {
         draw_text(font, search, {padding, baseline}, skin->color(SkinColor::TEXT));
         float clear_x = (float)padding + text_bounds(font, search).size.x + Ui::pxf(HINT_GAP);
         draw_hints(window, font, {{"Esc  clear", SPOT_SEARCH_CLEAR}}, {clear_x, (float)baseline}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), ui_spots);
-        draw_text(font, count, {screensize.x - padding - count_width, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
+        draw_text(font, count, {screensize.x - padding - GameNascent::fps_counter_width() - count_width, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
     }
 
     void SceneList::download_recommended() {

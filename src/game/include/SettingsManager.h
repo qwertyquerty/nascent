@@ -9,6 +9,12 @@
 #include <vector>
 
 namespace nascent {
+    enum class TitleSongs : uint8_t {
+        ALL,
+        FAVORITES,
+        NONE,
+    };
+
     struct Settings {
         uint16_t field_scroll_speed = 160; // vh / s
         uint8_t field_audio_sync_max_error = 20; // ms
@@ -21,6 +27,10 @@ namespace nascent {
         bool field_show_judgement = true;
         uint8_t field_judgement_height = 45; // % of the field above the judgement line's end
         bool field_show_combo = true;
+        bool field_note_gradient = true;
+        bool field_show_accuracy = true;
+        bool field_show_average_error = true;
+        bool field_show_error_deviation = true;
         uint8_t field_combo_height = 41; // % of the field above the judgement line's end
         bool field_show_timing_bar = true;
         uint8_t field_timing_bar_height = 0; // % of the screen above its bottom edge
@@ -33,13 +43,14 @@ namespace nascent {
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;
         uint16_t title_h_scroll_rate = 250; // px / s
+        TitleSongs title_songs = TitleSongs::ALL;
 
         float play_start_delay = 2; // s
 
         float scene_transition_time = 0.2f; // s
         float list_preview_fade_in_time = 0.5; // s
 
-        std::string skin = "default";
+        std::string skin = "arrows_filled";
         bool display_fullscreen = true;
         uint16_t display_window_width = 1600;
         uint16_t display_window_height = 900;

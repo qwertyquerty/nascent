@@ -36,6 +36,10 @@ namespace nascent {
         void show_toast(std::string message, bool is_error, float duration);
 
         public:
+        static constexpr int32_t FPS_COUNTER_WIDTH = 100;
+
+        static int32_t fps_counter_width();
+
         GameNascent(olc::PixelGameEngine* window);
         ~GameNascent();
         void init() override;

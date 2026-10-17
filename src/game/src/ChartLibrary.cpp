@@ -35,9 +35,13 @@ namespace nascent {
             return folder;
         }
 
-        ChartLibrary build_library(std::vector<LoadedChart> loaded, float pitch, DifficultyCache& cache) {
+        ChartLibrary build_library(std::vector<LoadedChart> loaded, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr) {
             parallel_for(loaded.size(), [&](size_t index) {
                 loaded[index].difficulty = (float)cache.difficulty(*loaded[index].chart, pitch);
+
+                if (progress != nullptr) {
+                    progress->done++;
+                }
             });
 
             std::unordered_map<std::u8string, std::string> folder_titles;
@@ -105,6 +109,11 @@ namespace nascent {
         }
     }
 
+    float LibraryLoadProgress::fraction() const {
+        size_t all = total;
+        return all == 0 ? 0.0f : std::min(1.0f, (float)done / (float)all);
+    }
+
     size_t ChartLibrary::size() const {
         return charts.size();
     }
@@ -130,7 +139,7 @@ namespace nascent {
         return library;
     }
 
-    ChartLibrary load_chart_library(const std::filesystem::path& song_directory, float pitch, DifficultyCache& cache) {
+    ChartLibrary load_chart_library(const std::filesystem::path& song_directory, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress) {
         std::error_code ec;
         std::vector<LoadedChart> loaded;
 
@@ -173,10 +182,18 @@ namespace nascent {
             std::vector<LoadedChart> parsed(chart_files.size());
             std::mutex log_mutex;
 
+            if (progress != nullptr) {
+                progress->total = chart_files.size() * 2;
+            }
+
             parallel_for(chart_files.size(), [&](size_t index) {
                 std::string error;
                 std::unique_ptr<Chart> chart = Chart::load(chart_files[index].path, pitch, error);
                 std::error_code audio_ec;
+
+                if (progress != nullptr) {
+                    progress->done++;
+                }
 
                 if (chart != nullptr && !std::filesystem::is_regular_file(chart->audio_path, audio_ec)) {
                     error = std::format("audio file {} is missing", path_utf8(chart->audio_path));
@@ -207,7 +224,11 @@ namespace nascent {
             difficulty_keys.insert(entry.chart->difficulty_key());
         }
 
-        ChartLibrary library = build_library(std::move(loaded), pitch, cache);
+        if (progress != nullptr) {
+            progress->total = progress->done + loaded.size();
+        }
+
+        ChartLibrary library = build_library(std::move(loaded), pitch, cache, progress);
         cache.retain(difficulty_keys);
         migrate_replay_folders(library);
 

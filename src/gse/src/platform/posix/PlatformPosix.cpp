@@ -61,13 +61,8 @@ namespace nascent {
         return copied;
     }
 
-    bool open_url(const std::string& url) {
-        if (!url.starts_with("https://")) {
-            return false;
-        }
-
+    static bool run_opener(std::string argument) {
         std::string program = platform_detail::url_opener();
-        std::string argument = url;
         char* arguments[] = {program.data(), argument.data(), nullptr};
         pid_t pid = 0;
 
@@ -79,5 +74,15 @@ namespace nascent {
             waitpid(pid, nullptr, 0);
         }).detach();
         return true;
+    }
+
+    bool open_url(const std::string& url) {
+        return url.starts_with("https://") && run_opener(url);
+    }
+
+    bool open_folder(const std::filesystem::path& folder) {
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        return run_opener(folder.string());
     }
 }

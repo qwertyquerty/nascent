@@ -6,6 +6,7 @@
 #include "Chart.h"
 #include "EntityField.h"
 #include "gse/Game.h"
+#include "gse/Platform.h"
 #include "gse/ui/RowField.h"
 #include "KeyBindField.h"
 #include "SettingsManager.h"
@@ -121,10 +122,12 @@ namespace nascent {
 
         form.add<SectionField>("Display");
         skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
+        note_gradient_field = &form.add<ChoiceField>("Note gradient", std::vector<std::string>{"Off", "On"}, settings.field_note_gradient ? 1 : 0);
         frame_rate_field = &form.add<ChoiceField>("Frame rate limit", frame_rate_labels, frame_rate_index);
         fps_counter_field = &form.add<ChoiceField>("FPS counter", std::vector<std::string>{"Off", "On"}, settings.show_fps ? 1 : 0);
         rich_presence_field = &form.add<ChoiceField>("Discord rich presence", std::vector<std::string>{"Off", "On"}, settings.discord_rich_presence ? 1 : 0);
         transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
+        title_music_field = &form.add<ChoiceField>("Title screen songs", std::vector<std::string>{"All", "Favorites", "None"}, std::min<size_t>((size_t)settings.title_songs, 2));
         fullscreen_field = &form.add<ChoiceField>("Fullscreen (applies on restart)", std::vector<std::string>{"Off", "On"}, settings.display_fullscreen ? 1 : 0);
 
         form.add<SectionField>("Audio");
@@ -163,6 +166,9 @@ namespace nascent {
         judgement_height_field = &form.add<SliderField>("Judgement height", settings.field_judgement_height, 0, 100, PERCENT_STEP, "%");
         combo_field = &form.add<ChoiceField>("Combo", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_combo ? 1 : 0);
         combo_height_field = &form.add<SliderField>("Combo height", settings.field_combo_height, 0, 100, PERCENT_STEP, "%");
+        accuracy_field = &form.add<ChoiceField>("Accuracy", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_accuracy ? 1 : 0);
+        average_error_field = &form.add<ChoiceField>("Average error", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_average_error ? 1 : 0);
+        error_deviation_field = &form.add<ChoiceField>("Error deviation", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_error_deviation ? 1 : 0);
         timing_bar_field = &form.add<ChoiceField>("Hit timing bar", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_bar ? 1 : 0);
         timing_bar_height_field = &form.add<SliderField>("Hit timing bar height", settings.field_timing_bar_height, 0, 100, PERCENT_STEP, "%");
         timing_bar_length_field = &form.add<SliderField>("Hit timing bar length", settings.field_timing_bar_length, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH, PERCENT_STEP, "%");
@@ -178,6 +184,9 @@ namespace nascent {
         server_field = &form.add<TextField>("Server address", settings.server_url);
         server_typed = settings.server_url;
         server_checked = settings.server_url;
+
+        form.add<SectionField>("Files");
+        data_folder_button = &form.add<ButtonField>("Open data folder");
 
         form.spacing = OPTIONS_FIELD_SPACING;
         form.focus_field(0);
@@ -210,6 +219,8 @@ namespace nascent {
         settings.display_fullscreen = fullscreen_field->selected == 1;
         settings.field_hitsounds = hitsounds_field->selected == 1;
         settings.field_mirror = mirror_field->selected == 1;
+        settings.field_note_gradient = note_gradient_field->selected == 1;
+        settings.title_songs = (TitleSongs)title_music_field->selected;
         settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
         settings.field_background_brightness = (uint8_t)background_brightness_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
@@ -218,6 +229,9 @@ namespace nascent {
         settings.field_show_judgement = judgement_field->selected == 1;
         settings.field_judgement_height = (uint8_t)judgement_height_field->value;
         settings.field_show_combo = combo_field->selected == 1;
+        settings.field_show_accuracy = accuracy_field->selected == 1;
+        settings.field_show_average_error = average_error_field->selected == 1;
+        settings.field_show_error_deviation = error_deviation_field->selected == 1;
         settings.field_combo_height = (uint8_t)combo_height_field->value;
         settings.field_show_timing_bar = timing_bar_field->selected == 1;
         settings.field_timing_bar_height = (uint8_t)timing_bar_height_field->value;
@@ -272,7 +286,10 @@ namespace nascent {
             action = UiForm::Action::CHANGED;
         }
 
-        if (action == UiForm::Action::CHANGED) {
+        if (data_folder_button->take_pressed()) {
+            open_folder(user_config_directory(SettingsManager::APP_NAME));
+        }
+        else if (action == UiForm::Action::CHANGED) {
             apply();
         }
 
@@ -398,6 +415,7 @@ namespace nascent {
         preview_field->judge_height = screen.y * settings.field_judge_line_percent / 100.0;
         preview_field->upscroll = settings.field_upscroll;
         preview_field->mirror = settings.field_mirror;
+        preview_field->note_gradient = settings.field_note_gradient;
         preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
     }
 
@@ -468,6 +486,10 @@ namespace nascent {
 
         if (key_field != nullptr) {
             return {{"↑/↓:  choose"}, {"Enter:  rebind", FOOTER_CONFIRM}, {"Delete:  reset", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
+        }
+
+        if (data_folder_button != nullptr && form.focused_field() == data_folder_button) {
+            return {{"↑/↓:  choose"}, {"Enter:  open", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 
         if (server_field != nullptr && form.focused_field() == server_field) {

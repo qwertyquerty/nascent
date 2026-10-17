@@ -11,6 +11,7 @@
 #include "RichPresence.h"
 #include "SceneTitle.h"
 #include "SettingsManager.h"
+#include "StatusBar.h"
 #include "Skin.h"
 #include "SubmissionQueue.h"
 #include "ToastOverlay.h"
@@ -142,10 +143,16 @@ namespace nascent {
 
         if (SettingsManager::settings.show_fps) {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
-            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(100), Ui::px(30), skin->color(SkinColor::TEXT));
+            olc::FontRect metrics = text_bounds(skin->display_font_small, "Hgjy");
+            int32_t baseline = (StatusBar::height() - metrics.size.y) / 2 - metrics.offset.y;
+            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(FPS_COUNTER_WIDTH), baseline, skin->color(SkinColor::TEXT));
         }
 
         overlays().draw(window);
+    }
+
+    int32_t GameNascent::fps_counter_width() {
+        return SettingsManager::settings.show_fps ? Ui::px(FPS_COUNTER_WIDTH) : 0;
     }
 
     void GameNascent::show_toast(std::string message, bool is_error, float duration) {

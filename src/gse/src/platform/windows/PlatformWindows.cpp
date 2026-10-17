@@ -140,6 +140,12 @@ namespace nascent {
 
         return (INT_PTR)ShellExecuteW(nullptr, L"open", widen(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL) > 32;
     }
+
+    bool open_folder(const std::filesystem::path& folder) {
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        return (INT_PTR)ShellExecuteW(nullptr, L"open", folder.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL) > 32;
+    }
 }
 
 namespace nascent::platform_detail {

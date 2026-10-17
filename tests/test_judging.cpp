@@ -16,6 +16,19 @@
 using namespace nascent;
 using namespace nascent::test;
 
+NASCENT_TEST(error_deviation) {
+    std::unique_ptr<Chart> chart = make_chart({tap(0, 1000), tap(1, 2000)});
+    Attempt attempt(chart.get());
+    CHECK(attempt.get_err_deviation() == 0);
+
+    attempt.press(0, 1010);
+    attempt.release(0, 1050);
+    attempt.press(1, 1990);
+    attempt.release(1, 2050);
+    CHECK(attempt.get_avg_err() == 0);
+    CHECK(std::abs(attempt.get_err_deviation() - 10.0) < 1e-9);
+}
+
 NASCENT_TEST(judging) {
     CHECK(get_window_from_hit_acc_diff(HitScore::PERFECT, 10) == 10);
     CHECK(get_window_from_hit_acc_diff(HitScore::BAD, 0) == MAX_BAD_WINDOW_SIZE);

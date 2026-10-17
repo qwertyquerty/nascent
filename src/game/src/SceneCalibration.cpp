@@ -133,6 +133,7 @@ namespace nascent {
         field->judge_alpha = 64;
         field->upscroll = SettingsManager::settings.field_upscroll;
         field->mirror = SettingsManager::settings.field_mirror;
+        field->note_gradient = SettingsManager::settings.field_note_gradient;
         on_resize();
 
         std::filesystem::path click_path = std::filesystem::temp_directory_path() / "nascent_calibration_click.wav";

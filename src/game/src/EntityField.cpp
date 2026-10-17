@@ -57,7 +57,7 @@ namespace nascent {
 
                 bool held = get_key(display_column(column));
                 olc::Decal* receptor = sized_image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
-                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
+                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors && note_gradient ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
                 color.a = held ? 255 : manifest.receptor_alpha.value_or(judge_alpha);
 
                 draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
@@ -153,17 +153,23 @@ namespace nascent {
 
         if (jhit != nullptr) {
             double t = (position - (jhit->hit_played ? (jhit->released ? jhit->attempt_hit.end_time : jhit->attempt_hit.time) : jhit->chart_hit.time + get_window_from_hit_acc_diff(HitScore::BAD, attempt->hit_accuracy))) / 1000;
-            olc::Decal* hs_skin = draw_hit_score ? skin->hit_score_decal(jhit->released ? jhit->release_score : jhit->hit_score) : nullptr;
+            HitScore shown_score = jhit->released ? jhit->release_score : jhit->hit_score;
+            olc::Decal* hs_skin = draw_hit_score ? skin->hit_score_decal(shown_score) : nullptr;
             float scale = smoothstep(0.8, 0.6, t * 4);
 
             if (hs_skin != nullptr) {
-                window->DrawDecal(
-                    {(float)(pos.x + size.x / 2 - hs_skin->sprite->width * scale / 2),
-                     (float)(overlay_y(judgement_height) - hs_skin->sprite->height * scale / 2)},
-                    hs_skin,
-                    {scale, scale},
-                    with_opacity(olc::Pixel(255, 255, 255, smoothstep(255, 0, (t - 1) * 2)))
-                );
+                olc::vf2d corner = {(float)(pos.x + size.x / 2 - hs_skin->sprite->width * scale / 2), (float)(overlay_y(judgement_height) - hs_skin->sprite->height * scale / 2)};
+                olc::Pixel tint = skin->judgement_color(shown_score);
+                tint.a = (uint8_t)smoothstep(255, 0, (t - 1) * 2);
+                tint = with_opacity(tint);
+
+                if (shown_score == HitScore::PERFECT) {
+                    for (olc::vf2d offset : Skin::glow_offsets(std::max(1.0f, Ui::pxf(Skin::GRADE_GLOW_RADIUS) * scale))) {
+                        window->DrawDecal(corner + offset, hs_skin, {scale, scale}, Skin::glow_color(tint, 1.0f));
+                    }
+                }
+
+                window->DrawDecal(corner, hs_skin, {scale, scale}, tint);
             }
 
             if (draw_combo) {
@@ -200,7 +206,7 @@ namespace nascent {
     };
 
     olc::Pixel EntityField::note_color(double x, double y, olc::PixelGameEngine* window) const {
-        if (skin->manifest().tint == SkinTint::NONE) {
+        if (skin->manifest().tint == SkinTint::NONE || !note_gradient) {
             return olc::WHITE;
         }
 

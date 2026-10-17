@@ -111,6 +111,8 @@ namespace nascent {
         std::optional<ChartLibrary> completed_library_load;
         std::thread library_loader;
         bool library_loading = false;
+        bool library_loaded = false;
+        LibraryLoadProgress library_load_progress;
         bool library_reload_pending = false;
 
         std::mutex difficulty_mutex;
@@ -196,7 +198,9 @@ namespace nascent {
         static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.json";
 
         SceneList(Skin* skin, Skin* logo_skin, EntityStarfield* sky);
-        const ChartLibrary& chart_library() const;
+        std::optional<std::vector<std::filesystem::path>> chart_paths(bool favorites_only);
+        bool library_available();
+        float library_progress();
         ~SceneList();
         void on_create() override;
         void on_enter() override;

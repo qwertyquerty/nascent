@@ -50,6 +50,7 @@ namespace nascent {
         uint32_t n_scored_notes = 0;
         uint32_t total_score = 0;
         int64_t total_err = 0;
+        int64_t total_squared_err = 0;
         uint32_t n_timed_hits = 0;
 
         uint32_t current_combo = 0;
@@ -71,6 +72,7 @@ namespace nascent {
         const JudgedHit* get_last_scored() const;
         double get_accuracy() const;
         double get_avg_err() const;
+        double get_err_deviation() const;
         uint32_t get_combo() const;
 
         private:

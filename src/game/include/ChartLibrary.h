@@ -30,6 +30,13 @@ namespace nascent {
         ChartLibrary without(const std::vector<bool>& removed);
     };
 
-    ChartLibrary load_chart_library(const std::filesystem::path& song_directory, float pitch, DifficultyCache& cache);
+    struct LibraryLoadProgress {
+        std::atomic<size_t> done{0};
+        std::atomic<size_t> total{0};
+
+        float fraction() const;
+    };
+
+    ChartLibrary load_chart_library(const std::filesystem::path& song_directory, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr);
     ChartLibrary single_chart_library(std::unique_ptr<Chart> chart, float pitch, DifficultyCache& cache);
 }

@@ -34,6 +34,7 @@ namespace nascent {
         bool draw_judge = true;
         bool draw_notes_past_judge = true;
         bool draw_judge_colors = false;
+        bool note_gradient = true;
         bool draw_hit_score = true;
         bool draw_combo = false;
         double judge_height = 0;

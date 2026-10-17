@@ -3,6 +3,8 @@
 
 #include "Chart.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace nascent {
@@ -44,6 +46,7 @@ namespace nascent {
 
             if (played) {
                 total_err += err;
+                total_squared_err += (int64_t)err * err;
                 n_timed_hits += 1;
             }
         }
@@ -71,6 +74,15 @@ namespace nascent {
 
     double Attempt::get_avg_err() const {
         return n_timed_hits ? (double)total_err / n_timed_hits : 0;
+    }
+
+    double Attempt::get_err_deviation() const {
+        if (n_timed_hits == 0) {
+            return 0;
+        }
+
+        double mean = (double)total_err / n_timed_hits;
+        return std::sqrt(std::max(0.0, (double)total_squared_err / n_timed_hits - mean * mean));
     }
 
     uint32_t Attempt::get_combo() const {

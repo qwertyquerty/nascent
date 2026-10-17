@@ -213,6 +213,8 @@ namespace nascent {
         std::array<std::vector<std::future<std::vector<std::unique_ptr<olc::Sprite>>>>, SKIN_IMAGE_COUNT> pending_images;
         std::array<std::optional<int32_t>, SKIN_SOUND_COUNT> sounds;
         std::optional<std::vector<int32_t>> menu_plucks;
+        std::optional<std::vector<int32_t>> hitsound_voices;
+        size_t next_hitsound_voice = 0;
         std::array<SpriteDecal, HIT_SCORE_COUNT> hit_score_decals;
         std::unique_ptr<olc::Sprite> title_gradient;
 
@@ -236,6 +238,7 @@ namespace nascent {
         static constexpr const char* SYMBOL_FONT_PATH = "assets/fonts/OpenArrow-Regular.ttf";
         static constexpr size_t MAX_INHERITANCE_DEPTH = 8;
         static constexpr size_t MAX_MENU_PLUCKS = 10;
+        static constexpr size_t HITSOUND_VOICES = 8;
         static constexpr uint16_t DISPLAY_FONT_LARGE_SIZE = 72;
         static constexpr uint16_t DISPLAY_FONT_MEDIUM_SIZE = 36;
         static constexpr uint16_t DISPLAY_FONT_SMALL_SIZE = 18;
@@ -276,8 +279,12 @@ namespace nascent {
         olc::Pixel grade_color(Grade grade) const;
         olc::Pixel difficulty_color(double difficulty) const;
         olc::Pixel rank_color(int64_t rank) const;
+        static std::array<olc::vf2d, GRADE_GLOW_STEPS> glow_offsets(float radius);
+        static olc::Pixel glow_color(olc::Pixel color, float opacity);
         void draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale = 1.0f, float opacity = 1.0f) const;
+        void draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity = 1.0f) const;
         int32_t sound(SkinSound sound);
+        int32_t hitsound_voice();
         int32_t get_random_menu_pluck();
     };
 }
