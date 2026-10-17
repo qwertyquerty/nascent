@@ -1,5 +1,6 @@
 #include "SceneOptions.h"
 #include "RichPresence.h"
+#include "SceneCalibration.h"
 
 #include "Account.h"
 #include "Attempt.h"
@@ -136,6 +137,12 @@ namespace nascent {
         effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, PERCENT_STEP, "%");
         hitsounds_field = &form.add<ChoiceField>("Hitsounds", std::vector<std::string>{"Off", "On"}, settings.field_hitsounds ? 1 : 0);
 
+        form.add<SectionField>("Calibration");
+        visual_offset_field = &form.add<SliderField>("Visual offset", settings.field_audio_visual_offset, -SceneCalibration::OFFSET_LIMIT_MS, SceneCalibration::OFFSET_LIMIT_MS, 1, " ms");
+        input_offset_field = &form.add<SliderField>("Input offset", settings.field_audio_input_offset, -SceneCalibration::OFFSET_LIMIT_MS, SceneCalibration::OFFSET_LIMIT_MS, 1, " ms");
+        scroll_speed_field = &form.add<SliderField>("Scroll speed", settings.field_scroll_speed, SceneCalibration::SCROLL_SPEED_MIN, SceneCalibration::SCROLL_SPEED_MAX, SceneCalibration::SCROLL_SPEED_STEP, "");
+        calibration_button = &form.add<ButtonField>("Open calibration");
+
         form.add<SectionField>("Playfield");
         lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width_percent, LANE_WIDTH_MIN, LANE_WIDTH_MAX, PERCENT_STEP, "%");
         background_brightness_field = &form.add<SliderField>("Background brightness", settings.field_background_brightness, 0, 100, PERCENT_STEP, "%");
@@ -225,6 +232,9 @@ namespace nascent {
         settings.field_background_brightness = (uint8_t)background_brightness_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
         settings.field_judge_line_percent = (uint8_t)judge_offset_field->value;
+        settings.field_audio_visual_offset = (int16_t)visual_offset_field->value;
+        settings.field_audio_input_offset = (int16_t)input_offset_field->value;
+        settings.field_scroll_speed = (uint16_t)scroll_speed_field->value;
         settings.field_upscroll = scroll_direction_field->selected == 1;
         settings.field_show_judgement = judgement_field->selected == 1;
         settings.field_judgement_height = (uint8_t)judgement_height_field->value;
@@ -247,6 +257,20 @@ namespace nascent {
         }
 
         changed = true;
+    }
+
+    void SceneOptions::on_enter() {
+        form.set_enabled(true);
+
+        if (visual_offset_field == nullptr) {
+            return;
+        }
+
+        const Settings& settings = SettingsManager::settings;
+        visual_offset_field->value = settings.field_audio_visual_offset;
+        input_offset_field->value = settings.field_audio_input_offset;
+        scroll_speed_field->value = settings.field_scroll_speed;
+        rebuild_preview();
     }
 
     void SceneOptions::on_exit() {
@@ -288,6 +312,9 @@ namespace nascent {
 
         if (data_folder_button->take_pressed()) {
             open_folder(user_config_directory(SettingsManager::APP_NAME));
+        }
+        else if (calibration_button->take_pressed()) {
+            game->scenes().push(std::make_unique<SceneCalibration>(skin));
         }
         else if (action == UiForm::Action::CHANGED) {
             apply();
@@ -488,7 +515,7 @@ namespace nascent {
             return {{"↑/↓:  choose"}, {"Enter:  rebind", FOOTER_CONFIRM}, {"Delete:  reset", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
         }
 
-        if (data_folder_button != nullptr && form.focused_field() == data_folder_button) {
+        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button)) {
             return {{"↑/↓:  choose"}, {"Enter:  open", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 

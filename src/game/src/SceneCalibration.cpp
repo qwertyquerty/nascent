@@ -28,11 +28,6 @@ namespace nascent {
     static constexpr uint32_t CLICK_SAMPLE_RATE = 48000;
     static constexpr double CLICK_LENGTH_S = 0.04;
 
-    static constexpr int32_t OFFSET_LIMIT_MS = 300;
-    static constexpr int32_t SCROLL_SPEED_MIN = 20;
-    static constexpr int32_t SCROLL_SPEED_MAX = 1000;
-    static constexpr int32_t SCROLL_SPEED_STEP = 5;
-
     static constexpr size_t MAX_TAP_SAMPLES = 16;
     static constexpr size_t MIN_TAPS_FOR_SUGGESTION = 4;
 

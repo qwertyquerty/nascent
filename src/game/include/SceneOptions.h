@@ -62,6 +62,10 @@ namespace nascent {
         std::vector<KeyBindField*> key_fields;
         TextField* server_field = nullptr;
         ButtonField* data_folder_button = nullptr;
+        SliderField* visual_offset_field = nullptr;
+        SliderField* input_offset_field = nullptr;
+        SliderField* scroll_speed_field = nullptr;
+        ButtonField* calibration_button = nullptr;
         std::string status;
 
         std::string server_typed;
@@ -106,6 +110,7 @@ namespace nascent {
         SceneOptions(Skin* skin);
         ~SceneOptions() override;
         void on_create() override;
+        void on_enter() override;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

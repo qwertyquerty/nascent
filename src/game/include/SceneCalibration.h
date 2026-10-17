@@ -52,6 +52,11 @@ namespace nascent {
         Hotspots spots;
 
         public:
+        static constexpr int32_t OFFSET_LIMIT_MS = 300;
+        static constexpr int32_t SCROLL_SPEED_MIN = 20;
+        static constexpr int32_t SCROLL_SPEED_MAX = 1000;
+        static constexpr int32_t SCROLL_SPEED_STEP = 5;
+
         SceneCalibration(Skin* skin);
         ~SceneCalibration();
         void on_create() override;
