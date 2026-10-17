@@ -347,6 +347,16 @@ namespace nascent {
             }
         }
 
+        if (std::optional<int32_t> hovered = ui_spots.at(input.mouse_position()); hovered && *hovered >= SPOT_RECOMMENDED_FIRST && ui_spots.take_click(input, 1)) {
+            size_t song = (size_t)(*hovered - SPOT_RECOMMENDED_FIRST);
+
+            if (song < std::size(RECOMMENDED_SONGS) && BeatmapDownloads::cancel(RECOMMENDED_SONGS[song].set_id)) {
+                game->audio().play_effect(skin->get_random_menu_pluck());
+            }
+
+            return false;
+        }
+
         if (std::optional<int32_t> spot = ui_spots.take_click(input)) {
             if (*spot == SPOT_SEARCH_CLEAR) {
                 search.clear();
@@ -854,14 +864,18 @@ namespace nascent {
         int32_t x = screen.x / 24;
         int32_t y = screen.y / 10;
         bool any_failed = false;
+        bool any_downloading = false;
         bool all_started = true;
+        olc::FontRect metrics = text_bounds(skin->display_font_small, "Hgjy");
+        float row_height = Ui::pxf(RECOMMENDED_ROW_HEIGHT);
 
         draw_text(skin->display_font_large, "Your library is empty", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(70);
         draw_text(skin->display_font_small, "Download these recommended songs to get started.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
         y += Ui::px(60);
 
-        for (const RecommendedSong& song : RECOMMENDED_SONGS) {
+        for (size_t index = 0; index < std::size(RECOMMENDED_SONGS); index++) {
+            const RecommendedSong& song = RECOMMENDED_SONGS[index];
             std::shared_ptr<BeatmapDownloads::Download> download = BeatmapDownloads::find(song.set_id);
             std::string status;
             olc::Pixel status_color = skin->color(SkinColor::TEXT_MUTED);
@@ -873,6 +887,7 @@ namespace nascent {
                 switch (download->state.load()) {
                     case BeatmapDownloads::State::DOWNLOADING:
                         status = std::format("{:.0f}%", download->progress.load() * 100.0);
+                        any_downloading = true;
                         break;
                     case BeatmapDownloads::State::EXTRACTING:
                         status = "Extracting";
@@ -891,6 +906,9 @@ namespace nascent {
 
             draw_text(skin->display_font_small, std::format("{} - {}", song.artist, song.title), {x, y}, skin->color(SkinColor::TEXT));
             draw_text(skin->display_font_small, status, {x + Ui::px(RECOMMENDED_STATUS_OFFSET), y}, status_color);
+            float row_top = (float)(y + metrics.offset.y) - (row_height - (float)metrics.size.y) / 2.0f;
+            float row_width = (float)(Ui::px(RECOMMENDED_STATUS_OFFSET) + text_bounds(skin->display_font_small, "Extracting").size.x);
+            ui_spots.add(Rect{{(float)x, row_top}, {row_width, row_height}}, SPOT_RECOMMENDED_FIRST + (int32_t)index);
             y += Ui::px(RECOMMENDED_ROW_HEIGHT);
         }
 
@@ -899,7 +917,13 @@ namespace nascent {
         Hint download = !all_started ? Hint{"Enter:  download recommended songs", SPOT_DOWNLOAD}
             : any_failed             ? Hint{"Enter:  retry failed downloads", SPOT_DOWNLOAD}
                                      : Hint{"Downloading...", -1};
-        draw_hints(window, skin->display_font_small, {download, {"F5:  browse charts", SPOT_BROWSE}}, {(float)x, (float)y}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), ui_spots);
+        std::vector<Hint> hints = {download, {"F5:  browse charts", SPOT_BROWSE}};
+
+        if (any_downloading) {
+            hints.push_back({"Right-click a song:  cancel"});
+        }
+
+        draw_hints(window, skin->display_font_small, hints, {(float)x, (float)y}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), ui_spots);
     }
 
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {

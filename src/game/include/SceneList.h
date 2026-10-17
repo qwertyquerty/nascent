@@ -192,6 +192,7 @@ namespace nascent {
         static constexpr int32_t SPOT_SEARCH_CLEAR = 1;
         static constexpr int32_t SPOT_DOWNLOAD = 2;
         static constexpr int32_t SPOT_BROWSE = 3;
+        static constexpr int32_t SPOT_RECOMMENDED_FIRST = 100;
         static constexpr float HINT_GAP = 36.0f;
         static constexpr int32_t RECOMMENDED_ROW_HEIGHT = 30;
         static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;

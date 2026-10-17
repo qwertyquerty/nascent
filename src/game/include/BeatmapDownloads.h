@@ -20,6 +20,7 @@ namespace nascent {
         struct Download {
             std::atomic<State> state = State::DOWNLOADING;
             std::atomic<double> progress = 0.0;
+            std::atomic<bool> cancelled = false;
 
             std::string error() const;
             void fail(std::string message);
@@ -44,6 +45,7 @@ namespace nascent {
 
         static std::shared_ptr<Download> start(int64_t set_id, const std::string& artist, const std::string& title);
         static std::shared_ptr<Download> find(int64_t set_id);
+        static bool cancel(int64_t set_id);
         static bool take_library_changed();
         static ImportResult import_archive(const std::filesystem::path& file);
     };

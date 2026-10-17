@@ -280,10 +280,14 @@ namespace nascent {
     static std::optional<std::string> fetch_archive(const std::vector<std::string>& urls, BeatmapDownloads::Download& download, std::string& error) {
         for (const std::string& url : urls) {
             for (int32_t attempt = 1; attempt <= BeatmapDownloads::DOWNLOAD_ATTEMPTS; attempt++) {
+                if (download.cancelled) {
+                    return std::nullopt;
+                }
+
                 bool retryable = false;
                 std::string attempt_error;
                 download.progress = 0.0;
-                std::optional<std::string> archive = ServerClient::download(url, BeatmapDownloads::MAX_DOWNLOAD_BYTES, [&download](double progress) { download.progress = progress; }, attempt_error, retryable);
+                std::optional<std::string> archive = ServerClient::download(url, BeatmapDownloads::MAX_DOWNLOAD_BYTES, [&download](double progress) { download.progress = progress; }, attempt_error, retryable, &download.cancelled);
 
                 if (archive && is_archive(*archive)) {
                     return archive;
@@ -347,6 +351,10 @@ namespace nascent {
             std::string error = "no beatmap download mirrors are configured";
             std::optional<std::string> archive = fetch_archive(urls, *download, error);
 
+            if (download->cancelled) {
+                return;
+            }
+
             if (!archive) {
                 download->fail(error);
                 return;
@@ -371,6 +379,19 @@ namespace nascent {
         std::lock_guard<std::mutex> lock(downloads_mutex);
         auto existing = downloads.find(set_id);
         return existing != downloads.end() ? existing->second : nullptr;
+    }
+
+    bool BeatmapDownloads::cancel(int64_t set_id) {
+        std::lock_guard<std::mutex> lock(downloads_mutex);
+        auto existing = downloads.find(set_id);
+
+        if (existing == downloads.end() || existing->second->state != State::DOWNLOADING) {
+            return false;
+        }
+
+        existing->second->cancelled = true;
+        downloads.erase(existing);
+        return true;
     }
 
     bool BeatmapDownloads::take_library_changed() {

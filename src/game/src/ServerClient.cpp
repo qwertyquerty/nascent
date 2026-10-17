@@ -287,6 +287,7 @@ namespace nascent {
         std::string data;
         size_t max_bytes = 0;
         const std::function<void(double)>* progress = nullptr;
+        const std::atomic<bool>* cancelled = nullptr;
     };
 
     static size_t append_download(char* data, size_t size, size_t count, void* target) {
@@ -303,6 +304,10 @@ namespace nascent {
     static int report_progress(void* target, curl_off_t total, curl_off_t now, curl_off_t, curl_off_t) {
         DownloadTarget* download = static_cast<DownloadTarget*>(target);
 
+        if (download->cancelled != nullptr && *download->cancelled) {
+            return 1;
+        }
+
         if (total > 0 && *download->progress) {
             (*download->progress)((double)now / (double)total);
         }
@@ -310,7 +315,7 @@ namespace nascent {
         return 0;
     }
 
-    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable) {
+    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled) {
         retryable = false;
 
         if (!is_https(url)) {
@@ -326,7 +331,7 @@ namespace nascent {
             return std::nullopt;
         }
 
-        DownloadTarget target{std::string(), max_bytes, &progress};
+        DownloadTarget target{std::string(), max_bytes, &progress, cancelled};
         char error_buffer[CURL_ERROR_SIZE] = {};
         long status = 0;
 
@@ -348,6 +353,11 @@ namespace nascent {
 
         if (result == CURLE_WRITE_ERROR && target.data.size() + CURL_MAX_WRITE_SIZE > max_bytes) {
             error = std::format("the download is larger than {} MB", max_bytes / (1024 * 1024));
+            return std::nullopt;
+        }
+
+        if (result == CURLE_ABORTED_BY_CALLBACK) {
+            error = "the download was cancelled";
             return std::nullopt;
         }
 

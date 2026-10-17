@@ -188,6 +188,25 @@ namespace nascent {
         return true;
     }
 
+    bool SceneBrowser::is_downloading(size_t index) const {
+        if (index >= results.size()) {
+            return false;
+        }
+
+        std::optional<int64_t> set_id = osu_set_id(results[index]);
+        std::shared_ptr<BeatmapDownloads::Download> download = set_id ? BeatmapDownloads::find(*set_id) : nullptr;
+        return download != nullptr && download->state == BeatmapDownloads::State::DOWNLOADING;
+    }
+
+    bool SceneBrowser::cancel_download(size_t index) {
+        if (index >= results.size()) {
+            return false;
+        }
+
+        std::optional<int64_t> set_id = osu_set_id(results[index]);
+        return set_id && BeatmapDownloads::cancel(*set_id);
+    }
+
     bool SceneBrowser::update_mouse(Input& input) {
         if (std::optional<int32_t> hint = hint_spots.take_click(input)) {
             if (*hint == HINT_BACK) {
@@ -214,6 +233,14 @@ namespace nascent {
             focus_results(false);
             play_menu_sound();
             return false;
+        }
+
+        if (std::optional<int32_t> cancelled = result_spots.take_click(input, 1)) {
+            if (cancel_download((size_t)*cancelled)) {
+                play_menu_sound();
+            }
+
+            return true;
         }
 
         std::optional<int32_t> row = result_spots.take_click(input);
@@ -444,7 +471,8 @@ namespace nascent {
             draw_text(detail_font, status, {status_x, title_baseline}, status_color);
         }
 
-        std::vector<Hint> hints = results_focused ? std::vector<Hint>{{"↑/↓:  chart"}, {"Enter:  download", HINT_CONFIRM}, {"Ctrl+Tab:  filters", HINT_SWITCH}, {"Esc:  back", HINT_BACK}}
+        Hint selected_action = is_downloading(selected) ? Hint{"Right-click:  cancel"} : Hint{"Enter:  download", HINT_CONFIRM};
+        std::vector<Hint> hints = results_focused ? std::vector<Hint>{{"↑/↓:  chart"}, selected_action, {"Ctrl+Tab:  filters", HINT_SWITCH}, {"Esc:  back", HINT_BACK}}
                                                   : std::vector<Hint>{{"Tab, ↑/↓:  filter"}, {"←/→:  change"}, {"Enter:  next", HINT_CONFIRM}, {"Ctrl+Tab:  results", HINT_SWITCH}, {"Esc:  back", HINT_BACK}};
         int32_t hint_line_height = Ui::px(HINT_LINE_HEIGHT);
         int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * hint_line_height;

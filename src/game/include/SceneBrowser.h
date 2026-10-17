@@ -59,6 +59,8 @@ namespace nascent {
         void request_page(const ChartQuery& query);
         void poll_results();
         bool download_selected();
+        bool is_downloading(size_t index) const;
+        bool cancel_download(size_t index);
         void focus_results(bool focused);
         void play_menu_sound();
 
