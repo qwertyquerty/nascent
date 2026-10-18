@@ -149,15 +149,16 @@ namespace nascent {
                 break;
         }
 
-        const std::array<std::pair<std::string_view, StatusAction>, 8> hints = {{
+        const std::array<std::pair<std::string_view, StatusAction>, 9> hints = {{
             {leaderboards_shown ? "Tab  preview" : "Tab  scores", StatusAction::TOGGLE_SCORES},
             {"Shift ←/→  rate", StatusAction::RATE},
             {"F1  options", StatusAction::OPTIONS},
-            {"F3  calibration", StatusAction::CALIBRATION},
+            {"F3  offset", StatusAction::CALIBRATION},
             {username.empty() ? "F4  sign in" : "F4  account", StatusAction::ACCOUNT},
             {"F5  browse", StatusAction::BROWSE},
             {"F6  input", StatusAction::INPUT},
             {"F7  chart", StatusAction::CHART_MENU},
+            {"F8  sort", StatusAction::SORT},
         }};
         int32_t hint_x = screen.x - padding() + segment_gap;
         olc::vf2d mouse = window->GetMousePos();

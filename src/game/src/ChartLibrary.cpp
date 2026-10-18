@@ -35,6 +35,12 @@ namespace nascent {
             return folder;
         }
 
+        int64_t folder_time(const std::filesystem::path& folder) {
+            std::error_code ec;
+            std::filesystem::file_time_type time = std::filesystem::last_write_time(folder, ec);
+            return ec ? 0 : (int64_t)time.time_since_epoch().count();
+        }
+
         ChartLibrary build_library(std::vector<LoadedChart> loaded, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr) {
             parallel_for(loaded.size(), [&](size_t index) {
                 loaded[index].difficulty = (float)cache.difficulty(*loaded[index].chart, pitch);
@@ -80,6 +86,7 @@ namespace nascent {
                 library.details.push_back(std::format("[{}] - {} // {}", info.difficulty_name, info.artist, info.mapper));
                 library.lengths_ms.push_back((double)entry.chart->get_duration_ms() * entry.chart->pitch);
                 library.bpms.push_back(entry.chart->bpm_range());
+                library.added.push_back(folder_time(entry.chart->file_path.parent_path()));
                 library.charts.push_back(std::move(entry.chart));
             }
 
@@ -134,6 +141,7 @@ namespace nascent {
             library.details.push_back(details[index]);
             library.lengths_ms.push_back(lengths_ms[index]);
             library.bpms.push_back(bpms[index]);
+            library.added.push_back(index < added.size() ? added[index] : 0);
         }
 
         return library;

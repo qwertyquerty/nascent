@@ -43,6 +43,7 @@ namespace nascent {
         title_field_count,
         title_h_scroll_rate,
         title_songs,
+        list_sort,
         play_start_delay,
         scene_transition_time,
         list_preview_fade_in_time,

@@ -34,6 +34,7 @@ add_library(game
     src/ServerClient.cpp
     src/SettingsManager.cpp
     src/Skin.cpp
+    src/SortMenu.cpp
     src/StatusBar.cpp
     src/SubmissionQueue.cpp
     src/ToastOverlay.cpp

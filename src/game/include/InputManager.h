@@ -23,6 +23,7 @@ namespace nascent {
 
     namespace game_actions {
         inline constexpr ActionId CHART_MENU = actions::FIRST_CUSTOM;
+        inline constexpr ActionId SORT_MENU = actions::FIRST_CUSTOM + 1;
     }
 
     struct KeyBindingInfo {
@@ -49,6 +50,7 @@ namespace nascent {
         static const olc::Key browse_key = olc::Key::F5;
         static const olc::Key input_key = olc::Key::F6;
         static const olc::Key chart_menu_key = olc::Key::F7;
+        static const olc::Key sort_key = olc::Key::F8;
         static const olc::Key field_key = olc::Key::TAB;
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;

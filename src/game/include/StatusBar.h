@@ -21,7 +21,8 @@ namespace nascent {
         ACCOUNT,
         BROWSE,
         INPUT,
-        CHART_MENU
+        CHART_MENU,
+        SORT
     };
 
     class StatusBar {
@@ -60,7 +61,7 @@ namespace nascent {
         static constexpr float PROFILE_INTERVAL = 60.0f;
         static constexpr int32_t HEIGHT = 40;
         static constexpr int32_t PADDING = 20;
-        static constexpr int32_t SEGMENT_GAP = 36;
+        static constexpr int32_t SEGMENT_GAP = 30;
         static constexpr int32_t LABEL_GAP = 8;
         static constexpr int32_t DOT_RADIUS = 4;
 

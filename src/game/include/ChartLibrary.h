@@ -24,6 +24,7 @@ namespace nascent {
         std::vector<std::string> details;
         std::vector<double> lengths_ms;
         std::vector<BpmRange> bpms;
+        std::vector<int64_t> added;
         float pitch = 1.0f;
 
         size_t size() const;

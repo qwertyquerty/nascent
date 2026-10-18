@@ -305,6 +305,9 @@ namespace nascent {
 
                 open_chart_menu();
                 return true;
+            case StatusAction::SORT:
+                open_sort_menu();
+                return true;
             default:
                 break;
         }
@@ -444,6 +447,11 @@ namespace nascent {
 
         if (input.key_pressed(InputManager::leaderboard_key)) {
             run_status_action(StatusAction::TOGGLE_SCORES, false);
+        }
+
+        if (input.take(game_actions::SORT_MENU)) {
+            open_sort_menu();
+            return true;
         }
 
         if (input.key_held(InputManager::keybind_mod1)) {
@@ -754,7 +762,7 @@ namespace nascent {
             library.difficulties.assign(library.size(), std::nullopt);
         }
 
-        if (query.filters_on("difficulty")) {
+        if (query.filters_on("difficulty") || current_sort() == ListSort::DIFFICULTY) {
             parallel_for(library.size(), [&](size_t index) {
                 if (!library.difficulties[index]) {
                     library.difficulties[index] = (float)difficulty_cache->difficulty(*library.charts[index], pitch);
@@ -781,14 +789,80 @@ namespace nascent {
                 continue;
             }
 
-            if (index == keep_chart) {
-                selected_chart_index = (int32_t)visible.size();
-            }
-
             visible.push_back(index);
         }
 
+        sort_visible();
+        auto kept = std::find(visible.begin(), visible.end(), keep_chart);
+        selected_chart_index = kept != visible.end() ? (int32_t)(kept - visible.begin()) : 0;
         list_scroll_offset = 0;
+    }
+
+    ListSort SceneList::current_sort() {
+        uint8_t sort = SettingsManager::settings.list_sort;
+        return sort < (uint8_t)ListSort::COUNT ? (ListSort)sort : ListSort::TITLE;
+    }
+
+    void SceneList::set_sort(ListSort sort) {
+        if (sort == current_sort()) {
+            return;
+        }
+
+        SettingsManager::settings.list_sort = (uint8_t)sort;
+        SettingsManager::save();
+        refresh_search();
+    }
+
+    void SceneList::open_sort_menu() {
+        overlays.open(std::make_unique<SortMenu>(skin, current_sort(), [this](ListSort sort) {
+            set_sort(sort);
+        }));
+    }
+
+    void SceneList::sort_visible() {
+        ListSort sort = current_sort();
+
+        if (sort == ListSort::TITLE) {
+            return;
+        }
+
+        std::vector<std::string> artists;
+
+        if (sort == ListSort::ARTIST) {
+            artists.resize(library.size());
+
+            for (size_t index : visible) {
+                artists[index] = ascii_lowercase(library.charts[index]->info.artist);
+            }
+        }
+
+        auto bpm = [&](size_t index) {
+            return index < library.bpms.size() ? library.bpms[index].main : 0.0;
+        };
+
+        auto added = [&](size_t index) {
+            return index < library.added.size() ? library.added[index] : (int64_t)0;
+        };
+
+        std::stable_sort(visible.begin(), visible.end(), [&](size_t a, size_t b) {
+            switch (sort) {
+                case ListSort::ARTIST:
+                    return artists[a] < artists[b];
+                case ListSort::DIFFICULTY: {
+                    std::optional<float> left = get_difficulty(a);
+                    std::optional<float> right = get_difficulty(b);
+                    return left && (!right || *left < *right);
+                }
+                case ListSort::BPM:
+                    return bpm(a) > 0 && (bpm(b) <= 0 || bpm(a) < bpm(b));
+                case ListSort::LENGTH:
+                    return library.lengths_ms[a] < library.lengths_ms[b];
+                case ListSort::DATE_ADDED:
+                    return added(a) > added(b);
+                default:
+                    return false;
+            }
+        });
     }
 
     void SceneList::refresh_search() {

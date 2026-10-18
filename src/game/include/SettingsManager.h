@@ -46,6 +46,7 @@ namespace nascent {
         uint8_t title_field_count = 9;
         uint16_t title_h_scroll_rate = 250; // px / s
         TitleSongs title_songs = TitleSongs::ALL;
+        uint8_t list_sort = 0;
 
         float play_start_delay = 2; // s
 

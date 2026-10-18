@@ -4,6 +4,7 @@
 #include "ChartMenu.h"
 #include "LeaderboardPanel.h"
 #include "ReplayMenu.h"
+#include "SortMenu.h"
 #include "gse/Scene.h"
 #include "SongClock.h"
 #include "StatusBar.h"
@@ -139,6 +140,10 @@ namespace nascent {
         void apply_library(ChartLibrary loaded);
         void apply_search(size_t keep_chart);
         void refresh_search();
+        static ListSort current_sort();
+        void set_sort(ListSort sort);
+        void open_sort_menu();
+        void sort_visible();
         void update_search();
         void draw_search(olc::PixelGameEngine* window);
         void select_chart(int32_t, bool sound = true);
