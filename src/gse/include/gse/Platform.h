@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace nascent {
@@ -13,6 +14,7 @@ namespace nascent {
     void use_executable_directory_for_assets();
     void attach_parent_console();
     std::filesystem::path user_config_directory(const std::string& app_name);
+    bool move_into_place(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& ec);
     void precise_sleep(double seconds);
     bool copy_to_clipboard(const std::string& text);
     bool open_url(const std::string& url);

@@ -1,5 +1,6 @@
 #include "EtternaSkin.h"
 
+#include "gse/Platform.h"
 #include "Utf8Path.h"
 #include "json.h"
 
@@ -616,9 +617,8 @@ namespace nascent {
         std::ofstream(staging / "skin.json", std::ios::trunc) << config.dump(4) << std::endl;
 
         std::filesystem::remove_all(destination, ec);
-        std::filesystem::rename(staging, destination, ec);
 
-        if (ec) {
+        if (!move_into_place(staging, destination, ec)) {
             std::filesystem::remove_all(staging, ec);
             result.error = std::format("could not move the skin into {}", path_utf8(skins_directory));
             return result;

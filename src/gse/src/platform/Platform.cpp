@@ -1,10 +1,43 @@
 #include "gse/Platform.h"
 #include "platform/PlatformDetail.h"
 
+#include <chrono>
 #include <format>
 #include <system_error>
+#include <thread>
 
 namespace nascent {
+    static constexpr int32_t MOVE_ATTEMPTS = 8;
+    static constexpr int32_t MOVE_RETRY_MS = 50;
+
+    bool move_into_place(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& ec) {
+        for (int32_t attempt = 1; attempt <= MOVE_ATTEMPTS; attempt++) {
+            std::filesystem::rename(from, to, ec);
+
+            if (!ec) {
+                return true;
+            }
+
+            if (attempt < MOVE_ATTEMPTS) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(MOVE_RETRY_MS * attempt));
+            }
+        }
+
+        std::error_code copy_ec;
+        std::filesystem::copy(from, to, std::filesystem::copy_options::recursive, copy_ec);
+
+        if (copy_ec) {
+            std::error_code cleanup_ec;
+            std::filesystem::remove_all(to, cleanup_ec);
+            return false;
+        }
+
+        std::error_code cleanup_ec;
+        std::filesystem::remove_all(from, cleanup_ec);
+        ec.clear();
+        return true;
+    }
+
     std::filesystem::path executable_directory() {
         return executable_path().parent_path();
     }

@@ -165,7 +165,7 @@ namespace nascent {
             };
 
             for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
-                if (!chart_folder.is_directory(ec)) {
+                if (!chart_folder.is_directory(ec) || chart_folder.path().extension() == ".part") {
                     continue;
                 }
 

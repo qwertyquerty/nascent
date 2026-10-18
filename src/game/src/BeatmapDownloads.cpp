@@ -1,5 +1,6 @@
 #include "BeatmapDownloads.h"
 
+#include "gse/Platform.h"
 #include "ServerClient.h"
 #include "SettingsManager.h"
 #include "Utf8Path.h"
@@ -249,11 +250,9 @@ namespace nascent {
             return false;
         }
 
-        std::filesystem::rename(staging, destination, ec);
-
-        if (ec) {
-            std::filesystem::remove_all(staging, ec);
+        if (!move_into_place(staging, destination, ec)) {
             error = std::format("could not move the beatmap into the songs folder: {}", ec.message());
+            std::filesystem::remove_all(staging, ec);
             return false;
         }
 
@@ -347,7 +346,7 @@ namespace nascent {
 
         std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(folder_name(std::format("{} {} - {}", set_id, artist, title)));
 
-        std::thread([download, urls, destination] {
+        std::thread([download, urls, destination, set_id] {
             std::string error = "no beatmap download mirrors are configured";
             std::optional<std::string> archive = fetch_archive(urls, *download, error);
 
@@ -356,6 +355,7 @@ namespace nascent {
             }
 
             if (!archive) {
+                std::cerr << std::format("Beatmap {} failed to download: {}", set_id, error) << std::endl;
                 download->fail(error);
                 return;
             }
@@ -363,6 +363,7 @@ namespace nascent {
             download->state = State::EXTRACTING;
 
             if (!install(*archive, destination, error)) {
+                std::cerr << std::format("Beatmap {} failed to install into {}: {}", set_id, path_utf8(destination), error) << std::endl;
                 download->fail(error);
                 return;
             }
