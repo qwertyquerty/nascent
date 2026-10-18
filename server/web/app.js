@@ -591,7 +591,7 @@ const loaders = {
 const app = Vue.createApp({
     template: "#app-template",
 
-    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, user: null, busy: null, formError: null, formNotice: null, flash: null, staffError: null, reviewNotes: {}, reviewBusy: null, showAddresses: false}),
+    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, user: null, busy: null, formError: null, formNotice: null, flash: null, staffError: null, reviewNotes: {}, reviewBusy: null, showAddresses: false, showEmail: false}),
 
     async created() {
         if (location.hash.startsWith("#/")) {

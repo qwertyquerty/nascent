@@ -547,7 +547,7 @@
                         <div class="box">
                             <h2 class="title is-5">Profile</h2>
                             <p class="mb-1"><a :href="$link.user(view.user.username)">{{ view.user.username }}</a></p>
-                            <p class="has-text-grey mb-1">{{ view.user.email }}</p>
+                            <p class="has-text-grey mb-1"><span v-if="showEmail">{{ view.user.email }}</span><span v-else aria-label="Email hidden">•••••@•••</span> <button type="button" class="button is-small is-text reveal-button" :aria-pressed="showEmail" @click="showEmail = !showEmail">{{ showEmail ? "Hide" : "Show" }}</button></p>
                             <p class="has-text-grey">Joined <rel-time :value="view.user.created_at"></rel-time></p>
                         </div>
                         <div class="box">
@@ -589,7 +589,7 @@
                             <h2 class="title is-5">Signed in devices</h2>
                             <div class="table-container">
                                 <table class="table is-fullwidth">
-                                    <thead><tr><th>Device</th><th>Address <button type="button" class="button is-small is-text show-addresses" :aria-pressed="showAddresses" @click="showAddresses = !showAddresses">{{ showAddresses ? "Hide" : "Show" }}</button></th><th>Last used</th><th><span class="is-sr-only">Actions</span></th></tr></thead>
+                                    <thead><tr><th>Device</th><th>Address <button type="button" class="button is-small is-text reveal-button" :aria-pressed="showAddresses" @click="showAddresses = !showAddresses">{{ showAddresses ? "Hide" : "Show" }}</button></th><th>Last used</th><th><span class="is-sr-only">Actions</span></th></tr></thead>
                                     <tbody>
                                         <tr v-for="entry in view.sessions" :key="entry.id">
                                             <td class="session-client" :title="entry.client">{{ $f.client(entry.client) }} <span v-if="entry.current" class="tag is-info is-light">this browser</span></td>
