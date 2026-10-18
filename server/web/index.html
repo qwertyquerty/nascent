@@ -589,11 +589,11 @@
                             <h2 class="title is-5">Signed in devices</h2>
                             <div class="table-container">
                                 <table class="table is-fullwidth">
-                                    <thead><tr><th>Device</th><th>Address</th><th>Last used</th><th><span class="is-sr-only">Actions</span></th></tr></thead>
+                                    <thead><tr><th>Device</th><th>Address <button type="button" class="button is-small is-text show-addresses" :aria-pressed="showAddresses" @click="showAddresses = !showAddresses">{{ showAddresses ? "Hide" : "Show" }}</button></th><th>Last used</th><th><span class="is-sr-only">Actions</span></th></tr></thead>
                                     <tbody>
                                         <tr v-for="entry in view.sessions" :key="entry.id">
                                             <td class="session-client" :title="entry.client">{{ $f.client(entry.client) }} <span v-if="entry.current" class="tag is-info is-light">this browser</span></td>
-                                            <td>{{ entry.ip }}</td>
+                                            <td><span v-if="showAddresses">{{ entry.ip }}</span><span v-else class="has-text-grey" aria-label="Address hidden">•••</span></td>
                                             <td><rel-time :value="entry.last_used_at"></rel-time></td>
                                             <td class="has-text-right"><button v-if="!entry.current" type="button" class="button is-small" :class="{'is-loading': busy === 'session-' + entry.id}" @click="revokeSession(entry)">Sign out</button></td>
                                         </tr>

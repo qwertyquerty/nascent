@@ -228,6 +228,17 @@ a.navbar-item.is-active:focus-within {
     gap: 1rem;
 }
 
+th:has(.show-addresses) {
+    white-space: nowrap;
+}
+
+.show-addresses {
+    height: auto;
+    margin-left: 0.25rem;
+    padding: 0 0.25rem;
+    vertical-align: baseline;
+}
+
 .session-client {
     max-width: 16rem;
     overflow: hidden;
