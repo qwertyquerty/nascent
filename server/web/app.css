@@ -151,15 +151,22 @@ a.navbar-item.is-active:focus-within {
 }
 
 .hero-lanes {
-    --size: 4.25rem;
-    --gap: 0.6rem;
+    --size: 5.3rem;
+    --gap: 0.75rem;
+    --glow: 2rem;
     position: absolute;
     top: -35%;
     left: 50%;
-    width: calc(var(--size) * 4 + var(--gap) * 3);
+    width: calc(var(--size) * 4 + var(--gap) * 3 + var(--glow) * 2);
     height: 170%;
+    padding: 0 var(--glow);
     transform: translateX(-50%) rotate(24deg);
     mask-image: linear-gradient(transparent, #000 25%, #000 85%, transparent);
+}
+
+.hero-track {
+    position: relative;
+    height: 100%;
     filter: drop-shadow(0 0 0.6rem rgba(0, 200, 200, 0.45));
 }
 
