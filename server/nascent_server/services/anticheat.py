@@ -1,3 +1,4 @@
+import re
 import statistics
 from collections import defaultdict
 from collections.abc import Mapping
@@ -8,6 +9,20 @@ import nascent_core as nc
 
 REVIEW = "review"
 INFO = "info"
+
+RELEASE_VERSION = re.compile(r"^\d+\.\d+\.\d+(\.(indev|alpha|beta|rc)\d+)?$")
+OFFICIAL_COMPILERS = {"Windows": "MSVC", "Linux": "GCC", "macOS": "Clang"}
+CLOCK_MIN_INTERVAL_MS = 500.0
+FINGERPRINT_MIN_NOTES = 50
+FINGERPRINT_MIN_TAPS = 30
+FINGERPRINT_MIN_CHORDS = 15
+FINGERPRINT_MAX_TAP_MS = 150
+FINGERPRINT_RULES = {
+    "hold_ms": (-2.0, 4.0, 3.0),
+    "error_sd": (-3.0, None, 1.0),
+    "error_drift": (-3.0, None, 0.05),
+    "chord_spread_ms": (-3.0, None, 1.0),
+}
 
 
 @dataclass
@@ -25,6 +40,7 @@ class Flag:
 class PlayerHistory:
     ranked_play_count: int
     best_performance: float
+    recent_performances: list[float] = field(default_factory=list)
 
 
 def _stdev(values: list[float]) -> float:
@@ -108,19 +124,34 @@ def timing_flags(simulation: nc.Simulation, inputs: list[tuple[int, int, bool]],
 
 def performance_flags(performance: float, history: PlayerHistory, config: Mapping[str, Any]) -> list[Flag]:
     if history.ranked_play_count >= config["ANTICHEAT_SPIKE_MIN_RANKED_PLAYS"]:
-        limit = history.best_performance * config["ANTICHEAT_SPIKE_RATIO"] + config["ANTICHEAT_SPIKE_MARGIN"]
+        flags = []
+        baseline = history.best_performance
+        limit = baseline * config["ANTICHEAT_SPIKE_RATIO"] + config["ANTICHEAT_SPIKE_MARGIN"]
 
         if performance > limit:
-            return [
+            flags.append(
                 Flag(
                     "performance_spike",
                     REVIEW,
-                    "This play is worth far more than the player's previous best",
-                    {"performance": round(performance, 3), "previous_best": round(history.best_performance, 3)},
+                    "This play is worth far more than the player's established best",
+                    {"performance": round(performance, 3), "previous_best": round(baseline, 3)},
                 )
-            ]
+            )
 
-        return []
+        streak_floor = baseline * config["ANTICHEAT_STREAK_RATIO"]
+        streak = sum(1 for value in history.recent_performances if value > streak_floor)
+
+        if performance > streak_floor and streak + 1 >= config["ANTICHEAT_STREAK_COUNT"]:
+            flags.append(
+                Flag(
+                    "performance_streak",
+                    REVIEW,
+                    "Several recent plays are well beyond the player's established best",
+                    {"performance": round(performance, 3), "previous_best": round(baseline, 3), "recent_above": streak + 1},
+                )
+            )
+
+        return flags
 
     if performance > config["ANTICHEAT_NEW_ACCOUNT_PERFORMANCE"]:
         return [
@@ -133,6 +164,141 @@ def performance_flags(performance: float, history: PlayerHistory, config: Mappin
         ]
 
     return []
+
+
+def build_flags(diagnostics: Any, staff: bool, config: Mapping[str, Any]) -> list[Flag]:
+    if not isinstance(diagnostics, dict) or not isinstance(diagnostics.get("version"), str):
+        return []
+
+    version = diagnostics["version"]
+    platform = diagnostics.get("platform") if isinstance(diagnostics.get("platform"), str) else ""
+    official = diagnostics.get("official_build")
+    reasons = []
+
+    if official is False:
+        reasons.append("not_official")
+
+    if official is True and not diagnostics.get("build_commit"):
+        reasons.append("missing_commit")
+
+    if not RELEASE_VERSION.match(version):
+        reasons.append("version")
+
+    parts = platform.split()
+    expected = OFFICIAL_COMPILERS.get(parts[0]) if parts else None
+
+    if expected is not None and (len(parts) < 3 or parts[2] != expected):
+        reasons.append("toolchain")
+
+    if not reasons:
+        return []
+
+    severity = REVIEW if config["ANTICHEAT_FLAG_UNOFFICIAL_BUILDS"] and not staff else INFO
+    data = {"version": version[:64], "platform": platform[:64], "commit": str(diagnostics.get("build_commit") or "")[:64], "reasons": reasons}
+    return [Flag("unofficial_build", severity, "This play was recorded on a build that isn't an official release", data)]
+
+
+def clock_flags(samples: Any, config: Mapping[str, Any]) -> list[Flag]:
+    if samples is None:
+        return [Flag("clock_samples_missing", INFO, "This replay is from a client without clock samples, so the time-warp check was skipped")]
+
+    if not isinstance(samples, list) or len(samples) < config["ANTICHEAT_CLOCK_MIN_SAMPLES"] or len(samples) > config["ANTICHEAT_CLOCK_MAX_SAMPLES"]:
+        return []
+
+    points = []
+
+    for sample in samples:
+        if not isinstance(sample, list) or len(sample) < 2 or not all(isinstance(value, (int, float)) for value in sample[:2]):
+            return []
+
+        points.append((float(sample[0]), float(sample[1])))
+
+    ratios = []
+
+    for (wall_a, song_a), (wall_b, song_b) in zip(points, points[1:]):
+        wall = wall_b - wall_a
+        song = song_b - song_a
+
+        if wall >= CLOCK_MIN_INTERVAL_MS and song > 0:
+            ratios.append(song / wall)
+
+    if len(ratios) < config["ANTICHEAT_CLOCK_MIN_SAMPLES"] // 2:
+        return []
+
+    ratio = statistics.median(ratios)
+
+    if abs(ratio - 1.0) <= config["ANTICHEAT_CLOCK_TOLERANCE"]:
+        return []
+
+    return [
+        Flag(
+            "clock_rate_mismatch",
+            REVIEW,
+            "The song ran at a different speed than real time during this play",
+            {"ratio": round(ratio, 4), "samples": len(points)},
+        )
+    ]
+
+
+def _autocorrelation(values: list[float]) -> float:
+    mean = statistics.fmean(values)
+    variance = sum((value - mean) ** 2 for value in values)
+
+    if variance <= 0:
+        return 0.0
+
+    return sum((values[index] - mean) * (values[index + 1] - mean) for index in range(len(values) - 1)) / variance
+
+
+def fingerprint(simulation: nc.Simulation, inputs: list[tuple[int, int, bool]]) -> dict[str, float] | None:
+    played = sorted((note for note in simulation.notes if note.hit_played and note.hit_score != "MISS"), key=lambda note: (note.time, note.lane))
+
+    if len(played) < FINGERPRINT_MIN_NOTES:
+        return None
+
+    errors = [float(note.hit_error) for note in played]
+    result = {"error_sd": round(_stdev(errors), 3), "error_drift": round(_autocorrelation(errors), 4)}
+
+    durations = press_durations(inputs)
+    taps = [durations[key] for note in played if not note.is_hold and (key := (note.lane, note.time + note.hit_error)) in durations]
+    taps = [duration for duration in taps if duration < FINGERPRINT_MAX_TAP_MS]
+
+    if len(taps) >= FINGERPRINT_MIN_TAPS:
+        result["hold_ms"] = round(float(statistics.median(taps)), 2)
+
+    chords: dict[int, list[int]] = defaultdict(list)
+
+    for note in played:
+        chords[note.time].append(note.time + note.hit_error)
+
+    spreads = [max(presses) - min(presses) for presses in chords.values() if len(presses) >= 2]
+
+    if len(spreads) >= FINGERPRINT_MIN_CHORDS:
+        result["chord_spread_ms"] = round(float(statistics.median(spreads)), 2)
+
+    return result
+
+
+def fingerprint_flags(current: dict[str, float], history: list[dict[str, float]], config: Mapping[str, Any]) -> list[Flag]:
+    unusual = []
+
+    for metric, (low, high, floor) in FINGERPRINT_RULES.items():
+        values = [entry[metric] for entry in history if isinstance(entry, dict) and isinstance(entry.get(metric), (int, float))]
+
+        if metric not in current or len(values) < config["ANTICHEAT_FINGERPRINT_MIN_PLAYS"]:
+            continue
+
+        median = statistics.median(values)
+        spread = max(1.4826 * statistics.median([abs(value - median) for value in values]), floor)
+        z = (current[metric] - median) / spread
+
+        if (low is not None and z < low) or (high is not None and z > high):
+            unusual.append({"metric": metric, "value": current[metric], "usual": round(median, 3), "z": round(z, 2), "plays": len(values)})
+
+    if not unusual:
+        return []
+
+    return [Flag("fingerprint_mismatch", REVIEW, "This play doesn't match how the player usually plays", {"metrics": unusual})]
 
 
 def needs_review(flags: list[Flag]) -> bool:

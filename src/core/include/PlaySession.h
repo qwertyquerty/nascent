@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "Attempt.h"
 #include "Chart.h"
@@ -13,7 +14,11 @@ namespace nascent {
         Attempt attempt;
         SongClock clock;
 
+        std::vector<double> input_times;
+
         int32_t to_input_time(double now) const;
+        double precise_input_time(double now) const;
+        void record_input_times(double time);
 
         public:
         int32_t audio_visual_offset = 0;
@@ -34,6 +39,7 @@ namespace nascent {
         double visual_position(double now) const;
 
         const Attempt& get_attempt() const;
+        const std::vector<double>& get_input_times() const;
         uint32_t get_held_keys() const;
         unsigned int clock_snaps() const;
         double last_clock_drift() const;

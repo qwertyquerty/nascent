@@ -1,5 +1,6 @@
 #include "Attempt.h"
 #include "Chart.h"
+#include "PlaySession.h"
 #include "Replay.h"
 #include "Results.h"
 #include "TestSupport.h"
@@ -81,4 +82,40 @@ NASCENT_TEST(replays_from_before_gameplay_hashes) {
     CHECK(replay.inputs.size() == 2);
     CHECK(replay_folder("replays", "") == std::filesystem::path("replays") / "unknown");
     CHECK(replay_folder("replays", std::string(64, 'a')) == std::filesystem::path("replays") / std::string(Replay::FOLDER_HASH_LENGTH, 'a'));
+}
+
+NASCENT_TEST(replay_precise_times_and_clock_samples) {
+    std::unique_ptr<Chart> chart = make_chart({tap(0, 1000), tap(1, 2000)});
+    PlaySession session(chart.get(), 20.0);
+    session.reset_clock(0.0, 0.0);
+    session.press(0, 1000.4);
+    session.release(0, 1050.6);
+    session.press(1, 1999.7);
+    session.release(1, 2040.2);
+
+    const std::vector<double>& times = session.get_input_times();
+    CHECK(times.size() == session.get_attempt().inputs.size());
+    CHECK(times.size() == 4 && std::abs(times[0] - 1000.4) < 1e-9 && std::abs(times[2] - 1999.7) < 1e-9);
+    CHECK(session.get_attempt().inputs[0].time == 1000 && session.get_attempt().inputs[2].time == 2000);
+
+    AttemptSummary summary = summarize_attempt(session.get_attempt(), 1.0);
+    Replay replay = make_replay(session.get_attempt(), summary, {"Pack/chart.json", chart->gameplay_hash(), "Title", "Artist", "Hard", 4}, 1.0f, {}, "2026-10-17T00:00:00Z");
+    replay.input_times = times;
+    replay.clock_samples = {{0.0, -2000.0}, {1000.04, -999.96}, {2000.0, 0.0}};
+    replay.pauses = {{1500.0, 4200.04, 1250.0}};
+
+    Replay loaded = nlohmann::json(replay).get<Replay>();
+    CHECK(loaded.input_times.size() == 4 && std::abs(loaded.input_times[1] - 1050.6) < 1e-9);
+    CHECK(loaded.clock_samples.size() == 3 && std::abs(loaded.clock_samples[1][0] - 1000.0) < 1e-9);
+    CHECK(loaded.pauses.size() == 1 && std::abs(loaded.pauses[0][1] - 4200.0) < 1e-9 && std::abs(loaded.pauses[0][2] - 1250.0) < 1e-9);
+
+    nlohmann::json mismatched = nlohmann::json(replay);
+    mismatched["input_times"] = {1.0, 2.0};
+    CHECK(mismatched.get<Replay>().input_times.empty());
+
+    replay.input_times.clear();
+    replay.clock_samples.clear();
+    replay.pauses.clear();
+    nlohmann::json plain = nlohmann::json(replay);
+    CHECK(!plain.contains("input_times") && !plain.contains("clock_samples") && !plain.contains("pauses"));
 }

@@ -1,0 +1,9 @@
+- name: Fingerprint plays that were submitted before fingerprints existed
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Backfill the fingerprints
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: backfill_fingerprints

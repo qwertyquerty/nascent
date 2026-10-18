@@ -29,7 +29,7 @@ def review_queue():
     plays = db.session.scalars(
         select(Play).options(joinedload(Play.user), joinedload(Play.chart)).where(Play.status == status).order_by(Play.id.asc()).offset(offset).limit(limit)
     ).all()
-    return {"plays": [play_out(play, include_flags=True) for play in plays]}
+    return {"plays": [play_out(play, include_review=True) for play in plays]}
 
 
 @blueprint.post("/plays/<int:play_id>/review")
@@ -44,7 +44,7 @@ def review(play_id: int):
     review_play(play, current_user(), body.decision == "approve", body.note)
     db.session.commit()
     ranking.sync_leaderboard(play.user)
-    return {"play": play_out(play, include_flags=True)}
+    return {"play": play_out(play, include_review=True)}
 
 
 @blueprint.put("/charts/<chart_hash>/status")

@@ -52,9 +52,75 @@ const query = (params = {}) => new URLSearchParams(Object.entries(params).filter
 const pageOf = (params) => Math.max(1, parseInt(params.page, 10) || 1);
 const paged = (params) => ({limit: PAGE_SIZE, offset: (pageOf(params) - 1) * PAGE_SIZE});
 
-async function api(path, params) {
+const STAFF_SESSION = "nascent-staff-session";
+const STAFF_ROLES = ["moderator", "admin"];
+
+const staffSession = {
+    get() {
+        try {
+            return JSON.parse(sessionStorage.getItem(STAFF_SESSION));
+        }
+        catch {
+            return null;
+        }
+    },
+
+    set(tokens) {
+        try {
+            sessionStorage.setItem(STAFF_SESSION, JSON.stringify({access: tokens.access_token, refresh: tokens.refresh_token}));
+        }
+        catch {
+            return;
+        }
+    },
+
+    clear() {
+        try {
+            sessionStorage.removeItem(STAFF_SESSION);
+        }
+        catch {
+            return;
+        }
+    },
+};
+
+async function refreshStaffSession(session) {
+    const response = await fetch(`${API}/auth/refresh`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({refresh_token: session.refresh})}).catch(() => null);
+    const body = response?.ok ? await response.json().catch(() => null) : null;
+
+    if (!body?.tokens) {
+        staffSession.clear();
+        return;
+    }
+
+    staffSession.set(body.tokens);
+}
+
+async function api(path, params, options = {}) {
     const search = query(params);
-    const response = await fetch(`${API}${path}${search ? `?${search}` : ""}`);
+    const send = () => {
+        const session = options.anonymous ? null : staffSession.get();
+        const headers = {};
+
+        if (options.body !== undefined) {
+            headers["Content-Type"] = "application/json";
+        }
+
+        if (session) {
+            headers.Authorization = `Bearer ${session.access}`;
+        }
+
+        return fetch(`${API}${path}${search ? `?${search}` : ""}`, {method: options.method || "GET", headers, body: options.body === undefined ? undefined : JSON.stringify(options.body)});
+    };
+
+    let response = await send();
+    const session = options.anonymous ? null : staffSession.get();
+
+    if (response.status === 401 && session) {
+        await refreshStaffSession(session);
+        response = await send();
+    }
+
     const body = await response.json().catch(() => null);
 
     if (!response.ok) {
@@ -107,6 +173,18 @@ const relative = new Intl.RelativeTimeFormat(undefined, {numeric: "auto"});
 const UNIT_SECONDS = [["second", 1, 60], ["minute", 60, 3600], ["hour", 3600, 86400], ["day", 86400, 86400 * 7]];
 
 const format = {
+    flag(flag) {
+        const data = flag.data || {};
+
+        if (Array.isArray(data.metrics)) {
+            return data.metrics.map((metric) => `${metric.metric.replaceAll("_", " ")} ${metric.value} (usual ${metric.usual}, z ${metric.z})`).join(" · ");
+        }
+
+        return Object.entries(data)
+            .filter(([, value]) => value !== "" && value != null && !(Array.isArray(value) && !value.length))
+            .map(([key, value]) => `${key.replaceAll("_", " ")} ${Array.isArray(value) ? value.join(", ") : value}`)
+            .join(" · ");
+    },
     number: (value) => Number(value ?? 0).toLocaleString(),
     performance: (value) => Number(value ?? 0).toFixed(2),
     accuracy: (value) => `${(Number(value ?? 0) * 100).toFixed(2)}%`,
@@ -298,6 +376,27 @@ const loaders = {
         return {title: "Charts", filtered, ...result};
     },
 
+    async staff({params}) {
+        const status = params.status === "rejected" ? "rejected" : "pending_review";
+
+        if (!staffSession.get()) {
+            return {title: "Staff", signedIn: false};
+        }
+
+        try {
+            const [{user}, {plays}] = await Promise.all([api("/me"), api("/moderation/plays", {status, limit: 100})]);
+            return {title: "Review queue", signedIn: true, user, status, plays};
+        }
+        catch (error) {
+            if (error.status === 401 || error.status === 403) {
+                staffSession.clear();
+                return {title: "Staff", signedIn: false, notice: error.status === 403 ? "That account can't review plays." : "Your session ended, sign in again."};
+            }
+
+            throw error;
+        }
+    },
+
     async chart({id, params}) {
         const base = `/charts/${encodeURIComponent(id)}`;
         const performance = params.board === "performance";
@@ -314,7 +413,7 @@ const loaders = {
 };
 
 const app = Vue.createApp({
-    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null}),
+    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, staffUser: null, staffError: null, staffBusy: false, reviewNotes: {}, reviewBusy: null}),
 
     async created() {
         if (location.hash.startsWith("#/")) {
@@ -324,6 +423,10 @@ const app = Vue.createApp({
         addEventListener("popstate", () => this.load());
         document.addEventListener("click", (event) => this.intercept(event));
         latestRelease().then((release) => (this.release = release));
+
+        if (staffSession.get()) {
+            api("/me").then(({user}) => (this.staffUser = STAFF_ROLES.includes(user.role) ? user : null)).catch(() => null);
+        }
         this.keyCounts = (await api("/info").catch(() => ({ranked_key_counts: [4, 5, 6, 7, 8, 9, 10]}))).ranked_key_counts;
         this.load();
     },
@@ -400,6 +503,60 @@ const app = Vue.createApp({
                     this.loading = false;
                     this.$nextTick(() => document.getElementById("content")?.focus({preventScroll: true}));
                 }
+            }
+        },
+
+        async staffLogin(event) {
+            const form = new FormData(event.target);
+            this.staffError = null;
+            this.staffBusy = true;
+
+            try {
+                const {user, tokens} = await api("/auth/login", null, {method: "POST", body: {login: form.get("login"), password: form.get("password")}, anonymous: true});
+
+                if (!STAFF_ROLES.includes(user.role)) {
+                    await fetch(`${API}/auth/logout`, {method: "POST", headers: {Authorization: `Bearer ${tokens.access_token}`}}).catch(() => null);
+                    throw new Error("That account can't review plays.");
+                }
+
+                staffSession.set(tokens);
+                this.staffUser = user;
+                this.load();
+            }
+            catch (error) {
+                this.staffError = error.message;
+            }
+            finally {
+                this.staffBusy = false;
+            }
+        },
+
+        async staffLogout() {
+            await api("/auth/logout", null, {method: "POST"}).catch(() => null);
+            staffSession.clear();
+            this.staffUser = null;
+            this.go("/staff");
+        },
+
+        async review(play, decision) {
+            this.reviewBusy = play.id;
+            this.staffError = null;
+
+            try {
+                await api(`/moderation/plays/${play.id}/review`, null, {method: "POST", body: {decision, note: this.reviewNotes[play.id] || ""}});
+
+                if (this.route.name === "staff") {
+                    this.view.plays = this.view.plays.filter((entry) => entry.id !== play.id);
+                }
+                else {
+                    this.load();
+                }
+            }
+            catch (error) {
+                this.staffError = error.message;
+            }
+            finally {
+                this.reviewBusy = null;
             }
         },
 

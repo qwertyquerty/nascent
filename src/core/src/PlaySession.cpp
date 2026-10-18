@@ -8,7 +8,17 @@ namespace nascent {
     }
 
     int32_t PlaySession::to_input_time(double now) const {
-        return (int32_t)std::lround(clock.position_at(now) + audio_input_offset);
+        return (int32_t)std::lround(precise_input_time(now));
+    }
+
+    double PlaySession::precise_input_time(double now) const {
+        return clock.position_at(now) + audio_input_offset;
+    }
+
+    void PlaySession::record_input_times(double time) {
+        while (input_times.size() < attempt.inputs.size()) {
+            input_times.push_back(time);
+        }
     }
 
     void PlaySession::reset_clock(double song_position, double now) {
@@ -21,14 +31,17 @@ namespace nascent {
 
     void PlaySession::press(uint8_t key, double event_time) {
         attempt.press(key, to_input_time(event_time));
+        record_input_times(precise_input_time(event_time));
     }
 
     void PlaySession::release(uint8_t key, double event_time) {
         attempt.release(key, to_input_time(event_time));
+        record_input_times(precise_input_time(event_time));
     }
 
     void PlaySession::set_keys(uint32_t keys, double now) {
         attempt.set_keys(keys, to_input_time(now));
+        record_input_times(precise_input_time(now));
     }
 
     void PlaySession::apply(const AttemptInput& input) {
@@ -38,10 +51,13 @@ namespace nascent {
         else {
             attempt.release(input.key, input.time);
         }
+
+        record_input_times(input.time);
     }
 
     void PlaySession::update(double now) {
         attempt.update(to_input_time(now));
+        record_input_times(precise_input_time(now));
     }
 
     double PlaySession::song_position(double now) const {
@@ -54,6 +70,10 @@ namespace nascent {
 
     const Attempt& PlaySession::get_attempt() const {
         return attempt;
+    }
+
+    const std::vector<double>& PlaySession::get_input_times() const {
+        return input_times;
     }
 
     unsigned int PlaySession::clock_snaps() const {

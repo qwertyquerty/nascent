@@ -14,7 +14,7 @@ from ..serializers import chart_detail, play_out
 from ..services.charts import native_chart
 from ..services.plays import Standing, chart_board_size, chart_rank, issue_ticket, submit_play
 from ..storage import get_json_gz, json_gz_response
-from .lookup import can_see_private, get_visible_play_or_404
+from .lookup import can_see_private, get_visible_play_or_404, viewer_is_moderator
 
 blueprint = Blueprint("plays", __name__, url_prefix="/plays")
 
@@ -77,7 +77,7 @@ def submit():
     body = parse_body(SubmissionIn)
     result = submit_play(user, body.chart_hash, body.replay, body.chart, body.ticket)
     return {
-        "play": play_out(result.play, include_chart=False, include_flags=True),
+        "play": play_out(result.play, include_chart=False, include_private=True),
         "chart": chart_detail(result.chart),
         "chart_created": result.chart_created,
         "chart_rank": result.chart_rank,
@@ -91,7 +91,7 @@ def get_play(play_id: int):
     play = get_visible_play_or_404(play_id)
     rank = chart_rank(play) if not play.user.is_banned else None
     leaderboard = {"rank": rank, "total": chart_board_size(play.chart_id, play.rate_key), "rate": play.rate} if rank is not None else None
-    return {"play": play_out(play, include_flags=can_see_private(play.user)), "leaderboard": leaderboard}
+    return {"play": play_out(play, include_private=can_see_private(play.user), include_review=viewer_is_moderator()), "leaderboard": leaderboard}
 
 
 @blueprint.get("/<int:play_id>/replay")

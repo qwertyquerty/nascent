@@ -164,6 +164,19 @@ a.navbar-item.is-active:focus-within {
 }
 
 
+.staff-login {
+    max-width: 26rem;
+}
+
+.review-flags {
+    list-style: disc;
+    margin-left: 1.25rem;
+}
+
+.review-actions {
+    max-width: 40rem;
+}
+
 .logo-loader {
     display: flex;
     justify-content: center;

@@ -5,6 +5,7 @@
 #include "Results.h"
 #include "json.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -49,6 +50,9 @@ namespace nascent {
         float rate = 1.0f;
         ReplaySettings settings;
         std::vector<AttemptInput> inputs;
+        std::vector<double> input_times;
+        std::vector<std::array<double, 2>> clock_samples;
+        std::vector<std::array<double, 3>> pauses;
         int32_t end_time = 0;
         ReplayResult result;
         nlohmann::json diagnostics;

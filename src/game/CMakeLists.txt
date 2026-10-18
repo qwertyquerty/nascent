@@ -44,6 +44,9 @@ add_library(game
 )
 
 target_include_directories(game PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_compile_definitions(game PRIVATE NASCENT_VERSION_STRING="${NASCENT_VERSION}")
+set(NASCENT_BUILD_COMMIT "" CACHE STRING "Commit an official release was built from")
+option(NASCENT_OFFICIAL_BUILD "Mark this build as an official release" OFF)
+
+target_compile_definitions(game PRIVATE NASCENT_VERSION_STRING="${NASCENT_VERSION}" NASCENT_BUILD_COMMIT="${NASCENT_BUILD_COMMIT}" NASCENT_OFFICIAL_BUILD=$<BOOL:${NASCENT_OFFICIAL_BUILD}>)
 target_link_libraries(game PUBLIC core gse olcPixelGameEngine kissfft discord-rpc PRIVATE CURL::libcurl miniz stb)
 nascent_target_warnings(game)

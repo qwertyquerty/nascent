@@ -58,6 +58,10 @@ namespace nascent {
         std::optional<double> last_press_time;
         std::optional<double> closest_press_gap;
         uint32_t simultaneous_presses = 0;
+        std::vector<std::array<double, 2>> clock_samples;
+        std::vector<std::array<double, 3>> pauses;
+        std::optional<std::array<double, 2>> open_pause;
+        std::optional<double> clock_origin;
 
         bool chart_started = false;
         bool paused = false;
@@ -90,6 +94,8 @@ namespace nascent {
         void skip_intro(double now);
         void record_frame(float elapsed_time);
         void record_press(double time);
+        void record_clock_sample(double now);
+        double wall_time(double now);
         double frame_percentile_ms(double fraction) const;
         std::vector<std::string> diagnostics_lines(bool full) const;
         void copy_diagnostics();
@@ -112,6 +118,7 @@ namespace nascent {
         static constexpr int32_t REPLAY_STOP = 5;
         static constexpr float BACKGROUND_FADE_TIME = 0.4f;
         static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
+        static constexpr double CLOCK_SAMPLE_INTERVAL_MS = 1000.0;
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
         static constexpr float TICKET_HINT_FADE_S = 0.3f;
 

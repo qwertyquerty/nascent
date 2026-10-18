@@ -87,6 +87,7 @@ namespace nascent {
 
         const Attempt& attempt = session->get_attempt();
         AttemptSummary summary = summarize_attempt(attempt, chart_difficulty());
+        summary.pause_count = (uint32_t)(replay ? replay->pauses.size() : pauses.size());
 
         if (replay) {
             int continuing_audio_id = -1;
@@ -118,6 +119,9 @@ namespace nascent {
 
         Replay replay = make_replay(attempt, summary, replay_chart, chart->pitch, replay_settings, current_utc_timestamp());
         replay.diagnostics = timing_diagnostics();
+        replay.input_times = session->get_input_times();
+        replay.clock_samples = clock_samples;
+        replay.pauses = pauses;
         const LocalBest* previous_best = LocalBests::lookup(chart->gameplay_hash(), chart->pitch);
         bool new_best = previous_best != nullptr && summary.accuracy > previous_best->accuracy;
         LocalBests::record(chart->gameplay_hash(), chart->pitch, summary, replay.played_at);
@@ -176,6 +180,10 @@ namespace nascent {
         double field_width = lane_width * chart->info.key_count;
 
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
+        clock_samples.clear();
+        pauses.clear();
+        open_pause.reset();
+        clock_origin.reset();
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
         session->reset_clock(start_position_ms(), now_ms());
@@ -278,6 +286,24 @@ namespace nascent {
         double frame_ms = elapsed_time * 1000.0;
         frame_histogram[std::min((size_t)(frame_ms / FRAME_HISTOGRAM_STEP_MS), FRAME_HISTOGRAM_BUCKETS - 1)]++;
         worst_frame_ms = std::max(worst_frame_ms, frame_ms);
+    }
+
+    double ScenePlay::wall_time(double now) {
+        if (!clock_origin) {
+            clock_origin = now;
+        }
+
+        return now - *clock_origin;
+    }
+
+    void ScenePlay::record_clock_sample(double now) {
+        double elapsed = wall_time(now);
+
+        if (!clock_samples.empty() && elapsed - clock_samples.back()[0] < CLOCK_SAMPLE_INTERVAL_MS) {
+            return;
+        }
+
+        clock_samples.push_back({elapsed, session->song_position(now)});
     }
 
     void ScenePlay::record_press(double time) {
@@ -433,6 +459,9 @@ namespace nascent {
             {"worst_frame_ms", worst_frame_ms},
             {"platform", platform_description()},
             {"version", NASCENT_VERSION_STRING},
+            {"official_build", NASCENT_OFFICIAL_BUILD != 0},
+            {"build_commit", NASCENT_BUILD_COMMIT},
+            {"pause_count", pauses.size()},
         };
     }
 
@@ -562,6 +591,11 @@ namespace nascent {
         paused = true;
         overlays.open(std::make_unique<PauseOverlay>(*this, skin));
         paused_position = session->song_position(now);
+
+        if (!replay) {
+            open_pause = std::array<double, 2>{wall_time(now), paused_position};
+        }
+
         game->audio().engine().Pause(chart_audio_id);
         game->audio().play_music(skin->sound(SkinSound::IDLE_LOOP), true);
     }
@@ -569,6 +603,11 @@ namespace nascent {
     void ScenePlay::resume(double now) {
         paused = false;
         resumed_at = now;
+
+        if (open_pause) {
+            pauses.push_back({(*open_pause)[0], wall_time(now), (*open_pause)[1]});
+            open_pause.reset();
+        }
 
         if (chart_started && !audio_finished && !replay_paused) {
             game->audio().engine().Play(chart_audio_id);
@@ -735,6 +774,10 @@ namespace nascent {
 
             if (chart_started && !audio_finished) {
                 session->sync_clock(game->audio().engine().GetPositionMilliseconds(chart_audio_id) / chart->pitch, now);
+            }
+
+            if (!replay) {
+                record_clock_sample(now);
             }
 
             if (replay) {

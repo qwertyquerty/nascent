@@ -482,6 +482,7 @@ namespace nascent {
         const StatRow stats[] = {
             {"Combo", std::format("{}", summary.max_combo), skin->color(full_combo ? SkinColor::FULL_COMBO : SkinColor::TEXT), full_combo ? "FULL COMBO" : "", skin->color(SkinColor::FULL_COMBO)},
             {"Error", std::format("{:+.1f} ± {:.1f} ms", summary.average_error, summary.error_deviation), skin->color(SkinColor::TEXT), "", olc::BLANK},
+            {"Pauses", std::format("{}", summary.pause_count), skin->color(SkinColor::TEXT), "", olc::BLANK},
             {"Diff", std::format("{:.2f}", summary.difficulty), skin->difficulty_color(summary.difficulty), "", olc::BLANK},
             {"Perf", std::format("{:.2f}", summary.performance), skin->color(SkinColor::TEXT), new_best ? "NEW PERSONAL BEST" : "", shine},
         };

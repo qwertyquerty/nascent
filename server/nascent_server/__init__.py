@@ -51,9 +51,11 @@ def create_app(config: type[Config] | None = None, overrides: dict | None = None
 
     from .api import api
     from .cli import nascent_cli
+    from .review_cli import backfill_fingerprints
     from .site import blueprint as site
 
     app.register_blueprint(api)
     app.register_blueprint(site)
+    nascent_cli.add_command(backfill_fingerprints)
     app.cli.add_command(nascent_cli)
     return app

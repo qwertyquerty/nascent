@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import tasks, timeutil
 from ..errors import ApiError
 from ..extensions import db
-from ..models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, PlayStatus, PlayTicket, User
+from ..models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, PlayStatus, PlayTicket, Role, User
 from ..ratelimit import check_rate_limit
 from ..security import TICKET_PREFIX, hash_token, new_token, require_not_banned
 from ..storage import put_json_gz, sharded_key
@@ -209,8 +209,23 @@ def _resolve_ticket(
 
 
 def _player_history(user: User) -> anticheat.PlayerHistory:
-    best = db.session.scalar(select(func.max(Play.performance)).where(Play.user_id == user.id, Play.is_profile_best.is_(True)))
-    return anticheat.PlayerHistory(user.ranked_play_count, float(best or 0.0))
+    cutoff = timeutil.utcnow() - timedelta(hours=current_app.config["ANTICHEAT_SPIKE_BASELINE_HOURS"])
+    ranked = (Play.user_id == user.id, Play.ranked.is_(True))
+    count, best = db.session.execute(
+        select(func.count(Play.id), func.max(Play.performance)).where(*ranked, Play.status == PlayStatus.VERIFIED, Play.submitted_at < cutoff)
+    ).one()
+    recent = db.session.scalars(select(Play.performance).where(*ranked, Play.status.in_(COUNTED_PLAY_STATUSES), Play.submitted_at >= cutoff)).all()
+    return anticheat.PlayerHistory(int(count or 0), float(best or 0.0), [float(value) for value in recent])
+
+
+def _fingerprint_history(user: User) -> list[dict]:
+    rows = db.session.scalars(
+        select(Play.fingerprint)
+        .where(Play.user_id == user.id, Play.status == PlayStatus.VERIFIED, Play.fingerprint.is_not(None))
+        .order_by(Play.submitted_at.desc())
+        .limit(current_app.config["ANTICHEAT_FINGERPRINT_HISTORY"])
+    ).all()
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def submit_play(
@@ -275,6 +290,15 @@ def submit_play(
     play_performance = performance(difficulty, simulation.accuracy)
     flags = anticheat.timing_flags(simulation, replay.inputs, current_app.config)
 
+    play_fingerprint = anticheat.fingerprint(simulation, replay.inputs)
+
+    if not imported and not trusted:
+        flags.extend(anticheat.build_flags(raw_replay.get("diagnostics"), user.has_role(Role.MODERATOR), current_app.config))
+        flags.extend(anticheat.clock_flags(raw_replay.get("clock_samples"), current_app.config))
+
+        if play_fingerprint is not None:
+            flags.extend(anticheat.fingerprint_flags(play_fingerprint, _fingerprint_history(user), current_app.config))
+
     if ticket_flag is not None:
         flags.append(ticket_flag)
 
@@ -314,6 +338,7 @@ def submit_play(
         replay_key=replay_key,
         settings=replay.settings,
         flags=[flag.to_dict() for flag in flags],
+        fingerprint=play_fingerprint,
         submitted_at=submitted_at or timeutil.utcnow(),
         ticket_id=ticket.id if ticket else None,
     )

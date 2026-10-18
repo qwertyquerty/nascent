@@ -10,13 +10,15 @@ def test_robotic_plays_wait_for_review(api, clock):
     token = api.token("robot")
 
     play = submit(api, clock, token, make_replay(CHART, seed=1, spread=0)).get_json()["play"]
-    assert play["status"] == "pending_review"
+    assert play["status"] == "verified"
     assert play["ranked"] is True
-    assert "robotic_hit_timing" in [flag["code"] for flag in play["flags"]]
+    assert play["flags"] == []
     assert board(api) == ["robot"]
 
     queue = api.get("/api/v1/moderation/plays", admin).get_json()["plays"]
     assert [entry["id"] for entry in queue] == [play["id"]]
+    assert queue[0]["status"] == "pending_review"
+    assert "robotic_hit_timing" in [flag["code"] for flag in queue[0]["flags"]]
     assert api.get("/api/v1/moderation/plays", token).status_code == 403
 
     rejected = api.post(f"/api/v1/moderation/plays/{play['id']}/review", {"decision": "reject", "note": "bot"}, admin).get_json()["play"]

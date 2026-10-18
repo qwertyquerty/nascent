@@ -23,6 +23,11 @@ def can_see_private(user: User) -> bool:
     return viewer is not None and (viewer.id == user.id or viewer.has_role(Role.MODERATOR))
 
 
+def viewer_is_moderator() -> bool:
+    viewer = authenticate()
+    return viewer is not None and viewer.has_role(Role.MODERATOR)
+
+
 def get_visible_play_or_404(play_id: int) -> Play:
     play = db.session.get(Play, play_id)
 

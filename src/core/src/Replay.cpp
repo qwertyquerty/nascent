@@ -2,12 +2,17 @@
 #include "Utf8Path.h"
 
 #include <chrono>
+#include <cmath>
 #include <ctime>
 #include <format>
 #include <fstream>
 #include <system_error>
 
 namespace nascent {
+    static double rounded(double value, double scale) {
+        return std::round(value * scale) / scale;
+    }
+
     void to_json(nlohmann::json& j, const Replay& replay) {
         nlohmann::json inputs = nlohmann::json::array();
 
@@ -49,6 +54,36 @@ namespace nascent {
         if (!replay.diagnostics.is_null()) {
             j["diagnostics"] = replay.diagnostics;
         }
+
+        if (!replay.input_times.empty() && replay.input_times.size() == replay.inputs.size()) {
+            nlohmann::json times = nlohmann::json::array();
+
+            for (double time : replay.input_times) {
+                times.push_back(rounded(time, 1000.0));
+            }
+
+            j["input_times"] = std::move(times);
+        }
+
+        if (!replay.clock_samples.empty()) {
+            nlohmann::json samples = nlohmann::json::array();
+
+            for (const std::array<double, 2>& sample : replay.clock_samples) {
+                samples.push_back({rounded(sample[0], 10.0), rounded(sample[1], 10.0)});
+            }
+
+            j["clock_samples"] = std::move(samples);
+        }
+
+        if (!replay.pauses.empty()) {
+            nlohmann::json pauses = nlohmann::json::array();
+
+            for (const std::array<double, 3>& pause : replay.pauses) {
+                pauses.push_back({rounded(pause[0], 10.0), rounded(pause[1], 10.0), rounded(pause[2], 10.0)});
+            }
+
+            j["pauses"] = std::move(pauses);
+        }
     }
 
     void from_json(const nlohmann::json& j, Replay& replay) {
@@ -87,6 +122,39 @@ namespace nascent {
 
         for (const nlohmann::json& input : j.at("inputs")) {
             replay.inputs.push_back({input.at(0).get<int32_t>(), input.at(1).get<uint8_t>(), input.at(2).get<int>() != 0});
+        }
+
+        replay.input_times.clear();
+
+        if (j.contains("input_times") && j.at("input_times").is_array() && j.at("input_times").size() == replay.inputs.size()) {
+            for (const nlohmann::json& time : j.at("input_times")) {
+                if (!time.is_number()) {
+                    replay.input_times.clear();
+                    break;
+                }
+
+                replay.input_times.push_back(time.get<double>());
+            }
+        }
+
+        replay.clock_samples.clear();
+
+        if (j.contains("clock_samples") && j.at("clock_samples").is_array()) {
+            for (const nlohmann::json& sample : j.at("clock_samples")) {
+                if (sample.is_array() && sample.size() >= 2 && sample.at(0).is_number() && sample.at(1).is_number()) {
+                    replay.clock_samples.push_back({sample.at(0).get<double>(), sample.at(1).get<double>()});
+                }
+            }
+        }
+
+        replay.pauses.clear();
+
+        if (j.contains("pauses") && j.at("pauses").is_array()) {
+            for (const nlohmann::json& pause : j.at("pauses")) {
+                if (pause.is_array() && pause.size() >= 3 && pause.at(0).is_number() && pause.at(1).is_number() && pause.at(2).is_number()) {
+                    replay.pauses.push_back({pause.at(0).get<double>(), pause.at(1).get<double>(), pause.at(2).get<double>()});
+                }
+            }
         }
     }
 

@@ -266,6 +266,7 @@ class Play(db.Model):
     replay_key: Mapped[str] = mapped_column(String(128))
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
     flags: Mapped[list] = mapped_column(JSON, default=list)
+    fingerprint: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
     ticket_id: Mapped[int | None] = mapped_column(ForeignKey("play_tickets.id", ondelete="SET NULL"), nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

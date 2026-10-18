@@ -3,7 +3,7 @@ from typing import Any
 
 from flask import current_app
 
-from .models import Chart, ChartSource, Play, User, UserKeyStats
+from .models import Chart, ChartSource, Play, PlayStatus, User, UserKeyStats
 from .timeutil import isoformat
 
 
@@ -100,12 +100,16 @@ def chart_detail(chart: Chart) -> dict[str, Any]:
     }
 
 
-def play_out(play: Play, include_user: bool = True, include_chart: bool = True, include_flags: bool = False) -> dict[str, Any]:
+PUBLIC_FLAG_CODES = {"ticket_rejected"}
+
+
+def play_out(play: Play, include_user: bool = True, include_chart: bool = True, include_private: bool = False, include_review: bool = False) -> dict[str, Any]:
+    status = play.status if include_review or play.status != PlayStatus.PENDING_REVIEW else PlayStatus.VERIFIED
     body: dict[str, Any] = {
         "id": play.id,
         "rate": play.rate,
         "key_count": play.key_count,
-        "status": play.status,
+        "status": status,
         "ranked": play.ranked,
         "accuracy": play.accuracy,
         "grade": play.grade,
@@ -126,9 +130,15 @@ def play_out(play: Play, include_user: bool = True, include_chart: bool = True, 
     if include_chart:
         body["chart"] = chart_summary(play.chart)
 
-    if include_flags:
+    if include_review:
         body["flags"] = play.flags
         body["settings"] = play.settings
         body["review_note"] = play.review_note
+        body["fingerprint"] = play.fingerprint
+        body["reviewed_at"] = isoformat(play.reviewed_at) if play.reviewed_at else None
+    elif include_private:
+        body["flags"] = [flag for flag in play.flags if isinstance(flag, dict) and flag.get("code") in PUBLIC_FLAG_CODES]
+        body["settings"] = play.settings
+        body["review_note"] = play.review_note if play.status == PlayStatus.REJECTED else ""
 
     return body
