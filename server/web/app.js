@@ -27,8 +27,9 @@ function difficultyColor(value) {
 
     return stops[stops.length - 1][1];
 }
-const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases/latest";
-const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases/latest";
+const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases?per_page=10";
+const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases";
+const INSTALLER_SUFFIXES = {win: ["-setup.exe", ".zip"], mac: [".dmg", ".zip"], linux: [".AppImage", ".zip"]};
 const PAGE_SIZE = 50;
 const SEARCH_DELAY_MS = 180;
 const DAY_MS = 86400000;
@@ -263,6 +264,10 @@ function parseRoute() {
 function detectPlatform() {
     const platform = `${navigator.userAgentData?.platform || ""} ${navigator.platform || ""} ${navigator.userAgent}`.toLowerCase();
 
+    if (navigator.userAgentData?.mobile || /android|iphone|ipad|ipod/.test(platform) || (platform.includes("mac") && navigator.maxTouchPoints > 1)) {
+        return null;
+    }
+
     if (platform.includes("win")) {
         return {os: "win", label: "Windows"};
     }
@@ -278,6 +283,36 @@ function detectPlatform() {
     return null;
 }
 
+async function detectArchitecture(os) {
+    try {
+        const {architecture} = (await navigator.userAgentData?.getHighEntropyValues?.(["architecture"])) ?? {};
+
+        if (architecture) {
+            return architecture === "arm" ? "arm64" : "x86_64";
+        }
+    }
+    catch {
+        return os === "mac" ? "arm64" : "x86_64";
+    }
+
+    return /aarch64|arm64/.test(navigator.userAgent.toLowerCase()) || os === "mac" ? "arm64" : "x86_64";
+}
+
+function installerFor(assets, os, architecture) {
+    const platformAssets = assets.filter((asset) => asset.name.includes(`-${os}-`));
+
+    for (const suffix of INSTALLER_SUFFIXES[os]) {
+        const candidates = platformAssets.filter((asset) => asset.name.endsWith(suffix));
+        const asset = candidates.find((candidate) => candidate.name.includes(`-${os}-${architecture}`)) ?? candidates[0];
+
+        if (asset) {
+            return asset;
+        }
+    }
+
+    return null;
+}
+
 async function latestRelease() {
     const platform = detectPlatform();
 
@@ -288,9 +323,13 @@ async function latestRelease() {
             throw new Error(`GitHub answered ${response.status}`);
         }
 
-        const release = await response.json();
-        const matching = platform ? release.assets.filter((asset) => asset.name.endsWith(".zip") && asset.name.includes(`-${platform.os}-`)) : [];
-        const asset = matching.find((candidate) => candidate.name.includes(platform.os === "mac" ? "arm64" : "x64")) ?? matching[0];
+        const release = (await response.json()).find((entry) => !entry.draft);
+
+        if (!release) {
+            throw new Error("No releases yet");
+        }
+
+        const asset = platform ? installerFor(release.assets, platform.os, await detectArchitecture(platform.os)) : null;
         return {version: release.tag_name, page: release.html_url, url: asset?.browser_download_url ?? null, label: asset ? platform.label : null};
     }
     catch {

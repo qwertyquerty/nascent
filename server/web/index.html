@@ -35,7 +35,7 @@
                 <div class="navbar-end">
                     <div v-if="staffUser" class="navbar-item"><a class="button is-small is-warning is-light" href="/staff">Review</a></div>
                     <div class="navbar-item"><player-search></player-search></div>
-                    <div class="navbar-item"><a class="button is-small is-primary download-button" :href="release?.url || release?.page || 'https://github.com/qwertyquerty/nascent/releases/latest'">Download</a></div>
+                    <div class="navbar-item"><a class="button is-small is-primary download-button" :href="release?.url || release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a></div>
                 </div>
             </div>
         </div>
@@ -517,7 +517,7 @@
     </main>
 
     <footer class="footer has-text-centered is-size-7 has-text-grey">
-        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases/latest'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/staff">Staff</a>
+        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/staff">Staff</a>
     </footer>
 </div>
 </body>
