@@ -77,15 +77,56 @@
         chdir: "{{ nascent_compose_dir }}"
       changed_when: true
 
-    - name: Start the stack and wait for it to be healthy
+    - name: Swap in the new api without dropping requests
+      ansible.builtin.shell: |
+        {% raw %}
+        set -eu
+        old=$(docker compose ps -q api)
+
+        if [ -z "$old" ] || [ -z "$(docker compose ps -q nginx)" ]; then
+          echo "nothing running yet, starting fresh"
+          exit 0
+        fi
+
+        docker compose up -d --no-deps --no-recreate --scale api=$(($(echo "$old" | wc -l) + 1)) api
+        new=$(docker compose ps -q api | grep -vxF "$old")
+
+        for attempt in $(seq 1 150); do
+          health=$(docker inspect -f '{{.State.Health.Status}}' "$new")
+          [ "$health" = healthy ] && break
+
+          if [ "$health" = unhealthy ] || [ "$attempt" = 150 ]; then
+            docker logs --tail 50 "$new" >&2
+            docker rm -f "$new"
+            echo "the new api never became healthy, the old one is still serving" >&2
+            exit 1
+          fi
+
+          sleep 2
+        done
+
+        name=$(docker inspect -f '{{.Name}}' "$new")
+        docker compose exec -T -e NASCENT_API="${name#/}:8000" nginx sh /etc/nginx/nascent/start.sh reload
+        docker compose exec -T nginx sh -c 'sleep 1; for i in $(seq 1 90); do pgrep -f "[s]hutting down" > /dev/null || exit 0; sleep 1; done'
+        docker stop -t 30 $old
+        docker rm $old
+        echo "swapped in ${name#/}"
+        {% endraw %}
+      args:
+        chdir: "{{ nascent_compose_dir }}"
+        executable: /bin/bash
+      register: api_swap
+      changed_when: "'swapped in' in api_swap.stdout"
+
+    - name: Start the rest of the stack and wait for it to be healthy
       ansible.builtin.command: docker compose up -d --remove-orphans --wait --wait-timeout 300
       args:
         chdir: "{{ nascent_compose_dir }}"
       changed_when: true
 
-    - name: Restart nginx to pick up the new release and Cloudflare settings
+    - name: Reload nginx to pick up the new release and Cloudflare settings
       when: checkout is changed or cloudflare_conf is changed or cloudflare_removed is changed
-      ansible.builtin.command: docker compose restart nginx
+      ansible.builtin.command: docker compose exec -T nginx sh /etc/nginx/nascent/start.sh reload
       args:
         chdir: "{{ nascent_compose_dir }}"
       changed_when: true
@@ -129,7 +170,7 @@
         mode: "0644"
 
     - name: Switch nginx to https
-      ansible.builtin.command: docker compose restart nginx
+      ansible.builtin.command: docker compose exec -T nginx sh /etc/nginx/nascent/start.sh reload
       args:
         chdir: "{{ nascent_compose_dir }}"
       changed_when: true

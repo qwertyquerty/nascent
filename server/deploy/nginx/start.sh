@@ -15,6 +15,14 @@ else
 fi
 
 envsubst '${NASCENT_DOMAIN} ${NASCENT_DOMAINS}' < "$template" > /etc/nginx/conf.d/default.conf
+echo "set \$nascent_api ${NASCENT_API:-api:8000};" > /etc/nginx/nascent-api.conf
+
+if [ "${1:-}" = "reload" ]; then
+    nginx -t -q
+    nginx -s reload
+    echo "reloaded, sending the api to ${NASCENT_API:-api:8000}"
+    exit 0
+fi
 
 (
     while true; do
