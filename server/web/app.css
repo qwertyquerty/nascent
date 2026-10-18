@@ -151,34 +151,24 @@ a.navbar-item.is-active:focus-within {
 }
 
 .hero-lanes {
-    --size: 3.25rem;
+    --size: 4.25rem;
     --gap: 0.6rem;
     position: absolute;
     top: -35%;
     left: 50%;
     width: calc(var(--size) * 4 + var(--gap) * 3);
     height: 170%;
-    transform: translateX(-50%) rotate(-24deg);
+    transform: translateX(-50%) rotate(24deg);
     mask-image: linear-gradient(transparent, #000 25%, #000 85%, transparent);
     filter: drop-shadow(0 0 0.6rem rgba(0, 200, 200, 0.45));
 }
 
-.hero-note,
-.hero-receptor {
+.hero-note {
     position: absolute;
     left: calc(var(--lane) * (var(--size) + var(--gap)));
     width: var(--size);
     background-color: var(--color);
     mask: var(--sprite) center top / var(--size) no-repeat;
-}
-
-.hero-receptor {
-    top: 78%;
-    height: var(--size);
-    opacity: 0.25;
-}
-
-.hero-note {
     top: 0;
     height: 100%;
     animation: hero-scroll var(--seconds) linear infinite;
@@ -191,7 +181,7 @@ a.navbar-item.is-active:focus-within {
     }
 
     to {
-        transform: translateY(78%);
+        transform: translateY(100%);
     }
 }
 
