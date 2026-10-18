@@ -115,6 +115,7 @@ services:
     entrypoint: ["/bin/sh", "/etc/nginx/nascent/start.sh"]
     environment:
       NASCENT_DOMAIN: ${NASCENT_DOMAIN:-}
+      NASCENT_DOMAINS: ${NASCENT_DOMAINS:-}
     ports:
       - "${NASCENT_HTTP_PORT:-80}:80"
       - "${NASCENT_HTTPS_PORT:-443}:443"

@@ -108,15 +108,15 @@
   register: certificate_marker
   failed_when: false
 
-- name: Get a certificate for {{ nascent_domain }}
+- name: Get a certificate for {{ nascent_all_domains | join(', ') }}
   vars:
-    certificate_wanted: "{{ nascent_domain }} staging={{ nascent_letsencrypt_staging | bool }}"
+    certificate_wanted: "{{ nascent_all_domains | join(',') }} staging={{ nascent_letsencrypt_staging | bool }}"
   when: nascent_domain | length > 0 and (certificate_marker.content | default('') | b64decode) != certificate_wanted
   block:
     - name: Request the certificate
       ansible.builtin.command: >-
         docker compose run --rm --no-deps --entrypoint certbot certbot certonly --webroot -w /var/www/certbot --cert-name nascent
-        -d {{ nascent_domain }} --email {{ nascent_letsencrypt_email }} --agree-tos --no-eff-email --non-interactive --force-renewal
+        {{ nascent_all_domains | map('regex_replace', '^', '-d ') | join(' ') }} --email {{ nascent_letsencrypt_email }} --agree-tos --no-eff-email --non-interactive --force-renewal
         {{ '--staging' if nascent_letsencrypt_staging | bool else '' }}
       args:
         chdir: "{{ nascent_compose_dir }}"
@@ -136,7 +136,7 @@
   rescue:
     - name: Explain the missing certificate
       ansible.builtin.debug:
-        msg: no certificate yet, check that {{ nascent_domain }} points at this server; serving http until the next run
+        msg: no certificate yet, check that {{ nascent_all_domains | join(', ') }} all point at this server; serving http until the next run
 
 - name: Remove images from older releases
   ansible.builtin.shell: |

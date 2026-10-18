@@ -2,6 +2,8 @@ nascent_repo: https://github.com/qwertyquerty/nascent.git
 nascent_ref: main
 
 nascent_domain: ""
+nascent_domain_aliases: []
+nascent_all_domains: "{{ ([nascent_domain] + nascent_domain_aliases) | select | unique | list }}"
 nascent_letsencrypt_email: ""
 nascent_letsencrypt_staging: false
 nascent_cors_origins: ""
