@@ -99,10 +99,8 @@ def home() -> Page:
     key_count = key_counts()[0]
     players = (api("/leaderboards/performance", key_count=key_count, limit=10) or {}).get("entries", [])
     plays = (api("/plays", sort="performance", key_count=key_count, limit=10) or {}).get("plays", [])
-    description = (
-        f"Nascent is a vertical scrolling rhythm game passion project for Windows, macOS and Linux. "
-        f"Play osu!mania beatmaps from {min(key_counts())}K to {max(key_counts())}K, climb global leaderboards and watch replays."
-    )
+    description = "Nascent is a vertical scrolling rhythm game passion project for Windows, macOS and Linux."
+
     sections = [
         ("Get Nascent", [(DOWNLOAD_URL, "Download Nascent for free", "Windows, macOS and Linux"), (SOURCE_URL, "Source code on GitHub", "")]),
         (f"Top {key_count}K players", [(user_path(entry["user"]["username"]), entry["user"]["username"], f"{entry['performance']:.2f} performance") for entry in players]),
