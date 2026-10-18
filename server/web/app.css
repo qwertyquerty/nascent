@@ -29,10 +29,6 @@
     --bulma-link-text-l: 58%;
 }
 
-[v-cloak] {
-    display: none;
-}
-
 body {
     display: flex;
     flex-direction: column;
