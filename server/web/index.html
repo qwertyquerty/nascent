@@ -89,7 +89,7 @@
                     <div class="column">
                         <h2 class="title is-4">Top plays</h2>
                         <key-tabs :current="view.playsKeyCount" path="/" param="plays_key_count" :params="{key_count: route.params.key_count}" label="Top plays key mode"></key-tabs>
-                        <play-table :plays="view.topPlays" show-user empty="No ranked plays yet." :caption="'Top ' + view.playsKeyCount + 'K plays'"></play-table>
+                        <play-table :plays="view.topPlays" show-user compact empty="No ranked plays yet." :caption="'Top ' + view.playsKeyCount + 'K plays'"></play-table>
                         <a class="button is-small" :href="$link.to('/plays', {key_count: view.playsKeyCount, sort: 'performance'})">All top {{ view.playsKeyCount }}K plays</a>
                     </div>
                 </div>

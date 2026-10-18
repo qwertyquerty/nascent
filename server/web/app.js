@@ -1345,7 +1345,7 @@ app.component("player-table", {
 });
 
 app.component("play-table", {
-    props: {plays: Array, showUser: Boolean, showChart: {type: Boolean, default: true}, empty: {type: String, default: "No plays yet."}, caption: String},
+    props: {plays: Array, showUser: Boolean, showChart: {type: Boolean, default: true}, compact: Boolean, empty: {type: String, default: "No plays yet."}, caption: String},
     computed: {
         rows: (self) => self.plays.map((entry) => ({...entry, play: entry.play ?? entry})),
         ranked: (self) => self.plays[0]?.rank !== undefined,
@@ -1357,7 +1357,7 @@ app.component("play-table", {
         <thead><tr>
             <th v-if="ranked" scope="col" class="is-numeric">Rank</th><th v-if="showUser" scope="col">Player</th><th v-if="showChart" scope="col">Chart</th>
             <th scope="col" class="is-numeric is-hidden-mobile">Rate</th><th scope="col">Grade</th><th scope="col" class="is-numeric">Accuracy</th>
-            <th scope="col" class="is-numeric is-hidden-mobile">Combo</th><th scope="col" class="is-numeric">Performance</th>
+            <th v-if="!compact" scope="col" class="is-numeric is-hidden-mobile">Combo</th><th scope="col" class="is-numeric">{{ compact ? "Perf" : "Performance" }}</th>
             <th v-if="weighted" scope="col" class="is-numeric is-hidden-mobile">Weighted</th><th scope="col" class="is-numeric">Played</th>
         </tr></thead>
         <tbody><tr v-for="{play, rank, weight} in rows" :key="play.id">
@@ -1369,7 +1369,7 @@ app.component("play-table", {
             <td class="is-numeric is-hidden-mobile" :class="{'rate-changed': play.rate !== 1}">{{ $f.rate(play.rate) }}</td>
             <td><a :href="$link.play(play.id)" class="grade" :class="'grade-' + play.grade" :aria-label="'Grade ' + play.grade + ', view this play'">{{ play.grade }}</a></td>
             <td class="is-numeric"><a :href="$link.play(play.id)">{{ $f.accuracy(play.accuracy) }}</a></td>
-            <td class="is-numeric is-hidden-mobile">{{ $f.number(play.max_combo) }}</td>
+            <td v-if="!compact" class="is-numeric is-hidden-mobile">{{ $f.number(play.max_combo) }}</td>
             <td class="is-numeric">{{ play.ranked ? $f.performance(play.performance) : "unranked" }}</td>
             <td v-if="weighted" class="is-numeric is-hidden-mobile">{{ Math.round(weight * 100) }}%</td>
             <td class="is-numeric"><rel-time :value="play.submitted_at"></rel-time></td>
