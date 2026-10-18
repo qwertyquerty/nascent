@@ -8,12 +8,14 @@ nascent_letsencrypt_email: ""
 nascent_letsencrypt_staging: false
 nascent_cors_origins: ""
 
-nascent_mail_from: ""
-nascent_smtp_host: ""
+nascent_resend_api_key: ""
+nascent_mail_domain: "{{ nascent_domain }}"
+nascent_mail_from: "{{ 'Nascent <noreply@' ~ nascent_mail_domain ~ '>' if nascent_mail_domain | length > 0 else '' }}"
+nascent_smtp_host: "{{ 'smtp.resend.com' if nascent_resend_api_key | length > 0 else '' }}"
 nascent_smtp_port: 587
 nascent_smtp_security: starttls
-nascent_smtp_username: ""
-nascent_smtp_password: ""
+nascent_smtp_username: "{{ 'resend' if nascent_resend_api_key | length > 0 else '' }}"
+nascent_smtp_password: "{{ nascent_resend_api_key }}"
 
 nascent_workers: 2
 nascent_uwsgi_processes: 4

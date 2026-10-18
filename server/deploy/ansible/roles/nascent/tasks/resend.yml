@@ -1,0 +1,79 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - nascent_resend_api_key | length > 0
+      - nascent_mail_domain | length > 0
+    fail_msg: set nascent_resend_api_key (a Resend API key with full access) and nascent_domain, or nascent_mail_domain to send from another domain
+
+- name: List the domains on the Resend account
+  ansible.builtin.uri:
+    url: https://api.resend.com/domains
+    headers:
+      Authorization: "Bearer {{ nascent_resend_api_key }}"
+    status_code: [200, 401, 403]
+  register: resend_domains
+  no_log: true
+
+- name: Check the API key
+  ansible.builtin.assert:
+    that: resend_domains.status == 200
+    fail_msg: "Resend refused the API key ({{ resend_domains.status }}: {{ resend_domains.json.message | default('no details') }}). Setup needs a key with full access."
+
+- name: Add {{ nascent_mail_domain }} to Resend
+  when: nascent_mail_domain not in (resend_domains.json.data | map(attribute='name'))
+  ansible.builtin.uri:
+    url: https://api.resend.com/domains
+    method: POST
+    headers:
+      Authorization: "Bearer {{ nascent_resend_api_key }}"
+    body_format: json
+    body:
+      name: "{{ nascent_mail_domain }}"
+    status_code: [200, 201, 403, 422]
+  register: resend_created
+  no_log: true
+
+- name: Check that Resend accepted the domain
+  when: resend_created is not skipped
+  ansible.builtin.assert:
+    that: resend_created.status in [200, 201]
+    fail_msg: "Resend could not add {{ nascent_mail_domain }} ({{ resend_created.status }}: {{ resend_created.json.message | default('no details') }})"
+
+- name: Remember the domain
+  ansible.builtin.set_fact:
+    resend_domain_id: >-
+      {{ resend_created.json.id if resend_created is not skipped
+         else (resend_domains.json.data | selectattr('name', 'equalto', nascent_mail_domain) | first).id }}
+
+- name: Ask Resend to check the DNS records
+  ansible.builtin.uri:
+    url: https://api.resend.com/domains/{{ resend_domain_id }}/verify
+    method: POST
+    headers:
+      Authorization: "Bearer {{ nascent_resend_api_key }}"
+    status_code: [200, 201, 202]
+  no_log: true
+  failed_when: false
+
+- name: Read the DNS records Resend needs
+  ansible.builtin.uri:
+    url: https://api.resend.com/domains/{{ resend_domain_id }}
+    headers:
+      Authorization: "Bearer {{ nascent_resend_api_key }}"
+  register: resend_domain
+  no_log: true
+
+- name: Show the DNS records to add in Cloudflare (DNS only, not proxied)
+  ansible.builtin.debug:
+    msg: "{{ item.type }}  {{ item.name }}  {{ item.value }}{{ '  priority ' ~ item.priority if item.priority is defined else '' }}  ({{ item.status }})"
+  loop: "{{ resend_domain.json.records }}"
+  loop_control:
+    label: "{{ item.record | default(item.type) }}"
+
+- name: Show what to do next
+  ansible.builtin.debug:
+    msg:
+      - "Resend says {{ resend_domain.json.name }} is {{ resend_domain.json.status }}."
+      - "{{ 'All set.' if resend_domain.json.status == 'verified' else 'Add the records above, wait a few minutes, then run this playbook again.' }}"
+      - "Also recommended: TXT  _dmarc  v=DMARC1; p=none;"
+      - "Mail is sent as {{ nascent_mail_from }}. Deploy so the server picks up the settings, then run test-email.yml."

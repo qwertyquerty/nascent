@@ -8,7 +8,4 @@ nascent:
     nascent_domain_aliases: [nascent.example.com]
     nascent_letsencrypt_email: you@example.com
     nascent_letsencrypt_staging: true
-    nascent_mail_from: Nascent <noreply@example.com>
-    nascent_smtp_host: smtp.example.com
-    nascent_smtp_username: noreply@example.com
-    nascent_smtp_password: change-me
+    nascent_resend_api_key: re_change_me

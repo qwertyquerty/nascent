@@ -1,0 +1,8 @@
+- name: Set up Resend to send Nascent's email
+  hosts: nascent
+  gather_facts: false
+  tasks:
+    - name: Set up the sending domain
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: resend
