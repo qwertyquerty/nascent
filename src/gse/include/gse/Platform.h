@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,4 +20,7 @@ namespace nascent {
     bool open_file(const std::filesystem::path& file);
     std::string platform_description();
     void set_cursor_hidden(bool hidden);
+    bool fit_window_to_screen(int32_t& width, int32_t& height);
+    void allow_app_switching_in_fullscreen();
+    std::optional<bool> application_focused();
 }

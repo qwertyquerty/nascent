@@ -22,6 +22,9 @@ class NascentMain : public olc::PixelGameEngine {
 
     public:
     bool OnUserCreate() override {
+        if (SettingsManager::settings.display_fullscreen) {
+            allow_app_switching_in_fullscreen();
+        }
 
         game.init();
 
@@ -49,6 +52,10 @@ int main() {
     const Settings& settings = SettingsManager::settings;
     int32_t width = std::max<int32_t>(settings.display_window_width, MINIMUM_WINDOW_WIDTH);
     int32_t height = std::max<int32_t>(settings.display_window_height, MINIMUM_WINDOW_HEIGHT);
+
+    if (!settings.display_fullscreen && fit_window_to_screen(width, height)) {
+        std::cerr << "Window: shrunk to " << width << "x" << height << " to fit the screen" << std::endl;
+    }
 
     {
         NascentMain ns_main;

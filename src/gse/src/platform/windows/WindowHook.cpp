@@ -305,6 +305,17 @@ namespace nascent {
         hook_key_events = enabled;
     }
 
+    bool fit_window_to_screen(int32_t&, int32_t&) {
+        return false;
+    }
+
+    void allow_app_switching_in_fullscreen() {
+    }
+
+    std::optional<bool> application_focused() {
+        return std::nullopt;
+    }
+
     static constexpr USHORT GENERIC_DESKTOP_USAGE_PAGE = 0x01;
     static constexpr USHORT KEYBOARD_USAGE = 0x06;
     static constexpr USHORT UNMAPPED_VIRTUAL_KEY = 0xFF;

@@ -48,7 +48,7 @@ namespace nascent {
         Input& input = game->input();
         bool pause_pressed = input.key_pressed(InputManager::get_key(KeyBinding::PAUSE));
 
-        if (!game->window->IsFocused()) {
+        if (!input.focused()) {
             return;
         }
 

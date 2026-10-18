@@ -1,5 +1,6 @@
 #include "gse/input/Input.h"
 
+#include "gse/Platform.h"
 #include "gse/input/KeySource.h"
 #include "gse/input/TextInput.h"
 #include "gse/input/WindowHook.h"
@@ -45,6 +46,14 @@ namespace nascent {
             input_mode = *source;
         }
 
+        if (input_mode == InputMode::COCOA_EVENTS) {
+            keys_from_queue = true;
+            key_state = [this](olc::Key key) {
+                size_t index = (size_t)key;
+                return index < KEY_COUNT ? queued_keys[index] : olc::HWButton{};
+            };
+        }
+
         set_window_hook_key_events(input_mode == InputMode::WINDOW_MESSAGES);
     }
 
@@ -54,6 +63,28 @@ namespace nascent {
         for (size_t index = 1; index < KEY_COUNT; index++) {
             olc::Key key = (olc::Key)index;
             queue.push(key, key_state(key).bHeld, now);
+        }
+    }
+
+    bool Input::focused() const {
+        if (window == nullptr) {
+            return true;
+        }
+
+        return application_focused().value_or(window->IsFocused());
+    }
+
+    void Input::update_queued_keys() {
+        for (olc::HWButton& button : queued_keys) {
+            button.bPressed = false;
+            button.bReleased = false;
+        }
+
+        for (const KeyEvent& event : frame_events) {
+            olc::HWButton& button = queued_keys[(size_t)event.key];
+            button.bPressed = button.bPressed || (event.pressed && !button.bHeld);
+            button.bReleased = button.bReleased || (!event.pressed && button.bHeld);
+            button.bHeld = event.pressed;
         }
     }
 
@@ -69,11 +100,24 @@ namespace nascent {
         }
 
         frame_events = queue.drain();
-        frame_text = hook_active || window == nullptr ? queue.drain_text() : us_layout_text(window);
+        frame_text = hook_active || keys_from_queue || window == nullptr ? queue.drain_text() : us_layout_text(window);
         frame_dropped_files = queue.drain_dropped_files();
         frame_pressed_keys.clear();
 
-        if (window != nullptr) {
+        if (keys_from_queue) {
+            update_queued_keys();
+
+            for (const KeyEvent& event : frame_events) {
+                if (event.pressed) {
+                    frame_pressed_keys.push_back(event.key);
+                }
+            }
+
+            for (olc::Key key : queue.drain_repeats()) {
+                frame_pressed_keys.push_back(key);
+            }
+        }
+        else if (window != nullptr) {
             for (int32_t keycode : window->GetKeyPressCache()) {
                 frame_pressed_keys.push_back(window->ConvertKeycode(keycode));
             }

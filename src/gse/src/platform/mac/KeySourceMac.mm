@@ -222,6 +222,36 @@ namespace nascent {
         return now_ms() - std::max(age_ms, 0.0);
     }
 
+    static bool is_typed_character(char32_t code_point) {
+        return code_point >= 0x20 && code_point != 0x7f && !(code_point >= 0xf700 && code_point <= 0xf8ff);
+    }
+
+    static void push_typed_text(NSEvent* event) {
+        if ((event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) != 0) {
+            return;
+        }
+
+        NSString* characters = event.characters;
+        NSUInteger length = characters.length;
+
+        for (NSUInteger index = 0; index < length; index++) {
+            char32_t unit = [characters characterAtIndex:index];
+
+            if (unit >= 0xd800 && unit <= 0xdbff && index + 1 < length) {
+                char32_t low = [characters characterAtIndex:index + 1];
+
+                if (low >= 0xdc00 && low <= 0xdfff) {
+                    unit = 0x10000 + ((unit - 0xd800) << 10) + (low - 0xdc00);
+                    index++;
+                }
+            }
+
+            if (is_typed_character(unit)) {
+                key_queue->push_text(unit);
+            }
+        }
+    }
+
     static void handle_key_event(NSEvent* event) {
         if (key_queue == nullptr) {
             return;
@@ -238,6 +268,15 @@ namespace nascent {
             }
 
             return;
+        }
+
+        if (event.type == NSEventTypeKeyDown) {
+            push_typed_text(event);
+
+            if (event.isARepeat) {
+                key_queue->push_repeat(key);
+                return;
+            }
         }
 
         key_queue->push(key, event.type == NSEventTypeKeyDown, time);

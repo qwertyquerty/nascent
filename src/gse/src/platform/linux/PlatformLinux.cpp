@@ -12,6 +12,17 @@ namespace nascent {
         std::filesystem::path path = std::filesystem::read_symlink("/proc/self/exe", ec);
         return ec ? std::filesystem::path() : path;
     }
+
+    bool fit_window_to_screen(int32_t&, int32_t&) {
+        return false;
+    }
+
+    void allow_app_switching_in_fullscreen() {
+    }
+
+    std::optional<bool> application_focused() {
+        return std::nullopt;
+    }
 }
 
 namespace nascent::platform_detail {

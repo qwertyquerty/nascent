@@ -87,6 +87,25 @@ namespace nascent {
         return std::exchange(text, {});
     }
 
+    void KeyEventQueue::push_repeat(olc::Key key) {
+        size_t index = (size_t)key;
+
+        if (key == olc::Key::NONE || index >= KEY_COUNT) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(mutex);
+
+        if (held[index]) {
+            repeats.push_back(key);
+        }
+    }
+
+    std::vector<olc::Key> KeyEventQueue::drain_repeats() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return std::exchange(repeats, {});
+    }
+
     void KeyEventQueue::push_dropped_files(std::vector<std::string> files) {
         std::lock_guard<std::mutex> lock(mutex);
         dropped_files.insert(dropped_files.end(), std::make_move_iterator(files.begin()), std::make_move_iterator(files.end()));

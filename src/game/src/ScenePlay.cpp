@@ -709,7 +709,7 @@ namespace nascent {
             restart_hold = 0;
         }
 
-        if (!paused && ((pause_pressed && (!resumed_at || now - *resumed_at >= PAUSE_COOLDOWN_MS)) || !game->window->IsFocused())) {
+        if (!paused && ((pause_pressed && (!resumed_at || now - *resumed_at >= PAUSE_COOLDOWN_MS)) || !input.focused())) {
             pause(now);
         }
 

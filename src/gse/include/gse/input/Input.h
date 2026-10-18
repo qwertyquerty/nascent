@@ -37,7 +37,9 @@ namespace nascent {
         KeyState key_state;
         KeyEventQueue queue;
         bool hook_active = false;
+        bool keys_from_queue = false;
         InputMode input_mode = InputMode::POLLING;
+        std::array<olc::HWButton, KEY_COUNT> queued_keys = {};
         std::vector<KeyEvent> frame_events;
         std::string frame_text;
         std::vector<std::string> frame_dropped_files;
@@ -51,6 +53,7 @@ namespace nascent {
         int suppressed = 0;
 
         void poll_key_events();
+        void update_queued_keys();
 
         public:
         explicit Input(olc::PixelGameEngine* window);
@@ -69,6 +72,7 @@ namespace nascent {
         void consume(ActionId action);
         void inject(ActionId action);
 
+        bool focused() const;
         olc::HWButton key(olc::Key key) const;
         bool key_pressed(olc::Key key) const;
         bool key_held(olc::Key key) const;

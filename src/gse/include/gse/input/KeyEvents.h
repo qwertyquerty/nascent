@@ -46,6 +46,7 @@ namespace nascent {
         std::vector<KeyEvent> events;
         std::array<bool, KEY_COUNT> held = {};
         std::string text;
+        std::vector<olc::Key> repeats;
         std::vector<std::string> dropped_files;
         int32_t back_clicks = 0;
         InputDelayStats delay_stats;
@@ -53,9 +54,11 @@ namespace nascent {
         public:
         bool push(olc::Key key, bool pressed, double time);
         void push_text(char32_t code_point);
+        void push_repeat(olc::Key key);
         void release_all(double time);
         std::vector<KeyEvent> drain();
         std::string drain_text();
+        std::vector<olc::Key> drain_repeats();
         void push_dropped_files(std::vector<std::string> files);
         std::vector<std::string> drain_dropped_files();
         void push_back_click();
