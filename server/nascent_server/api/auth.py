@@ -1,4 +1,4 @@
-from flask import Blueprint, g
+from flask import Blueprint, current_app, g
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -6,10 +6,12 @@ from .. import timeutil
 from ..errors import ApiError
 from ..extensions import db
 from ..models import AuthSession, User
-from ..ratelimit import check_rate_limit
-from ..schemas import LoginIn, RefreshIn, RegisterIn, parse_body
+from ..ratelimit import check_rate_limit, over_rate_limit
+from ..schemas import LoginIn, PasswordResetConfirmIn, PasswordResetIn, RefreshIn, RegisterIn, parse_body
 from ..security import auth_required, client_ip, current_user, hash_password, issue_session, revoke_user_sessions, rotate_session, verify_password
 from ..serializers import private_user
+from ..services import mail, password_reset
+from ..tasks import enqueue
 
 blueprint = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -68,6 +70,39 @@ def refresh():
     tokens = rotate_session(body.refresh_token)
     db.session.commit()
     return {"tokens": tokens.to_dict()}
+
+
+@blueprint.post("/password-reset")
+def request_password_reset():
+    ip = client_ip()
+    check_rate_limit("password_reset_ip", ip)
+
+    if not mail.enabled():
+        raise ApiError(503, "mail_unavailable", "This server can't send email, ask a staff member to reset your password")
+
+    body = parse_body(PasswordResetIn)
+    login_key = body.login.lower()
+    user_id = db.session.scalar(select(User.id).where(or_(User.username_key == login_key, User.email_key == login_key)))
+
+    if user_id is not None and not over_rate_limit("password_reset_account", user_id):
+        try:
+            enqueue(password_reset.send_password_reset, user_id, ip)
+        except Exception:
+            current_app.logger.exception("could not send a password reset to user %s", user_id)
+
+    return {"sent": True}, 202
+
+
+@blueprint.post("/password-reset/confirm")
+def confirm_password_reset():
+    check_rate_limit("password_reset_confirm", client_ip())
+    body = parse_body(PasswordResetConfirmIn)
+    user = password_reset.redeem(body.token)
+    user.password_hash = hash_password(body.new_password)
+    revoke_user_sessions(user.id)
+    tokens = issue_session(user)
+    db.session.commit()
+    return {"user": private_user(user), "tokens": tokens.to_dict()}
 
 
 @blueprint.post("/logout")

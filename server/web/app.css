@@ -160,8 +160,22 @@ a.navbar-item.is-active:focus-within {
 }
 
 
-.staff-login {
+.auth-box {
     max-width: 26rem;
+}
+
+.auth-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+}
+
+.session-client {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .review-flags {

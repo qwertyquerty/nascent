@@ -148,6 +148,21 @@ class AuthSession(db.Model):
     user: Mapped[User] = relationship()
 
 
+class PasswordReset(db.Model):
+    __tablename__ = "password_resets"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    password_check: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    ip: Mapped[str] = mapped_column(String(45), default="")
+
+    user: Mapped[User] = relationship()
+
+
 class Chart(db.Model):
     __tablename__ = "charts"
 

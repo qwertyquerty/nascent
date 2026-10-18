@@ -5,6 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..cache import store
 from ..extensions import db
+from ..services import mail
 from ..services.calculator import RATE_KEYS, calculator_version
 
 blueprint = Blueprint("meta", __name__)
@@ -34,4 +35,5 @@ def info():
         "profile": {"top_plays": current_app.config["PROFILE_TOP_PLAYS"], "decay": current_app.config["PROFILE_DECAY"]},
         "ranked_key_counts": list(current_app.config["RANKED_KEY_COUNTS"]),
         "performance_accuracy_floor": nc.PERFORMANCE_ACCURACY_FLOOR,
+        "password_reset": mail.enabled(),
     }

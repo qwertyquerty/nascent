@@ -8,6 +8,13 @@ nascent_letsencrypt_email: ""
 nascent_letsencrypt_staging: false
 nascent_cors_origins: ""
 
+nascent_mail_from: ""
+nascent_smtp_host: ""
+nascent_smtp_port: 587
+nascent_smtp_security: starttls
+nascent_smtp_username: ""
+nascent_smtp_password: ""
+
 nascent_workers: 2
 nascent_uwsgi_processes: 4
 nascent_uwsgi_threads: 4

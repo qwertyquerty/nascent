@@ -41,6 +41,15 @@ class RefreshIn(Body):
     refresh_token: str = Field(min_length=1, max_length=200)
 
 
+class PasswordResetIn(Body):
+    login: str = Field(min_length=1, max_length=254)
+
+
+class PasswordResetConfirmIn(Body):
+    token: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class PasswordChangeIn(Body):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=8, max_length=256)

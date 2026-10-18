@@ -53,22 +53,30 @@ const query = (params) => new URLSearchParams(Object.entries(params ?? {}).filte
 const pageOf = (params) => Math.max(1, parseInt(params.page, 10) || 1);
 const paged = (params) => ({limit: PAGE_SIZE, offset: (pageOf(params) - 1) * PAGE_SIZE});
 
-const STAFF_SESSION = "nascent-staff-session";
+const SESSION_KEY = "nascent-session";
+const SIGNED_OUT = "nascent-signed-out";
 const STAFF_ROLES = ["moderator", "admin"];
+const DEFAULT_INFO = {ranked_key_counts: [4, 5, 6, 7, 8, 9, 10], password_reset: false};
 
-const staffSession = {
+let memorySession = null;
+let refreshing = null;
+let infoRequest = null;
+
+const savedSession = {
     get() {
         try {
-            return JSON.parse(sessionStorage.getItem(STAFF_SESSION));
+            return JSON.parse(localStorage.getItem(SESSION_KEY));
         }
         catch {
-            return null;
+            return memorySession;
         }
     },
 
     set(tokens) {
+        memorySession = {access: tokens.access_token, refresh: tokens.refresh_token};
+
         try {
-            sessionStorage.setItem(STAFF_SESSION, JSON.stringify({access: tokens.access_token, refresh: tokens.refresh_token}));
+            localStorage.setItem(SESSION_KEY, JSON.stringify(memorySession));
         }
         catch {
             return;
@@ -76,31 +84,73 @@ const staffSession = {
     },
 
     clear() {
+        memorySession = null;
+
         try {
-            sessionStorage.removeItem(STAFF_SESSION);
+            localStorage.removeItem(SESSION_KEY);
         }
         catch {
             return;
         }
+        finally {
+            dispatchEvent(new Event(SIGNED_OUT));
+        }
     },
 };
 
-async function refreshStaffSession(session) {
+async function renewSession() {
+    const session = savedSession.get();
     const response = await fetch(`${API}/auth/refresh`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({refresh_token: session.refresh})}).catch(() => null);
     const body = response?.ok ? await response.json().catch(() => null) : null;
 
-    if (!body?.tokens) {
-        staffSession.clear();
+    if (body?.tokens) {
+        savedSession.set(body.tokens);
+    }
+    else if (response?.status === 401) {
+        savedSession.clear();
+    }
+}
+
+async function refreshSession(stale) {
+    if (savedSession.get()?.refresh !== stale.refresh) {
         return;
     }
 
-    staffSession.set(body.tokens);
+    refreshing ??= renewSession().finally(() => (refreshing = null));
+    await refreshing;
+}
+
+function serverInfo() {
+    infoRequest ??= api("/info", null, {anonymous: true}).catch(() => {
+        infoRequest = null;
+        return DEFAULT_INFO;
+    });
+    return infoRequest;
+}
+
+function safeNext(value) {
+    try {
+        const url = new URL(value, location.origin);
+        return value.startsWith("/") && url.origin === location.origin ? url.pathname + url.search : null;
+    }
+    catch {
+        return null;
+    }
+}
+
+function newPassword(form) {
+    const password = form.get("new_password");
+
+    if (password !== form.get("confirm_password")) {
+        throw new Error("The passwords don't match.");
+    }
+
+    return password;
 }
 
 async function api(path, params, options = {}) {
     const search = query(params);
-    const send = () => {
-        const session = options.anonymous ? null : staffSession.get();
+    const send = (session) => {
         const headers = {};
 
         if (options.body !== undefined) {
@@ -114,12 +164,16 @@ async function api(path, params, options = {}) {
         return fetch(`${API}${path}${search ? `?${search}` : ""}`, {method: options.method || "GET", headers, body: options.body === undefined ? undefined : JSON.stringify(options.body)});
     };
 
-    let response = await send();
-    const session = options.anonymous ? null : staffSession.get();
+    const session = options.anonymous ? null : savedSession.get();
+    let response = await send(session);
 
     if (response.status === 401 && session) {
-        await refreshStaffSession(session);
-        response = await send();
+        await refreshSession(session);
+        const renewed = savedSession.get();
+
+        if (renewed) {
+            response = await send(renewed);
+        }
     }
 
     const body = await response.json().catch(() => null);
@@ -191,6 +245,20 @@ const format = {
     accuracy: (value) => `${(Number(value ?? 0) * 100).toFixed(2)}%`,
     rank: (value) => (value ? `#${value.toLocaleString()}` : "—"),
     rate: (value) => `${Number(value).toFixed(2)}x`,
+    client(value) {
+        if (!value) {
+            return "Unknown device";
+        }
+
+        if (/^nascent/i.test(value)) {
+            return "Nascent";
+        }
+
+        const pick = (names) => names.find(([token]) => value.includes(token))?.[1];
+        const browser = pick([["Edg/", "Edge"], ["OPR/", "Opera"], ["Firefox/", "Firefox"], ["Chrome/", "Chrome"], ["Safari/", "Safari"]]);
+        const system = pick([["Windows", "Windows"], ["Android", "Android"], ["iPhone", "iPhone"], ["iPad", "iPad"], ["Mac OS", "macOS"], ["CrOS", "ChromeOS"], ["Linux", "Linux"]]);
+        return browser ? `${browser}${system ? ` on ${system}` : ""}` : value;
+    },
     length: (ms) => `${Math.floor(ms / 60000)}:${String(Math.round(ms / 1000) % 60).padStart(2, "0")}`,
     playtime: (ms) => `${Math.floor(ms / 3600000).toLocaleString()}h ${Math.floor(ms / 60000) % 60}m`,
     error: (ms) => `${ms >= 0 ? "+" : ""}${Number(ms).toFixed(1)} ms`,
@@ -417,19 +485,69 @@ const loaders = {
 
     async staff({params}) {
         const status = params.status === "rejected" ? "rejected" : "pending_review";
+        const signIn = {redirect: link.to("/login", {next: link.to("/staff", {status: params.status})})};
 
-        if (!staffSession.get()) {
-            return {title: "Staff", signedIn: false};
+        if (!savedSession.get()) {
+            return signIn;
         }
 
         try {
             const [{user}, {plays}] = await Promise.all([api("/me"), api("/moderation/plays", {status, limit: 100})]);
-            return {title: "Review queue", signedIn: true, user, status, plays};
+            return {title: "Review queue", allowed: true, user, status, plays};
         }
         catch (error) {
-            if (error.status === 401 || error.status === 403) {
-                staffSession.clear();
-                return {title: "Staff", signedIn: false, notice: error.status === 403 ? "That account can't review plays." : "Your session ended, sign in again."};
+            if (error.status === 403) {
+                return {title: "Staff", allowed: false};
+            }
+
+            if (error.status === 401) {
+                savedSession.clear();
+                return signIn;
+            }
+
+            throw error;
+        }
+    },
+
+    async login({params}) {
+        const next = safeNext(params.next) || "/account";
+
+        if (savedSession.get()) {
+            return {redirect: next};
+        }
+
+        return {title: "Sign in", next, passwordReset: (await serverInfo()).password_reset};
+    },
+
+    async forgot() {
+        return {title: "Forgot password", enabled: (await serverInfo()).password_reset, sent: false};
+    },
+
+    async reset() {
+        const token = location.hash.slice(1);
+
+        if (token) {
+            history.replaceState(null, "", location.pathname);
+        }
+
+        return {title: "Choose a new password", token: token || null};
+    },
+
+    async account() {
+        const signIn = {redirect: link.to("/login", {next: "/account"})};
+
+        if (!savedSession.get()) {
+            return signIn;
+        }
+
+        try {
+            const [{user}, {sessions}] = await Promise.all([api("/me"), api("/auth/sessions")]);
+            return {title: "Account", user, sessions};
+        }
+        catch (error) {
+            if (error.status === 401) {
+                savedSession.clear();
+                return signIn;
             }
 
             throw error;
@@ -452,7 +570,7 @@ const loaders = {
 };
 
 const app = Vue.createApp({
-    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, staffUser: null, staffError: null, staffBusy: false, reviewNotes: {}, reviewBusy: null}),
+    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, user: null, busy: null, formError: null, formNotice: null, flash: null, staffError: null, reviewNotes: {}, reviewBusy: null}),
 
     async created() {
         if (location.hash.startsWith("#/")) {
@@ -460,17 +578,32 @@ const app = Vue.createApp({
         }
 
         addEventListener("popstate", () => this.load());
+        addEventListener(SIGNED_OUT, () => (this.user = null));
+        addEventListener("storage", (event) => event.key === SESSION_KEY && this.refreshUser());
         document.addEventListener("click", (event) => this.intercept(event));
         latestRelease().then((release) => (this.release = release));
-
-        if (staffSession.get()) {
-            api("/me").then(({user}) => (this.staffUser = STAFF_ROLES.includes(user.role) ? user : null)).catch(() => null);
-        }
-        this.keyCounts = (await api("/info").catch(() => ({ranked_key_counts: [4, 5, 6, 7, 8, 9, 10]}))).ranked_key_counts;
+        this.refreshUser();
+        this.keyCounts = (await serverInfo()).ranked_key_counts;
         this.load();
     },
 
+    computed: {
+        staff() {
+            return STAFF_ROLES.includes(this.user?.role);
+        },
+    },
+
     methods: {
+        async refreshUser() {
+            if (!savedSession.get()) {
+                this.user = null;
+                return;
+            }
+
+            const result = await api("/me").catch((error) => (error.status === 401 ? null : {user: this.user}));
+            this.user = result?.user ?? null;
+        },
+
         intercept(event) {
             if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
                 return;
@@ -509,7 +642,7 @@ const app = Vue.createApp({
             const current = () => key === location.pathname + location.search;
             const route = parseRoute();
             const samePage = this.view !== null && route.path === this.route.path;
-            Object.assign(this, {route, error: null, loading: true, menuOpen: false});
+            Object.assign(this, {route, error: null, loading: true, menuOpen: false, formError: null, formNotice: this.flash, flash: null});
 
             if (!samePage) {
                 this.view = null;
@@ -524,6 +657,15 @@ const app = Vue.createApp({
                 }
 
                 const view = await loader(route, this.keyCounts);
+
+                if (view.redirect) {
+                    if (current()) {
+                        history.replaceState(null, "", view.redirect);
+                        this.load();
+                    }
+
+                    return;
+                }
 
                 if (current()) {
                     this.view = view;
@@ -545,36 +687,77 @@ const app = Vue.createApp({
             }
         },
 
-        async staffLogin(event) {
-            const form = new FormData(event.target);
-            this.staffError = null;
-            this.staffBusy = true;
+        async submitForm(name, action) {
+            this.busy = name;
+            this.formError = null;
+            this.formNotice = null;
 
             try {
-                const {user, tokens} = await api("/auth/login", null, {method: "POST", body: {login: form.get("login"), password: form.get("password")}, anonymous: true});
-
-                if (!STAFF_ROLES.includes(user.role)) {
-                    await fetch(`${API}/auth/logout`, {method: "POST", headers: {Authorization: `Bearer ${tokens.access_token}`}}).catch(() => null);
-                    throw new Error("That account can't review plays.");
-                }
-
-                staffSession.set(tokens);
-                this.staffUser = user;
-                this.load();
+                await action();
             }
             catch (error) {
-                this.staffError = error.message;
+                this.formError = error.message;
             }
             finally {
-                this.staffBusy = false;
+                this.busy = null;
             }
         },
 
-        async staffLogout() {
-            await api("/auth/logout", null, {method: "POST"}).catch(() => null);
-            staffSession.clear();
-            this.staffUser = null;
-            this.go("/staff");
+        signIn(event) {
+            const form = new FormData(event.target);
+
+            return this.submitForm("sign-in", async () => {
+                const {user, tokens} = await api("/auth/login", null, {method: "POST", body: {login: form.get("login"), password: form.get("password")}, anonymous: true});
+                savedSession.set(tokens);
+                this.user = user;
+                this.go(this.view.next);
+            });
+        },
+
+        requestReset(event) {
+            const form = new FormData(event.target);
+
+            return this.submitForm("forgot", async () => {
+                await api("/auth/password-reset", null, {method: "POST", body: {login: form.get("login")}, anonymous: true});
+                this.view.sent = true;
+            });
+        },
+
+        confirmReset(event) {
+            const form = new FormData(event.target);
+
+            return this.submitForm("reset", async () => {
+                const body = {token: this.view.token, new_password: newPassword(form)};
+                const {user, tokens} = await api("/auth/password-reset/confirm", null, {method: "POST", body, anonymous: true});
+                savedSession.set(tokens);
+                this.user = user;
+                this.flash = "Your password was changed and every other device was signed out.";
+                this.go("/account");
+            });
+        },
+
+        changePassword(event) {
+            const form = new FormData(event.target);
+
+            return this.submitForm("password", async () => {
+                await api("/me/password", null, {method: "PUT", body: {current_password: form.get("current_password"), new_password: newPassword(form)}});
+                event.target.reset();
+                this.view.sessions = (await api("/auth/sessions")).sessions;
+                this.formNotice = "Your password was changed and every other device was signed out.";
+            });
+        },
+
+        revokeSession(entry) {
+            return this.submitForm(`session-${entry.id}`, async () => {
+                await api(`/auth/sessions/${entry.id}`, null, {method: "DELETE"});
+                this.view.sessions = this.view.sessions.filter((other) => other.id !== entry.id);
+            });
+        },
+
+        async signOut(everywhere = false) {
+            await api(everywhere ? "/auth/logout-all" : "/auth/logout", null, {method: "POST"}).catch(() => null);
+            savedSession.clear();
+            this.go("/");
         },
 
         async review(play, decision) {

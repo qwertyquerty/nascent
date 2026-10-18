@@ -14,7 +14,7 @@ from sqlalchemy import delete, func, inspect, select
 from . import tasks, timeutil
 from .errors import ApiError
 from .extensions import db
-from .models import AuthSession, Chart, ChartStatus, Play, PlayTicket, Role, User
+from .models import AuthSession, Chart, ChartStatus, PasswordReset, Play, PlayTicket, Role, User
 from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
@@ -327,8 +327,9 @@ def prune():
     tickets = db.session.execute(
         delete(PlayTicket).where(PlayTicket.used_at.is_(None), (PlayTicket.expires_at < now) | PlayTicket.superseded_at.is_not(None))
     ).rowcount
+    resets = db.session.execute(delete(PasswordReset).where(PasswordReset.expires_at < now)).rowcount
     db.session.commit()
-    click.echo(f"removed {sessions} sessions and {tickets} unused tickets")
+    click.echo(f"removed {sessions} sessions, {tickets} unused tickets and {resets} password reset links")
 
 
 @nascent_cli.command("worker")

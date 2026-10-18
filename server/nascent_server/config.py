@@ -2,6 +2,8 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+DOMAIN = os.environ.get("NASCENT_DOMAIN", "").strip()
+
 
 class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get("NASCENT_DATABASE_URL", "sqlite:///nascent-dev.db")
@@ -22,6 +24,17 @@ class Config:
     USE_X_ACCEL_REDIRECT = os.environ.get("NASCENT_USE_X_ACCEL_REDIRECT", "0") == "1"
     X_ACCEL_PREFIX = "/_storage/"
 
+    SITE_URL = (os.environ.get("NASCENT_SITE_URL") or (f"https://{DOMAIN}" if DOMAIN else "http://localhost:5000")).rstrip("/")
+
+    MAIL_BACKEND = os.environ.get("NASCENT_MAIL_BACKEND") or ("smtp" if os.environ.get("NASCENT_SMTP_HOST") else "none")
+    MAIL_FROM = os.environ.get("NASCENT_MAIL_FROM") or f"Nascent <noreply@{DOMAIN or 'localhost'}>"
+    SMTP_HOST = os.environ.get("NASCENT_SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("NASCENT_SMTP_PORT", "587"))
+    SMTP_SECURITY = os.environ.get("NASCENT_SMTP_SECURITY", "starttls")
+    SMTP_USERNAME = os.environ.get("NASCENT_SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.environ.get("NASCENT_SMTP_PASSWORD", "")
+    SMTP_TIMEOUT = 30
+
     TRUST_PROXY_HOPS = int(os.environ.get("NASCENT_TRUST_PROXY_HOPS", "0"))
     CORS_ORIGINS = [origin for origin in os.environ.get("NASCENT_CORS_ORIGINS", "").split(",") if origin]
 
@@ -31,6 +44,7 @@ class Config:
     ACCESS_TOKEN_TTL = timedelta(hours=1)
     REFRESH_TOKEN_TTL = timedelta(days=90)
     SESSION_TOUCH_INTERVAL = timedelta(minutes=5)
+    PASSWORD_RESET_TTL = timedelta(hours=1)
 
     TICKET_GRACE = timedelta(hours=1)
     TICKET_MIN_ELAPSED_RATIO = 0.95
@@ -57,6 +71,9 @@ class Config:
         "login_ip": (30, 600),
         "login_account": (10, 600),
         "refresh": (60, 600),
+        "password_reset_ip": (10, 3600),
+        "password_reset_account": (3, 3600),
+        "password_reset_confirm": (30, 3600),
         "ticket": (2000, 3600),
         "submit_burst": (6, 60),
         "submit": (120, 3600),
@@ -99,3 +116,5 @@ class TestConfig(Config):
     SQLALCHEMY_ENGINE_OPTIONS = {}
     REDIS_URL = os.environ.get("NASCENT_TEST_REDIS_URL")
     TASKS_INLINE = True
+    MAIL_BACKEND = "memory"
+    SITE_URL = "https://nascent.test"

@@ -65,7 +65,7 @@ namespace nascent {
         this->mode = mode;
         form.clear();
         login_field = email_field = password_field = nullptr;
-        continue_button = profile_button = sign_out_button = switch_button = nullptr;
+        continue_button = profile_button = sign_out_button = switch_button = forgot_button = nullptr;
 
         if (mode == Mode::SIGNED_IN) {
             continue_button = &form.add<ButtonField>("Continue");
@@ -83,6 +83,11 @@ namespace nascent {
 
         password_field = &form.add<TextField>("Password", "", true);
         switch_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "Create an account instead" : "Sign in instead");
+
+        if (mode == Mode::SIGN_IN) {
+            forgot_button = &form.add<ButtonField>("Forgot password?");
+        }
+
         form.focus_field(0);
     }
 
@@ -140,6 +145,13 @@ namespace nascent {
         play_menu_sound();
         bool opened = open_url(ServerApi::profile_page_url(Account::username()));
         status = opened ? "Opened your profile in the browser" : "Could not open the browser";
+        status_is_error = !opened;
+    }
+
+    void SceneAccount::open_password_reset() {
+        play_menu_sound();
+        bool opened = open_url(ServerApi::website_url("/forgot"));
+        status = opened ? "Opened the password reset page in the browser" : "Could not open the browser";
         status_is_error = !opened;
     }
 
@@ -232,6 +244,9 @@ namespace nascent {
             play_menu_sound();
             status.clear();
             set_mode(mode == Mode::SIGN_IN ? Mode::REGISTER : Mode::SIGN_IN);
+        }
+        else if (forgot_button != nullptr && forgot_button->take_pressed()) {
+            open_password_reset();
         }
         else if (action == UiForm::Action::SUBMIT) {
             play_menu_sound();

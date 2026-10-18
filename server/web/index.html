@@ -33,8 +33,10 @@
                         class="navbar-item" :class="{'is-active': names.includes(route.name)}" :href="path" :aria-current="names.includes(route.name) ? 'page' : null">{{ label }}</a>
                 </div>
                 <div class="navbar-end">
-                    <div v-if="staffUser" class="navbar-item"><a class="button is-small is-warning is-light" href="/staff">Review</a></div>
+                    <div v-if="staff" class="navbar-item"><a class="button is-small is-warning is-light" href="/staff">Review</a></div>
                     <div class="navbar-item"><player-search></player-search></div>
+                    <a v-if="user" class="navbar-item" :class="{'is-active': route.name === 'account'}" href="/account" :aria-current="route.name === 'account' ? 'page' : null">{{ user.username }}</a>
+                    <a v-else class="navbar-item" :class="{'is-active': route.name === 'login'}" href="/login">Sign in</a>
                     <div class="navbar-item"><a class="button is-small is-primary download-button" :href="release?.url || release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a></div>
                 </div>
             </div>
@@ -142,7 +144,7 @@
                     <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Personal best</span>
                 </div>
 
-                <div v-if="staffUser && view.play.flags && view.play.status === 'pending_review'" class="box review-item">
+                <div v-if="staff && view.play.flags && view.play.status === 'pending_review'" class="box review-item">
                     <p class="has-text-weight-semibold mb-2">Waiting for review</p>
                     <ul class="review-flags mb-3">
                         <li v-for="(flag, index) in view.play.flags" :key="index"><strong>{{ flag.message }}</strong> <span class="has-text-grey">{{ $f.flag(flag) }}</span></li>
@@ -462,32 +464,135 @@
                 </template>
             </template>
 
-            <template v-else-if="route.name === 'staff'">
-                <template v-if="!view.signedIn">
-                    <h1 class="title is-3">Staff sign in</h1>
-                    <div class="box staff-login">
-                        <p v-if="view.notice" class="notification is-warning is-light">{{ view.notice }}</p>
-                        <form @submit.prevent="staffLogin($event)">
-                            <div class="field">
-                                <label class="label" for="staff-login">Username or email</label>
-                                <div class="control"><input id="staff-login" class="input" name="login" autocomplete="username" required></div>
-                            </div>
-                            <div class="field">
-                                <label class="label" for="staff-password">Password</label>
-                                <div class="control"><input id="staff-password" class="input" type="password" name="password" autocomplete="current-password" required></div>
-                            </div>
-                            <p v-if="staffError" class="help is-danger mb-3" role="alert">{{ staffError }}</p>
-                            <button class="button is-primary" :class="{'is-loading': staffBusy}" type="submit">Sign in</button>
-                        </form>
+            <template v-else-if="route.name === 'login'">
+                <h1 class="title is-3">Sign in</h1>
+                <div class="box auth-box">
+                    <form @submit.prevent="signIn($event)">
+                        <div class="field">
+                            <label class="label" for="login-name">Username or email</label>
+                            <div class="control"><input id="login-name" class="input" name="login" autocomplete="username" required></div>
+                        </div>
+                        <div class="field">
+                            <label class="label" for="login-password">Password</label>
+                            <div class="control"><input id="login-password" class="input" type="password" name="password" autocomplete="current-password" required></div>
+                        </div>
+                        <p v-if="formError" class="help is-danger mb-3" role="alert">{{ formError }}</p>
+                        <div class="auth-actions">
+                            <button class="button is-primary" :class="{'is-loading': busy === 'sign-in'}" type="submit">Sign in</button>
+                            <a v-if="view.passwordReset" href="/forgot">Forgot your password?</a>
+                        </div>
+                    </form>
+                </div>
+                <p class="has-text-grey">New here? Create an account from the account screen in the game.</p>
+            </template>
+
+            <template v-else-if="route.name === 'forgot'">
+                <h1 class="title is-3">Forgot password</h1>
+                <div class="box auth-box">
+                    <p v-if="!view.enabled">This server can't send email, so ask a staff member to reset your password.</p>
+                    <div v-else-if="view.sent" role="status">
+                        <p class="mb-2">If that account exists, a reset link is on its way to the email address it was registered with. The link works for an hour.</p>
+                        <p class="has-text-grey">Nothing after a few minutes? Check your spam folder.</p>
                     </div>
+                    <form v-else @submit.prevent="requestReset($event)">
+                        <p class="mb-4">Enter your username or email and you'll get a link to choose a new password.</p>
+                        <div class="field">
+                            <label class="label" for="forgot-login">Username or email</label>
+                            <div class="control"><input id="forgot-login" class="input" name="login" autocomplete="username" required></div>
+                        </div>
+                        <p v-if="formError" class="help is-danger mb-3" role="alert">{{ formError }}</p>
+                        <button class="button is-primary" :class="{'is-loading': busy === 'forgot'}" type="submit">Send reset link</button>
+                    </form>
+                </div>
+                <a href="/login">Back to sign in</a>
+            </template>
+
+            <template v-else-if="route.name === 'reset'">
+                <h1 class="title is-3">Choose a new password</h1>
+                <div class="box auth-box">
+                    <p v-if="!view.token">This link is incomplete. Open it from the email again, or <a href="/forgot">ask for a new one</a>.</p>
+                    <form v-else @submit.prevent="confirmReset($event)">
+                        <div class="field">
+                            <label class="label" for="reset-password">New password</label>
+                            <div class="control"><input id="reset-password" class="input" type="password" name="new_password" autocomplete="new-password" minlength="8" maxlength="256" required></div>
+                            <p class="help">At least 8 characters.</p>
+                        </div>
+                        <div class="field">
+                            <label class="label" for="reset-confirm">Confirm new password</label>
+                            <div class="control"><input id="reset-confirm" class="input" type="password" name="confirm_password" autocomplete="new-password" minlength="8" maxlength="256" required></div>
+                        </div>
+                        <p v-if="formError" class="help is-danger mb-3" role="alert">{{ formError }}</p>
+                        <button class="button is-primary" :class="{'is-loading': busy === 'reset'}" type="submit">Change password</button>
+                    </form>
+                </div>
+                <p v-if="view.token" class="has-text-grey">Link expired? <a href="/forgot">Ask for a new one</a>.</p>
+            </template>
+
+            <template v-else-if="route.name === 'account'">
+                <div class="level is-mobile mb-4">
+                    <div class="level-left"><h1 class="title is-3">Account</h1></div>
+                    <div class="level-right"><button type="button" class="button is-small" @click="signOut()">Sign out</button></div>
+                </div>
+                <p v-if="formNotice" class="notification is-success is-light" role="status">{{ formNotice }}</p>
+                <p v-if="formError" class="notification is-danger is-light" role="alert">{{ formError }}</p>
+                <div class="columns">
+                    <div class="column is-5">
+                        <div class="box">
+                            <h2 class="title is-5">Profile</h2>
+                            <p class="mb-1"><a :href="$link.user(view.user.username)">{{ view.user.username }}</a></p>
+                            <p class="has-text-grey mb-1">{{ view.user.email }}</p>
+                            <p class="has-text-grey">Joined <rel-time :value="view.user.created_at"></rel-time></p>
+                        </div>
+                        <div class="box">
+                            <h2 class="title is-5">Change password</h2>
+                            <form @submit.prevent="changePassword($event)">
+                                <input type="text" name="username" autocomplete="username" :value="view.user.username" hidden>
+                                <div class="field">
+                                    <label class="label" for="account-current">Current password</label>
+                                    <div class="control"><input id="account-current" class="input" type="password" name="current_password" autocomplete="current-password" required></div>
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="account-new">New password</label>
+                                    <div class="control"><input id="account-new" class="input" type="password" name="new_password" autocomplete="new-password" minlength="8" maxlength="256" required></div>
+                                </div>
+                                <div class="field">
+                                    <label class="label" for="account-confirm">Confirm new password</label>
+                                    <div class="control"><input id="account-confirm" class="input" type="password" name="confirm_password" autocomplete="new-password" minlength="8" maxlength="256" required></div>
+                                </div>
+                                <button class="button is-primary" :class="{'is-loading': busy === 'password'}" type="submit">Change password</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="box">
+                            <h2 class="title is-5">Signed in devices</h2>
+                            <div class="table-container">
+                                <table class="table is-fullwidth">
+                                    <thead><tr><th>Device</th><th>Address</th><th>Last used</th><th><span class="is-sr-only">Actions</span></th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="entry in view.sessions" :key="entry.id">
+                                            <td class="session-client" :title="entry.client">{{ $f.client(entry.client) }} <span v-if="entry.current" class="tag is-info is-light">this browser</span></td>
+                                            <td>{{ entry.ip }}</td>
+                                            <td><rel-time :value="entry.last_used_at"></rel-time></td>
+                                            <td class="has-text-right"><button v-if="!entry.current" type="button" class="button is-small" :class="{'is-loading': busy === 'session-' + entry.id}" @click="revokeSession(entry)">Sign out</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button type="button" class="button is-small is-danger is-light" @click="signOut(true)">Sign out everywhere</button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <template v-else-if="route.name === 'staff'">
+                <template v-if="!view.allowed">
+                    <h1 class="title is-3">Staff</h1>
+                    <p class="notification is-warning is-light">You're signed in as {{ user?.username }}, which can't review plays.</p>
                 </template>
                 <template v-else>
                     <div class="level is-mobile mb-4">
                         <div class="level-left"><h1 class="title is-3">Review queue</h1></div>
-                        <div class="level-right">
-                            <span class="has-text-grey mr-3">{{ view.user.username }}</span>
-                            <button type="button" class="button is-small" @click="staffLogout">Sign out</button>
-                        </div>
                     </div>
                     <div class="tabs">
                         <ul>
