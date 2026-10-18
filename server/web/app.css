@@ -213,6 +213,10 @@ a.navbar-item.is-active:focus-within {
 }
 
 
+.legal {
+    max-width: 48rem;
+}
+
 .auth-box {
     max-width: 26rem;
 }

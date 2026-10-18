@@ -9,7 +9,7 @@ from ..errors import ApiError
 from ..extensions import db
 from ..ids import parse_id
 from ..models import Chart, ChartStatus, User
-from .pages import NAV, build_page, chart_path, key_counts, site_url, user_path
+from .pages import LEGAL, NAV, build_page, chart_path, key_counts, legal_html, site_url, user_path
 
 blueprint = Blueprint("site", __name__, template_folder="templates")
 
@@ -49,7 +49,7 @@ def listed(kind: str):
 
 def sitemap_entries(name: str) -> list[tuple[str, str | None]] | None:
     if name == "pages":
-        paths = ["/", "/leaderboard", *(f"/leaderboard?key_count={count}" for count in key_counts()[1:]), "/charts", "/charts?status=all", "/stats"]
+        paths = ["/", "/leaderboard", *(f"/leaderboard?key_count={count}" for count in key_counts()[1:]), "/charts", "/charts?status=all", "/stats", "/privacy", "/terms"]
         return [(site_url(path), None) for path in paths]
 
     kind, _, number = name.partition("-")
@@ -64,6 +64,16 @@ def sitemap_entries(name: str) -> list[tuple[str, str | None]] | None:
         return [(site_url(chart_path(row.hash)), (row.ranked_at or row.created_at).date().isoformat()) for row in rows] or None
 
     return [(site_url(user_path(row.username)), row.last_played_at.date().isoformat() if row.last_played_at else None) for row in rows] or None
+
+
+@blueprint.get("/fragments/<name>")
+def fragment(name: str) -> Response:
+    if name not in LEGAL:
+        raise ApiError(404, "not_found", "No such page")
+
+    response = Response(legal_html(name), mimetype="text/html")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 @blueprint.get("/robots.txt")

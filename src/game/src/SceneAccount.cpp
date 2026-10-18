@@ -65,7 +65,7 @@ namespace nascent {
         this->mode = mode;
         form.clear();
         login_field = email_field = password_field = nullptr;
-        continue_button = profile_button = sign_out_button = switch_button = forgot_button = nullptr;
+        continue_button = profile_button = sign_out_button = switch_button = forgot_button = terms_button = nullptr;
 
         if (mode == Mode::SIGNED_IN) {
             continue_button = &form.add<ButtonField>("Continue");
@@ -86,6 +86,9 @@ namespace nascent {
 
         if (mode == Mode::SIGN_IN) {
             forgot_button = &form.add<ButtonField>("Forgot password?");
+        }
+        else {
+            terms_button = &form.add<ButtonField>("Terms and privacy policy");
         }
 
         form.focus_field(0);
@@ -152,6 +155,13 @@ namespace nascent {
         play_menu_sound();
         bool opened = open_url(ServerApi::website_url("/forgot"));
         status = opened ? "Opened the password reset page in the browser" : "Could not open the browser";
+        status_is_error = !opened;
+    }
+
+    void SceneAccount::open_terms() {
+        play_menu_sound();
+        bool opened = open_url(ServerApi::website_url("/terms"));
+        status = opened ? "Opened the terms in the browser" : "Could not open the browser";
         status_is_error = !opened;
     }
 
@@ -248,6 +258,9 @@ namespace nascent {
         else if (forgot_button != nullptr && forgot_button->take_pressed()) {
             open_password_reset();
         }
+        else if (terms_button != nullptr && terms_button->take_pressed()) {
+            open_terms();
+        }
         else if (action == UiForm::Action::SUBMIT) {
             play_menu_sound();
             submit();
@@ -273,7 +286,8 @@ namespace nascent {
         draw_text(skin->display_font_large, title, {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::px(90);
 
-        draw_text(skin->display_font_small, "Signing in lets your plays count towards the leaderboards.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
+        const char* subtitle = mode == Mode::REGISTER ? "Creating an account means you agree to the terms and privacy policy." : "Signing in lets your plays count towards the leaderboards.";
+        draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(SkinColor::TEXT_MUTED));
         y += Ui::px(26);
         draw_text(skin->display_font_small, SettingsManager::settings.server_url, {x, y}, skin->color(SkinColor::TEXT_FAINT));
         y += Ui::px(60);

@@ -68,3 +68,11 @@ def test_robots_and_sitemaps(api, clock):
     assert urls("/sitemaps/charts-1.xml") == [f"{SITE}/charts/{HASH}"]
     assert urls("/sitemaps/users-1.xml") == [f"{SITE}/users/alice"]
     assert api.get("/sitemaps/users-2.xml").status_code == 404
+
+
+def test_legal_pages(api):
+    html, canonical, robots, _ = page(api, "/privacy")
+    assert (canonical, robots.split(",")[0]) == (f"{SITE}/privacy", "index")
+    assert "Argon2" in html
+    assert "Fair play" in api.get("/fragments/terms").get_data(as_text=True)
+    assert api.get("/fragments/nope").status_code == 404

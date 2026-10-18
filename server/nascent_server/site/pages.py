@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from flask import current_app, request
+from flask import current_app, render_template, request
 
 from ..ids import parse_id
 from ..services import ranking
@@ -31,6 +31,7 @@ class Page:
     intro: list[str] = field(default_factory=list)
     sections: list[tuple[str, list[tuple[str, str, str]]]] | None = None
     structured: list[dict[str, Any]] = field(default_factory=list)
+    html: str = ""
 
 
 def site_url(path: str) -> str:
@@ -217,6 +218,21 @@ def play(reference: str) -> Page:
     return Page(f"{heading} · {SITE_NAME}", heading, description, f"/plays/{found['id']}", intro=[description], sections=[("Details", links)])
 
 
+LEGAL = {
+    "privacy": ("Privacy policy", "What Nascent collects when you use its accounts, leaderboards and replays, why, and how to download or delete your data."),
+    "terms": ("Terms of service", "The rules for using Nascent's accounts, leaderboards and replays, including fair play."),
+}
+
+
+def legal_html(name: str) -> str:
+    return render_template(f"legal/{name}.html", issues_url=f"{SOURCE_URL}/issues", source_url=SOURCE_URL)
+
+
+def legal(name: str) -> Page:
+    heading, description = LEGAL[name]
+    return Page(f"{heading} · {SITE_NAME}", heading, description, f"/{name}", sections=[], html=legal_html(name))
+
+
 def stats() -> Page:
     numbers = api("/stats") or {}
     description = f"Nascent by the numbers: {numbers.get('players', 0):,} players, {numbers.get('plays', 0):,} plays and {numbers.get('ranked_charts', 0):,} ranked charts."
@@ -246,6 +262,9 @@ def build_page(path: str) -> Page:
 
     if len(parts) == 1 and parts[0] in sections:
         return sections[parts[0]]()
+
+    if len(parts) == 1 and parts[0] in LEGAL:
+        return legal(parts[0])
 
     if len(parts) == 1 and parts[0] in PRIVATE:
         return private(parts[0])

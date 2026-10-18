@@ -86,3 +86,14 @@ def test_resets_are_refused_when_mail_is_not_set_up(api, app, client):
 
     assert api.get("/api/v1/info").get_json()["password_reset"] is False
     assert request_reset(client, "alice").get_json()["error"]["code"] == "mail_unavailable"
+
+
+def test_send_test_email_command(app):
+    result = app.test_cli_runner().invoke(args=["nascent", "send-test-email", "admin@example.com"])
+    assert result.exit_code == 0, result.output
+
+    with app.app_context():
+        assert mail.outbox()[-1]["To"] == "admin@example.com"
+
+    app.config["MAIL_BACKEND"] = "none"
+    assert "mail is not set up" in app.test_cli_runner().invoke(args=["nascent", "send-test-email", "admin@example.com"]).output

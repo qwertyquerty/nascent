@@ -39,6 +39,9 @@ class FileStorage:
     def exists(self, key: str) -> bool:
         return self.path(key).is_file()
 
+    def delete(self, key: str) -> None:
+        self.path(key).unlink(missing_ok=True)
+
 
 def init_storage(app: Flask) -> None:
     app.extensions["nascent_storage"] = FileStorage(app.config["STORAGE_PATH"])

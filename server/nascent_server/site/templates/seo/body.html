@@ -4,6 +4,7 @@
 <h1>{{ page.heading }}</h1>
 {% for line in page.intro %}<p>{{ line }}</p>
 {% endfor %}
+{{- page.html | safe }}
 {%- for title, items in page.sections if items %}
 <h2>{{ title }}</h2>
 <ul>{% for href, text, note in items %}<li><a href="{{ href }}">{{ text }}</a>{% if note %} · {{ note }}{% endif %}</li>{% endfor %}</ul>

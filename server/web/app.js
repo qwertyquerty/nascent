@@ -121,6 +121,16 @@ async function refreshSession(stale) {
     await refreshing;
 }
 
+async function fragment(name) {
+    const response = await fetch(`/fragments/${name}`);
+
+    if (!response.ok) {
+        throw new Error("This page couldn't be loaded.");
+    }
+
+    return response.text();
+}
+
 function serverInfo() {
     infoRequest ??= api("/info", null, {anonymous: true}).catch(() => {
         infoRequest = null;
@@ -520,6 +530,14 @@ const loaders = {
         return {title: "Sign in", next, passwordReset: (await serverInfo()).password_reset};
     },
 
+    async privacy() {
+        return {title: "Privacy policy", html: await fragment("privacy")};
+    },
+
+    async terms() {
+        return {title: "Terms of service", html: await fragment("terms")};
+    },
+
     async forgot() {
         return {title: "Forgot password", enabled: (await serverInfo()).password_reset, sent: false};
     },
@@ -759,6 +777,31 @@ const app = Vue.createApp({
                 event.target.reset();
                 this.view.sessions = (await api("/auth/sessions")).sessions;
                 this.formNotice = "Your password was changed and every other device was signed out.";
+            });
+        },
+
+        exportAccount() {
+            return this.submitForm("export", async () => {
+                const data = await api("/me/export");
+                const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type: "application/json"}));
+                const link = Object.assign(document.createElement("a"), {href: url, download: `nascent-${data.user.username}.json`});
+                link.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            });
+        },
+
+        deleteAccount(event) {
+            const form = new FormData(event.target);
+
+            if (!confirm("Delete your Nascent account and all of its plays? This can't be undone.")) {
+                return;
+            }
+
+            return this.submitForm("delete", async () => {
+                await api("/me", null, {method: "DELETE", body: {password: form.get("password")}});
+                savedSession.clear();
+                this.flash = "Your account and its plays were deleted.";
+                this.go("/");
             });
         },
 

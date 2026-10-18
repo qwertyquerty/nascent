@@ -51,6 +51,7 @@
 
     <main id="content" class="section" tabindex="-1" :aria-busy="loading">
         <div class="container" :class="{'is-refreshing': loading && view}">
+            <p v-if="formNotice" class="notification is-success is-light" role="status">{{ formNotice }}</p>
             <div v-if="error" class="notification is-danger is-light" role="alert">{{ error }}</div>
             <logo-loader v-else-if="!view"></logo-loader>
 
@@ -540,7 +541,6 @@
                     <div class="level-left"><h1 class="title is-3">Account</h1></div>
                     <div class="level-right"><button type="button" class="button is-small" @click="signOut()">Sign out</button></div>
                 </div>
-                <p v-if="formNotice" class="notification is-success is-light" role="status">{{ formNotice }}</p>
                 <p v-if="formError" class="notification is-danger is-light" role="alert">{{ formError }}</p>
                 <div class="columns">
                     <div class="column is-5">
@@ -569,6 +569,20 @@
                                 <button class="button is-primary" :class="{'is-loading': busy === 'password'}" type="submit">Change password</button>
                             </form>
                         </div>
+                        <div class="box">
+                            <h2 class="title is-5">Your data</h2>
+                            <p class="mb-3">Download everything Nascent stores about your account, or delete it. See the <a href="/privacy">privacy policy</a> for details.</p>
+                            <button type="button" class="button is-small" :class="{'is-loading': busy === 'export'}" @click="exportAccount">Download my data</button>
+                            <form class="mt-5" @submit.prevent="deleteAccount($event)">
+                                <input type="text" name="username" autocomplete="username" :value="view.user.username" hidden>
+                                <div class="field">
+                                    <label class="label" for="delete-password">Delete account</label>
+                                    <p class="help mb-2">This permanently deletes your account, plays, replays and signed in devices. Charts you uploaded stay, without your name on them.</p>
+                                    <div class="control"><input id="delete-password" class="input" type="password" name="password" autocomplete="current-password" placeholder="Your password" required></div>
+                                </div>
+                                <button class="button is-small is-danger" :class="{'is-loading': busy === 'delete'}" type="submit">Delete my account</button>
+                            </form>
+                        </div>
                     </div>
                     <div class="column">
                         <div class="box">
@@ -589,6 +603,13 @@
                             <button type="button" class="button is-small is-danger is-light" @click="signOut(true)">Sign out everywhere</button>
                         </div>
                     </div>
+                </div>
+            </template>
+
+            <template v-else-if="route.name === 'privacy' || route.name === 'terms'">
+                <div class="content legal">
+                    <h1 class="title is-3">{{ view.title }}</h1>
+                    <div v-html="view.html"></div>
                 </div>
             </template>
 
@@ -629,7 +650,7 @@
     </main>
 
     <footer class="footer has-text-centered is-size-7 has-text-grey">
-        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/staff">Staff</a>
+        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/staff">Staff</a>
     </footer>
 </template>
 <div id="app" v-cloak></div>

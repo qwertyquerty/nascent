@@ -27,7 +27,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 include = ["nascent_server*"]
 
 [tool.setuptools.package-data]
-nascent_server = ["site/templates/seo/*"]
+nascent_server = ["site/templates/seo/*", "site/templates/legal/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -45,6 +45,7 @@ namespace nascent {
         ButtonField* sign_out_button = nullptr;
         ButtonField* switch_button = nullptr;
         ButtonField* forgot_button = nullptr;
+        ButtonField* terms_button = nullptr;
 
         std::unique_ptr<EntityFFT> fft;
         std::vector<float> audio_buffer;
@@ -60,6 +61,7 @@ namespace nascent {
         void sign_out();
         void open_profile();
         void open_password_reset();
+        void open_terms();
         void play_menu_sound();
 
         public:

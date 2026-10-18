@@ -1,0 +1,13 @@
+- name: Send a test email
+  hosts: nascent
+  become: true
+  gather_facts: false
+  vars_prompt:
+    - name: address
+      prompt: Send the test email to
+      private: false
+  tasks:
+    - name: Send the test email
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: test_email

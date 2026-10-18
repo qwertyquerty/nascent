@@ -78,6 +78,7 @@ class Config:
         "password_reset_ip": (10, 3600),
         "password_reset_account": (3, 3600),
         "password_reset_confirm": (30, 3600),
+        "account_delete": (5, 3600),
         "ticket": (2000, 3600),
         "submit_burst": (6, 60),
         "submit": (120, 3600),

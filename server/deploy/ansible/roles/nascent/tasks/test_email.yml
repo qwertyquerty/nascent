@@ -1,0 +1,22 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that: address | default('') | length > 0
+    fail_msg: pass the address to send the test email to
+
+- name: Send a test email to {{ address }}
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, send-test-email, "{{ address }}"]
+    chdir: "{{ nascent_compose_dir }}"
+  register: test_email
+  changed_when: test_email.rc == 0
+  failed_when: false
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ test_email.stdout | trim }}"
+  when: test_email.rc == 0
+
+- name: Fail with the reason
+  ansible.builtin.fail:
+    msg: "{{ test_email.stderr | trim }}"
+  when: test_email.rc != 0
