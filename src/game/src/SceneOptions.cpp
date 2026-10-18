@@ -169,6 +169,7 @@ namespace nascent {
         judge_offset_field = &form.add<SliderField>("Judgement line height", settings.field_judge_line_percent, 0, JUDGE_LINE_MAX, PERCENT_STEP, "%");
         scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
         mirror_field = &form.add<ChoiceField>("Mirror", std::vector<std::string>{"Off", "On"}, settings.field_mirror ? 1 : 0);
+        lane_cover_field = &form.add<SliderField>("Noteblock", settings.field_lane_cover, 0, 100, PERCENT_STEP, "%");
         judgement_field = &form.add<ChoiceField>("Judgement", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement ? 1 : 0);
         judgement_height_field = &form.add<SliderField>("Judgement height", settings.field_judgement_height, 0, 100, PERCENT_STEP, "%");
         combo_field = &form.add<ChoiceField>("Combo", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_combo ? 1 : 0);
@@ -226,6 +227,7 @@ namespace nascent {
         settings.display_fullscreen = fullscreen_field->selected == 1;
         settings.field_hitsounds = hitsounds_field->selected == 1;
         settings.field_mirror = mirror_field->selected == 1;
+        settings.field_lane_cover = (uint8_t)lane_cover_field->value;
         settings.field_note_gradient = note_gradient_field->selected == 1;
         settings.title_songs = (TitleSongs)title_music_field->selected;
         settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
@@ -442,6 +444,7 @@ namespace nascent {
         preview_field->judge_height = screen.y * settings.field_judge_line_percent / 100.0;
         preview_field->upscroll = settings.field_upscroll;
         preview_field->mirror = settings.field_mirror;
+        preview_field->lane_cover = settings.field_lane_cover / 100.0;
         preview_field->note_gradient = settings.field_note_gradient;
         preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
     }

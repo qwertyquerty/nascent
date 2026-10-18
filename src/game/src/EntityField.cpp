@@ -160,6 +160,8 @@ namespace nascent {
             }
         }
 
+        draw_lane_cover(window, jl_y);
+
         const JudgedHit* jhit = attempt != nullptr && (draw_hit_score || draw_combo) ? attempt->get_last_scored() : nullptr;
 
         if (jhit != nullptr) {
@@ -272,6 +274,37 @@ namespace nascent {
 
     double EntityField::get_judge_bottom() const {
         return pos.y + size.y - judge_height;
+    }
+
+    void EntityField::draw_lane_cover(olc::PixelGameEngine* window, double judge_y) const {
+        double covered = std::clamp(lane_cover, 0.0, 1.0) * (judge_y - pos.y);
+
+        if (covered <= 0) {
+            return;
+        }
+
+        double fade = std::min(covered, (double)Ui::pxf(LANE_COVER_FADE));
+        double solid_end = pos.y + covered - fade;
+        olc::Pixel opaque = skin->color(SkinColor::SCREEN_BACKGROUND);
+        opaque.a = 255;
+        opaque = with_opacity(opaque);
+        olc::Pixel clear = opaque;
+        clear.a = 0;
+
+        float left = (float)std::floor(pos.x);
+        float width = (float)std::ceil(pos.x + size.x) - left;
+        float solid_top = (float)std::min(flip_y(pos.y), flip_y(solid_end));
+        float solid_bottom = (float)std::max(flip_y(pos.y), flip_y(solid_end));
+        float fade_top = (float)std::min(flip_y(solid_end), flip_y(pos.y + covered));
+        float fade_bottom = (float)std::max(flip_y(solid_end), flip_y(pos.y + covered));
+
+        if (solid_bottom > solid_top) {
+            window->FillRectDecal({left, solid_top}, {width, solid_bottom - solid_top}, opaque);
+        }
+
+        olc::Pixel top_color = upscroll ? clear : opaque;
+        olc::Pixel bottom_color = upscroll ? opaque : clear;
+        window->GradientFillRectDecal({left, fade_top}, {width, fade_bottom - fade_top}, top_color, bottom_color, bottom_color, top_color);
     }
 
     double EntityField::flip_y(double y) const {

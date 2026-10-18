@@ -37,6 +37,7 @@ namespace nascent {
         uint8_t field_timing_bar_length = 33; // % of the screen width
         uint8_t field_timing_bar_width = 5; // % of the screen height
         bool field_mirror = false;
+        uint8_t field_lane_cover = 0;
         bool field_hitsounds = false;
         uint8_t field_background_brightness = 0;
 

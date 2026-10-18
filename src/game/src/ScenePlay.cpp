@@ -183,6 +183,7 @@ namespace nascent {
         field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
         field->draw_hit_score = settings.field_show_judgement;
         field->draw_combo = settings.field_show_combo;
+        field->lane_cover = settings.field_lane_cover / 100.0;
         field->judgement_height = settings.field_judgement_height / 100.0;
         field->combo_height = settings.field_combo_height / 100.0;
 

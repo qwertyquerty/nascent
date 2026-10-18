@@ -38,6 +38,7 @@ namespace nascent {
         ChoiceField* title_music_field = nullptr;
         ChoiceField* fullscreen_field = nullptr;
         ChoiceField* mirror_field = nullptr;
+        SliderField* lane_cover_field = nullptr;
         ChoiceField* hitsounds_field = nullptr;
         SliderField* lane_width_field = nullptr;
         SliderField* background_brightness_field = nullptr;

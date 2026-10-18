@@ -35,6 +35,7 @@ namespace nascent {
         field_timing_bar_length,
         field_timing_bar_width,
         field_mirror,
+        field_lane_cover,
         field_hitsounds,
         field_background_brightness,
         title_logo_start_delay,

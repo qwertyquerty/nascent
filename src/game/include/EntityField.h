@@ -43,6 +43,7 @@ namespace nascent {
         bool mirror = false;
         double judgement_height = 0.45;
         double combo_height = 0.41;
+        double lane_cover = 0;
 
         uint8_t judge_alpha = 64;
 
@@ -54,6 +55,8 @@ namespace nascent {
 
         olc::vd2d pos = {0, 0};
         olc::vd2d size = {0, 0};
+
+        static constexpr float LANE_COVER_FADE = 40.0f;
 
         EntityField(const Chart*, Skin*, olc::vd2d, olc::vd2d);
         void draw(olc::PixelGameEngine*);
@@ -68,6 +71,7 @@ namespace nascent {
         olc::Decal* sized_image(SkinImage image, uint8_t column, uint8_t key_count) const;
         void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
         void draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const;
+        void draw_lane_cover(olc::PixelGameEngine* window, double judge_y) const;
         void set_attempt(const Attempt* attempt);
 
         void set_keys(uint32_t keys);
