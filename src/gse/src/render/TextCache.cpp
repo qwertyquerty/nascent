@@ -103,6 +103,30 @@ namespace nascent {
         return SpriteDecal(std::unique_ptr<olc::Sprite>(font.RenderStringToSprite(std::string(text), color)), true);
     }
 
+    std::string fit_text(olc::Font& font, std::string text, int32_t max_width) {
+        auto width = [&font](const std::string& value) {
+            return value.empty() ? 0 : text_bounds(font, value).size.x;
+        };
+
+        if (width(text) <= max_width) {
+            return text;
+        }
+
+        while (!text.empty() && width(text + "...") > max_width) {
+            text.pop_back();
+
+            while (!text.empty() && ((unsigned char)text.back() & 0xc0) == 0x80) {
+                text.pop_back();
+            }
+
+            if (!text.empty() && (unsigned char)text.back() >= 0xc0) {
+                text.pop_back();
+            }
+        }
+
+        return text + "...";
+    }
+
     void text_cache_begin_frame() {
         text_cache_frame++;
 

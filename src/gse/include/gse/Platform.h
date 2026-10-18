@@ -12,7 +12,8 @@ namespace nascent {
     std::filesystem::path executable_directory();
     bool spawn_detached(const std::filesystem::path& program, const std::vector<std::string>& arguments);
     void use_executable_directory_for_assets();
-    void attach_parent_console();
+    bool attach_parent_console();
+    void redirect_output_to_log(const std::filesystem::path& file);
     std::filesystem::path user_config_directory(const std::string& app_name);
     bool move_into_place(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& ec);
     void precise_sleep(double seconds);

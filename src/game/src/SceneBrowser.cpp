@@ -37,26 +37,6 @@ namespace nascent {
         return text.empty() ? 0 : text_bounds(font, text).size.x;
     }
 
-    static std::string fit_text(olc::Font& font, std::string text, int32_t max_width) {
-        if (text_width(font, text) <= max_width) {
-            return text;
-        }
-
-        while (!text.empty() && text_width(font, text + "...") > max_width) {
-            text.pop_back();
-
-            while (!text.empty() && ((unsigned char)text.back() & 0xc0) == 0x80) {
-                text.pop_back();
-            }
-
-            if (!text.empty() && (unsigned char)text.back() >= 0xc0) {
-                text.pop_back();
-            }
-        }
-
-        return text + "...";
-    }
-
     static std::string format_length(int64_t milliseconds) {
         int64_t seconds = milliseconds / 1000;
         return std::format("{}:{:02}", seconds / 60, seconds % 60);

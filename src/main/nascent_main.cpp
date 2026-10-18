@@ -44,7 +44,10 @@ class NascentMain : public olc::PixelGameEngine {
 };
 
 int main() {
-    attach_parent_console();
+    if (!attach_parent_console()) {
+        redirect_output_to_log(user_config_directory(SettingsManager::APP_NAME) / SettingsManager::LOG_FILE);
+    }
+
     use_executable_directory_for_assets();
     Updater::recover();
     SettingsManager::load();

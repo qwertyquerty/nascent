@@ -971,7 +971,7 @@ namespace nascent {
                         status_color = skin->color(SkinColor::POSITIVE);
                         break;
                     case BeatmapDownloads::State::FAILED:
-                        status = "Failed";
+                        status = fit_text(skin->display_font_small, "Failed: " + download->error(), screen.x - x * 2 - Ui::px(RECOMMENDED_STATUS_OFFSET));
                         status_color = skin->color(SkinColor::TEXT_ERROR);
                         any_failed = true;
                         break;

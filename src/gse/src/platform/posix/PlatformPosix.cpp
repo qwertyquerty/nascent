@@ -29,7 +29,11 @@ namespace nascent {
         return posix_spawn(&pid, path.c_str(), nullptr, nullptr, argv.data(), environ) == 0;
     }
 
-    void attach_parent_console() {
+    bool attach_parent_console() {
+        return true;
+    }
+
+    void redirect_output_to_log(const std::filesystem::path&) {
     }
 
     void precise_sleep(double seconds) {

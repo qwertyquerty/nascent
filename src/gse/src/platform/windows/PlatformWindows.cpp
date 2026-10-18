@@ -67,12 +67,16 @@ namespace nascent {
         return true;
     }
 
-    void attach_parent_console() {
+    bool attach_parent_console() {
         bool missing_out = _fileno(stdout) < 0;
         bool missing_err = _fileno(stderr) < 0;
 
-        if (!(missing_out || missing_err) || !AttachConsole(ATTACH_PARENT_PROCESS)) {
-            return;
+        if (!(missing_out || missing_err)) {
+            return true;
+        }
+
+        if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+            return false;
         }
 
         if (missing_out) {
@@ -81,6 +85,26 @@ namespace nascent {
 
         if (missing_err) {
             std::freopen("CONOUT$", "w", stderr);
+        }
+
+        return true;
+    }
+
+    void redirect_output_to_log(const std::filesystem::path& file) {
+        std::error_code ec;
+        std::filesystem::create_directories(file.parent_path(), ec);
+        std::filesystem::path previous = file;
+        previous.replace_extension(".previous.log");
+        std::filesystem::rename(file, previous, ec);
+
+        if (_wfreopen(file.wstring().c_str(), L"w", stderr) == nullptr) {
+            return;
+        }
+
+        std::setvbuf(stderr, nullptr, _IONBF, 0);
+
+        if (_wfreopen(file.wstring().c_str(), L"a", stdout) != nullptr) {
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
         }
     }
 

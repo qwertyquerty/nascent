@@ -82,6 +82,7 @@ namespace nascent {
     class SettingsManager {
         public:
         static constexpr const char* APP_NAME = "Nascent";
+        static constexpr const char* LOG_FILE = "nascent.log";
         static constexpr const char* SETTINGS_FILE_NAME = "settings.json";
         static constexpr double VOLUME_RANGE_DB = 40.0;
         static constexpr uint32_t SETTINGS_VERSION = 1;
