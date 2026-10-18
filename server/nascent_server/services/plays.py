@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -23,6 +24,16 @@ from .charts import MAX_DURATION_MS, chart_difficulty, get_chart, native_chart, 
 INT32_MIN = -(2**31)
 INT32_MAX = 2**31 - 1
 ACCURACY_TOLERANCE = 1e-9
+REPLAY_TEXT_LIMIT = 256
+REPLAY_PATH_LIMIT = 512
+DIAGNOSTICS_MAX_FIELDS = 64
+DIAGNOSTICS_KEY_LIMIT = 64
+MAX_REPLAY_PAUSES = 1000
+REPLAY_CHART_FIELDS = ("path", "gameplay_hash", "title", "artist", "difficulty_name", "key_count")
+REPLAY_SETTINGS_FIELDS = ("audio_input_offset", "audio_visual_offset", "scroll_speed", "mirror")
+REPLAY_RESULT_FIELDS = ("accuracy", "grade", "max_combo", "score_counts", "average_error", "difficulty", "performance")
+PATH_SEPARATORS = re.compile(r"[\\/]+")
+WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 
 
 @dataclass
@@ -114,6 +125,99 @@ def _validate_raw_inputs(raw_inputs: Any, key_count: int, note_count: int) -> No
 
         if not INT32_MIN <= time <= INT32_MAX or not 0 <= lane < key_count or pressed not in (0, 1):
             raise _invalid_replay(f"input {index} is out of range")
+
+
+def _short(value: Any, limit: int = REPLAY_TEXT_LIMIT) -> Any:
+    return value[:limit] if isinstance(value, str) else value
+
+
+def _pick(value: Any, fields: tuple[str, ...]) -> Any:
+    if not isinstance(value, dict):
+        return value
+
+    return {field: _short(value[field]) for field in fields if field in value}
+
+
+def public_chart_path(path: Any) -> Any:
+    if not isinstance(path, str):
+        return path
+
+    parts = [part for part in PATH_SEPARATORS.split(path) if part]
+
+    if path.startswith(("/", "\\", "~")) or WINDOWS_DRIVE.match(path) or ".." in parts:
+        return parts[-1][:REPLAY_PATH_LIMIT] if parts else ""
+
+    return path[:REPLAY_PATH_LIMIT]
+
+
+def _diagnostics(value: Any) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+
+    kept = {}
+
+    for key, item in value.items():
+        if len(kept) >= DIAGNOSTICS_MAX_FIELDS:
+            break
+
+        if len(key) <= DIAGNOSTICS_KEY_LIMIT and (item is None or isinstance(item, (bool, int, float, str))):
+            kept[key] = _short(item)
+
+    return kept
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def storable_replay(raw: dict) -> dict:
+    replay = {key: raw[key] for key in ("version", "rate", "end_time", "inputs") if key in raw}
+
+    if "played_at" in raw:
+        replay["played_at"] = _short(raw["played_at"])
+
+    if "chart" in raw:
+        chart = _pick(raw["chart"], REPLAY_CHART_FIELDS)
+
+        if isinstance(chart, dict) and "path" in chart:
+            chart["path"] = public_chart_path(raw["chart"]["path"])
+
+        replay["chart"] = chart
+
+    if "settings" in raw:
+        replay["settings"] = _pick(raw["settings"], REPLAY_SETTINGS_FIELDS)
+
+    if "result" in raw:
+        result = _pick(raw["result"], REPLAY_RESULT_FIELDS)
+
+        if isinstance(result, dict) and isinstance(result.get("score_counts"), dict):
+            result["score_counts"] = {name: count for name, count in result["score_counts"].items() if name in nc.HIT_SCORES}
+
+        replay["result"] = result
+
+    diagnostics = _diagnostics(raw.get("diagnostics"))
+
+    if diagnostics is not None:
+        replay["diagnostics"] = diagnostics
+
+    input_times = raw.get("input_times")
+    inputs = raw.get("inputs")
+
+    if isinstance(input_times, list) and isinstance(inputs, list) and len(input_times) == len(inputs) and all(_is_number(time) for time in input_times):
+        replay["input_times"] = input_times
+
+    clock_samples = raw.get("clock_samples")
+
+    if isinstance(clock_samples, list):
+        limit = current_app.config["ANTICHEAT_CLOCK_MAX_SAMPLES"]
+        replay["clock_samples"] = [sample[:2] for sample in clock_samples[:limit] if isinstance(sample, list)]
+
+    pauses = raw.get("pauses")
+
+    if isinstance(pauses, list):
+        replay["pauses"] = [pause[:3] for pause in pauses[:MAX_REPLAY_PAUSES] if isinstance(pause, list)]
+
+    return replay
 
 
 def _validate_replay(replay: nc.Replay, native: nc.Chart) -> None:
@@ -240,11 +344,6 @@ def submit_play(
     submitted_at: datetime | None = None,
 ) -> SubmissionResult:
     require_not_banned(user)
-
-    if not imported:
-        check_rate_limit("submit_burst", user.id)
-        check_rate_limit("submit", user.id)
-
     chart_hash = chart_hash.lower()
     chart = get_chart(chart_hash)
 
@@ -263,7 +362,7 @@ def submit_play(
     _validate_raw_inputs(raw_replay.get("inputs"), native.key_count, native.note_count)
 
     try:
-        replay = nc.Replay.from_json(json.dumps(raw_replay))
+        replay = nc.Replay.from_json(json.dumps(storable_replay(raw_replay)))
     except ValueError as error:
         raise _invalid_replay(f"The replay could not be read: {error}") from None
 
@@ -308,8 +407,6 @@ def submit_play(
     status = PlayStatus.PENDING_REVIEW if eligible and anticheat.needs_review(flags) else PlayStatus.VERIFIED
 
     replay_key = sharded_key("replays", fingerprint, ".json.gz")
-    put_json_gz(replay_key, replay.to_json())
-
     key_count = native.key_count
     key_mode = (
         Standing(key_count, ranking.standing(user, key_count)[0], ranking.global_rank(user, key_count)) if key_count in ranking.ranked_key_counts() else None
@@ -350,6 +447,7 @@ def submit_play(
         db.session.rollback()
         raise ApiError(409, "duplicate_replay", "This replay has already been submitted") from None
 
+    put_json_gz(replay_key, replay.to_json())
     db.session.execute(update(Chart).where(Chart.id == chart.id).values(play_count=Chart.play_count + 1))
     ranking.apply_play_change(user, chart.id, rate_key)
     db.session.commit()

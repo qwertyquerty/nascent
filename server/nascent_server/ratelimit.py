@@ -1,18 +1,19 @@
 import redis
 from flask import current_app
 
-from .cache import store
+from .cache import fallback_store, store
 from .errors import ApiError
 
 
 def _hit(name: str, identity: str | int) -> tuple[bool, int]:
     limit, window = current_app.config["RATE_LIMITS"][name]
+    key = f"{name}:{identity}"
 
     try:
-        count, retry_after = store().hit(f"{name}:{identity}", window)
+        count, retry_after = store().hit(key, window)
     except redis.RedisError:
-        current_app.logger.warning("rate limiter unavailable, allowing %s", name)
-        return False, 0
+        current_app.logger.warning("rate limiter unavailable, counting %s in this process", name)
+        count, retry_after = fallback_store().hit(key, window)
 
     return count > limit, retry_after
 

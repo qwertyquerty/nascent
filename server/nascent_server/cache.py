@@ -140,7 +140,12 @@ class MemoryStore:
 def init_store(app: Flask) -> None:
     url = app.config.get("REDIS_URL")
     app.extensions["nascent_store"] = RedisStore(url, app.config["REDIS_PREFIX"]) if url else MemoryStore()
+    app.extensions["nascent_fallback_store"] = MemoryStore()
 
 
 def store() -> RedisStore | MemoryStore:
     return current_app.extensions["nascent_store"]
+
+
+def fallback_store() -> MemoryStore:
+    return current_app.extensions["nascent_fallback_store"]

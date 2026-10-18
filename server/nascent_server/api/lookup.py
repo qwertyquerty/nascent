@@ -2,13 +2,18 @@ from sqlalchemy import select
 
 from ..errors import ApiError
 from ..extensions import db
+from ..ids import parse_id
 from ..models import COUNTED_PLAY_STATUSES, Play, Role, User
 from ..security import authenticate
 
 
 def get_user_or_404(reference: str) -> User:
-    if reference.isdigit():
-        user = db.session.get(User, int(reference))
+    user_id = parse_id(reference)
+
+    if user_id is not None:
+        user = db.session.get(User, user_id)
+    elif reference.isdigit() or "\x00" in reference:
+        user = None
     else:
         user = db.session.scalar(select(User).where(User.username_key == reference.lower()))
 

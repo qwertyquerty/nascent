@@ -1,5 +1,7 @@
+import json
+
 import nascent_core as nc
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -8,12 +10,13 @@ from ..errors import ApiError
 from ..extensions import db
 from ..models import COUNTED_PLAY_STATUSES, Play, User
 from ..queries import count_rows
+from ..ratelimit import check_rate_limit
 from ..schemas import SubmissionIn, TicketIn, pagination, parse_body, query_int
-from ..security import current_user
+from ..security import current_user, require_not_banned
 from ..serializers import chart_detail, play_out
 from ..services.charts import native_chart
 from ..services.plays import Standing, chart_board_size, chart_rank, issue_ticket, submit_play
-from ..storage import get_json_gz, json_gz_response
+from ..storage import get_json_gz, json_gz_response, put_json_gz, sharded_key, storage, stored_json_response
 from .lookup import can_see_private, get_visible_play_or_404, viewer_is_moderator
 
 blueprint = Blueprint("plays", __name__, url_prefix="/plays")
@@ -74,7 +77,10 @@ def list_plays():
 @blueprint.post("")
 def submit():
     user = current_user()
-    body = parse_body(SubmissionIn)
+    require_not_banned(user)
+    check_rate_limit("submit_burst", user.id)
+    check_rate_limit("submit", user.id)
+    body = parse_body(SubmissionIn, large=True)
     result = submit_play(user, body.chart_hash, body.replay, body.chart, body.ticket)
     return {
         "play": play_out(result.play, include_chart=False, include_private=True),
@@ -86,7 +92,7 @@ def submit():
     }, 201
 
 
-@blueprint.get("/<int:play_id>")
+@blueprint.get("/<id:play_id>")
 def get_play(play_id: int):
     play = get_visible_play_or_404(play_id)
     rank = chart_rank(play) if not play.user.is_banned else None
@@ -94,15 +100,13 @@ def get_play(play_id: int):
     return {"play": play_out(play, include_private=can_see_private(play.user), include_review=viewer_is_moderator()), "leaderboard": leaderboard}
 
 
-@blueprint.get("/<int:play_id>/replay")
+@blueprint.get("/<id:play_id>/replay")
 def get_replay(play_id: int):
     play = get_visible_play_or_404(play_id)
     return json_gz_response(play.replay_key, f"nascent-replay-{play.id}.json")
 
 
-@blueprint.get("/<int:play_id>/timeline")
-def get_timeline(play_id: int):
-    play = get_visible_play_or_404(play_id)
+def build_timeline(play: Play) -> dict:
     native = native_chart(play.chart)
     replay = nc.Replay.from_json(get_json_gz(play.replay_key))
     simulation = nc.simulate(native, replay)
@@ -121,7 +125,7 @@ def get_timeline(play_id: int):
         }
         for note in simulation.notes
     ]
-    body = {
+    return {
         "play_id": play.id,
         "rate": replay.rate,
         "key_count": native.key_count,
@@ -130,4 +134,18 @@ def get_timeline(play_id: int):
         "inputs": [[time, lane, pressed] for time, lane, pressed in replay.inputs],
         "notes": notes,
     }
-    return body, 200, {"Cache-Control": f"public, max-age={TIMELINE_MAX_AGE}"}
+
+
+def timeline_key(play: Play) -> str:
+    return sharded_key("timelines", play.replay_hash, f".j{current_app.config['JUDGE_REVISION']}.json.gz")
+
+
+@blueprint.get("/<id:play_id>/timeline")
+def get_timeline(play_id: int):
+    play = get_visible_play_or_404(play_id)
+    key = timeline_key(play)
+
+    if not storage().exists(key):
+        put_json_gz(key, json.dumps(build_timeline(play), separators=(",", ":")))
+
+    return stored_json_response(key, TIMELINE_MAX_AGE)

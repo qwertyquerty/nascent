@@ -7,6 +7,7 @@ from .cache import init_store
 from .config import Config
 from .errors import register_error_handlers
 from .extensions import db, migrate
+from .ids import IdConverter
 from .storage import init_storage
 
 MIGRATIONS_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "migrations")
@@ -34,6 +35,7 @@ def create_app(config: type[Config] | None = None, overrides: dict | None = None
     app.config.from_object(config or Config)
     app.config.update(overrides or {})
     app.json.sort_keys = False
+    app.url_map.converters["id"] = IdConverter
 
     if app.config["TRUST_PROXY_HOPS"]:
         hops = app.config["TRUST_PROXY_HOPS"]

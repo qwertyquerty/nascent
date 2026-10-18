@@ -36,6 +36,9 @@ class FileStorage:
     def get(self, key: str) -> bytes:
         return self.path(key).read_bytes()
 
+    def exists(self, key: str) -> bool:
+        return self.path(key).is_file()
+
 
 def init_storage(app: Flask) -> None:
     app.extensions["nascent_storage"] = FileStorage(app.config["STORAGE_PATH"])
@@ -71,5 +74,19 @@ def json_gz_response(key: str, download_name: str) -> Response:
 
     response.headers["Content-Disposition"] = f'attachment; filename="{download_name}"'
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    response.headers["Vary"] = "Accept-Encoding"
+    return response
+
+
+def stored_json_response(key: str, max_age: int) -> Response:
+    data = storage().get(key)
+
+    if "gzip" in request.headers.get("Accept-Encoding", ""):
+        response = Response(data, mimetype="application/json")
+        response.headers["Content-Encoding"] = "gzip"
+    else:
+        response = Response(gzip.decompress(data), mimetype="application/json")
+
+    response.headers["Cache-Control"] = f"public, max-age={max_age}"
     response.headers["Vary"] = "Accept-Encoding"
     return response

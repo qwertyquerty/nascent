@@ -19,6 +19,9 @@ from .calculator import DEFAULT_RATE_KEY, calculator_version, rate_for_key
 
 MAX_NOTES = 200_000
 MAX_DURATION_MS = 3 * 60 * 60 * 1000
+MAX_TIMING_POINTS = MAX_NOTES
+CHART_TEXT_LIMIT = 1024
+HASH_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 NATIVE_CACHE_SIZE = 64
 OSU_SOURCE = "osu"
 OSU_ID_PATTERNS = {
@@ -30,9 +33,23 @@ _native_cache: OrderedDict[str, nc.Chart] = OrderedDict()
 _native_lock = Lock()
 
 
+def _bounded_chart(data: dict) -> dict:
+    timing_points = data.get("timing_points")
+
+    if isinstance(timing_points, list) and len(timing_points) > MAX_TIMING_POINTS:
+        raise ApiError(400, "invalid_chart", f"The chart has more than {MAX_TIMING_POINTS:,} timing points")
+
+    info = data.get("info")
+
+    if not isinstance(info, dict):
+        return data
+
+    return {**data, "info": {key: value[:CHART_TEXT_LIMIT] if isinstance(value, str) else value for key, value in info.items()}}
+
+
 def parse_chart(data: dict) -> nc.Chart:
     try:
-        chart = nc.Chart.from_json(json.dumps(data))
+        chart = nc.Chart.from_json(json.dumps(_bounded_chart(data)))
     except ValueError as error:
         raise ApiError(400, "invalid_chart", f"The chart is invalid: {error}") from None
 
@@ -67,6 +84,9 @@ def clear_native_cache() -> None:
 
 
 def get_chart(chart_hash: str) -> Chart | None:
+    if not HASH_PATTERN.fullmatch(chart_hash):
+        return None
+
     return db.session.scalar(select(Chart).where(Chart.hash == chart_hash.lower()))
 
 
@@ -80,7 +100,7 @@ def get_chart_or_404(chart_hash: str) -> Chart:
 
 
 def _text(value: str) -> str:
-    return value[:255]
+    return value.replace("\x00", "")[:255]
 
 
 def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[int] = ()) -> tuple[Chart, bool]:

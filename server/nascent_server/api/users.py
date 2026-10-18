@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from .. import timeutil
 from ..extensions import db
+from ..ids import parse_id
 from ..models import COUNTED_PLAY_STATUSES, Chart, Play, User
 from ..queries import count_rows
 from ..schemas import pagination, query_float, query_int
@@ -25,7 +26,7 @@ FAVORITE_CHARTS = 6
 
 @blueprint.get("")
 def search():
-    term = (request.args.get("q") or "").strip().lower()[:SEARCH_LENGTH]
+    term = (request.args.get("q") or "").replace("\x00", "").strip().lower()[:SEARCH_LENGTH]
     limit = query_int("limit", 8, 1, 25)
 
     if not term:
@@ -170,7 +171,7 @@ def recent_plays(reference: str):
     user = get_user_or_404(reference)
     limit = query_int("limit", 50, 1, 100)
     offset = query_int("offset", 0, 0, 10_000)
-    before = request.args.get("before", type=int)
+    before = parse_id(request.args.get("before"))
 
     query = select(Play).options(joinedload(Play.chart)).where(Play.user_id == user.id)
 

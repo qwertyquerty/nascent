@@ -5,6 +5,7 @@ from flask import Blueprint, Response, current_app, request
 
 from .api.lookup import get_user_or_404, get_visible_play_or_404
 from .errors import ApiError
+from .ids import parse_id
 from .services import ranking
 from .services.charts import get_chart
 
@@ -50,8 +51,8 @@ def _chart_meta(chart_hash: str) -> tuple[str, str]:
     return _chart_name(chart), description
 
 
-def _play_meta(play_id: str) -> tuple[str, str]:
-    play = get_visible_play_or_404(int(play_id))
+def _play_meta(play_id: int) -> tuple[str, str]:
+    play = get_visible_play_or_404(play_id)
     title = f"{play.user.username} · {play.grade} {play.accuracy * 100:.2f}% on {_chart_name(play.chart)}"
     performance = f"{play.performance:.2f} performance" if play.ranked else "unranked"
     description = f"{play.key_count}K · {play.rate:.2f}x · {performance} · {play.max_combo:,}x combo · {play.submitted_at:%b %d, %Y}"
@@ -68,8 +69,8 @@ def _page_meta(path: str) -> tuple[str | None, str]:
         if len(parts) == 2 and parts[0] == "charts":
             return _chart_meta(parts[1])
 
-        if len(parts) == 2 and parts[0] == "plays" and parts[1].isdigit():
-            return _play_meta(parts[1])
+        if len(parts) == 2 and parts[0] == "plays" and (play_id := parse_id(parts[1])) is not None:
+            return _play_meta(play_id)
     except ApiError:
         pass
 

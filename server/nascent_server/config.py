@@ -40,6 +40,8 @@ class Config:
 
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024
     MAX_DECOMPRESSED_BODY = 64 * 1024 * 1024
+    MAX_SMALL_BODY = 64 * 1024
+    MAX_JSON_NODES = 8_000_000
 
     ACCESS_TOKEN_TTL = timedelta(hours=1)
     REFRESH_TOKEN_TTL = timedelta(days=90)

@@ -58,12 +58,12 @@ def list_charts():
         if maximum is not None:
             query = query.where(column <= maximum * scale)
 
-    source = request.args.get("source")
+    source = (request.args.get("source") or "").replace("\x00", "")
 
     if source:
         query = query.where(Chart.sources.any(ChartSource.source == source[:16]))
 
-    search = (request.args.get("q") or "").strip()[:100]
+    search = (request.args.get("q") or "").replace("\x00", "").strip()[:100]
 
     if search:
         pattern = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -87,7 +87,7 @@ def upload_chart():
     user = current_user()
     require_not_banned(user)
     check_rate_limit("chart_upload", user.id)
-    body = json_body()
+    body = json_body(large=True)
 
     if not isinstance(body, dict):
         raise ApiError(400, "invalid_json", "The request body must be a chart object")

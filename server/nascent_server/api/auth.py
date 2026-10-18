@@ -47,10 +47,10 @@ def register():
 
 @blueprint.post("/login")
 def login():
-    body = parse_body(LoginIn)
-    login_key = body.login.lower()
     ip = client_ip()
     check_rate_limit("login_ip", ip)
+    body = parse_body(LoginIn)
+    login_key = body.login.lower()
     check_rate_limit("login_account", f"{login_key}:{ip}")
 
     user = db.session.scalar(select(User).where(or_(User.username_key == login_key, User.email_key == login_key)))
@@ -146,7 +146,7 @@ def sessions():
     }
 
 
-@blueprint.delete("/sessions/<int:session_id>")
+@blueprint.delete("/sessions/<id:session_id>")
 @auth_required
 def revoke_session(session_id: int):
     session = db.session.get(AuthSession, session_id)

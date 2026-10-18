@@ -74,7 +74,7 @@ def client_ip() -> str:
 
 
 def client_name() -> str:
-    return (request.headers.get("User-Agent") or "")[:200]
+    return (request.headers.get("User-Agent") or "").replace("\x00", "")[:200]
 
 
 def issue_session(user: User) -> IssuedTokens:

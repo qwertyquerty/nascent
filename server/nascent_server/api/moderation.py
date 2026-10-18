@@ -32,7 +32,7 @@ def review_queue():
     return {"plays": [play_out(play, include_review=True) for play in plays]}
 
 
-@blueprint.post("/plays/<int:play_id>/review")
+@blueprint.post("/plays/<id:play_id>/review")
 @role_required(Role.MODERATOR)
 def review(play_id: int):
     body = parse_body(ReviewIn)
