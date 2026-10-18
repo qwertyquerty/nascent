@@ -172,6 +172,8 @@ namespace nascent {
                 return olc::Key::SHIFT;
             case kVK_Control:
             case kVK_RightControl:
+            case kVK_Command:
+            case kVK_RightCommand:
                 return olc::Key::CTRL;
             case kVK_CapsLock:
                 return olc::Key::CAPS_LOCK;
@@ -209,7 +211,7 @@ namespace nascent {
             case olc::Key::SHIFT:
                 return NSEventModifierFlagShift;
             case olc::Key::CTRL:
-                return NSEventModifierFlagControl;
+                return NSEventModifierFlagControl | NSEventModifierFlagCommand;
             case olc::Key::CAPS_LOCK:
                 return NSEventModifierFlagCapsLock;
             default:

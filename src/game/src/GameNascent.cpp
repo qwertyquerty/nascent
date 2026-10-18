@@ -138,7 +138,7 @@ namespace nascent {
         }
 
         if (BeatmapDownloads::take_access_denied()) {
-            show_toast("Songs couldn't be saved, an antivirus may be blocking Nascent", true, ACCESS_DENIED_TOAST_TIME);
+            show_toast("Couldn't save songs: allow Nascent in your antivirus or run it as administrator", true, ACCESS_DENIED_TOAST_TIME);
         }
 
         this->elapsed_time = elapsed_time;

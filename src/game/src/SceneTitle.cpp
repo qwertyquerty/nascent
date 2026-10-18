@@ -399,7 +399,7 @@ namespace nascent {
 
         switch (update.status) {
             case UpdateStatus::AVAILABLE:
-                text = std::format("Nascent {} is available, press Ctrl+R to {}", update.release->tag, update.installable ? "update" : "open the download page");
+                text = std::format("Nascent {} is available, click here or press Ctrl+R to {}", update.release->tag, update.installable ? "update" : "open the download page");
                 break;
             case UpdateStatus::DOWNLOADING:
                 text = std::format("Downloading Nascent {}... {}%", update.release->tag, (int)std::floor(update.progress * 100.0));
@@ -408,7 +408,7 @@ namespace nascent {
                 text = "Restarting to finish the update...";
                 break;
             case UpdateStatus::FAILED:
-                text = std::format("Update failed: {}. Press Ctrl+R to try again", update.error);
+                text = std::format("Update failed: {}. Click here or press Ctrl+R to try again", update.error);
                 color = bg_skin->color(SkinColor::UPDATE_NOTICE_ERROR);
                 break;
             default:
