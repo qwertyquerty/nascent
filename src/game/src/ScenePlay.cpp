@@ -74,11 +74,19 @@ namespace nascent {
         this->replay_label = std::move(replay_label);
     }
 
+    double ScenePlay::chart_difficulty() {
+        if (!difficulty) {
+            difficulty = difficulty_load.valid() ? difficulty_load.get() : DifficultyCalculator::calculate(*chart);
+        }
+
+        return *difficulty;
+    }
+
     void ScenePlay::finish() {
         finished = true;
 
         const Attempt& attempt = session->get_attempt();
-        AttemptSummary summary = summarize_attempt(attempt, DifficultyCalculator::calculate(*chart));
+        AttemptSummary summary = summarize_attempt(attempt, chart_difficulty());
 
         if (replay) {
             int continuing_audio_id = -1;
@@ -145,6 +153,12 @@ namespace nascent {
 
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
         start_attempt();
+
+        if (SettingsManager::settings.field_show_performance) {
+            difficulty_load = std::async(std::launch::async, [chart = chart] {
+                return DifficultyCalculator::calculate(*chart);
+            });
+        }
         load_background();
 
         chart_audio_id = load_song_audio(game->audio().engine(), chart->audio_path);
@@ -792,6 +806,12 @@ namespace nascent {
 
         std::string error_text = settings.field_show_average_error ? std::format("{:+.1f}", attempt.get_avg_err()) : std::string();
 
+        if (!difficulty && is_ready(difficulty_load)) {
+            difficulty = difficulty_load.get();
+        }
+
+        std::string performance_text = settings.field_show_performance && difficulty ? std::format("Perf: {:.1f}", performance_for(*difficulty, attempt.get_accuracy())) : std::string();
+
         if (settings.field_show_error_deviation) {
             error_text += std::format("{}± {:.1f}", error_text.empty() ? "" : " ", attempt.get_err_deviation());
         }
@@ -799,6 +819,7 @@ namespace nascent {
         for (auto [shown, text] : {
                  std::pair{settings.field_show_accuracy, std::format("{:.2f}%", attempt.get_accuracy() * 100)},
                  std::pair{!error_text.empty(), error_text + " ms"},
+                 std::pair{!performance_text.empty(), performance_text},
              }) {
             if (shown) {
                 draw_text(skin->display_font_medium, text, Ui::px(20), stat_y, skin->color(SkinColor::TEXT));

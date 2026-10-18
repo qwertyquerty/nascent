@@ -177,6 +177,7 @@ namespace nascent {
         accuracy_field = &form.add<ChoiceField>("Accuracy", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_accuracy ? 1 : 0);
         average_error_field = &form.add<ChoiceField>("Average error", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_average_error ? 1 : 0);
         error_deviation_field = &form.add<ChoiceField>("Error deviation", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_error_deviation ? 1 : 0);
+        performance_field = &form.add<ChoiceField>("Performance prediction", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_performance ? 1 : 0);
         timing_bar_field = &form.add<ChoiceField>("Hit timing bar", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_bar ? 1 : 0);
         timing_bar_height_field = &form.add<SliderField>("Hit timing bar height", settings.field_timing_bar_height, 0, 100, PERCENT_STEP, "%");
         timing_bar_length_field = &form.add<SliderField>("Hit timing bar length", settings.field_timing_bar_length, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH, PERCENT_STEP, "%");
@@ -244,6 +245,7 @@ namespace nascent {
         settings.field_show_accuracy = accuracy_field->selected == 1;
         settings.field_show_average_error = average_error_field->selected == 1;
         settings.field_show_error_deviation = error_deviation_field->selected == 1;
+        settings.field_show_performance = performance_field->selected == 1;
         settings.field_combo_height = (uint8_t)combo_height_field->value;
         settings.field_show_timing_bar = timing_bar_field->selected == 1;
         settings.field_timing_bar_height = (uint8_t)timing_bar_height_field->value;

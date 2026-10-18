@@ -40,6 +40,8 @@ namespace nascent {
         Skin* skin;
 
         std::optional<Replay> replay;
+        std::future<double> difficulty_load;
+        std::optional<double> difficulty;
         std::string replay_label;
         size_t replay_cursor = 0;
 
@@ -77,6 +79,7 @@ namespace nascent {
         void feed_replay(double position, bool sounds);
         void seek_replay(double target, double now);
         void finish();
+        double chart_difficulty();
         void start_attempt();
         void request_ticket();
         bool ticket_pending(double now);

@@ -29,6 +29,7 @@ namespace nascent {
         field_show_accuracy,
         field_show_average_error,
         field_show_error_deviation,
+        field_show_performance,
         field_combo_height,
         field_show_timing_bar,
         field_timing_bar_height,

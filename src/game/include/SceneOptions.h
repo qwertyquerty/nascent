@@ -53,6 +53,7 @@ namespace nascent {
         ChoiceField* accuracy_field = nullptr;
         ChoiceField* average_error_field = nullptr;
         ChoiceField* error_deviation_field = nullptr;
+        ChoiceField* performance_field = nullptr;
         ChoiceField* timing_bar_field = nullptr;
         SliderField* timing_bar_height_field = nullptr;
         SliderField* timing_bar_length_field = nullptr;
