@@ -6,8 +6,13 @@
     <meta name="nascent-api" content="/api/v1">
     <meta name="theme-color" content="#00b1e1">
     <title>Nascent</title>
-    <style>[v-cloak] { display: none !important; }</style>
+    <script>document.documentElement.classList.add("js");</script>
+    <style>[v-cloak] { display: none !important; } .js .prerender { display: none; }</style>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="icon" type="image/png" href="/logo_n.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
     <link rel="preload" href="/display_font.ttf" as="font" type="font/ttf" crossorigin>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css" integrity="sha384-tl5h4XuWmVzPeVWU0x8bx0j/5iMwCBduLEgZ+2lH4Wjda+4+q3mpCww74dgAB3OX" crossorigin="anonymous">
     <link rel="stylesheet" href="/app.css">
@@ -18,7 +23,8 @@
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to content</a>
-<div id="app" v-cloak>
+<!--prerender-->
+<template id="app-template">
     <nav class="navbar has-shadow" aria-label="Main">
         <div class="container">
             <div class="navbar-brand">
@@ -624,6 +630,7 @@
     <footer class="footer has-text-centered is-size-7 has-text-grey">
         Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/staff">Staff</a>
     </footer>
-</div>
+</template>
+<div id="app" v-cloak></div>
 </body>
 </html>

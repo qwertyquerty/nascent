@@ -188,8 +188,8 @@ def test_malformed_lookups_are_not_server_errors(api, client):
     assert api.get(f"/api/v1/users/player/plays/recent?before={huge}").status_code == 200
     assert api.get("/api/v1/users?q=%00").status_code == 200
     assert api.get("/api/v1/charts?q=%00&source=%00").status_code == 200
-    assert client.get(f"/plays/{huge}").status_code == 200
-    assert client.get(f"/users/{huge}").status_code == 200
+    assert client.get(f"/plays/{huge}").status_code == 404
+    assert client.get(f"/users/{huge}").status_code == 404
     assert api.post("/api/v1/auth/login", {"login": f"player{NUL}", "password": "whatever"}).status_code == 400
 
 

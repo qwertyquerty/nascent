@@ -54,6 +54,8 @@ class Config:
     RANKED_MIN_NOTES = 15
 
     STATS_CACHE_SECONDS = 30
+    SITE_PAGE_CACHE_SECONDS = 300
+    SITEMAP_CACHE_SECONDS = 3600
     STATS_ACTIVITY_CACHE_SECONDS = 300
     WEB_DIR = os.environ.get("NASCENT_WEB_DIR", str(Path(__file__).resolve().parents[1] / "web"))
 
@@ -114,6 +116,8 @@ class TestConfig(Config):
     TESTING = True
     STATS_CACHE_SECONDS = 0
     STATS_ACTIVITY_CACHE_SECONDS = 0
+    SITE_PAGE_CACHE_SECONDS = 0
+    SITEMAP_CACHE_SECONDS = 0
     SQLALCHEMY_DATABASE_URI = os.environ.get("NASCENT_TEST_DATABASE_URL", "sqlite://")
     SQLALCHEMY_ENGINE_OPTIONS = {}
     REDIS_URL = os.environ.get("NASCENT_TEST_REDIS_URL")

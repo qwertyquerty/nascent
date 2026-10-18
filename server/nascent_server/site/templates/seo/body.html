@@ -1,0 +1,12 @@
+<div id="prerender" class="prerender section"><div class="container content">
+<nav aria-label="Site"><p>{% for href, name in nav %}<a href="{{ href }}">{{ name }}</a>{{ " · " if not loop.last }}{% endfor %}</p></nav>
+<article>
+<h1>{{ page.heading }}</h1>
+{% for line in page.intro %}<p>{{ line }}</p>
+{% endfor %}
+{%- for title, items in page.sections if items %}
+<h2>{{ title }}</h2>
+<ul>{% for href, text, note in items %}<li><a href="{{ href }}">{{ text }}</a>{% if note %} · {{ note }}{% endif %}</li>{% endfor %}</ul>
+{%- endfor %}
+</article>
+</div></div>

@@ -56,11 +56,11 @@ def test_page_shell_meta(api, clock):
     play = ranked_play(api, clock)["play"]
 
     home = api.get("/").get_data(as_text=True)
-    assert "<title>Nascent</title>" in home
+    assert "<title>Nascent · A vertical scrolling rhythm game passion project</title>" in home
     assert 'property="og:description"' in home
 
     profile = api.get("/users/alice").get_data(as_text=True)
-    assert "<title>alice · Nascent</title>" in profile
+    assert "<title>alice · 4K #1 · Nascent</title>" in profile
     assert "4K #1 of 1" in profile
 
     chart = api.get(f"/charts/{HASH}").get_data(as_text=True)
@@ -70,8 +70,9 @@ def test_page_shell_meta(api, clock):
     assert "alice · " in play_page
     assert "on Test Artist - Test Song [Hard]" in play_page
 
-    missing = api.get("/users/nobody").get_data(as_text=True)
-    assert "<title>Nascent</title>" in missing
+    missing = api.get("/users/nobody")
+    assert missing.status_code == 404
+    assert "<title>Page not found · Nascent</title>" in missing.get_data(as_text=True)
 
     unknown_api = api.get("/api/v1/nothing-here")
     assert unknown_api.status_code == 404

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<{{ root }} xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{% for loc, lastmod in entries %}<{{ item }}><loc>{{ loc }}</loc>{% if lastmod %}<lastmod>{{ lastmod }}</lastmod>{% endif %}</{{ item }}>{% endfor %}</{{ root }}>

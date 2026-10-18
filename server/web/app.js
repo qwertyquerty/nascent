@@ -59,6 +59,7 @@ const STAFF_ROLES = ["moderator", "admin"];
 const DEFAULT_INFO = {ranked_key_counts: [4, 5, 6, 7, 8, 9, 10], password_reset: false};
 
 let memorySession = null;
+let servedTitle = true;
 let refreshing = null;
 let infoRequest = null;
 
@@ -570,6 +571,8 @@ const loaders = {
 };
 
 const app = Vue.createApp({
+    template: "#app-template",
+
     data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, user: null, busy: null, formError: null, formNotice: null, flash: null, staffError: null, reviewNotes: {}, reviewBusy: null}),
 
     async created() {
@@ -577,6 +580,7 @@ const app = Vue.createApp({
             history.replaceState(null, "", location.hash.slice(1));
         }
 
+        document.getElementById("prerender")?.remove();
         addEventListener("popstate", () => this.load());
         addEventListener(SIGNED_OUT, () => (this.user = null));
         addEventListener("storage", (event) => event.key === SESSION_KEY && this.refreshUser());
@@ -660,6 +664,7 @@ const app = Vue.createApp({
 
                 if (view.redirect) {
                     if (current()) {
+                        servedTitle = false;
                         history.replaceState(null, "", view.redirect);
                         this.load();
                     }
@@ -669,14 +674,24 @@ const app = Vue.createApp({
 
                 if (current()) {
                     this.view = view;
-                    document.title = view.title ? `${view.title} · Nascent` : "Nascent";
+
+                    if (!servedTitle) {
+                        document.title = view.title ? `${view.title} · Nascent` : "Nascent · A vertical scrolling rhythm game passion project";
+                    }
+
+                    servedTitle = false;
                 }
             }
             catch (error) {
                 if (current()) {
                     this.view = null;
                     this.error = error.message;
-                    document.title = "Nascent";
+
+                    if (!servedTitle) {
+                        document.title = "Nascent";
+                    }
+
+                    servedTitle = false;
                 }
             }
             finally {
