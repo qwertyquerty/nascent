@@ -1,3 +1,5 @@
+import zlib
+
 import click
 import nascent_core as nc
 from flask.cli import with_appcontext
@@ -36,7 +38,7 @@ def backfill_fingerprints(batch: int):
 
                 replay = nc.Replay.from_json(get_json_gz(play.replay_key))
                 play.fingerprint = anticheat.fingerprint(nc.simulate(natives[play.chart_id], replay), replay.inputs)
-            except Exception as error:
+            except (OSError, EOFError, ValueError, RuntimeError, zlib.error) as error:
                 skipped += 1
                 click.echo(f"skipped play {play.id}: {error}")
                 continue

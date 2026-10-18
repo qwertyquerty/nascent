@@ -1,6 +1,5 @@
 import re
 
-from nascent_server.extensions import db
 from nascent_server.services import mail
 
 from .test_auth import login

@@ -1,3 +1,4 @@
+import itertools
 import re
 import statistics
 from collections import defaultdict
@@ -215,7 +216,7 @@ def clock_flags(samples: Any, config: Mapping[str, Any]) -> list[Flag]:
 
     ratios = []
 
-    for (wall_a, song_a), (wall_b, song_b) in zip(points, points[1:]):
+    for (wall_a, song_a), (wall_b, song_b) in itertools.pairwise(points):
         wall = wall_b - wall_a
         song = song_b - song_a
 
