@@ -824,6 +824,23 @@ app.config.globalProperties.$link = link;
 app.component("replay-viewer", ReplayViewer);
 app.component("hit-error-graph", HitErrorGraph);
 
+const HERO_SPRITES = [1, 3, 2, 4];
+const HERO_COLORS = ["#00b1e1", "#00c6c9", "#00dcb1", "#00f59a"];
+const HERO_PATTERN = [[0, 0], [1, 2], [2, 1], [3, 3], [4, 0], [4, 3], [5, 1], [6, 2], [7, 3]];
+const HERO_STEPS = 8;
+const HERO_SECONDS = 3.2;
+
+app.component("hero-notes", {
+    data: () => ({notes: HERO_PATTERN.map(([step, lane]) => ({lane, delay: (-step / HERO_STEPS) * HERO_SECONDS}))}),
+    methods: {
+        lane: (index) => ({"--lane": index, "--color": HERO_COLORS[index], "--sprite": `url(/skins/default/note_${HERO_SPRITES[index]}.png)`}),
+    },
+    template: `<div class="hero-notes" aria-hidden="true"><div class="hero-lanes" :style="{'--seconds': '${HERO_SECONDS}s'}">
+        <span v-for="index in 4" :key="'receptor' + index" class="hero-receptor" :style="lane(index - 1)"></span>
+        <span v-for="(note, index) in notes" :key="index" class="hero-note" :style="{...lane(note.lane), animationDelay: note.delay + 's'}"></span>
+    </div></div>`,
+});
+
 app.component("logo-loader", {
     template: `<div class="logo-loader" role="status" aria-label="Loading">
         <img v-for="letter in 7" :key="letter" :src="'/letters/' + letter + '.png'" :style="{animationDelay: (letter - 1) * 0.11 + 's'}" alt="">

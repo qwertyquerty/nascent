@@ -130,13 +130,69 @@ a.navbar-item.is-active:focus-within {
 }
 
 .hero {
+    position: relative;
+    overflow: hidden;
     margin-bottom: 2rem;
     border-radius: 12px;
     background: radial-gradient(ellipse at 20% 0%, rgba(0, 177, 225, 0.18), transparent 60%), radial-gradient(ellipse at 90% 100%, rgba(0, 245, 154, 0.12), transparent 55%), #070a0e;
 }
 
 .hero-body {
+    position: relative;
     padding: 3rem 2rem;
+}
+
+.hero-notes {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 45%;
+    pointer-events: none;
+    mask-image: linear-gradient(90deg, transparent, #000 40%);
+}
+
+.hero-lanes {
+    --size: 3.25rem;
+    --gap: 0.6rem;
+    position: absolute;
+    top: -35%;
+    left: 50%;
+    width: calc(var(--size) * 4 + var(--gap) * 3);
+    height: 170%;
+    transform: translateX(-50%) rotate(-24deg);
+    mask-image: linear-gradient(transparent, #000 25%, #000 85%, transparent);
+    filter: drop-shadow(0 0 0.6rem rgba(0, 200, 200, 0.45));
+}
+
+.hero-note,
+.hero-receptor {
+    position: absolute;
+    left: calc(var(--lane) * (var(--size) + var(--gap)));
+    width: var(--size);
+    background-color: var(--color);
+    mask: var(--sprite) center top / var(--size) no-repeat;
+}
+
+.hero-receptor {
+    top: 78%;
+    height: var(--size);
+    opacity: 0.25;
+}
+
+.hero-note {
+    top: 0;
+    height: 100%;
+    animation: hero-scroll var(--seconds) linear infinite;
+    will-change: transform;
+}
+
+@keyframes hero-scroll {
+    from {
+        transform: translateY(calc(-1 * var(--size)));
+    }
+
+    to {
+        transform: translateY(78%);
+    }
 }
 
 .home-logo {
@@ -795,6 +851,12 @@ a.navbar-item.is-active:focus-within {
     }
 }
 
+@media screen and (max-width: 1023px) {
+    .hero-notes {
+        display: none;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .logo-loader img {
         animation: none;
@@ -803,6 +865,10 @@ a.navbar-item.is-active:focus-within {
 
     .grade-X {
         animation: none;
+    }
+
+    .hero-notes {
+        display: none;
     }
 }
 
