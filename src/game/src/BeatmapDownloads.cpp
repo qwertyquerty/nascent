@@ -9,6 +9,7 @@
 #include <miniz.h>
 
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -24,6 +25,7 @@ namespace nascent {
     static std::mutex downloads_mutex;
     static std::map<int64_t, std::shared_ptr<BeatmapDownloads::Download>> downloads;
     static std::atomic<bool> library_changed = false;
+    static std::atomic<bool> access_denied = false;
 
     static std::string folder_name(const std::string& text) {
         std::string name;
@@ -202,10 +204,15 @@ namespace nascent {
             else {
                 std::error_code ec;
                 std::filesystem::create_directories(target.parent_path(), ec);
+                errno = 0;
                 std::ofstream file(target, std::ios::binary | std::ios::trunc);
                 file.write(static_cast<const char*>(data), (std::streamsize)size);
 
                 if (!file) {
+                    if (ec == std::errc::permission_denied || errno == EACCES) {
+                        access_denied = true;
+                    }
+
                     failure = ec ? ec.message() : std::string("the file could not be created");
                 }
             }
@@ -251,6 +258,10 @@ namespace nascent {
         }
 
         if (!move_into_place(staging, destination, ec)) {
+            if (ec == std::errc::permission_denied) {
+                access_denied = true;
+            }
+
             error = std::format("could not move the beatmap into the songs folder: {}", ec.message());
             std::filesystem::remove_all(staging, ec);
             return false;
@@ -397,6 +408,10 @@ namespace nascent {
 
     bool BeatmapDownloads::take_library_changed() {
         return library_changed.exchange(false);
+    }
+
+    bool BeatmapDownloads::take_access_denied() {
+        return access_denied.exchange(false);
     }
 
     BeatmapDownloads::ImportResult BeatmapDownloads::import_archive(const std::filesystem::path& file) {

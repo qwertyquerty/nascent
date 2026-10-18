@@ -42,6 +42,7 @@ namespace nascent {
 
         public:
         static constexpr int32_t FPS_COUNTER_WIDTH = 100;
+        static constexpr float ACCESS_DENIED_TOAST_TIME = 12.0f;
 
         static int32_t fps_counter_width();
 

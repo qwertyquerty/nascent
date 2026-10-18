@@ -137,6 +137,10 @@ namespace nascent {
             show_toast(std::move(notice->message), notice->is_error, ToastOverlay::DEFAULT_TIME);
         }
 
+        if (BeatmapDownloads::take_access_denied()) {
+            show_toast("Songs couldn't be saved, an antivirus may be blocking Nascent", true, ACCESS_DENIED_TOAST_TIME);
+        }
+
         this->elapsed_time = elapsed_time;
         update_scene(elapsed_time);
         RichPresence::update(elapsed_time);

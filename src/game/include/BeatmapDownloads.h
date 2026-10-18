@@ -47,6 +47,7 @@ namespace nascent {
         static std::shared_ptr<Download> find(int64_t set_id);
         static bool cancel(int64_t set_id);
         static bool take_library_changed();
+        static bool take_access_denied();
         static ImportResult import_archive(const std::filesystem::path& file);
     };
 }
