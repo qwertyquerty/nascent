@@ -85,4 +85,9 @@ namespace nascent {
         std::filesystem::create_directories(folder, ec);
         return run_opener(folder.string());
     }
+
+    bool open_file(const std::filesystem::path& file) {
+        std::error_code ec;
+        return std::filesystem::is_regular_file(file, ec) && run_opener(file.string());
+    }
 }

@@ -2,9 +2,11 @@
 
 #include "BeatmapDownloads.h"
 #include "EtternaSkin.h"
+#include "Screenshots.h"
 #include "gse/Game.h"
 
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <memory>
 #include <string>
@@ -28,12 +30,15 @@ namespace nascent {
         std::future<SkinImportResult> skin_import;
         std::vector<std::future<BeatmapDownloads::ImportResult>> beatmap_imports;
         ToastOverlay* toasts = nullptr;
+        bool screenshot_requested = false;
+        std::future<ScreenshotResult> screenshot_save;
 
         void bind_actions();
         void handle_dropped_files();
+        void update_screenshot();
         void on_screen_resize() override;
         void on_back() override;
-        void show_toast(std::string message, bool is_error, float duration);
+        void show_toast(std::string message, bool is_error, float duration, std::function<void()> action = {});
 
         public:
         static constexpr int32_t FPS_COUNTER_WIDTH = 100;

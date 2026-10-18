@@ -15,6 +15,7 @@ namespace nascent {
     bool copy_to_clipboard(const std::string& text);
     bool open_url(const std::string& url);
     bool open_folder(const std::filesystem::path& folder);
+    bool open_file(const std::filesystem::path& file);
     std::string platform_description();
     void set_cursor_hidden(bool hidden);
 }

@@ -12,9 +12,10 @@
 namespace nascent {
     ToastOverlay::ToastOverlay(Skin* skin) : skin(skin) {}
 
-    void ToastOverlay::show(std::string message, bool is_error, float duration) {
+    void ToastOverlay::show(std::string message, bool is_error, float duration, std::function<void()> action) {
         this->message = std::move(message);
         this->is_error = is_error;
+        this->action = std::move(action);
         timer = duration;
     }
 
@@ -23,6 +24,10 @@ namespace nascent {
         Input& input = game->input();
 
         if (timer > FADE_TIME && input.clicked(0) && area.contains(input.mouse_position()) && input.take_click(0)) {
+            if (std::function<void()> clicked = std::exchange(action, {})) {
+                clicked();
+            }
+
             timer = FADE_TIME;
         }
     }

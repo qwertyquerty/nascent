@@ -4,6 +4,7 @@
 #include "gse/ui/Layout.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 namespace nascent {
@@ -15,6 +16,7 @@ namespace nascent {
         std::string message;
         float timer = 0;
         bool is_error = false;
+        std::function<void()> action;
         Rect area;
 
         public:
@@ -26,7 +28,7 @@ namespace nascent {
 
         explicit ToastOverlay(Skin* skin);
 
-        void show(std::string message, bool is_error, float duration = DEFAULT_TIME);
+        void show(std::string message, bool is_error, float duration = DEFAULT_TIME, std::function<void()> action = {});
         void update(float elapsed_time) override;
         void draw(olc::PixelGameEngine* window) override;
         bool is_modal() const override;

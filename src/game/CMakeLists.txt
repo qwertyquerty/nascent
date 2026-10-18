@@ -29,6 +29,7 @@ add_library(game
     src/ScenePlay.cpp
     src/SceneResults.cpp
     src/SceneTitle.cpp
+    src/Screenshots.cpp
     src/ServerApi.cpp
     src/ServerClient.cpp
     src/SettingsManager.cpp

@@ -11,6 +11,7 @@
 #include "RichPresence.h"
 #include "SceneTitle.h"
 #include "SettingsManager.h"
+#include "gse/Platform.h"
 #include "StatusBar.h"
 #include "Skin.h"
 #include "SubmissionQueue.h"
@@ -29,6 +30,8 @@
 #include <ctime>
 #include <format>
 #include <limits>
+#include <optional>
+#include <utility>
 
 namespace nascent {
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
@@ -119,6 +122,7 @@ namespace nascent {
             return;
         }
 
+        update_screenshot();
         limit_frame_rate(SettingsManager::settings.frame_rate_limit);
         begin_frame(elapsed_time);
         text_cache_begin_frame();
@@ -151,13 +155,43 @@ namespace nascent {
         overlays().draw(window);
     }
 
+    void GameNascent::update_screenshot() {
+        if (is_ready(screenshot_save)) {
+            ScreenshotResult result = screenshot_save.get();
+
+            if (result.ok) {
+                show_toast(std::format("Screenshot saved: {} (click to open)", path_utf8(result.path.filename())), false, ToastOverlay::DEFAULT_TIME, [path = result.path] {
+                    open_file(path);
+                });
+            }
+            else {
+                show_toast(std::format("Screenshot failed: {}", result.error), true, ToastOverlay::DEFAULT_TIME);
+            }
+        }
+
+        if (std::exchange(screenshot_requested, false) && !screenshot_save.valid()) {
+            if (std::optional<CapturedFrame> frame = capture_displayed_frame()) {
+                screenshot_save = std::async(std::launch::async, [frame = std::move(*frame)] {
+                    return Screenshots::save(frame);
+                });
+            }
+            else {
+                show_toast("Screenshot failed: couldn't read the screen", true, ToastOverlay::DEFAULT_TIME);
+            }
+        }
+
+        if (input().key_pressed(InputManager::get_key(KeyBinding::SCREENSHOT))) {
+            screenshot_requested = true;
+        }
+    }
+
     int32_t GameNascent::fps_counter_width() {
         return SettingsManager::settings.show_fps ? Ui::px(FPS_COUNTER_WIDTH) : 0;
     }
 
-    void GameNascent::show_toast(std::string message, bool is_error, float duration) {
+    void GameNascent::show_toast(std::string message, bool is_error, float duration, std::function<void()> action) {
         if (toasts != nullptr) {
-            toasts->show(std::move(message), is_error, duration);
+            toasts->show(std::move(message), is_error, duration, std::move(action));
         }
     }
 

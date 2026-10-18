@@ -13,6 +13,7 @@ add_library(gse
     src/input/KeyEvents.cpp
     src/input/TextInput.cpp
     src/platform/Platform.cpp
+    src/render/FrameCapture.cpp
     src/render/MipDecal.cpp
     src/render/ShapeSprite.cpp
     src/render/SpriteDecal.cpp

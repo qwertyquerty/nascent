@@ -17,7 +17,8 @@ namespace nascent {
         RESTART,
         DIAGNOSTICS,
         COPY_DIAGNOSTICS,
-        SKIP_INTRO
+        SKIP_INTRO,
+        SCREENSHOT
     };
 
     namespace game_actions {
@@ -30,12 +31,13 @@ namespace nascent {
         olc::Key default_key;
     };
 
-    inline constexpr std::array<KeyBindingInfo, 5> KEY_BINDINGS = {{
+    inline constexpr std::array<KeyBindingInfo, 6> KEY_BINDINGS = {{
         {"pause", "Pause", olc::Key::TAB},
         {"restart", "Quick restart (hold)", olc::Key::OEM_3},
         {"diagnostics", "Diagnostics overlay", olc::Key::F10},
         {"copy_diagnostics", "Copy diagnostics", olc::Key::F11},
         {"skip_intro", "Skip intro", olc::Key::SPACE},
+        {"screenshot", "Screenshot", olc::Key::F12},
     }};
 
     class InputManager {

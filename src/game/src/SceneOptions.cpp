@@ -183,7 +183,7 @@ namespace nascent {
         timing_bar_length_field = &form.add<SliderField>("Hit timing bar length", settings.field_timing_bar_length, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH, PERCENT_STEP, "%");
         timing_bar_width_field = &form.add<SliderField>("Hit timing bar width", settings.field_timing_bar_width, TIMING_BAR_WIDTH_MIN, TIMING_BAR_WIDTH_MAX, PERCENT_STEP, "%");
 
-        form.add<SectionField>("Gameplay keys");
+        form.add<SectionField>("Keys");
 
         for (size_t index = 0; index < KEY_BINDINGS.size(); index++) {
             key_fields.push_back(&form.add<KeyBindField>((KeyBinding)index));
