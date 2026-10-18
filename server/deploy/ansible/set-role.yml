@@ -1,0 +1,17 @@
+- name: Set a player's role
+  hosts: nascent
+  become: true
+  gather_facts: false
+  vars_prompt:
+    - name: player
+      prompt: Player name
+      private: false
+    - name: role
+      prompt: Role (admin, moderator or user)
+      private: false
+      default: admin
+  tasks:
+    - name: Set the role
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: set_role

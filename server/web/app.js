@@ -48,7 +48,7 @@ const GRADE_COLORS = Object.fromEntries([..."XSABCDEF"].map((grade) => [grade, P
 const LEADERBOARD_SORT = {sort: "performance", order: "desc"};
 const CHART_SORT = {sort: "play_count", order: "desc"};
 
-const query = (params = {}) => new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== "")).toString();
+const query = (params) => new URLSearchParams(Object.entries(params ?? {}).filter(([, value]) => value != null && value !== "")).toString();
 const pageOf = (params) => Math.max(1, parseInt(params.page, 10) || 1);
 const paged = (params) => ({limit: PAGE_SIZE, offset: (pageOf(params) - 1) * PAGE_SIZE});
 

@@ -1,0 +1,24 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - player | default('') | length > 0
+      - role in ['admin', 'moderator', 'user']
+    fail_msg: pass the player's name with -e player=name and -e role=admin, moderator or user
+
+- name: Make {{ player }} a {{ role }}
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, set-role, "{{ player }}", "{{ role }}"]
+    chdir: "{{ nascent_compose_dir }}"
+  register: set_role
+  changed_when: set_role.rc == 0
+  failed_when: false
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ set_role.stdout | trim }}"
+  when: set_role.rc == 0
+
+- name: Fail with the reason
+  ansible.builtin.fail:
+    msg: "{{ set_role.stderr | trim }}"
+  when: set_role.rc != 0
