@@ -36,6 +36,7 @@ namespace nascent {
             {"hold_head", SkinImage::NOTE},
             {"hold_body", std::nullopt},
             {"hold_cap", std::nullopt},
+            {"mascot", std::nullopt},
         }};
 
         constexpr std::array<const char*, SKIN_SOUND_COUNT> SOUND_STEMS = {"hitsound", "idle_loop", "account_loop"};
@@ -201,6 +202,16 @@ namespace nascent {
 
         if (has("receptor_alpha", nlohmann::json::value_t::number_float)) {
             receptor_alpha = clamp_alpha(config["receptor_alpha"]);
+        }
+
+        if (has("mascot", nlohmann::json::value_t::object)) {
+            const nlohmann::json& settings = config["mascot"];
+
+            for (auto [key, target] : {std::pair{"width", &mascot.width}, std::pair{"x", &mascot.x}, std::pair{"y", &mascot.y}}) {
+                if (settings.contains(key) && settings[key].is_number()) {
+                    *target = std::clamp(settings[key].get<double>(), 0.0, 100.0);
+                }
+            }
         }
 
         apply_colors(config);
@@ -540,6 +551,10 @@ namespace nascent {
 
         const MipDecal& chosen = decals[index % decals.size()];
         return chosen ? &chosen : nullptr;
+    }
+
+    const SkinMascot& Skin::mascot() const {
+        return skin_manifest.mascot;
     }
 
     olc::Decal* Skin::hit_score_decal(HitScore score) const {

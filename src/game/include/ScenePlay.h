@@ -104,6 +104,7 @@ namespace nascent {
         void draw_replay_bar(olc::PixelGameEngine* window) const;
         void load_background();
         void draw_background(olc::PixelGameEngine* window) const;
+        void draw_mascot(olc::PixelGameEngine* window) const;
 
         public:
         void on_resize() override;

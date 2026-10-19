@@ -644,6 +644,22 @@ namespace nascent {
         });
     }
 
+    void ScenePlay::draw_mascot(olc::PixelGameEngine* window) const {
+        const MipDecal* mascot = skin->image(SkinImage::MASCOT, 0, 0);
+
+        if (mascot == nullptr || mascot->size().x <= 0) {
+            return;
+        }
+
+        const SkinMascot& placement = skin->mascot();
+        olc::vf2d screen = window->GetScreenSize();
+        float scale = (float)(screen.x * placement.width / 100.0) / mascot->size().x;
+        olc::vf2d drawn = mascot->size() * scale;
+        olc::vf2d center = {(float)(screen.x * placement.x / 100.0), (float)(screen.y * placement.y / 100.0)};
+        MipDecal::Pick level = mascot->pick(scale);
+        window->DrawDecal(center - drawn / 2.0f, level.decal, {scale / level.factor, scale / level.factor});
+    }
+
     void ScenePlay::draw_background(olc::PixelGameEngine* window) const {
         uint8_t brightness = SettingsManager::settings.field_background_brightness;
         const MipDecal* image = borrowed_background != nullptr ? borrowed_background : &background_image;
@@ -836,6 +852,7 @@ namespace nascent {
         const Attempt& attempt = session->get_attempt();
 
         draw_background(window);
+        draw_mascot(window);
         field->draw(window);
 
         double position = paused ? paused_position : session->song_position(now_ms());

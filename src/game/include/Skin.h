@@ -31,10 +31,11 @@ namespace nascent {
         RECEPTOR_PRESSED,
         HOLD_HEAD,
         HOLD_BODY,
-        HOLD_CAP
+        HOLD_CAP,
+        MASCOT
     };
 
-    inline constexpr size_t SKIN_IMAGE_COUNT = 6;
+    inline constexpr size_t SKIN_IMAGE_COUNT = 7;
 
     enum class SkinSound : uint8_t {
         HITSOUND,
@@ -176,6 +177,12 @@ namespace nascent {
     inline constexpr size_t SKIN_COLOR_COUNT = SKIN_COLOR_NAMES.size();
     static_assert((size_t)SkinColor::RANK_THIRD + 1 == SKIN_COLOR_COUNT);
 
+    struct SkinMascot {
+        double width = 20;
+        double x = 85;
+        double y = 70;
+    };
+
     struct SkinManifest {
         std::string name;
         std::string inherits;
@@ -189,6 +196,7 @@ namespace nascent {
         double hold_body_tail_offset = 0;
         std::optional<uint8_t> receptor_alpha;
         std::map<uint8_t, std::vector<uint8_t>> lane_images;
+        SkinMascot mascot;
         std::array<std::optional<olc::Pixel>, SKIN_COLOR_COUNT> colors;
         std::vector<std::pair<double, olc::Pixel>> difficulty_scale;
 
@@ -269,6 +277,7 @@ namespace nascent {
         const SkinManifest& manifest() const;
 
         const MipDecal* image(SkinImage image, uint8_t lane, uint8_t key_count);
+        const SkinMascot& mascot() const;
         olc::Decal* hit_score_decal(HitScore score) const;
         olc::Pixel title_gradient_at(double x, double y) const;
         olc::Pixel color(SkinColor color) const;
