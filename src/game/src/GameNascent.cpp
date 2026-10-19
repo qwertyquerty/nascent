@@ -29,6 +29,8 @@
 #include <exception>
 #include <ctime>
 #include <format>
+#include <iostream>
+#include <string_view>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -50,6 +52,9 @@ namespace nascent {
     };
 
     void GameNascent::init() {
+        install_thread_crash_handler();
+        std::string_view commit = NASCENT_BUILD_COMMIT;
+        std::cerr << std::format("Nascent {} ({}) on {}", NASCENT_VERSION_STRING, commit.empty() ? "local build" : commit.substr(0, 12), platform_description()) << std::endl;
         Account::load();
         SubmissionQueue::start();
         Updater::check();

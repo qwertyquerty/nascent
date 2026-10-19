@@ -5,9 +5,11 @@
 
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <string>
 #include <thread>
 
 namespace X11 {
@@ -205,6 +207,20 @@ namespace nascent {
         return key != olc::Key::NONE ? key : key_from_keysym(XLookupKeysym(&event, 0));
     }
 
+    static void name_window(Display* display, Window window, const std::string& title) {
+        std::string instance = title;
+
+        for (char& character : instance) {
+            character = (char)std::tolower((unsigned char)character);
+        }
+
+        XClassHint hint = {instance.data(), const_cast<char*>(title.c_str())};
+        XSetClassHint(display, window, &hint);
+        Atom utf8 = XInternAtom(display, "UTF8_STRING", False);
+        Atom net_name = XInternAtom(display, "_NET_WM_NAME", False);
+        XChangeProperty(display, window, net_name, utf8, 8, PropModeReplace, (const unsigned char*)title.c_str(), (int)title.size());
+    }
+
     static bool is_auto_repeat_release(Display* display, const XEvent& event) {
         if (XEventsQueued(display, QueuedAfterReading) == 0) {
             return false;
@@ -276,7 +292,7 @@ namespace nascent {
         }
     }
 
-    std::optional<InputMode> start_key_source(KeyEventQueue* queue) {
+    std::optional<InputMode> start_key_source(KeyEventQueue* queue, const std::string& title) {
         if (key_thread.joinable()) {
             key_queue = queue;
             return InputMode::X11_THREAD;
@@ -306,6 +322,11 @@ namespace nascent {
         Bool detectable_repeat = False;
         XkbSetDetectableAutoRepeat(display, True, &detectable_repeat);
         XSelectInput(display, window, KeyPressMask | KeyReleaseMask | FocusChangeMask);
+
+        if (!title.empty()) {
+            name_window(display, window, title);
+        }
+
         XFlush(display);
 
         key_display = display;

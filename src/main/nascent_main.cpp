@@ -48,6 +48,8 @@ int main() {
         redirect_output_to_log(user_config_directory(SettingsManager::APP_NAME) / SettingsManager::LOG_FILE);
     }
 
+    install_crash_handler();
+
     use_executable_directory_for_assets();
     Updater::recover();
     SettingsManager::load();

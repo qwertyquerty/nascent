@@ -2,8 +2,10 @@
 
 #import <AppKit/AppKit.h>
 #include <Carbon/Carbon.h>
+#import <objc/runtime.h>
 
 #include <algorithm>
+#include <string>
 
 namespace nascent {
     static id key_monitor = nil;
@@ -313,6 +315,32 @@ namespace nascent {
         }
     }
 
+    static NSString* window_title = nil;
+    static IMP original_set_title = nullptr;
+
+    static void set_game_window_title(id window, SEL selector, NSString* title) {
+        Class glut_view = objc_getClass("GLUTView");
+
+        if (window_title != nil && glut_view != nil && [((NSWindow*)window).contentView isKindOfClass:glut_view]) {
+            title = window_title;
+        }
+
+        ((void (*)(id, SEL, NSString*))original_set_title)(window, selector, title);
+    }
+
+    static void lock_window_title(const std::string& title) {
+        window_title = [NSString stringWithUTF8String:title.c_str()];
+
+        if (original_set_title == nullptr) {
+            Method method = class_getInstanceMethod([NSWindow class], @selector(setTitle:));
+            original_set_title = method_setImplementation(method, (IMP)set_game_window_title);
+        }
+
+        for (NSWindow* window in NSApp.windows) {
+            [window setTitle:window.title];
+        }
+    }
+
     static void on_main_thread(void (^block)()) {
         if ([NSThread isMainThread]) {
             block();
@@ -322,9 +350,13 @@ namespace nascent {
         }
     }
 
-    std::optional<InputMode> start_key_source(KeyEventQueue* queue) {
+    std::optional<InputMode> start_key_source(KeyEventQueue* queue, const std::string& title) {
         on_main_thread(^{
           key_queue = queue;
+
+          if (!title.empty()) {
+              lock_window_title(title);
+          }
 
           if (key_monitor == nil) {
               install_monitor();

@@ -4,12 +4,16 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <execinfo.h>
 #include <spawn.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 extern char** environ;
 
@@ -30,10 +34,31 @@ namespace nascent {
     }
 
     bool attach_parent_console() {
-        return true;
+        struct stat info;
+
+        if (isatty(STDERR_FILENO)) {
+            return true;
+        }
+
+        return fstat(STDERR_FILENO, &info) == 0 && (S_ISFIFO(info.st_mode) || S_ISREG(info.st_mode));
     }
 
-    void redirect_output_to_log(const std::filesystem::path&) {
+    void redirect_output_to_log(const std::filesystem::path& file) {
+        std::error_code ec;
+        std::filesystem::create_directories(file.parent_path(), ec);
+        std::filesystem::path previous = file;
+        previous.replace_extension(".previous.log");
+        std::filesystem::rename(file, previous, ec);
+
+        if (std::freopen(file.c_str(), "w", stderr) == nullptr) {
+            return;
+        }
+
+        std::setvbuf(stderr, nullptr, _IONBF, 0);
+
+        if (std::freopen(file.c_str(), "a", stdout) != nullptr) {
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+        }
     }
 
     void precise_sleep(double seconds) {
@@ -93,5 +118,51 @@ namespace nascent {
     bool open_file(const std::filesystem::path& file) {
         std::error_code ec;
         return std::filesystem::is_regular_file(file, ec) && run_opener(file.string());
+    }
+}
+
+namespace nascent::platform_detail {
+    static constexpr int CRASH_STACK_FRAMES = 64;
+    static int crash_output = STDERR_FILENO;
+
+    static void write_text(const char* text) {
+        ssize_t written = write(crash_output, text, std::strlen(text));
+        (void)written;
+    }
+
+    static const char* signal_name(int signal) {
+        switch (signal) {
+            case SIGSEGV:
+                return "SIGSEGV (invalid memory access)";
+            case SIGABRT:
+                return "SIGABRT (aborted)";
+            case SIGFPE:
+                return "SIGFPE (arithmetic error)";
+            case SIGILL:
+                return "SIGILL (illegal instruction)";
+            case SIGBUS:
+                return "SIGBUS (bus error)";
+            default:
+                return "unknown signal";
+        }
+    }
+
+    static void crash_signal(int signal) {
+        write_text("Crash: ");
+        write_text(signal_name(signal));
+        write_text("\nStack:\n");
+        void* frames[CRASH_STACK_FRAMES] = {};
+        int count = backtrace(frames, CRASH_STACK_FRAMES);
+        backtrace_symbols_fd(frames, count, crash_output);
+        std::signal(signal, SIG_DFL);
+        std::raise(signal);
+    }
+
+    void install_crash_signals() {
+        crash_output = fileno(stderr);
+
+        for (int signal : {SIGSEGV, SIGABRT, SIGFPE, SIGILL, SIGBUS}) {
+            std::signal(signal, crash_signal);
+        }
     }
 }

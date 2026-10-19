@@ -2,11 +2,44 @@
 #include "platform/PlatformDetail.h"
 
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
 #include <format>
+#include <string>
 #include <system_error>
 #include <thread>
 
 namespace nascent {
+    static void log_terminate() {
+        std::string reason = "terminate was called";
+
+        if (std::exception_ptr error = std::current_exception()) {
+            try {
+                std::rethrow_exception(error);
+            }
+            catch (const std::exception& exception) {
+                reason = std::string("unhandled exception: ") + exception.what();
+            }
+            catch (...) {
+                reason = "unhandled exception of an unknown type";
+            }
+        }
+
+        std::fprintf(stderr, "Crash: %s\n", reason.c_str());
+        std::fflush(stderr);
+        std::abort();
+    }
+
+    void install_thread_crash_handler() {
+        std::set_terminate(log_terminate);
+    }
+
+    void install_crash_handler() {
+        install_thread_crash_handler();
+        platform_detail::install_crash_signals();
+    }
+
     static constexpr int32_t MOVE_ATTEMPTS = 8;
     static constexpr int32_t MOVE_RETRY_MS = 50;
 

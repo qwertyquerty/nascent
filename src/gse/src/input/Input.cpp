@@ -42,7 +42,7 @@ namespace nascent {
         hook_active = install_window_hook(&queue, window->sAppName);
         input_mode = hook_active ? InputMode::WINDOW_MESSAGES : InputMode::POLLING;
 
-        if (std::optional<InputMode> source = start_key_source(&queue)) {
+        if (std::optional<InputMode> source = start_key_source(&queue, window->sAppName)) {
             input_mode = *source;
         }
 

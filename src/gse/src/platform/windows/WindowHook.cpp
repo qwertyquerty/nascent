@@ -393,7 +393,7 @@ namespace nascent {
         DestroyWindow(window);
     }
 
-    std::optional<InputMode> start_key_source(KeyEventQueue* queue) {
+    std::optional<InputMode> start_key_source(KeyEventQueue* queue, const std::string&) {
         if (raw_input_thread.joinable()) {
             raw_input_queue = queue;
             return InputMode::RAW_INPUT;

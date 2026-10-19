@@ -11,4 +11,5 @@ namespace nascent::platform_detail {
     std::filesystem::path bundled_assets_directory(const std::filesystem::path& executable_directory);
     std::vector<const char*> clipboard_commands();
     const char* url_opener();
+    void install_crash_signals();
 }

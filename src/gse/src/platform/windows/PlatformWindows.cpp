@@ -2,7 +2,10 @@
 #include "platform/PlatformDetail.h"
 
 #include <algorithm>
+#include <csignal>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -208,5 +211,113 @@ namespace nascent::platform_detail {
 
     const char* url_opener() {
         return nullptr;
+    }
+
+    static constexpr ULONG CRASH_STACK_FRAMES = 62;
+
+    static void write_frame(void* address) {
+        HMODULE module = nullptr;
+        char name[MAX_PATH] = "";
+
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)address, &module) || GetModuleFileNameA(module, name, MAX_PATH) == 0) {
+            std::fprintf(stderr, "  %p\n", address);
+            return;
+        }
+
+        const char* base = std::strrchr(name, '\\');
+        std::fprintf(stderr, "  %s+0x%llx\n", base != nullptr ? base + 1 : name, (unsigned long long)((uintptr_t)address - (uintptr_t)module));
+    }
+
+    static void write_stack(ULONG skip) {
+        void* frames[CRASH_STACK_FRAMES] = {};
+        USHORT count = RtlCaptureStackBackTrace(skip, CRASH_STACK_FRAMES, frames, nullptr);
+        std::fprintf(stderr, "Stack:\n");
+
+        for (USHORT index = 0; index < count; index++) {
+            write_frame(frames[index]);
+        }
+
+        std::fflush(stderr);
+    }
+
+    static void write_crash_stack(CONTEXT context) {
+#if defined(_M_X64) || defined(_M_ARM64)
+        std::fprintf(stderr, "Stack:\n");
+
+        for (ULONG frame = 0; frame < CRASH_STACK_FRAMES; frame++) {
+#if defined(_M_X64)
+            DWORD64 pc = context.Rip;
+#else
+            DWORD64 pc = context.Pc;
+#endif
+            if (pc == 0) {
+                break;
+            }
+
+            write_frame((void*)pc);
+            DWORD64 image_base = 0;
+            PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(pc, &image_base, nullptr);
+
+            if (function == nullptr) {
+#if defined(_M_X64)
+                context.Rip = *(DWORD64*)context.Rsp;
+                context.Rsp += sizeof(DWORD64);
+#else
+                context.Pc = context.Lr;
+#endif
+                continue;
+            }
+
+            void* handler_data = nullptr;
+            DWORD64 establisher = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, image_base, pc, function, &context, &handler_data, &establisher, nullptr);
+        }
+
+        std::fflush(stderr);
+#else
+        (void)context;
+        write_stack(0);
+#endif
+    }
+
+    static const char* exception_name(DWORD code) {
+        switch (code) {
+            case EXCEPTION_ACCESS_VIOLATION:
+                return "access violation";
+            case EXCEPTION_STACK_OVERFLOW:
+                return "stack overflow";
+            case EXCEPTION_INT_DIVIDE_BY_ZERO:
+                return "integer divide by zero";
+            case EXCEPTION_ILLEGAL_INSTRUCTION:
+                return "illegal instruction";
+            case 0xE06D7363:
+                return "unhandled C++ exception";
+            default:
+                return "exception";
+        }
+    }
+
+    static LONG WINAPI crash_filter(EXCEPTION_POINTERS* info) {
+        const EXCEPTION_RECORD* record = info->ExceptionRecord;
+        std::fprintf(stderr, "Crash: %s (0x%08lX)", exception_name(record->ExceptionCode), record->ExceptionCode);
+
+        if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
+            std::fprintf(stderr, " %s address %p", record->ExceptionInformation[0] == 1 ? "writing" : "reading", (void*)record->ExceptionInformation[1]);
+        }
+
+        std::fprintf(stderr, " at\n");
+        write_frame(record->ExceptionAddress);
+        write_crash_stack(*info->ContextRecord);
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    static void crash_abort(int) {
+        std::fprintf(stderr, "Crash: aborted\n");
+        write_stack(1);
+    }
+
+    void install_crash_signals() {
+        SetUnhandledExceptionFilter(crash_filter);
+        std::signal(SIGABRT, crash_abort);
     }
 }
