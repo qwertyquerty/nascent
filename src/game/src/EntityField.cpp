@@ -48,31 +48,11 @@ namespace nascent {
         const uint8_t key_count = chart->info.key_count;
         const SkinManifest& manifest = skin->manifest();
 
-        // Draw judge line
         int32_t jl_y = pos.y + size.y - note_size - judge_height;
+        bool cover_bottom = lane_cover < 0;
 
-        if (draw_judge) {
-            for (uint8_t column = 0; column < key_count; column++) {
-                int32_t jl_x = pos.x + (column * (note_size + note_x_spacing));
-
-                uint8_t lane = display_column(column);
-                bool held = get_key(lane);
-                float light = held ? 1.0f : (lane < lane_light.size() ? std::clamp(lane_light[lane], 0.0f, 1.0f) : 0.0f);
-                olc::Decal* receptor = sized_image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
-                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors && note_gradient ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
-                uint8_t base = manifest.receptor_alpha.value_or(judge_alpha);
-                color.a = (uint8_t)std::lround(base + (255 - base) * light);
-
-                if (!lane_light.empty() && light > 0.0f) {
-                    olc::Pixel glow = Skin::glow_color(color, light);
-
-                    for (olc::vf2d offset : Skin::glow_offsets(std::max(1.0f, Ui::pxf(Skin::GRADE_GLOW_RADIUS)))) {
-                        draw_square(window, receptor, jl_x + offset.x, jl_y + offset.y, with_opacity(glow));
-                    }
-                }
-
-                draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
-            }
+        if (!cover_bottom) {
+            draw_receptors(window, jl_y);
         }
 
         double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
@@ -161,6 +141,10 @@ namespace nascent {
         }
 
         draw_lane_cover(window, jl_y);
+
+        if (cover_bottom) {
+            draw_receptors(window, jl_y);
+        }
 
         const JudgedHit* jhit = attempt != nullptr && (draw_hit_score || draw_combo) ? attempt->get_last_scored() : nullptr;
 
@@ -276,15 +260,46 @@ namespace nascent {
         return pos.y + size.y - judge_height;
     }
 
-    void EntityField::draw_lane_cover(olc::PixelGameEngine* window, double judge_y) const {
-        double covered = std::clamp(lane_cover, 0.0, 1.0) * (judge_y - pos.y);
+    void EntityField::draw_receptors(olc::PixelGameEngine* window, int32_t jl_y) {
+        const uint8_t key_count = chart->info.key_count;
+        const SkinManifest& manifest = skin->manifest();
 
-        if (covered <= 0) {
+        if (draw_judge) {
+            for (uint8_t column = 0; column < key_count; column++) {
+                int32_t jl_x = pos.x + (column * (note_size + note_x_spacing));
+
+                uint8_t lane = display_column(column);
+                bool held = get_key(lane);
+                float light = held ? 1.0f : (lane < lane_light.size() ? std::clamp(lane_light[lane], 0.0f, 1.0f) : 0.0f);
+                olc::Decal* receptor = sized_image(held ? SkinImage::RECEPTOR_PRESSED : SkinImage::RECEPTOR, column, key_count);
+                olc::Pixel color = manifest.tint == SkinTint::GRADIENT && draw_judge_colors && note_gradient ? skin->title_gradient_at((double)(jl_x - pos.x) / size.x, (flip_y(jl_y) - pos.y) / size.y) : olc::Pixel(255, 255, 255);
+                uint8_t base = manifest.receptor_alpha.value_or(judge_alpha);
+                color.a = (uint8_t)std::lround(base + (255 - base) * light);
+
+                if (!lane_light.empty() && light > 0.0f) {
+                    olc::Pixel glow = Skin::glow_color(color, light);
+
+                    for (olc::vf2d offset : Skin::glow_offsets(std::max(1.0f, Ui::pxf(Skin::GRADE_GLOW_RADIUS)))) {
+                        draw_square(window, receptor, jl_x + offset.x, jl_y + offset.y, with_opacity(glow));
+                    }
+                }
+
+                draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
+            }
+        }
+    }
+
+    void EntityField::draw_lane_cover(olc::PixelGameEngine* window, double judge_y) const {
+        if (lane_cover == 0) {
             return;
         }
 
+        double covered = std::clamp(std::abs(lane_cover), 0.0, 1.0) * (judge_y - pos.y);
         double fade = std::min(covered, (double)Ui::pxf(LANE_COVER_FADE));
-        double solid_end = pos.y + covered - fade;
+        double solid_from = lane_cover > 0 ? pos.y : pos.y + size.y;
+        double edge = lane_cover > 0 ? pos.y + covered : judge_y - covered;
+        double solid_to = lane_cover > 0 ? edge - fade : edge + fade;
+
         olc::Pixel opaque = skin->color(SkinColor::SCREEN_BACKGROUND);
         opaque.a = 255;
         opaque = with_opacity(opaque);
@@ -293,18 +308,18 @@ namespace nascent {
 
         float left = (float)std::floor(pos.x);
         float width = (float)std::ceil(pos.x + size.x) - left;
-        float solid_top = (float)std::min(flip_y(pos.y), flip_y(solid_end));
-        float solid_bottom = (float)std::max(flip_y(pos.y), flip_y(solid_end));
-        float fade_top = (float)std::min(flip_y(solid_end), flip_y(pos.y + covered));
-        float fade_bottom = (float)std::max(flip_y(solid_end), flip_y(pos.y + covered));
+        float solid_top = (float)std::min(flip_y(solid_from), flip_y(solid_to));
+        float solid_bottom = (float)std::max(flip_y(solid_from), flip_y(solid_to));
 
         if (solid_bottom > solid_top) {
             window->FillRectDecal({left, solid_top}, {width, solid_bottom - solid_top}, opaque);
         }
 
-        olc::Pixel top_color = upscroll ? clear : opaque;
-        olc::Pixel bottom_color = upscroll ? opaque : clear;
-        window->GradientFillRectDecal({left, fade_top}, {width, fade_bottom - fade_top}, top_color, bottom_color, bottom_color, top_color);
+        float opaque_y = (float)flip_y(solid_to);
+        float clear_y = (float)flip_y(edge);
+        olc::Pixel top_color = opaque_y < clear_y ? opaque : clear;
+        olc::Pixel bottom_color = opaque_y < clear_y ? clear : opaque;
+        window->GradientFillRectDecal({left, std::min(opaque_y, clear_y)}, {width, std::abs(clear_y - opaque_y)}, top_color, bottom_color, bottom_color, top_color);
     }
 
     double EntityField::flip_y(double y) const {

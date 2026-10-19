@@ -31,6 +31,7 @@ namespace nascent {
 
         ChoiceField* skin_field = nullptr;
         ChoiceField* note_gradient_field = nullptr;
+        ChoiceField* judgement_line_field = nullptr;
         ChoiceField* frame_rate_field = nullptr;
         ChoiceField* fps_counter_field = nullptr;
         ChoiceField* rich_presence_field = nullptr;

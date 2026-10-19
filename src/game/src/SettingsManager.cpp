@@ -26,6 +26,7 @@ namespace nascent {
         field_judgement_height,
         field_show_combo,
         field_note_gradient,
+        field_show_judgement_line,
         field_show_accuracy,
         field_show_average_error,
         field_show_error_deviation,

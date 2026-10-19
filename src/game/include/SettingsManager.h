@@ -28,6 +28,7 @@ namespace nascent {
         uint8_t field_judgement_height = 45; // % of the field above the judgement line's end
         bool field_show_combo = true;
         bool field_note_gradient = true;
+        bool field_show_judgement_line = true;
         bool field_show_accuracy = true;
         bool field_show_average_error = true;
         bool field_show_error_deviation = true;
@@ -38,7 +39,7 @@ namespace nascent {
         uint8_t field_timing_bar_length = 33; // % of the screen width
         uint8_t field_timing_bar_width = 5; // % of the screen height
         bool field_mirror = false;
-        uint8_t field_lane_cover = 0;
+        int8_t field_lane_cover = 0;
         bool field_hitsounds = false;
         uint8_t field_background_brightness = 0;
 
