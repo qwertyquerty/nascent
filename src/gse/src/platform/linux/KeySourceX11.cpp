@@ -186,6 +186,25 @@ namespace nascent {
         return found;
     }
 
+    static olc::Key key_for_event(XKeyEvent& event, KeyEventQueue* queue) {
+        std::array<char, 16> text = {};
+        KeySym symbol = NoSymbol;
+        int length = XLookupString(&event, text.data(), (int)text.size(), &symbol, nullptr);
+
+        if ((event.state & (ControlMask | Mod4Mask)) == 0) {
+            for (int index = 0; index < length; index++) {
+                unsigned char character = (unsigned char)text[index];
+
+                if (character >= 0x20 && character != 0x7f) {
+                    queue->push_text(character);
+                }
+            }
+        }
+
+        olc::Key key = key_from_keysym(symbol);
+        return key != olc::Key::NONE ? key : key_from_keysym(XLookupKeysym(&event, 0));
+    }
+
     static bool is_auto_repeat_release(Display* display, const XEvent& event) {
         if (XEventsQueued(display, QueuedAfterReading) == 0) {
             return false;
@@ -224,9 +243,7 @@ namespace nascent {
                 size_t code = event.xkey.keycode % KEYCODE_COUNT;
 
                 if (event.type == KeyPress) {
-                    KeySym symbol = NoSymbol;
-                    XLookupString(&event.xkey, nullptr, 0, &symbol, nullptr);
-                    olc::Key key = key_from_keysym(symbol);
+                    olc::Key key = key_for_event(event.xkey, queue);
 
                     if (pressed_keys[code] == olc::Key::NONE) {
                         pressed_keys[code] = key;
@@ -239,6 +256,7 @@ namespace nascent {
                 if (!detectable_repeat && is_auto_repeat_release(display, event)) {
                     XEvent repeat;
                     XNextEvent(display, &repeat);
+                    key_for_event(repeat.xkey, queue);
                     continue;
                 }
 

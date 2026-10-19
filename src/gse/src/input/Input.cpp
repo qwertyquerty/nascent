@@ -100,7 +100,7 @@ namespace nascent {
         }
 
         frame_events = queue.drain();
-        frame_text = hook_active || keys_from_queue || window == nullptr ? queue.drain_text() : us_layout_text(window);
+        frame_text = hook_active || keys_from_queue || input_mode == InputMode::X11_THREAD || window == nullptr ? queue.drain_text() : us_layout_text(window);
         frame_dropped_files = queue.drain_dropped_files();
         frame_pressed_keys.clear();
 
