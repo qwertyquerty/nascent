@@ -78,13 +78,35 @@ def pending_jobs() -> dict[str, int] | None:
 
     from rq.registry import DeferredJobRegistry, FailedJobRegistry, ScheduledJobRegistry, StartedJobRegistry
 
+    waiting = DeferredJobRegistry(queue=target).get_job_ids()
+    stuck = stuck_jobs(target, waiting)
     return {
         "queued": target.count,
         "running": StartedJobRegistry(queue=target).count,
-        "waiting": DeferredJobRegistry(queue=target).count,
+        "waiting": len(waiting) - len(stuck),
+        "stuck": len(stuck),
         "retrying": ScheduledJobRegistry(queue=target).count,
         "failed": FailedJobRegistry(queue=target).count,
     }
+
+
+def stuck_jobs(target, job_ids: list[str]) -> list[str]:
+    from rq.job import JobStatus
+
+    stuck = []
+
+    for job_id in job_ids:
+        job = target.fetch_job(job_id)
+
+        if job is None or not job.dependency_ids:
+            continue
+
+        dependencies = job.fetch_dependencies()
+
+        if len(dependencies) < len(job.dependency_ids) or any(dependency.get_status() in (JobStatus.FAILED, JobStatus.CANCELED, JobStatus.STOPPED) for dependency in dependencies):
+            stuck.append(job_id)
+
+    return stuck
 
 
 def _batches(values: list[int], size: int) -> Iterable[list[int]]:

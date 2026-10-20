@@ -1,5 +1,6 @@
 #include "Chart.h"
 #include "Const.h"
+#include "DifficultyCalculator.h"
 #include "OsuFormat.h"
 #include "TestSupport.h"
 
@@ -15,6 +16,23 @@
 
 using namespace nascent;
 using namespace nascent::test;
+
+NASCENT_TEST(chart_infinite_beat_length) {
+    std::vector<Hit> hits;
+
+    for (int32_t time = 0; time < 20000; time += 125) {
+        hits.push_back(tap((uint8_t)(time / 125 % 4), time));
+    }
+
+    nlohmann::json data = chart_json(hits);
+    data["timing_points"].push_back({{"time", 5000}, {"beat_length", nullptr}, {"meter", 4}});
+    std::string error;
+    std::unique_ptr<Chart> chart = Chart::parse(data, 1.0f, error);
+    CHECK(chart != nullptr);
+    CHECK(std::isinf(chart->timing_points.back().beat_length));
+    CHECK(std::isfinite(DifficultyCalculator::calculate(*chart)));
+    CHECK(DifficultyCalculator::calculate(*chart) > 0.0);
+}
 
 NASCENT_TEST(chart_loading) {
     std::unique_ptr<Chart> chart = make_chart({tap(1, 2000), tap(0, 1000), hold(2, 1500, 4000)});

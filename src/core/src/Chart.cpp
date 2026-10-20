@@ -12,6 +12,7 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <tuple>
 
@@ -52,7 +53,8 @@ namespace nascent {
 
     void from_json(const nlohmann::json& j, ChartTimingPoint& p) {
         j.at("time").get_to(p.time);
-        j.at("beat_length").get_to(p.beat_length);
+        const nlohmann::json& beat_length = j.at("beat_length");
+        p.beat_length = beat_length.is_null() ? std::numeric_limits<float>::infinity() : beat_length.get<float>();
         j.at("meter").get_to(p.meter);
     }
 

@@ -322,7 +322,7 @@ def calculator_status(require_current: bool):
     if pending is not None:
         click.echo(
             f"background jobs: {pending['queued']} queued, {pending['running']} running, {pending['waiting']} waiting on others, "
-            f"{pending['retrying']} retrying, {pending['failed']} failed"
+            f"{pending['stuck']} stuck behind failed jobs, {pending['retrying']} retrying, {pending['failed']} failed"
         )
 
     click.echo(f"current calculator {version}")
@@ -351,7 +351,8 @@ def wait_for_jobs(timeout: int, interval: int):
             raise click.ClickException(f"{pending['failed'] - failed_before} jobs failed; read them with rq info or the worker logs")
 
         if outstanding == 0:
-            click.echo("every background job has finished")
+            stuck = f"; {pending['stuck']} jobs are stuck behind failed jobs and will never run" if pending["stuck"] else ""
+            click.echo(f"every background job has finished{stuck}")
             return
 
         if time.monotonic() > deadline:
