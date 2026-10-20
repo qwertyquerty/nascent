@@ -58,6 +58,7 @@ namespace nascent {
         std::string cached_difficulty_key;
 
         bool validate_and_prepare(std::string& error);
+        bool assign_paths(const std::filesystem::path& path, std::string& error);
         std::string compute_gameplay_hash() const;
         std::string compute_difficulty_key() const;
 
@@ -79,6 +80,7 @@ namespace nascent {
         static std::unique_ptr<Chart> load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error);
         static std::unique_ptr<Chart> parse(const nlohmann::json& data, float pitch, std::string& error);
         static std::unique_ptr<Chart> create(const ChartInfo& info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string& error);
+        static std::unique_ptr<Chart> restore(const std::filesystem::path& path, ChartInfo info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string gameplay_hash, std::string difficulty_key, float pitch);
 
         /**
          * Set the pitch of the chart and recaculate the time of all the notes
@@ -86,6 +88,9 @@ namespace nascent {
         void set_pitch(float);
         void pitched_timing(float pitch, std::vector<Hit>& out_hits, std::vector<ChartTimingPoint>& out_timing_points) const;
         uint8_t unpitched_key_count() const;
+        const ChartInfo& unpitched_chart_info() const;
+        const std::vector<Hit>& unpitched_hit_objects() const;
+        const std::vector<ChartTimingPoint>& unpitched_timing() const;
         BpmRange bpm_range() const;
 
         nlohmann::json serialize() const;

@@ -4,6 +4,7 @@
 #include "gse/concurrency/Async.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
@@ -11,10 +12,12 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace nascent {
     class DifficultyCache;
+    class LibraryCache;
 
     struct ChartLibrary {
         std::vector<std::unique_ptr<Chart>> charts;
@@ -31,13 +34,40 @@ namespace nascent {
         ChartLibrary without(const std::vector<bool>& removed);
     };
 
+    enum class LibraryLoadStage : uint8_t {
+        LISTING,
+        READING,
+        DIFFICULTY,
+        SAVING,
+        BUILDING,
+        FINISHING,
+        DONE
+    };
+
     struct LibraryLoadProgress {
+        std::atomic<uint8_t> stage{0};
         std::atomic<size_t> done{0};
         std::atomic<size_t> total{0};
 
+        static constexpr std::array<float, (size_t)LibraryLoadStage::DONE> STAGE_WEIGHTS = {1.0f, 4.0f, 3.0f, 0.5f, 1.0f, 0.5f};
+
+        void reset();
+        void begin(LibraryLoadStage next, size_t count);
+        void step();
         float fraction() const;
     };
 
-    ChartLibrary load_chart_library(const std::vector<std::filesystem::path>& song_directories, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr);
+    struct LibraryUpdate {
+        std::unordered_set<std::string> kept;
+        std::vector<std::unique_ptr<Chart>> added;
+        std::vector<int64_t> added_times;
+        bool changed = false;
+    };
+
+    std::string chart_key(const std::filesystem::path& path);
+    ChartLibrary cached_chart_library(LibraryCache& library_cache, const std::vector<std::filesystem::path>& song_directories, float pitch, DifficultyCache& cache);
+    LibraryUpdate scan_chart_library(const std::vector<std::filesystem::path>& song_directories, float pitch, DifficultyCache& cache, LibraryCache& library_cache, LibraryLoadProgress* progress = nullptr);
+    ChartLibrary merge_chart_library(ChartLibrary current, LibraryUpdate update, float pitch, DifficultyCache& cache, std::vector<std::unique_ptr<Chart>>& removed, LibraryLoadProgress* progress = nullptr);
+    void prepare_replay_folders(const ChartLibrary& library, LibraryLoadProgress* progress = nullptr);
     ChartLibrary single_chart_library(std::unique_ptr<Chart> chart, float pitch, DifficultyCache& cache);
 }

@@ -100,22 +100,43 @@ namespace nascent {
 
         std::unique_ptr<Chart> chart = parse(jdata, pitch, error);
 
-        if (chart == nullptr) {
+        if (chart == nullptr || !chart->assign_paths(path, error)) {
             return nullptr;
         }
 
+        return chart;
+    }
+
+    bool Chart::assign_paths(const std::filesystem::path& path, std::string& error) {
         try {
-            chart->file_path = path;
-            chart->audio_path = path.parent_path() / utf8_path(chart->unpitched_info.audio_file);
-            chart->image_path = path.parent_path() / utf8_path(chart->unpitched_info.image_file);
-            (void)chart->audio_path.string();
-            (void)chart->image_path.string();
+            file_path = path;
+            audio_path = path.parent_path() / utf8_path(unpitched_info.audio_file);
+            image_path = path.parent_path() / utf8_path(unpitched_info.image_file);
+            (void)audio_path.string();
+            (void)image_path.string();
         }
         catch (const std::exception& e) {
             error = std::format("invalid audio or image path: {}", e.what());
+            return false;
+        }
+
+        return true;
+    }
+
+    std::unique_ptr<Chart> Chart::restore(const std::filesystem::path& path, ChartInfo info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string gameplay_hash, std::string difficulty_key, float pitch) {
+        std::unique_ptr<Chart> chart(new Chart());
+        chart->unpitched_info = std::move(info);
+        chart->unpitched_hits = std::move(hits);
+        chart->unpitched_timing_points = std::move(timing_points);
+        chart->cached_gameplay_hash = std::move(gameplay_hash);
+        chart->cached_difficulty_key = std::move(difficulty_key);
+        std::string error;
+
+        if (!chart->assign_paths(path, error)) {
             return nullptr;
         }
 
+        chart->set_pitch(pitch);
         return chart;
     }
 
@@ -288,6 +309,18 @@ namespace nascent {
 
     uint8_t Chart::unpitched_key_count() const {
         return unpitched_info.key_count;
+    }
+
+    const ChartInfo& Chart::unpitched_chart_info() const {
+        return unpitched_info;
+    }
+
+    const std::vector<Hit>& Chart::unpitched_hit_objects() const {
+        return unpitched_hits;
+    }
+
+    const std::vector<ChartTimingPoint>& Chart::unpitched_timing() const {
+        return unpitched_timing_points;
     }
 
     BpmRange Chart::bpm_range() const {

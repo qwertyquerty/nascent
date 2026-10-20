@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChartLibrary.h"
+#include "LibraryCache.h"
 #include "ChartMenu.h"
 #include "LeaderboardPanel.h"
 #include "ReplayMenu.h"
@@ -117,6 +118,10 @@ namespace nascent {
 
         std::mutex library_load_mutex;
         std::optional<ChartLibrary> completed_library_load;
+        std::optional<LibraryUpdate> completed_library_update;
+        std::unique_ptr<LibraryCache> library_cache;
+        std::atomic<bool> library_load_finished = false;
+        bool full_rebuild_pending = false;
         std::thread library_loader;
         bool library_loading = false;
         bool library_loaded = false;

@@ -13,6 +13,7 @@ add_library(game
     src/GameNascent.cpp
     src/InputManager.cpp
     src/KeyBindField.cpp
+    src/LibraryCache.cpp
     src/LeaderboardPanel.cpp
     src/Favorites.cpp
     src/LocalBests.cpp

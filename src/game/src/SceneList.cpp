@@ -102,6 +102,7 @@ namespace nascent {
         this->sky = sky;
         difficulty_cache = std::make_unique<DifficultyCache>(user_config_directory(SettingsManager::APP_NAME) / DIFFICULTY_CACHE_FILE);
         difficulty_cache->load();
+        library_cache = std::make_unique<LibraryCache>(user_config_directory(SettingsManager::APP_NAME) / LibraryCache::FILE_NAME);
 
         background_loader = std::thread([this] {
             background_load_loop();
@@ -714,6 +715,7 @@ namespace nascent {
 
     void SceneList::reload_everything() {
         difficulty_cache->clear();
+        full_rebuild_pending = true;
         game->notify("Reloading every chart and recalculating difficulties");
         start_library_load();
     }
@@ -727,16 +729,50 @@ namespace nascent {
         }
 
         library_loading = true;
-        library_load_progress.done = 0;
-        library_load_progress.total = 0;
+        library_load_finished = false;
+        library_load_progress.reset();
         std::vector<std::filesystem::path> song_directories = ChartFolders::all();
         float load_pitch = pitch;
         DifficultyCache* cache = difficulty_cache.get();
+        LibraryCache* listing = library_cache.get();
+        bool rebuild = std::exchange(full_rebuild_pending, false);
 
-        library_loader = std::thread([this, song_directories, load_pitch, cache] {
-            ChartLibrary loaded = load_chart_library(song_directories, load_pitch, *cache, &library_load_progress);
-            std::lock_guard<std::mutex> lock(library_load_mutex);
-            completed_library_load = std::move(loaded);
+        if (rebuild) {
+            listing->clear();
+        }
+
+        bool has_library = library_loaded && !rebuild;
+        bool use_cache = !library_loaded && !rebuild && LocalReplays::folders_migrated();
+
+        library_loader = std::thread([this, song_directories, load_pitch, cache, listing, has_library, use_cache] {
+            bool base = has_library;
+
+            if (use_cache) {
+                ChartLibrary cached = cached_chart_library(*listing, song_directories, load_pitch, *cache);
+
+                if (!cached.charts.empty()) {
+                    std::lock_guard<std::mutex> lock(library_load_mutex);
+                    completed_library_load = std::move(cached);
+                    base = true;
+                }
+            }
+
+            LibraryUpdate update = scan_chart_library(song_directories, load_pitch, *cache, *listing, &library_load_progress);
+
+            if (!base) {
+                std::vector<std::unique_ptr<Chart>> removed;
+                ChartLibrary full = merge_chart_library(ChartLibrary(), std::move(update), load_pitch, *cache, removed, &library_load_progress);
+                prepare_replay_folders(full, &library_load_progress);
+                library_load_progress.begin(LibraryLoadStage::DONE, 0);
+                std::lock_guard<std::mutex> lock(library_load_mutex);
+                completed_library_load = std::move(full);
+            }
+            else if (update.changed) {
+                std::lock_guard<std::mutex> lock(library_load_mutex);
+                completed_library_update = std::move(update);
+            }
+
+            library_load_finished = true;
         });
     }
 
@@ -751,25 +787,35 @@ namespace nascent {
             return;
         }
 
+        bool finished = library_load_finished;
         std::optional<ChartLibrary> loaded;
+        std::optional<LibraryUpdate> update;
         {
             std::lock_guard<std::mutex> lock(library_load_mutex);
             loaded = std::exchange(completed_library_load, std::nullopt);
+            update = std::exchange(completed_library_update, std::nullopt);
         }
 
-        if (!loaded) {
+        if (loaded) {
+            if (!LocalBests::is_backfilled()) {
+                LocalBests::backfill(LocalReplays::gameplay_hash_by_folder(loaded->hashes), LocalReplays::directory());
+            }
+
+            apply_library(std::move(*loaded));
+            library_loaded = true;
+        }
+
+        if (update) {
+            std::vector<std::unique_ptr<Chart>> removed;
+            apply_library(merge_chart_library(std::move(library), std::move(*update), pitch, *difficulty_cache, removed));
+        }
+
+        if (!finished) {
             return;
         }
 
         library_loader.join();
         library_loading = false;
-
-        if (!LocalBests::is_backfilled()) {
-            LocalBests::backfill(LocalReplays::gameplay_hash_by_folder(loaded->hashes), LocalReplays::directory());
-        }
-
-        apply_library(std::move(*loaded));
-        library_loaded = true;
 
         if (std::exchange(library_reload_pending, false)) {
             start_library_load();
