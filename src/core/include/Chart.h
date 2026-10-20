@@ -76,6 +76,7 @@ namespace nascent {
         static constexpr double BPM_PRECISION = 100.0;
 
         static std::unique_ptr<Chart> load(const std::filesystem::path& path, float pitch, std::string& error);
+        static std::unique_ptr<Chart> load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error);
         static std::unique_ptr<Chart> parse(const nlohmann::json& data, float pitch, std::string& error);
         static std::unique_ptr<Chart> create(const ChartInfo& info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string& error);
 

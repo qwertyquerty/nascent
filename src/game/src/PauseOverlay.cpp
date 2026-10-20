@@ -99,21 +99,22 @@ namespace nascent {
         const Chart& chart = *play.chart;
         window->FillRectDecal({0.0f, 0.0f}, screen, skin->color(SkinColor::PAUSE_OVERLAY));
 
-        float y = screen.y * TITLE_TOP;
+        float y = screen.y * (float)Ui::layout("pause_menu.title_top");
         draw_text_centered(skin->display_font_large, "PAUSED", center_x, y, skin->color(SkinColor::TEXT));
-        y += Ui::pxf(96);
+        y += Ui::layout_pxf("pause_menu.title_gap");
         draw_text_centered(skin->display_font_medium, std::format("{} - {}", chart.info.artist, chart.info.title), center_x, y, skin->color(SkinColor::TEXT_MUTED));
-        y += Ui::pxf(44);
+        y += Ui::layout_pxf("pause_menu.song_gap");
 
         int32_t chart_start = chart.get_chart_start_ms();
         std::string elapsed_text = clock_text(play.paused_position - chart_start);
         std::string total_text = clock_text(chart.get_chart_end_ms() - chart_start);
         std::string details = std::format("[{}]    {} / {}    {:.2f}%", chart.info.difficulty_name, elapsed_text, total_text, play.session->get_attempt().get_accuracy() * 100);
         draw_text_centered(skin->display_font_small, details, center_x, y, skin->color(SkinColor::TEXT_FAINT));
-        y += Ui::pxf(80);
+        y += Ui::layout_pxf("pause_menu.details_gap");
 
         item_bounds.clear();
-        float padding = Ui::pxf(ITEM_PADDING);
+        float padding = Ui::layout_pxf("pause_menu.item_padding");
+        float item_spacing = Ui::layout_pxf("pause_menu.item_spacing");
 
         for (size_t index = 0; index < ITEMS.size(); index++) {
             bool selected = index == selection;
@@ -121,10 +122,10 @@ namespace nascent {
             olc::FontRect bounds = draw_text_centered(skin->display_font_medium, ITEMS[index], center_x, y, color);
             Rect item = {{center_x - bounds.size.x / 2.0f, y + bounds.offset.y}, {(float)bounds.size.x, (float)bounds.size.y}};
             item_bounds.push_back(item.inflated(padding));
-            y += Ui::pxf(ITEM_SPACING);
+            y += item_spacing;
         }
 
         std::string hint = std::format("↑/↓  choose        Enter  select        {}/Esc  continue", InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE)));
-        draw_text_centered(skin->display_font_small, hint, center_x, screen.y - Ui::pxf(HINT_BOTTOM), skin->color(SkinColor::TEXT_FAINT));
+        draw_text_centered(skin->display_font_small, hint, center_x, screen.y - Ui::layout_pxf("pause_menu.hint_bottom"), skin->color(SkinColor::TEXT_FAINT));
     }
 }

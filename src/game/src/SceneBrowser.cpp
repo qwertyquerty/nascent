@@ -23,15 +23,8 @@
 #include <utility>
 
 namespace nascent {
-    static constexpr int32_t FORM_GAP = 60;
-    static constexpr int32_t ROW_PADDING = 16;
-    static constexpr int32_t STATUS_WIDTH = 260;
-    static constexpr int32_t FIELD_GAP = 10;
-    static constexpr int32_t HINT_LINE_HEIGHT = 28;
-    static constexpr uint8_t DOWNLOAD_FILL_ALPHA = 70;
     static constexpr uint8_t FIRST_KEY_COUNT = 4;
     static constexpr uint8_t LAST_KEY_COUNT = 10;
-    static constexpr float SCROLL_SPEED = 14.0f;
 
     static int32_t text_width(olc::Font& font, const std::string& text) {
         return text.empty() ? 0 : text_bounds(font, text).size.x;
@@ -61,7 +54,7 @@ namespace nascent {
             key_options.push_back(std::format("{}K", keys));
         }
 
-        form.spacing = FIELD_GAP;
+        form.spacing = Ui::layout("browser.field_gap");
         search_field = &form.add<TextField>("Title, artist or mapper");
         key_field = &form.add<ChoiceField>("Keys", key_options);
         status_field = &form.add<ChoiceField>("Status", std::vector<std::string>{"Ranked", "Unranked", "Any"});
@@ -271,7 +264,7 @@ namespace nascent {
             }
         }
         else if (!clicked) {
-            size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / std::max(1, Ui::px(ROW_HEIGHT)));
+            size_t page = (size_t)std::max(1, (window->GetScreenSize().y / 2) / std::max(1, Ui::layout_px("browser.row_height")));
             int32_t wheel = input.mouse_wheel();
             size_t previous = selected;
             bool down = down_repeat.update(input.take(actions::DOWN), input.held(actions::DOWN), elapsed_time);
@@ -319,16 +312,16 @@ namespace nascent {
             }
         }
 
-        scroll += ((float)selected * Ui::px(ROW_HEIGHT) - scroll) * std::min(1.0f, elapsed_time * SCROLL_SPEED);
+        scroll += ((float)selected * Ui::layout_px("browser.row_height") - scroll) * std::min(1.0f, elapsed_time * (float)Ui::layout("browser.scroll_speed"));
     }
 
     void SceneBrowser::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = (int32_t)(screen.x * Ui::layout("browser.margin_fraction"));
+        int32_t y = (int32_t)(screen.y * Ui::layout("browser.title_top_fraction"));
 
         draw_text(skin->display_font_large, "Browse Charts", {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(90);
+        y += Ui::layout_px("browser.title_gap");
 
         std::string subtitle;
 
@@ -343,19 +336,26 @@ namespace nascent {
         }
 
         draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(error.empty() ? SkinColor::TEXT_MUTED : SkinColor::TEXT_ERROR));
-        y += Ui::px(60);
+        y += Ui::layout_px("browser.subtitle_gap");
 
         form.draw(window, *skin, {x, y});
         result_spots.clear();
         hint_spots.clear();
 
-        int32_t row_height = Ui::px(ROW_HEIGHT);
-        int32_t row_padding = Ui::px(ROW_PADDING);
-        int32_t status_width = Ui::px(STATUS_WIDTH);
-        int32_t panel_x = x + TextField::width() + Ui::px(FORM_GAP);
+        int32_t row_height = Ui::layout_px("browser.row_height");
+        int32_t row_padding = Ui::layout_px("browser.row_padding");
+        int32_t status_width = Ui::layout_px("browser.status_width");
+        int32_t panel_x = x + TextField::width() + Ui::layout_px("browser.form_gap");
         int32_t panel_width = screen.x - panel_x - x;
-        int32_t top = screen.y / 24;
-        int32_t bottom = screen.y - screen.y / 24;
+        int32_t vertical_margin = (int32_t)(screen.y * Ui::layout("browser.vertical_margin_fraction"));
+        int32_t top = vertical_margin;
+        int32_t bottom = screen.y - vertical_margin;
+        float row_gap = Ui::layout_pxf("browser.row_gap");
+        uint8_t focused_highlight = (uint8_t)Ui::layout("browser.focused_highlight_alpha");
+        uint8_t unfocused_highlight = (uint8_t)Ui::layout("browser.unfocused_highlight_alpha");
+        uint8_t download_fill_alpha = (uint8_t)Ui::layout("browser.download_fill_alpha");
+        int32_t title_top = Ui::layout_px("browser.row_title_top");
+        int32_t detail_bottom = Ui::layout_px("browser.row_detail_bottom");
         float first = std::max(0.0f, scroll - (float)(screen.y / 2 - top - row_height / 2));
 
         olc::Font& title_font = skin->display_font_medium;
@@ -386,9 +386,9 @@ namespace nascent {
             BeatmapDownloads::State download_state = download != nullptr ? download->state.load() : BeatmapDownloads::State::FAILED;
             bool downloading = download != nullptr && (download_state == BeatmapDownloads::State::DOWNLOADING || download_state == BeatmapDownloads::State::EXTRACTING);
             olc::vf2d box_position = {(float)panel_x, row_top};
-            olc::vf2d box_size = {(float)panel_width, (float)row_height - Ui::pxf(6)};
+            olc::vf2d box_size = {(float)panel_width, (float)row_height - row_gap};
             result_spots.add({box_position, box_size}, (int32_t)index);
-            uint8_t highlight = is_selected ? (results_focused ? 36 : 16) : 0;
+            uint8_t highlight = is_selected ? (results_focused ? focused_highlight : unfocused_highlight) : 0;
             olc::Pixel selection = fade(skin->color(SkinColor::BROWSER_HIGHLIGHT), highlight / 255.0);
 
             if (downloading) {
@@ -396,7 +396,7 @@ namespace nascent {
                 ProgressBar bar(box_size, skin->color(SkinColor::DOWNLOAD_TRACK));
                 bar.track_color.a = std::max(bar.track_color.a, selection.a);
                 olc::Pixel fill = skin->title_gradient_at(progress, 0.5);
-                fill.a = DOWNLOAD_FILL_ALPHA;
+                fill.a = download_fill_alpha;
                 bar.draw(window, box_position, progress, fill);
             }
             else if (is_selected) {
@@ -432,13 +432,13 @@ namespace nascent {
             }
 
             std::string title = std::format("{} - {} [{}]", chart.artist, chart.title, chart.difficulty_name);
-            int32_t title_baseline = row_y + Ui::px(8) - title_metrics.offset.y;
+            int32_t title_baseline = row_y + title_top - title_metrics.offset.y;
             draw_text(title_font, fit_text(title_font, title, panel_width - status_width - row_padding * 3), {panel_x + row_padding, title_baseline}, color);
 
             std::string keys = std::format("{}K      ", chart.key_count);
             std::string difficulty = std::format("{:.2f}", chart.difficulty);
             std::string details = std::format("      {}      {} notes      {}      mapped by {}", format_length(chart.duration_ms), chart.note_count, chart.status, chart.mapper);
-            int32_t detail_baseline = row_y + row_height - Ui::px(16) - (detail_metrics.size.y + detail_metrics.offset.y);
+            int32_t detail_baseline = row_y + row_height - detail_bottom - (detail_metrics.size.y + detail_metrics.offset.y);
             int32_t detail_x = panel_x + row_padding;
             int32_t detail_room = panel_width - status_width - row_padding * 3;
             draw_text(detail_font, keys, {detail_x, detail_baseline}, skin->color(SkinColor::TEXT_MUTED));
@@ -454,7 +454,7 @@ namespace nascent {
         Hint selected_action = is_downloading(selected) ? Hint{"Right-click:  cancel"} : Hint{"Enter:  download", HINT_CONFIRM};
         std::vector<Hint> hints = results_focused ? std::vector<Hint>{{"↑/↓:  chart"}, selected_action, {"Ctrl+Tab:  filters", HINT_SWITCH}, {"Esc:  back", HINT_BACK}}
                                                   : std::vector<Hint>{{"Tab, ↑/↓:  filter"}, {"←/→:  change"}, {"Enter:  next", HINT_CONFIRM}, {"Ctrl+Tab:  results", HINT_SWITCH}, {"Esc:  back", HINT_BACK}};
-        int32_t hint_line_height = Ui::px(HINT_LINE_HEIGHT);
+        int32_t hint_line_height = Ui::layout_px("browser.hint_line_height");
         int32_t hint_baseline = bottom - (detail_metrics.size.y + detail_metrics.offset.y) - (int32_t)(hints.size() - 1) * hint_line_height;
 
         for (const Hint& hint : hints) {

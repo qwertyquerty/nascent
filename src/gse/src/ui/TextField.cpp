@@ -3,7 +3,6 @@
 #include "gse/render/Color.h"
 #include "gse/render/TextCache.h"
 #include "gse/ui/Layout.h"
-#include "gse/ui/RowField.h"
 #include "gse/ui/Ui.h"
 
 #include <algorithm>
@@ -11,9 +10,6 @@
 #include <utility>
 
 namespace nascent {
-    static constexpr int32_t LABEL_GAP = 8;
-    static constexpr int32_t CARET_INSET = 9;
-
     static bool is_continuation(char c) {
         return ((unsigned char)c & 0xc0) == 0x80;
     }
@@ -126,14 +122,14 @@ namespace nascent {
         draw_text(label_font, label, {position.x, position.y - label_metrics.offset.y}, color);
 
         int32_t box_width = width();
-        int32_t box_height = Ui::px(HEIGHT);
-        int32_t padding = Ui::px(PADDING);
-        int32_t caret_inset = Ui::px(CARET_INSET);
-        int32_t box_top = position.y + label_metrics.size.y + Ui::px(LABEL_GAP);
+        int32_t box_height = Ui::layout_px("form.text_field_height");
+        int32_t padding = Ui::layout_px("form.text_field_padding");
+        int32_t caret_inset = Ui::layout_px("form.text_field_caret_inset");
+        int32_t box_top = position.y + label_metrics.size.y + Ui::layout_px("form.text_field_label_gap");
         bool hovered = Rect{{(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}}.contains(window->GetMousePos());
         olc::Pixel background = theme.color(UiColor::INPUT_BACKGROUND);
         olc::Pixel focused_background = theme.color(UiColor::INPUT_BACKGROUND_FOCUSED);
-        olc::Pixel hover_background = hovered ? mix(background, focused_background, RowField::HOVER_MIX) : background;
+        olc::Pixel hover_background = hovered ? mix(background, focused_background, Ui::layout("form.hover_mix")) : background;
         window->FillRectDecal({(float)position.x, (float)box_top}, {(float)box_width, (float)box_height}, focused ? focused_background : hover_background);
 
         size_t end = focused ? std::min(cursor, value.size()) : value.size();
@@ -157,16 +153,16 @@ namespace nascent {
         int32_t text_left = position.x + padding;
         draw_text(text_font, visible, {text_left, baseline}, color);
 
-        if (focused && std::fmod(blink_timer, 1.0f) < 0.5f) {
+        if (focused && std::fmod(blink_timer, (float)Ui::layout("form.caret_blink_period")) < (float)Ui::layout("form.caret_visible_time")) {
             int32_t caret = text_left + text_width(text_font, shown.substr(first, caret_index - first)) + 1;
-            window->FillRectDecal({(float)caret, (float)(box_top + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(box_height - caret_inset * 2)}, theme.color(UiColor::TEXT));
+            window->FillRectDecal({(float)caret, (float)(box_top + caret_inset)}, {std::max(1.0f, Ui::layout_pxf("form.caret_width")), (float)(box_height - caret_inset * 2)}, theme.color(UiColor::TEXT));
         }
 
         return box_top + box_height - position.y;
     }
 
     int32_t TextField::width() {
-        return Ui::px(WIDTH);
+        return Ui::layout_px("form.text_field_width");
     }
 
     bool TextField::is_filled() const {

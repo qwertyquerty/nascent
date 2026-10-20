@@ -8,10 +8,12 @@
 #include "gse/Scene.h"
 #include "SongClock.h"
 #include "StatusBar.h"
+#include "Util.h"
 #include "gse/render/MipDecal.h"
 #include "gse/render/ShapeSprite.h"
 #include "gse/render/SpriteDecal.h"
 #include "gse/ui/KeyRepeat.h"
+#include "gse/ui/ScrollBar.h"
 
 #include <condition_variable>
 #include <cstddef>
@@ -37,6 +39,8 @@ namespace nascent {
         struct BackgroundLoadRequest {
             uint64_t generation = 0;
             std::string image_path;
+            std::filesystem::path audio_path;
+            bool keep_image = false;
         };
 
         struct DifficultyJob {
@@ -56,6 +60,8 @@ namespace nascent {
             uint64_t generation = 0;
             std::string image_path;
             std::vector<std::unique_ptr<olc::Sprite>> levels;
+            bool keep_image = false;
+            std::optional<PreparedSongAudio> audio;
         };
 
         std::unique_ptr<DifficultyCache> difficulty_cache;
@@ -129,14 +135,17 @@ namespace nascent {
 
         float widest_grade = -1.0f;
 
-        StarSprite favorite_star = StarSprite(FAVORITE_INNER_RATIO);
+        StarSprite favorite_star;
+        float favorite_star_ratio = -1.0f;
         LeaderboardPanel leaderboards;
         Hotspots row_spots;
         Hotspots ui_spots;
+        ScrollBar list_scrollbar;
         bool show_leaderboards = false;
         bool recommended_started = false;
 
         void start_library_load();
+        void reload_everything();
         void poll_library_load();
         void apply_library(ChartLibrary loaded);
         void apply_search(size_t keep_chart);
@@ -157,7 +166,7 @@ namespace nascent {
         void collect_difficulties();
 
         void request_background_load();
-        void apply_background_load(std::string image_path, std::vector<std::unique_ptr<olc::Sprite>> levels);
+        void apply_background_load(BackgroundLoadResult result);
         const MipDecal* background_for(const Chart& chart) const;
         void background_load_loop();
         void stop_preview_audio();
@@ -169,6 +178,9 @@ namespace nascent {
         void draw_recommended(olc::PixelGameEngine* window);
         bool update_controls(float elapsed_time);
         bool update_mouse(Input& input);
+        float list_position() const;
+        size_t selected_library_index() const;
+        void draw_list_scrollbar(olc::PixelGameEngine* window, int32_t charts_per_screen);
         bool run_status_action(StatusAction action, bool secondary);
         void play_selected();
         void open_chart_menu();
@@ -181,28 +193,13 @@ namespace nascent {
         void delete_charts(bool whole_pack);
 
         public:
-        static constexpr float DIFFICULTY_BAR_MAX = 100.0f;
         static constexpr size_t SHUFFLE_HISTORY_LIMIT = 100;
-        static constexpr double DIFFICULTY_IDLE_OPACITY = 0.75;
-        static constexpr float DIFFICULTY_BAR_WIDTH = 300.0f;
-        static constexpr float DIFFICULTY_BAR_HEIGHT = 6.0f;
-        static constexpr float DETAIL_GAP = 20.0f;
         static constexpr float PREVIEW_FADE_CURVE = 2.0f;
-        static constexpr float FAVORITE_GAP = 14.0f;
-        static constexpr float FAVORITE_RADIUS = 9.0f;
-        static constexpr float FAVORITE_INNER_RATIO = 0.45f;
-        static constexpr float GRADE_SCREEN_MARGIN = 8.0f;
-        static constexpr float GRADE_GAP = 8.0f;
-        static constexpr int32_t LIST_ROW_HEIGHT = 100;
-        static constexpr int32_t ROW_HIT_ABOVE = 34;
         static constexpr int32_t ROW_SPOT_CENTER = 1000;
         static constexpr int32_t SPOT_SEARCH_CLEAR = 1;
         static constexpr int32_t SPOT_DOWNLOAD = 2;
         static constexpr int32_t SPOT_BROWSE = 3;
         static constexpr int32_t SPOT_RECOMMENDED_FIRST = 100;
-        static constexpr float HINT_GAP = 36.0f;
-        static constexpr int32_t RECOMMENDED_ROW_HEIGHT = 30;
-        static constexpr int32_t RECOMMENDED_STATUS_OFFSET = 540;
         static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.json";
 
         SceneList(Skin* skin, Skin* logo_skin, EntityStarfield* sky);

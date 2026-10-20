@@ -80,7 +80,7 @@ namespace nascent {
     }
 
     double EntityStarfield::random(double low, double high) {
-        return std::uniform_real_distribution<double>(low, high)(rng);
+        return std::uniform_real_distribution<double>(std::min(low, high), std::max(low, high))(rng);
     }
 
     EntityStarfield::Direction EntityStarfield::normalized(double x, double y, double z) {
@@ -93,7 +93,7 @@ namespace nascent {
         return normalized(normal(rng), normal(rng), normal(rng));
     }
 
-    EntityStarfield::Direction EntityStarfield::band_direction() {
+    EntityStarfield::Direction EntityStarfield::band_direction(double spread) {
         const Direction& n = band_normal;
         Direction reference = std::abs(n.x) < 0.9 ? Direction{1, 0, 0} : Direction{0, 1, 0};
         Direction u = cross(n, reference);
@@ -101,7 +101,7 @@ namespace nascent {
         Direction w = cross(n, u);
 
         double around = random(0, 6.283185307);
-        double offset = std::normal_distribution<double>(0, STARFIELD_BAND_SPREAD)(rng);
+        double offset = std::normal_distribution<double>(0, spread)(rng);
         double ring = std::cos(offset);
         double lift = std::sin(offset);
 
@@ -196,15 +196,15 @@ namespace nascent {
     }
 
     void EntityStarfield::spawn_shooting_star() {
-        double angle = random(0.22, 0.5);
-        double speed = random(900, 1500) * Ui::scale();
+        double angle = random(Ui::layout("starfield.shooting_min_angle"), Ui::layout("starfield.shooting_max_angle"));
+        double speed = random(Ui::layout("starfield.shooting_min_speed"), Ui::layout("starfield.shooting_max_speed")) * Ui::scale();
 
         ShootingStar shooting;
         shooting.pos = {random(size.x * 0.3, size.x * 1.1), random(-size.y * 0.1, size.y * 0.45)};
         shooting.velocity = {-std::cos(angle) * speed, std::sin(angle) * speed};
         shooting.age = 0;
-        shooting.life = random(0.55, 1.1);
-        shooting.length = random(140, 300) * Ui::scale();
+        shooting.life = random(Ui::layout("starfield.shooting_min_life"), Ui::layout("starfield.shooting_max_life"));
+        shooting.length = random(Ui::layout("starfield.shooting_min_length"), Ui::layout("starfield.shooting_max_length")) * Ui::scale();
         shooting.tint = star_tint();
         shooting_stars.push_back(shooting);
     }
@@ -212,15 +212,19 @@ namespace nascent {
     void EntityStarfield::build_sky() {
         double band_angle = random(0, 3.14159265);
         band_normal = {std::cos(band_angle), std::sin(band_angle), 0};
+        double band_ratio = Ui::layout("starfield.band_ratio");
+        double band_spread = Ui::layout("starfield.band_spread");
+        double min_twinkle_rate = Ui::layout("starfield.min_twinkle_rate");
+        double max_twinkle_rate = Ui::layout("starfield.max_twinkle_rate");
 
         stars.clear();
 
         for (int i = 0; i < STARFIELD_STAR_COUNT; i++) {
             Star star;
-            star.direction = random(0, 1) < STARFIELD_BAND_RATIO ? band_direction() : random_direction();
+            star.direction = random(0, 1) < band_ratio ? band_direction(band_spread) : random_direction();
             star.brightness = std::pow(random(0, 1), 4.0);
             star.phase = random(0, 6.283185307);
-            star.twinkle_rate = random(0.6, 3.2);
+            star.twinkle_rate = random(min_twinkle_rate, max_twinkle_rate);
             star.tint = star_tint();
             stars.push_back(star);
         }
@@ -354,7 +358,7 @@ namespace nascent {
 
     EntityStarfield::Matrix EntityStarfield::view_matrix(SkyView target) const {
         const View& sky_view = views[(size_t)target];
-        return multiply(axis_rotation(sky_view.spin_axis, -(time - sky_view.spin_start) * STARFIELD_ROTATION_SPEED), sky_view.orientation);
+        return multiply(axis_rotation(sky_view.spin_axis, -(time - sky_view.spin_start) * Ui::layout("starfield.rotation_speed")), sky_view.orientation);
     }
 
     void EntityStarfield::place_planet(SkyView target) {
@@ -402,6 +406,10 @@ namespace nascent {
         update_camera();
     }
 
+    void EntityStarfield::pan_to(SkyView target) {
+        pan_to(target, Ui::layout("starfield.pan_time"));
+    }
+
     void EntityStarfield::pan_to(SkyView target, double seconds) {
         if (target == view && (pan_duration <= 0 || time - pan_start >= pan_duration)) {
             return;
@@ -432,7 +440,7 @@ namespace nascent {
     }
 
     void EntityStarfield::init() {
-        focal = (size.x / 2) / std::tan(STARFIELD_FOV / 2);
+        focal = (size.x / 2) / std::tan(Ui::layout("starfield.field_of_view") / 2);
 
         build_sky();
         build_sprites();
@@ -444,7 +452,7 @@ namespace nascent {
         }
 
         show(view);
-        shooting_timer = random(3.0, STARFIELD_SHOOTING_MIN_DELAY);
+        shooting_timer = random(Ui::layout("starfield.shooting_first_delay"), Ui::layout("starfield.shooting_min_delay"));
     }
 
     void EntityStarfield::update(float elapsed_time) {
@@ -462,7 +470,7 @@ namespace nascent {
 
         if (shooting_timer <= 0) {
             spawn_shooting_star();
-            shooting_timer = random(STARFIELD_SHOOTING_MIN_DELAY, STARFIELD_SHOOTING_MAX_DELAY);
+            shooting_timer = random(Ui::layout("starfield.shooting_min_delay"), Ui::layout("starfield.shooting_max_delay"));
         }
     }
 
@@ -476,7 +484,7 @@ namespace nascent {
         window->DrawDecal({(float)(center.x - size / 2), (float)(center.y - size / 2)}, level.decal, {scale / level.factor, scale / level.factor}, tint);
     }
 
-    void EntityStarfield::draw_star(olc::PixelGameEngine* window, const Star& star) const {
+    void EntityStarfield::draw_star(olc::PixelGameEngine* window, const Star& star, const StarStyle& style) const {
         olc::vd2d screen;
         double depth;
 
@@ -486,28 +494,28 @@ namespace nascent {
 
         double twinkle = 0.5 + 0.5 * std::sin(time * star.twinkle_rate + star.phase);
         double brightness = (0.12 + 0.6 * star.brightness) * (1 - 0.45 * twinkle * (1.1 - star.brightness));
-        double star_size = std::lerp(STARFIELD_MIN_STAR_SIZE, STARFIELD_MAX_STAR_SIZE, star.brightness) * Ui::scale();
+        double star_size = std::lerp(style.min_size, style.max_size, star.brightness) * Ui::scale();
 
         olc::Pixel color = star.tint;
         color.a = alpha_of(brightness * light_level);
         draw_sprite(window, glow, screen, star_size, color);
 
-        if (star.brightness > STARFIELD_FLARE_BRIGHTNESS) {
+        if (star.brightness > style.flare_brightness) {
             color.a = alpha_of((0.15 + 0.45 * twinkle) * brightness * light_level);
-            draw_sprite(window, flare, screen, star_size * 2.4, color);
+            draw_sprite(window, flare, screen, star_size * style.flare_size, color);
         }
     }
 
     void EntityStarfield::draw_shooting_star(olc::PixelGameEngine* window, const ShootingStar& shooting) const {
         double envelope = std::sin(3.14159265 * std::clamp(shooting.age / shooting.life, 0.0, 1.0));
         olc::vd2d direction = shooting.velocity.norm();
-        double half_width = STREAK_HALF_WIDTH * Ui::scale();
+        double half_width = Ui::layout("starfield.shooting_half_width") * Ui::scale();
         olc::vd2d side = olc::vd2d{-direction.y, direction.x} * half_width;
         olc::vd2d tail = shooting.pos - direction * shooting.length;
-        olc::vd2d tail_side = side * STREAK_TAIL_RATIO;
+        olc::vd2d tail_side = side * Ui::layout("starfield.shooting_tail_ratio");
 
         olc::Pixel head_color = shooting.tint;
-        head_color.a = alpha_of(envelope * 0.65 * light_level);
+        head_color.a = alpha_of(envelope * Ui::layout("starfield.shooting_head_opacity") * light_level);
         olc::Pixel tail_color = shooting.tint;
         tail_color.a = 0;
 
@@ -523,8 +531,8 @@ namespace nascent {
         );
 
         olc::Pixel glow_color = skin->color(SkinColor::SHOOTING_STAR_GLOW);
-        glow_color.a = (uint8_t)std::lround(glow_color.a * alpha_of(envelope * 0.75 * light_level) / 255.0);
-        draw_sprite(window, glow, shooting.pos, 14 * Ui::scale(), glow_color);
+        glow_color.a = (uint8_t)std::lround(glow_color.a * alpha_of(envelope * Ui::layout("starfield.shooting_glow_opacity") * light_level) / 255.0);
+        draw_sprite(window, glow, shooting.pos, Ui::layout("starfield.shooting_glow_size") * Ui::scale(), glow_color);
     }
 
     void EntityStarfield::draw_planet(olc::PixelGameEngine* window, const Planet& planet) const {
@@ -573,14 +581,23 @@ namespace nascent {
     }
 
     void EntityStarfield::draw(olc::PixelGameEngine* window) {
+        if (const MipDecal* backdrop = skin->image(SkinImage::MENU_BACKGROUND, 0, 0); backdrop != nullptr && backdrop->size().x > 0 && backdrop->size().y > 0) {
+            float cover = std::max((float)size.x / backdrop->size().x, (float)size.y / backdrop->size().y);
+            olc::vf2d drawn = backdrop->size() * cover;
+            MipDecal::Pick level = backdrop->pick(cover);
+            window->DrawDecal({((float)size.x - drawn.x) / 2.0f, ((float)size.y - drawn.y) / 2.0f}, level.decal, {cover / level.factor, cover / level.factor});
+            return;
+        }
+
         if (!glow || !flare) {
             return;
         }
 
         window->SetDecalMode(olc::DecalMode::ADDITIVE);
+        StarStyle style = {Ui::layout("starfield.min_star_size"), Ui::layout("starfield.max_star_size"), Ui::layout("starfield.flare_brightness"), Ui::layout("starfield.flare_size")};
 
         for (const Star& star : stars) {
-            draw_star(window, star);
+            draw_star(window, star, style);
         }
 
         for (const ShootingStar& shooting : shooting_stars) {

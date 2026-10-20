@@ -235,6 +235,7 @@ namespace nascent {
         static std::string website_url(const std::string& route);
         static std::string chart_page_url(const std::string& chart_hash, float rate = 1.0f);
         static std::string profile_page_url(const std::string& user);
+        static std::string play_page_url(int64_t play_id);
 
         static std::future<ApiResult<ServerHealth>> health();
         static std::future<ApiResult<ServerHealth>> health(const std::string& server_url);

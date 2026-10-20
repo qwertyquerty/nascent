@@ -38,6 +38,6 @@ namespace nascent {
         float fraction() const;
     };
 
-    ChartLibrary load_chart_library(const std::filesystem::path& song_directory, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr);
+    ChartLibrary load_chart_library(const std::vector<std::filesystem::path>& song_directories, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr);
     ChartLibrary single_chart_library(std::unique_ptr<Chart> chart, float pitch, DifficultyCache& cache);
 }

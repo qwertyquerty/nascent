@@ -3,7 +3,6 @@
 #include "gse/Overlay.h"
 #include "gse/ui/Layout.h"
 
-#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -21,10 +20,6 @@ namespace nascent {
 
         public:
         static constexpr float DEFAULT_TIME = 5.0f;
-        static constexpr float FADE_TIME = 0.5f;
-        static constexpr int32_t PADDING = 16;
-        static constexpr int32_t TOP = 60;
-        static constexpr int32_t BORDER = 2;
 
         explicit ToastOverlay(Skin* skin);
 

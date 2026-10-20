@@ -59,11 +59,6 @@ namespace nascent {
         public:
         static constexpr float HEARTBEAT_INTERVAL = 15.0f;
         static constexpr float PROFILE_INTERVAL = 60.0f;
-        static constexpr int32_t HEIGHT = 40;
-        static constexpr int32_t PADDING = 20;
-        static constexpr int32_t SEGMENT_GAP = 30;
-        static constexpr int32_t LABEL_GAP = 8;
-        static constexpr int32_t DOT_RADIUS = 4;
 
         static int32_t height();
         static int32_t padding();

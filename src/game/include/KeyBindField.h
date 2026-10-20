@@ -16,8 +16,6 @@ namespace nascent {
         olc::Pixel value_color(UiTheme& theme, bool focused) const override;
 
         public:
-        static constexpr float CAPTURE_PULSE_SPEED = 6.0f;
-
         KeyBinding binding;
         std::optional<KeyBinding> swapped;
 

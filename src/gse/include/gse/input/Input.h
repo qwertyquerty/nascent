@@ -47,6 +47,7 @@ namespace nascent {
         std::unordered_map<ActionId, std::vector<olc::Key>> bindings;
         std::unordered_set<ActionId> consumed;
         std::unordered_set<ActionId> injected;
+        std::unordered_set<ActionId> blocked;
         std::array<bool, MOUSE_BUTTONS> consumed_clicks = {};
         bool back_clicked = false;
         bool wheel_consumed = false;
@@ -71,6 +72,7 @@ namespace nascent {
         bool take(ActionId action);
         void consume(ActionId action);
         void inject(ActionId action);
+        void block(ActionId action);
 
         bool focused() const;
         olc::HWButton key(olc::Key key) const;

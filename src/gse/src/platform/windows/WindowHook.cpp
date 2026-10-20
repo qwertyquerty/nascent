@@ -16,6 +16,7 @@
 #endif
 #include <windows.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <cwchar>
 
 namespace nascent {
@@ -310,6 +311,51 @@ namespace nascent {
     }
 
     void allow_app_switching_in_fullscreen() {
+    }
+
+    std::optional<std::filesystem::path> choose_folder(const std::string& title) {
+        HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+        if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE) {
+            return std::nullopt;
+        }
+
+        std::optional<std::filesystem::path> chosen;
+        IFileOpenDialog* dialog = nullptr;
+
+        if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) {
+            FILEOPENDIALOGOPTIONS options = 0;
+            dialog->GetOptions(&options);
+            dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+            std::wstring wide_title = utf8_to_wide(title);
+            dialog->SetTitle(wide_title.c_str());
+            HRESULT shown = dialog->Show(hooked_window);
+
+            if (shown == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+                chosen = std::filesystem::path();
+            }
+            else if (SUCCEEDED(shown)) {
+                IShellItem* item = nullptr;
+                PWSTR path = nullptr;
+
+                if (SUCCEEDED(dialog->GetResult(&item)) && SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                    chosen = std::filesystem::path(path);
+                    CoTaskMemFree(path);
+                }
+
+                if (item != nullptr) {
+                    item->Release();
+                }
+            }
+
+            dialog->Release();
+        }
+
+        if (SUCCEEDED(initialized)) {
+            CoUninitialize();
+        }
+
+        return chosen;
     }
 
     std::optional<bool> application_focused() {

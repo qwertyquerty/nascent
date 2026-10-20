@@ -73,6 +73,10 @@ namespace nascent {
         }
 
         std::string text((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        return load_text(text, path, pitch, error);
+    }
+
+    std::unique_ptr<Chart> Chart::load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error) {
         nlohmann::json jdata;
 
         if (path.extension() == OSU_FILE_EXTENSION) {

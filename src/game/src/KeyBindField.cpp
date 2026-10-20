@@ -1,6 +1,7 @@
 #include "KeyBindField.h"
 
 #include "gse/render/Color.h"
+#include "gse/ui/Ui.h"
 
 #include <cmath>
 
@@ -17,7 +18,9 @@ namespace nascent {
         }
 
         olc::Pixel color = theme.accent(0.5);
-        return fade(color, (150.0 + 105.0 * (0.5 + 0.5 * std::cos(blink_timer * CAPTURE_PULSE_SPEED))) / 255.0);
+        double low = Ui::layout("options.key_capture_min_alpha");
+        double high = Ui::layout("options.key_capture_max_alpha");
+        return fade(color, (low + (high - low) * (0.5 + 0.5 * std::cos(blink_timer * (float)Ui::layout("options.key_capture_pulse_speed")))) / 255.0);
     }
 
     void KeyBindField::on_blur() {

@@ -128,6 +128,12 @@ namespace nascent {
         }
     }
 
+    void DifficultyCache::clear() {
+        std::lock_guard<std::mutex> lock(mutex);
+        dirty = dirty || !entries.empty();
+        entries.clear();
+    }
+
     size_t DifficultyCache::size() const {
         std::lock_guard<std::mutex> lock(mutex);
         size_t count = 0;

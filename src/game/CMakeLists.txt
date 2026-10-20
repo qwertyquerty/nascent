@@ -3,6 +3,7 @@ message(STATUS "Building Game Module")
 add_library(game
     src/Account.cpp
     src/BeatmapDownloads.cpp
+    src/ChartFolders.cpp
     src/ChartLibrary.cpp
     src/ChartMenu.cpp
     src/EntityFFT.cpp

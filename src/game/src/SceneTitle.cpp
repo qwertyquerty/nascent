@@ -169,10 +169,11 @@ namespace nascent {
         }
 
         logo_field->lane_light.resize(letters);
+        double light_fade_ms = Ui::layout("title.logo_light_fade_ms");
 
         for (size_t letter = 0; letter < letters; letter++) {
             double since = bg_position - std::max(letter_hit_time[letter], letter_hold_end[letter]);
-            logo_field->lane_light[letter] = bg_position < letter_hold_end[letter] ? 1.0f : (float)std::clamp(1.0 - since / LOGO_LIGHT_FADE_MS, 0.0, 1.0);
+            logo_field->lane_light[letter] = bg_position < letter_hold_end[letter] ? 1.0f : (float)std::clamp(1.0 - since / light_fade_ms, 0.0, 1.0);
         }
     }
 
@@ -184,13 +185,16 @@ namespace nascent {
         olc::vi2d window_size = game->window->GetScreenSize();
         double content = std::min((double)window_size.x, window_size.y * Ui::REFERENCE_WIDTH / Ui::REFERENCE_HEIGHT);
 
-        logo_field->pos = {((double)window_size.x - content / 2) / 2, 0};
-        logo_field->size = {content / 2, (double)window_size.y / 2 + content / 28};
+        double logo_width = content * Ui::layout("title.logo_width_fraction");
+        double visualizer_height = (double)window_size.y * Ui::layout("title.visualizer_height_fraction");
+
+        logo_field->pos = {((double)window_size.x - logo_width) / 2, 0};
+        logo_field->size = {logo_width, (double)window_size.y * Ui::layout("title.logo_height_fraction") + content * Ui::layout("title.logo_extra_height_fraction")};
         logo_field->set_lane_gap(std::nullopt);
         fft_l->pos = {0, 0};
-        fft_l->size = {(double)window_size.x, (double)window_size.y * 0.28};
-        fft_r->pos = {0, (double)window_size.y - (double)window_size.y * 0.28};
-        fft_r->size = {(double)window_size.x, (double)window_size.y * 0.28};
+        fft_l->size = {(double)window_size.x, visualizer_height};
+        fft_r->pos = {0, (double)window_size.y - visualizer_height};
+        fft_r->size = {(double)window_size.x, visualizer_height};
 
         logo_skin->set_font_scale(Ui::scale());
         start_hint = render_text_decal(bg_skin->display_font_medium, START_HINT, olc::WHITE);
@@ -218,18 +222,18 @@ namespace nascent {
         logo_field->draw_notes_past_judge = false;
         logo_field->draw_judge_colors = true;
         logo_field->draw_hit_score = false;
-        logo_field->judge_alpha = 150;
+        logo_field->judge_alpha = (uint8_t)Ui::layout("title.logo_judge_alpha");
         logo_field->scroll_speed = SettingsManager::settings.field_scroll_speed;
         logo_field->opacity = PLAY_LOGO_INTRO ? 1.0f : 0.0f;
 
         fft_l = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1}, 0);
-        fft_l->opacity = BACKGROUND_DIM;
+        fft_l->opacity = (float)Ui::layout("title.visualizer_opacity");
         fft_l->init();
 
         fft_r = std::make_unique<EntityFFT>(bg_skin, olc::vd2d{0, 0}, olc::vd2d{1, 1}, 1);
         fft_r->flipped = true;
         fft_r->mirrored = true;
-        fft_r->opacity = BACKGROUND_DIM;
+        fft_r->opacity = (float)Ui::layout("title.visualizer_opacity");
         fft_r->init();
 
         if constexpr (PLAY_LOGO_INTRO) {
@@ -244,7 +248,7 @@ namespace nascent {
         bg_clock.max_error = SettingsManager::settings.field_audio_sync_max_error;
 
         loading = !list->library_available();
-        reveal = loading ? 0.0f : LOADING_BAR_FADE_TIME + STARFIELD_FADE_IN_TIME;
+        reveal = loading ? 0.0f : reveal_time();
         loaded = true;
         on_resize();
     };
@@ -354,7 +358,7 @@ namespace nascent {
         }
 
         if (bg_started) {
-            bg_fade = std::min(1.0f, bg_fade + step / BACKGROUND_FADE_IN_TIME);
+            bg_fade = std::min(1.0f, bg_fade + step / (float)Ui::layout("title.start_hint_fade_in_time"));
         }
 
         if (logo_audio_id != -1) {
@@ -383,7 +387,7 @@ namespace nascent {
         }
 
         update_logo_lights();
-        reveal = std::min(reveal + step, LOADING_BAR_FADE_TIME + STARFIELD_FADE_IN_TIME);
+        reveal = std::min(reveal + step, reveal_time());
         timer += step;
     };
 
@@ -418,7 +422,7 @@ namespace nascent {
         olc::vi2d screen = window->GetScreenSize();
         int32_t width = text_bounds(bg_skin->display_font_small, text).size.x;
         bool clickable = update.status == UpdateStatus::AVAILABLE || update.status == UpdateStatus::FAILED;
-        draw_hints(window, bg_skin->display_font_small, {{text, clickable ? SPOT_UPDATE : -1}}, {(float)((screen.x - width) / 2), (float)(screen.y - Ui::px(UPDATE_NOTICE_BOTTOM))}, 0.0f, color, bg_skin->color(SkinColor::TEXT), spots);
+        draw_hints(window, bg_skin->display_font_small, {{text, clickable ? SPOT_UPDATE : -1}}, {(float)((screen.x - width) / 2), (float)(screen.y - Ui::layout_px("title.update_notice_bottom"))}, 0.0f, color, bg_skin->color(SkinColor::TEXT), spots);
     }
 
     void SceneTitle::update_loading(float elapsed_time) {
@@ -429,7 +433,7 @@ namespace nascent {
             return;
         }
 
-        shown_progress += (list->library_progress() - shown_progress) * std::min(1.0f, step * LOADING_BAR_SPEED);
+        shown_progress += (list->library_progress() - shown_progress) * std::min(1.0f, step * (float)Ui::layout("title.loading_bar_speed"));
 
         if (!list->library_available()) {
             return;
@@ -458,9 +462,9 @@ namespace nascent {
 
         float opacity = bar_opacity();
         olc::vf2d screen = olc::vf2d(window->GetScreenSize());
-        olc::vf2d size = {Ui::pxf(LOADING_BAR_WIDTH), std::max(1.0f, Ui::pxf(LOADING_BAR_HEIGHT))};
-        ProgressBar bar(size, fade(bg_skin->color(SkinColor::PROGRESS_TRACK), LOADING_TRACK_OPACITY * opacity));
-        bar.draw(window, (screen - size) / 2.0f, shown_progress, fade(bg_skin->accent(0.5), LOADING_FILL_OPACITY * opacity));
+        olc::vf2d size = {Ui::layout_pxf("title.loading_bar_width"), std::max(1.0f, Ui::layout_pxf("title.loading_bar_height"))};
+        ProgressBar bar(size, fade(bg_skin->color(SkinColor::PROGRESS_TRACK), (float)Ui::layout("title.loading_track_opacity") * opacity));
+        bar.draw(window, (screen - size) / 2.0f, shown_progress, fade(bg_skin->accent(0.5), (float)Ui::layout("title.loading_fill_opacity") * opacity));
     }
 
     void SceneTitle::draw_cover(olc::PixelGameEngine* window, float opacity) {
@@ -469,12 +473,16 @@ namespace nascent {
         window->FillRectDecal({0.0f, 0.0f}, olc::vf2d(window->GetScreenSize()), fade(cover, opacity));
     }
 
+    float SceneTitle::reveal_time() const {
+        return (float)Ui::layout("title.loading_bar_fade_time") + (float)Ui::layout("title.starfield_fade_in_time");
+    }
+
     float SceneTitle::bar_opacity() const {
-        return loading ? 1.0f : 1.0f - std::clamp(reveal / LOADING_BAR_FADE_TIME, 0.0f, 1.0f);
+        return loading ? 1.0f : 1.0f - std::clamp(reveal / (float)Ui::layout("title.loading_bar_fade_time"), 0.0f, 1.0f);
     }
 
     float SceneTitle::cover_opacity() const {
-        return loading ? 1.0f : 1.0f - std::clamp((reveal - LOADING_BAR_FADE_TIME) / STARFIELD_FADE_IN_TIME, 0.0f, 1.0f);
+        return loading ? 1.0f : 1.0f - std::clamp((reveal - (float)Ui::layout("title.loading_bar_fade_time")) / (float)Ui::layout("title.starfield_fade_in_time"), 0.0f, 1.0f);
     }
 
     void SceneTitle::draw(olc::PixelGameEngine* window) {
@@ -505,10 +513,11 @@ namespace nascent {
         if (start_hint && (bg_started || (bg_chart == nullptr && logo_finished()))) {
             olc::Decal* hint = start_hint.get();
             olc::vi2d screen = window->GetScreenSize();
-            float pulse = 0.5f + 0.5f * std::sin((float)timer * START_HINT_PULSE_SPEED);
+            float pulse = 0.5f + 0.5f * std::sin((float)timer * (float)Ui::layout("title.start_hint_pulse_speed"));
             float visibility = bg_chart != nullptr ? bg_fade : 1.0f;
-            float y = (float)(logo_field->pos.y + logo_field->size.y + Ui::px(START_HINT_GAP));
-            window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, fade(bg_skin->color(SkinColor::TEXT), (110 + 145 * pulse) * visibility / 255.0));
+            float alpha = (float)Ui::layout("title.start_hint_min_alpha") + (float)Ui::layout("title.start_hint_pulse_alpha") * pulse;
+            float y = (float)(logo_field->pos.y + logo_field->size.y + Ui::layout_px("title.start_hint_gap"));
+            window->DrawDecal({(float)(screen.x - hint->sprite->width) / 2.0f, y}, hint, {1.0f, 1.0f}, fade(bg_skin->color(SkinColor::TEXT), alpha * visibility / 255.0));
         }
 
         draw_update_notice(window);

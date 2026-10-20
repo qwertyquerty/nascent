@@ -21,6 +21,7 @@ add_library(gse
     src/ui/Layout.cpp
     src/ui/ProgressBar.cpp
     src/ui/RowField.cpp
+    src/ui/ScrollBar.cpp
     src/ui/TextField.cpp
     src/ui/UiForm.cpp
 )
@@ -31,7 +32,7 @@ nascent_target_warnings(gse)
 
 if(WIN32)
     target_sources(gse PRIVATE src/platform/windows/PlatformWindows.cpp src/platform/windows/WindowHook.cpp)
-    target_link_libraries(gse PRIVATE shell32 ole32)
+    target_link_libraries(gse PRIVATE shell32 ole32 uuid)
     target_compile_definitions(gse PRIVATE _WIN32_WINNT=0x0601)
 elseif(APPLE)
     target_sources(gse PRIVATE src/platform/posix/PlatformPosix.cpp src/platform/posix/WindowHook.cpp src/platform/mac/PlatformMac.cpp src/platform/mac/KeySourceMac.mm src/platform/mac/WindowMac.mm)

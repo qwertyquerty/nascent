@@ -74,6 +74,7 @@ namespace nascent {
         void update_loading(float elapsed_time);
         void draw_loading(olc::PixelGameEngine* window);
         void draw_cover(olc::PixelGameEngine* window, float opacity);
+        float reveal_time() const;
         float bar_opacity() const;
         float cover_opacity() const;
         bool adopt_track(const TitleTrack& track);
@@ -95,20 +96,7 @@ namespace nascent {
         static constexpr float MAX_TIMER_STEP = 1.0f / 30.0f;
         static constexpr int32_t RANDOM_CHART_ATTEMPTS = 10;
         static constexpr int32_t WARMUP_FRAMES = 3;
-        static constexpr float LOADING_BAR_WIDTH = 480.0f;
-        static constexpr float LOADING_BAR_HEIGHT = 6.0f;
-        static constexpr float LOADING_BAR_SPEED = 10.0f;
-        static constexpr float LOADING_TRACK_OPACITY = 0.12f;
-        static constexpr float LOADING_FILL_OPACITY = 0.35f;
-        static constexpr float LOADING_BAR_FADE_TIME = 0.25f;
-        static constexpr float STARFIELD_FADE_IN_TIME = 0.5f;
-        static constexpr float BACKGROUND_FADE_IN_TIME = 1.0f;
-        static constexpr float BACKGROUND_DIM = 0.5f;
-        static constexpr double LOGO_LIGHT_FADE_MS = 250.0;
         static constexpr const char* START_HINT = "PRESS ENTER TO START";
-        static constexpr int32_t START_HINT_GAP = 24;
-        static constexpr float START_HINT_PULSE_SPEED = 2.5f;
-        static constexpr int32_t UPDATE_NOTICE_BOTTOM = 48;
         static constexpr int32_t SPOT_UPDATE = 0;
 
         SceneTitle(Skin* bg_skin, Skin* logo_skin, SceneList* list, EntityStarfield* sky, std::optional<TitleTrack> handoff = std::nullopt);

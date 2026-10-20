@@ -12,6 +12,7 @@
 #include "gse/render/Color.h"
 #include "gse/anim/Easing.h"
 #include "gse/concurrency/Async.h"
+#include "gse/Platform.h"
 
 #include <algorithm>
 #include <chrono>
@@ -28,49 +29,32 @@
 namespace nascent {
     static constexpr std::string_view BACK_HINT = "Enter / Esc  back to the song list";
     static constexpr std::string_view BEST_LABEL = "Best";
-    static constexpr float GRADE_SLAM_START = 0.15f;
-    static constexpr float GRADE_SLAM_TIME = 0.4f;
-    static constexpr float GRADE_SLAM_SCALE = 2.6f;
-    static constexpr float FLASH_TIME = 0.35f;
-    static constexpr float FLASH_ALPHA = 0.22f;
-    static constexpr float COUNT_START = 0.25f;
-    static constexpr float COUNT_TIME = 1.1f;
-    static constexpr float ROWS_START = 0.55f;
-    static constexpr float ROW_STAGGER = 0.07f;
-    static constexpr float ROW_FADE = 0.3f;
-    static constexpr float ROW_SLIDE = 30.0f;
-    static constexpr float GRAPH_START = 0.9f;
-    static constexpr float GRAPH_FADE = 0.5f;
-    static constexpr float BANNER_START = 1.3f;
-    static constexpr float BANNER_FADE = 0.35f;
-    static constexpr float BANNER_SLIDE = 40.0f;
-    static constexpr float BANNER_GAP = 28.0f;
-    static constexpr float BANNER_PULSE_SPEED = 4.0f;
-    static constexpr float BANNER_GRADIENT_SPEED = 0.35f;
-    static constexpr float PARTICLE_GRAVITY = 900.0f;
-    static constexpr float PARTICLE_DRAG = 1.6f;
-    static constexpr float PARTICLE_SPEED_MIN = 250.0f;
-    static constexpr float PARTICLE_SPEED_MAX = 950.0f;
-    static constexpr float PARTICLE_LIFE_MIN = 0.7f;
-    static constexpr float PARTICLE_LIFE_MAX = 1.6f;
-    static constexpr float PARTICLE_SIZE_MIN = 3.0f;
-    static constexpr float PARTICLE_SIZE_MAX = 7.0f;
+    static constexpr std::string_view PLAY_PAGE_HINT = "F7  view on website";
+    static constexpr double MAX_PARTICLES = 2000.0;
 
     static size_t burst_size(Grade grade) {
         switch (grade) {
             case Grade::X:
-                return 170;
+                return (size_t)std::clamp(Ui::layout("results.particle_count_x"), 0.0, MAX_PARTICLES);
             case Grade::S:
-                return 120;
+                return (size_t)std::clamp(Ui::layout("results.particle_count_s"), 0.0, MAX_PARTICLES);
             case Grade::A:
-                return 60;
+                return (size_t)std::clamp(Ui::layout("results.particle_count_a"), 0.0, MAX_PARTICLES);
             case Grade::B:
-                return 35;
+                return (size_t)std::clamp(Ui::layout("results.particle_count_b"), 0.0, MAX_PARTICLES);
             case Grade::C:
-                return 20;
+                return (size_t)std::clamp(Ui::layout("results.particle_count_c"), 0.0, MAX_PARTICLES);
             default:
                 return 0;
         }
+    }
+
+    static int32_t content_left(olc::vi2d screen) {
+        return (int32_t)(screen.x * Ui::layout("results.margin_fraction"));
+    }
+
+    static int32_t content_top(olc::vi2d screen) {
+        return (int32_t)(screen.y * Ui::layout("results.top_fraction"));
     }
 
     SceneResults::SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id, bool new_best, std::string replay_label) {
@@ -98,10 +82,10 @@ namespace nascent {
 
     void SceneResults::layout_error_graph() {
         olc::vi2d screen = game->window->GetScreenSize();
-        int32_t margin = screen.x / 24;
+        int32_t margin = (int32_t)(screen.x * Ui::layout("results.graph_margin_fraction"));
 
-        error_graph_pos = {margin, (int32_t)(screen.y * 0.56)};
-        build_error_graph({std::max(1, screen.x - margin * 2), std::max(1, (int32_t)(screen.y * 0.32))});
+        error_graph_pos = {margin, (int32_t)(screen.y * Ui::layout("results.graph_top"))};
+        build_error_graph({std::max(1, screen.x - margin * 2), std::max(1, (int32_t)(screen.y * Ui::layout("results.graph_height")))});
     }
 
     void SceneResults::on_resize() {
@@ -119,17 +103,19 @@ namespace nascent {
         }
 
         double range = get_window_from_hit_acc_diff(HitScore::BAD, summary.hit_accuracy);
-        double half = size.y / 2.0 - 2;
+        double half = size.y / 2.0 - Ui::layout("results.graph_inset");
 
         auto error_to_y = [&](double error) {
             double clamped = std::clamp(error, -range, range);
             return (int32_t)std::lround(size.y / 2.0 + clamped / range * half);
         };
 
+        uint8_t band_alpha = (uint8_t)Ui::layout("results.graph_band_alpha");
+
         for (auto it = TIMED_HIT_SCORES.rbegin(); it != TIMED_HIT_SCORES.rend(); ++it) {
             double window = get_window_from_hit_acc_diff(*it, summary.hit_accuracy);
             olc::Pixel band = skin->judgement_color(*it);
-            band.a = 28;
+            band.a = band_alpha;
 
             for (int32_t y = error_to_y(-window); y <= error_to_y(window); y++) {
                 for (int32_t x = 0; x < size.x; x++) {
@@ -149,7 +135,7 @@ namespace nascent {
         };
 
         olc::Pixel miss_color = skin->judgement_color(HitScore::MISS);
-        miss_color.a = 110;
+        miss_color.a = (uint8_t)Ui::layout("results.graph_miss_alpha");
 
         for (const ErrorPoint& point : summary.errors) {
             if (point.score == HitScore::MISS && !point.played) {
@@ -161,17 +147,20 @@ namespace nascent {
             }
         }
 
+        uint8_t hit_alpha = (uint8_t)Ui::layout("results.graph_hit_alpha");
+        uint8_t release_alpha = (uint8_t)Ui::layout("results.graph_release_alpha");
+        int32_t radius = std::max(1, Ui::layout_px("results.graph_dot_radius"));
+        int32_t dot_width = std::max(2, Ui::layout_px("results.graph_dot_width"));
+
         for (const ErrorPoint& point : summary.errors) {
             if (point.score == HitScore::MISS && !point.played) {
                 continue;
             }
 
             olc::Pixel color = skin->judgement_color(point.score);
-            color.a = point.release ? 150 : 230;
+            color.a = point.release ? release_alpha : hit_alpha;
             int32_t x = time_to_x(point.time);
             int32_t y = error_to_y(point.error);
-            int32_t radius = std::max(1, Ui::px(1));
-            int32_t dot_width = std::max(2, Ui::px(2));
 
             for (int32_t dy = -radius; dy <= radius; dy++) {
                 for (int32_t dx = 0; dx < dot_width; dx++) {
@@ -198,7 +187,7 @@ namespace nascent {
     }
 
     olc::vf2d SceneResults::grade_baseline(olc::vi2d screen) const {
-        return {(float)(screen.x / 24), (float)(screen.y / 10 + Ui::px(36) + Ui::px(110) + Ui::px(20))};
+        return {(float)content_left(screen), (float)(content_top(screen) + Ui::layout_px("results.subtitle_gap") + Ui::layout_px("results.grade_row_gap") + Ui::layout_px("results.grade_row_offset"))};
     }
 
     void SceneResults::burst(olc::vf2d center) {
@@ -209,13 +198,13 @@ namespace nascent {
         ParticleBurst burst;
         burst.center = center;
         burst.count = burst_size(grade);
-        burst.speed_min = Ui::pxf(PARTICLE_SPEED_MIN);
-        burst.speed_max = Ui::pxf(PARTICLE_SPEED_MAX);
-        burst.lift = Ui::pxf(PARTICLE_SPEED_MIN);
-        burst.life_min = PARTICLE_LIFE_MIN;
-        burst.life_max = PARTICLE_LIFE_MAX;
-        burst.size_min = Ui::pxf(PARTICLE_SIZE_MIN);
-        burst.size_max = Ui::pxf(PARTICLE_SIZE_MAX);
+        burst.speed_min = Ui::layout_pxf("results.particle_speed_min");
+        burst.speed_max = Ui::layout_pxf("results.particle_speed_max");
+        burst.lift = Ui::layout_pxf("results.particle_lift");
+        burst.life_min = (float)Ui::layout("results.particle_life_min");
+        burst.life_max = (float)Ui::layout("results.particle_life_max");
+        burst.size_min = Ui::layout_pxf("results.particle_size_min");
+        burst.size_max = Ui::layout_pxf("results.particle_size_max");
         burst.color = [grade, base, theme](std::mt19937& random) {
             std::uniform_real_distribution<float> unit(0.0f, 1.0f);
 
@@ -230,11 +219,11 @@ namespace nascent {
 
     void SceneResults::update(float elapsed_time) {
         elapsed += elapsed_time;
-        particles.gravity = Ui::pxf(PARTICLE_GRAVITY);
-        particles.drag = PARTICLE_DRAG;
+        particles.gravity = Ui::layout_pxf("results.particle_gravity");
+        particles.drag = (float)Ui::layout("results.particle_drag");
         particles.update(elapsed_time);
 
-        if (!slammed && elapsed >= GRADE_SLAM_START + GRADE_SLAM_TIME) {
+        if (!slammed && elapsed >= (float)Ui::layout("results.grade_slam_start") + (float)Ui::layout("results.grade_slam_time")) {
             slammed = true;
             olc::vi2d screen = game->window->GetScreenSize();
             olc::vf2d baseline = grade_baseline(screen);
@@ -252,13 +241,41 @@ namespace nascent {
             RichPresence::refresh_profile();
         }
 
-        if (spots.take_click(game->input())) {
+        std::optional<int32_t> clicked = spots.take_click(game->input());
+
+        if (clicked == SPOT_BACK) {
             game->input().inject(actions::CONFIRM);
+        }
+
+        if (clicked == SPOT_PLAY_PAGE || game->input().key_pressed(InputManager::play_page_key)) {
+            open_play_page();
         }
 
         if (game->input().take(actions::CONFIRM)) {
             game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             game->scenes().pop();
+        }
+    }
+
+    std::optional<int64_t> SceneResults::submitted_play_id() const {
+        if (!replay_label.empty() || !submitted || !submitted->ok() || submitted->value->play.id <= 0) {
+            return std::nullopt;
+        }
+
+        return submitted->value->play.id;
+    }
+
+    void SceneResults::open_play_page() {
+        std::optional<int64_t> play_id = submitted_play_id();
+
+        if (!play_id) {
+            return;
+        }
+
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+
+        if (!open_url(ServerApi::play_page_url(*play_id))) {
+            game->notify("Could not open the browser", true);
         }
     }
 
@@ -297,8 +314,8 @@ namespace nascent {
         olc::vi2d screen = window->GetScreenSize();
         int32_t bar_height = StatusBar::height();
         int32_t padding = StatusBar::padding();
-        int32_t segment_gap = Ui::px(StatusBar::SEGMENT_GAP);
-        int32_t label_gap = Ui::px(StatusBar::LABEL_GAP);
+        int32_t segment_gap = Ui::layout_px("status_bar.segment_gap");
+        int32_t label_gap = Ui::layout_px("status_bar.label_gap");
         int32_t top = screen.y - bar_height;
         olc::Font& font = skin->display_font_small;
 
@@ -312,9 +329,15 @@ namespace nascent {
             return text.empty() ? 0 : text_bounds(font, text).size.x;
         };
 
-        int32_t right = screen.x - padding - width(BACK_HINT);
+        std::vector<Hint> hints = {{std::string(BACK_HINT), SPOT_BACK}};
+
+        if (submitted_play_id()) {
+            hints.insert(hints.begin(), {std::string(PLAY_PAGE_HINT), SPOT_PLAY_PAGE});
+        }
+
+        int32_t right = screen.x - padding - (int32_t)std::ceil(hints_width(font, hints, (float)segment_gap));
         spots.clear();
-        draw_hints(window, font, {{std::string(BACK_HINT), 0}}, {(float)right, (float)baseline}, (float)segment_gap, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
+        draw_hints(window, font, hints, {(float)right, (float)baseline}, (float)segment_gap, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
 
         int32_t left_limit = right - segment_gap;
         int32_t x = padding;
@@ -430,45 +453,52 @@ namespace nascent {
             window->DrawWarpedDecal(background_image.pick(cover).decal, corners, skin->color(SkinColor::BACKGROUND_TINT));
         }
 
-        float flash = elapsed >= GRADE_SLAM_START + GRADE_SLAM_TIME ? 1.0f - progress(elapsed, GRADE_SLAM_START + GRADE_SLAM_TIME, FLASH_TIME) : 0.0f;
+        float slam_start = (float)Ui::layout("results.grade_slam_start");
+        float slam_time = (float)Ui::layout("results.grade_slam_time");
+        float flash = elapsed >= slam_start + slam_time ? 1.0f - progress(elapsed, slam_start + slam_time, (float)Ui::layout("results.flash_time")) : 0.0f;
 
         if (flash > 0 && burst_size(summary.grade) > 0) {
-            window->FillRectDecal({0.0f, 0.0f}, screen, fade(skin->grade_color(summary.grade), flash * FLASH_ALPHA));
+            window->FillRectDecal({0.0f, 0.0f}, screen, fade(skin->grade_color(summary.grade), flash * (float)Ui::layout("results.flash_alpha")));
         }
 
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = content_left(screen);
+        int32_t y = content_top(screen);
 
         draw_text(skin->display_font_medium, std::format("{} - {}", chart->info.artist, chart->info.title), {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(36);
+        y += Ui::layout_px("results.subtitle_gap");
         draw_text(skin->display_font_small, std::format("[{}] // {}    {:.2f}x", chart->info.difficulty_name, chart->info.mapper, chart->pitch), {x, y}, skin->color(SkinColor::TEXT_MUTED));
-        y += Ui::px(110);
+        y += Ui::layout_px("results.grade_row_gap");
 
         olc::vf2d baseline = grade_baseline(screen);
         olc::FontRect grade_bounds = text_bounds(skin->display_font_large, grade_name(summary.grade));
-        float slam = progress(elapsed, GRADE_SLAM_START, GRADE_SLAM_TIME);
+        float slam = progress(elapsed, slam_start, slam_time);
 
         if (slam > 0) {
-            float scale = 1.0f + (GRADE_SLAM_SCALE - 1.0f) * (1.0f - ease_out(slam));
+            float scale = 1.0f + ((float)Ui::layout("results.grade_slam_scale") - 1.0f) * (1.0f - ease_out(slam));
             olc::vf2d half = {grade_bounds.offset.x + grade_bounds.size.x / 2.0f, grade_bounds.offset.y + grade_bounds.size.y / 2.0f};
             olc::vf2d center = baseline + half;
             skin->draw_grade(summary.grade, skin->display_font_large, center - half * scale, scale, std::min(1.0f, slam * 2.0f));
         }
 
-        double counted = summary.accuracy * ease_out(progress(elapsed, COUNT_START, COUNT_TIME));
+        double counted = summary.accuracy * ease_out(progress(elapsed, (float)Ui::layout("results.count_start"), (float)Ui::layout("results.count_time")));
         std::string accuracy_text = std::format("{:.2f}%", std::floor(counted * 10000.0) / 100.0);
-        int32_t accuracy_x = x + Ui::px(110);
-        draw_text(skin->display_font_large, accuracy_text, {accuracy_x, y + Ui::px(20)}, skin->color(SkinColor::TEXT));
+        int32_t accuracy_x = x + Ui::layout_px("results.accuracy_x");
+        draw_text(skin->display_font_large, accuracy_text, {accuracy_x, y + Ui::layout_px("results.grade_row_offset")}, skin->color(SkinColor::TEXT));
 
         bool full_combo = summary.max_combo > 0 && summary.score_counts[(size_t)HitScore::MISS] == 0;
-        float banner = ease_out(progress(elapsed, BANNER_START, BANNER_FADE));
-        float pulse = 0.85f + 0.15f * (float)std::sin(elapsed * BANNER_PULSE_SPEED);
-        olc::Pixel shine = skin->title_gradient_at(std::fmod(elapsed * BANNER_GRADIENT_SPEED, 1.0f), 0.5);
+        float banner = ease_out(progress(elapsed, (float)Ui::layout("results.banner_start"), (float)Ui::layout("results.banner_fade")));
+        float pulse = (float)Ui::layout("results.banner_pulse_base") + (float)Ui::layout("results.banner_pulse_amount") * (float)std::sin(elapsed * (float)Ui::layout("results.banner_pulse_speed"));
+        olc::Pixel shine = skin->title_gradient_at(std::fmod(elapsed * (float)Ui::layout("results.banner_gradient_speed"), 1.0f), 0.5);
 
-        y += Ui::px(80);
+        y += Ui::layout_px("results.stats_gap");
+
+        float rows_start = (float)Ui::layout("results.rows_start");
+        float row_stagger = (float)Ui::layout("results.row_stagger");
+        float row_fade_time = (float)Ui::layout("results.row_fade");
+        float row_slide = Ui::layout_pxf("results.row_slide");
 
         auto row_fade = [&](size_t index) {
-            return ease_out(progress(elapsed, ROWS_START + ROW_STAGGER * index, ROW_FADE));
+            return ease_out(progress(elapsed, rows_start + row_stagger * index, row_fade_time));
         };
 
         struct StatRow {
@@ -488,24 +518,30 @@ namespace nascent {
         };
 
         size_t row_index = 0;
+        int32_t stat_value_x = Ui::layout_px("results.stat_value_x");
+        int32_t banner_gap = Ui::layout_px("results.banner_gap");
+        float banner_slide = Ui::layout_pxf("results.banner_slide");
+        int32_t stat_row_height = Ui::layout_px("results.stat_row_height");
 
         for (const StatRow& row : stats) {
             float alpha = row_fade(row_index++);
-            int32_t slide = (int32_t)(Ui::pxf(ROW_SLIDE) * (1.0f - alpha));
-            int32_t value_x = x + Ui::px(300) - slide;
+            int32_t slide = (int32_t)(row_slide * (1.0f - alpha));
+            int32_t value_x = x + stat_value_x - slide;
             draw_text(skin->display_font_medium, row.label, {x - slide, y}, fade(skin->color(SkinColor::TEXT_MUTED), alpha));
             draw_text(skin->display_font_medium, row.value, {value_x, y}, fade(row.color, alpha));
 
             if (!row.badge.empty() && banner > 0) {
-                int32_t badge_x = value_x + text_bounds(skin->display_font_medium, row.value).size.x + Ui::px(BANNER_GAP) + (int32_t)(Ui::pxf(BANNER_SLIDE) * (1.0f - banner));
+                int32_t badge_x = value_x + text_bounds(skin->display_font_medium, row.value).size.x + banner_gap + (int32_t)(banner_slide * (1.0f - banner));
                 draw_text(skin->display_font_medium, row.badge, {badge_x, y}, fade(row.badge_color, banner * pulse));
             }
 
-            y += Ui::px(44);
+            y += stat_row_height;
         }
 
-        int32_t counts_x = screen.x / 2 + screen.x / 12;
-        int32_t counts_y = screen.y / 10 + Ui::px(146);
+        int32_t counts_x = screen.x / 2 + (int32_t)(screen.x * Ui::layout("results.counts_offset_fraction"));
+        int32_t counts_y = content_top(screen) + Ui::layout_px("results.counts_top");
+        int32_t count_value_x = Ui::layout_px("results.count_value_x");
+        int32_t count_row_height = Ui::layout_px("results.count_row_height");
 
         for (HitScore score : ALL_HIT_SCORES) {
             if (score == HitScore::NONE) {
@@ -513,18 +549,27 @@ namespace nascent {
             }
 
             float alpha = row_fade(row_index++);
-            int32_t slide = (int32_t)(Ui::pxf(ROW_SLIDE) * (1.0f - alpha));
+            int32_t slide = (int32_t)(row_slide * (1.0f - alpha));
             uint32_t count = (uint32_t)std::lround(summary.score_counts[(size_t)score] * alpha);
             skin->draw_judgement(score, skin->display_font_medium, olc::vf2d{(float)(counts_x + slide), (float)counts_y}, alpha);
-            draw_text(skin->display_font_medium, std::format("{}", count), {counts_x + Ui::px(260) + slide, counts_y}, fade(skin->color(SkinColor::TEXT), alpha));
-            counts_y += Ui::px(44);
+            draw_text(skin->display_font_medium, std::format("{}", count), {counts_x + count_value_x + slide, counts_y}, fade(skin->color(SkinColor::TEXT), alpha));
+            counts_y += count_row_height;
         }
 
-        float graph = ease_out(progress(elapsed, GRAPH_START, GRAPH_FADE));
+        float graph = ease_out(progress(elapsed, (float)Ui::layout("results.graph_start"), (float)Ui::layout("results.graph_fade")));
 
         if (error_graph && graph > 0) {
-            draw_text(skin->display_font_small, "Hit error over the song", {error_graph_pos.x, error_graph_pos.y - Ui::px(12)}, fade(skin->color(SkinColor::TEXT_MUTED), graph));
+            draw_text(skin->display_font_small, "Hit error over the song", {error_graph_pos.x, error_graph_pos.y - Ui::layout_px("results.graph_title_lift")}, fade(skin->color(SkinColor::TEXT_MUTED), graph));
             window->DrawDecal(error_graph_pos, error_graph.get(), {1.0f, 1.0f}, fade(olc::WHITE, graph));
+
+            olc::Font& label_font = skin->display_font_small;
+            olc::FontRect label_metrics = text_bounds(label_font, "Ely");
+            int32_t padding = Ui::layout_px("results.graph_label_padding");
+            int32_t label_x = error_graph_pos.x + padding;
+            int32_t graph_bottom = error_graph_pos.y + error_graph.get_sprite()->height;
+            olc::Pixel label_color = fade(skin->color(SkinColor::TEXT_MUTED), graph);
+            draw_text(label_font, "Early", {label_x, error_graph_pos.y + padding - label_metrics.offset.y}, label_color);
+            draw_text(label_font, "Late", {label_x, graph_bottom - padding - label_metrics.offset.y - label_metrics.size.y}, label_color);
         }
 
         particles.draw(window);

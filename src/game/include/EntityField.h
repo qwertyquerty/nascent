@@ -8,6 +8,7 @@
 
 namespace nascent {
     class Attempt;
+    struct JudgedHit;
     class Chart;
     class Skin;
     enum class SkinImage : uint8_t;
@@ -46,6 +47,8 @@ namespace nascent {
         double lane_cover = 0;
 
         uint8_t judge_alpha = 64;
+        float note_opacity = 1.0f;
+        float receptor_opacity = 1.0f;
 
         uint32_t active_keys = 0;
 
@@ -56,8 +59,6 @@ namespace nascent {
         olc::vd2d pos = {0, 0};
         olc::vd2d size = {0, 0};
 
-        static constexpr float LANE_COVER_FADE = 40.0f;
-
         EntityField(const Chart*, Skin*, olc::vd2d, olc::vd2d);
         void draw(olc::PixelGameEngine*);
 
@@ -67,6 +68,8 @@ namespace nascent {
         double flip_y(double y) const;
         double overlay_y(double height) const;
         olc::Pixel with_opacity(olc::Pixel color) const;
+        olc::Pixel note_tint(olc::Pixel color) const;
+        void draw_judgement(olc::PixelGameEngine* window, const JudgedHit& judged, double t);
         olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
         olc::Decal* sized_image(SkinImage image, uint8_t column, uint8_t key_count) const;
         void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;

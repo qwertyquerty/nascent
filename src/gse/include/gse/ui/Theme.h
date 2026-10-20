@@ -3,6 +3,8 @@
 #include "olcPixelGameEngine.h"
 #include "olcPGEX_TTF.h"
 
+#include <string_view>
+
 namespace nascent {
     enum class UiFont {
         SMALL,
@@ -26,5 +28,6 @@ namespace nascent {
         virtual olc::Font& font(UiFont font) = 0;
         virtual olc::Pixel color(UiColor color) const = 0;
         virtual olc::Pixel accent(double position) const = 0;
+        virtual double layout(std::string_view key) const = 0;
     };
 }

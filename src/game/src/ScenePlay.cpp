@@ -42,23 +42,7 @@
 
 namespace nascent {
     static constexpr int32_t RESULTS_DELAY_MS = 2000;
-    static constexpr float SONG_PROGRESS_WIDTH = 80.0f;
-    static constexpr float SONG_PROGRESS_HEIGHT = 6.0f;
-    static constexpr float SONG_PROGRESS_RIGHT = 100.0f;
-    static constexpr float SONG_PROGRESS_TOP = 40.0f;
-    static constexpr float DIAGNOSTICS_RIGHT = 20.0f;
-    static constexpr float DIAGNOSTICS_TOP = 70.0f;
-    static constexpr float DIAGNOSTICS_LINE_GAP = 4.0f;
-    static constexpr float DIAGNOSTICS_PADDING = 10.0f;
-    static constexpr float DIAGNOSTICS_MAX_WIDTH = 560.0f;
-    static constexpr float HIT_LOG_TOP = 160.0f;
-    static constexpr float HIT_LOG_SPACING = 26.0f;
-    static constexpr float HIT_LOG_SCORE_X = 20.0f;
-    static constexpr float HIT_LOG_ERROR_X = 80.0f;
     static constexpr uint8_t HIT_LOG_ROWS = 35;
-    static constexpr double REPLAY_LABEL_START = 1.5;
-    static constexpr int32_t STAT_TOP = 40;
-    static constexpr int32_t STAT_SPACING = 40;
 
     static double start_position_ms() {
         return -SettingsManager::settings.play_start_delay * 1000.0;
@@ -209,6 +193,14 @@ namespace nascent {
         field->lane_cover = settings.field_lane_cover / 100.0;
         field->judgement_height = settings.field_judgement_height / 100.0;
         field->combo_height = settings.field_combo_height / 100.0;
+        field->note_opacity = settings.field_note_opacity / 100.0f;
+        field->receptor_opacity = settings.field_receptor_opacity / 100.0f;
+        last_judged = nullptr;
+        last_judged_release = false;
+
+        for (HitScore score : ALL_HIT_SCORES) {
+            skin->judgement_voice(score);
+        }
 
         if (replay && replay->settings.scroll_speed > 0) {
             field->scroll_speed = replay->settings.scroll_speed;
@@ -470,10 +462,11 @@ namespace nascent {
         olc::Font& font = skin->display_font_small;
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         std::vector<std::string> lines = diagnostics_lines(false);
-        float padding = Ui::pxf(DIAGNOSTICS_PADDING);
-        float line_height = (float)metrics.size.y + Ui::pxf(DIAGNOSTICS_LINE_GAP);
-        float top = Ui::pxf(DIAGNOSTICS_TOP);
-        float max_width = Ui::pxf(DIAGNOSTICS_MAX_WIDTH);
+        float padding = Ui::layout_pxf("play.diagnostics_padding");
+        float line_gap = Ui::layout_pxf("play.diagnostics_line_gap");
+        float line_height = (float)metrics.size.y + line_gap;
+        float top = Ui::layout_pxf("play.diagnostics_top");
+        float max_width = Ui::layout_pxf("play.diagnostics_max_width");
         float width = 0;
 
         for (std::string& line : lines) {
@@ -492,8 +485,8 @@ namespace nascent {
             width = std::max(width, (float)text_bounds(font, line).size.x);
         }
 
-        float x = (float)window->GetScreenSize().x - Ui::pxf(DIAGNOSTICS_RIGHT) - width - padding;
-        float height = line_height * (float)lines.size() - Ui::pxf(DIAGNOSTICS_LINE_GAP) + padding * 2;
+        float x = (float)window->GetScreenSize().x - Ui::layout_pxf("play.diagnostics_right") - width - padding;
+        float height = line_height * (float)lines.size() - line_gap + padding * 2;
         window->FillRectDecal({x - padding, top - padding}, {width + padding * 2, height}, skin->color(SkinColor::DIAGNOSTICS_BACKGROUND));
 
         for (size_t index = 0; index < lines.size(); index++) {
@@ -619,6 +612,21 @@ namespace nascent {
         session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->input(), lane_keys)), now);
     }
 
+    void ScenePlay::play_judgement_sound() {
+        const JudgedHit* judged = session->get_attempt().get_last_scored();
+
+        if (judged == nullptr || (judged == last_judged && judged->released == last_judged_release)) {
+            return;
+        }
+
+        last_judged = judged;
+        last_judged_release = judged->released;
+
+        if (SettingsManager::settings.field_hitsounds) {
+            game->audio().play_effect(skin->judgement_voice(judged->released ? judged->release_score : judged->hit_score));
+        }
+    }
+
     void ScenePlay::use_background(const MipDecal* background) {
         borrowed_background = background;
     }
@@ -663,9 +671,12 @@ namespace nascent {
 
     void ScenePlay::draw_background(olc::PixelGameEngine* window) const {
         uint8_t brightness = SettingsManager::settings.field_background_brightness;
-        const MipDecal* image = borrowed_background != nullptr ? borrowed_background : &background_image;
+        const MipDecal* skinned = skin->image(SkinImage::PLAY_BACKGROUND, 0, chart->info.key_count);
+        const MipDecal* image = skinned != nullptr ? skinned : borrowed_background != nullptr ? borrowed_background
+                                                                                              : &background_image;
+        float shown = skinned != nullptr ? 1.0f : background_fade;
 
-        if (!*image || brightness == 0 || background_fade <= 0) {
+        if (!*image || brightness == 0 || shown <= 0) {
             return;
         }
 
@@ -673,7 +684,7 @@ namespace nascent {
         olc::vf2d size = image->size();
         float cover = std::max(screen.x / std::max(1.0f, size.x), screen.y / std::max(1.0f, size.y));
         olc::vf2d corners[4] = {{0.0f, 0.0f}, {0.0f, screen.y - 1.0f}, {screen.x - 1.0f, screen.y - 1.0f}, {screen.x - 1.0f, 0.0f}};
-        window->DrawWarpedDecal(image->pick(cover).decal, corners, fade(olc::WHITE, brightness / 100.0 * background_fade));
+        window->DrawWarpedDecal(image->pick(cover).decal, corners, fade(olc::WHITE, brightness / 100.0 * shown));
     }
 
     void ScenePlay::toggle_replay_pause(double now) {
@@ -701,7 +712,7 @@ namespace nascent {
         }
 
         if (background_image && background_fade < 1.0f) {
-            background_fade = std::min(1.0f, background_fade + elapsed_time / BACKGROUND_FADE_TIME);
+            background_fade = std::min(1.0f, background_fade + elapsed_time / (float)Ui::layout("play.background_fade_time"));
         }
         Input& input = game->input();
         bool pause_pressed = input.key_pressed(InputManager::get_key(KeyBinding::PAUSE));
@@ -834,6 +845,7 @@ namespace nascent {
             }
 
             session->update(now);
+            play_judgement_sound();
 
             if (chart_started) {
                 frames_played++;
@@ -849,7 +861,7 @@ namespace nascent {
         }
 
         float hint_target = waiting_for_ticket && !paused && now - ticket_requested_at >= TICKET_HINT_DELAY_MS ? 1.0f : 0.0f;
-        float hint_step = elapsed_time / TICKET_HINT_FADE_S;
+        float hint_step = elapsed_time / (float)Ui::layout("play.ticket_hint_fade_time");
         ticket_hint_alpha = hint_target > ticket_hint_alpha ? std::min(hint_target, ticket_hint_alpha + hint_step) : std::max(hint_target, ticket_hint_alpha - hint_step);
 
         field->set_position(session->visual_position(now));
@@ -868,10 +880,12 @@ namespace nascent {
         int32_t chart_start = chart->get_chart_start_ms();
         int32_t chart_length = std::max(1, chart->get_chart_end_ms() - chart_start);
         float progress = (float)((position - chart_start) / chart_length);
-        ProgressBar({Ui::pxf(SONG_PROGRESS_WIDTH), std::max(1.0f, Ui::pxf(SONG_PROGRESS_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, {screensize.x - Ui::pxf(SONG_PROGRESS_RIGHT), Ui::pxf(SONG_PROGRESS_TOP)}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+        ProgressBar({Ui::layout_pxf("play.progress_width"), std::max(1.0f, Ui::layout_pxf("play.progress_height"))}, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, {screensize.x - Ui::layout_pxf("play.progress_right"), Ui::layout_pxf("play.progress_top")}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
 
         const Settings& settings = SettingsManager::settings;
-        int32_t stat_y = Ui::px(STAT_TOP);
+        int32_t stat_x = Ui::layout_px("play.stats_left");
+        int32_t stat_y = Ui::layout_px("play.stats_top");
+        int32_t stat_spacing = Ui::layout_px("play.stats_spacing");
 
         std::string error_text = settings.field_show_average_error ? std::format("{:+.1f}", attempt.get_avg_err()) : std::string();
 
@@ -891,41 +905,48 @@ namespace nascent {
                  std::pair{!performance_text.empty(), performance_text},
              }) {
             if (shown) {
-                draw_text(skin->display_font_medium, text, Ui::px(20), stat_y, skin->color(SkinColor::TEXT));
-                stat_y += Ui::px(STAT_SPACING);
+                draw_text(skin->display_font_medium, text, stat_x, stat_y, skin->color(SkinColor::TEXT));
+                stat_y += stat_spacing;
             }
         }
 
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
-        draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, (int)smoothstep(-(float)screensize.x / 24, (float)screensize.x / 24, (timer - SettingsManager::settings.play_start_delay + 2) * 2) + (int)smoothstep(0, -(float)screensize.x / 12, (timer - SettingsManager::settings.play_start_delay - 1) * 2)}, skin->color(SkinColor::TEXT));
+        float title_offset = (float)(screensize.x * Ui::layout("play.title_offset_fraction"));
+        float title_exit = (float)(screensize.x * Ui::layout("play.title_exit_fraction"));
+        double title_speed = Ui::layout("play.title_slide_speed");
+        int32_t title_enter = (int)smoothstep(-title_offset, title_offset, (timer - SettingsManager::settings.play_start_delay + Ui::layout("play.title_enter_time")) * title_speed);
+        int32_t title_leave = (int)smoothstep(0, -title_exit, (timer - SettingsManager::settings.play_start_delay - Ui::layout("play.title_exit_time")) * title_speed);
+        draw_text(skin->display_font_medium, now_playing_string, {screensize.x / 2 - w / 2, title_enter + title_leave}, skin->color(SkinColor::TEXT));
 
         if (replay) {
-            float edge = (float)screensize.x / 24;
+            float edge = (float)(screensize.x * Ui::layout("play.replay_label_offset_fraction"));
             std::string label = std::format("Replay  {}", replay_label);
             int32_t label_width = text_bounds(skin->display_font_medium, label).size.x;
-            draw_text(skin->display_font_medium, label, {screensize.x / 2 - label_width / 2, (int)smoothstep(-edge, edge, (timer - SettingsManager::settings.play_start_delay - REPLAY_LABEL_START) * 2)}, skin->color(SkinColor::TEXT_MUTED));
+            draw_text(skin->display_font_medium, label, {screensize.x / 2 - label_width / 2, (int)smoothstep(-edge, edge, (timer - SettingsManager::settings.play_start_delay - Ui::layout("play.replay_label_delay")) * Ui::layout("play.replay_label_slide_speed"))}, skin->color(SkinColor::TEXT_MUTED));
         }
+
+        int32_t hint_y = (int32_t)(screensize.y * Ui::layout("play.hint_top_fraction"));
 
         if (ticket_hint_alpha > 0) {
             std::string waiting_hint = "Waiting for server...";
             int32_t waiting_width = text_bounds(skin->display_font_medium, waiting_hint).size.x;
-            draw_text(skin->display_font_medium, waiting_hint, {screensize.x / 2 - waiting_width / 2, screensize.y * 2 / 3}, fade(skin->color(SkinColor::PLAY_HINT), ticket_hint_alpha));
+            draw_text(skin->display_font_medium, waiting_hint, {screensize.x / 2 - waiting_width / 2, hint_y}, fade(skin->color(SkinColor::PLAY_HINT), ticket_hint_alpha));
         }
 
         if (can_skip_intro(now_ms())) {
             std::string skip_hint = std::format("Press {} to skip the intro", InputManager::key_label(InputManager::get_key(KeyBinding::SKIP_INTRO)));
             int32_t skip_width = text_bounds(skin->display_font_medium, skip_hint).size.x;
-            draw_text(skin->display_font_medium, skip_hint, {screensize.x / 2 - skip_width / 2, screensize.y * 2 / 3}, skin->color(SkinColor::PLAY_HINT));
+            draw_text(skin->display_font_medium, skip_hint, {screensize.x / 2 - skip_width / 2, hint_y}, skin->color(SkinColor::PLAY_HINT));
         }
 
         uint8_t l = 0;
         olc::Font& log_font = skin->display_font_small;
         olc::FontRect log_metrics = text_bounds(log_font, "Hgjy");
-        const float vspacing = Ui::pxf(HIT_LOG_SPACING);
-        const float log_top = Ui::pxf(HIT_LOG_TOP) - log_metrics.offset.y;
-        const float score_x = Ui::pxf(HIT_LOG_SCORE_X);
-        const float error_x = Ui::pxf(HIT_LOG_ERROR_X);
+        const float vspacing = Ui::layout_pxf("play.hit_log_spacing");
+        const float log_top = Ui::layout_pxf("play.hit_log_top") - log_metrics.offset.y;
+        const float score_x = Ui::layout_pxf("play.hit_log_score_x");
+        const float error_x = Ui::layout_pxf("play.hit_log_error_x");
 
         if (show_hit_log) {
             draw_timing_diagnostics(window);
@@ -979,7 +1000,7 @@ namespace nascent {
         olc::vi2d screen = window->GetScreenSize();
         int32_t bar_height = StatusBar::height();
         int32_t top = screen.y - bar_height;
-        int32_t segment_gap = Ui::px(StatusBar::SEGMENT_GAP);
+        int32_t segment_gap = Ui::layout_px("status_bar.segment_gap");
         olc::Font& font = skin->display_font_small;
 
         window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, skin->color(SkinColor::STATUS_BAR_BACKGROUND));

@@ -125,8 +125,10 @@ namespace nascent {
 
         field = std::make_unique<EntityField>(chart.get(), skin, olc::vd2d{0.0, 0.0}, olc::vd2d{1.0, 1.0});
         field->draw_judge_colors = true;
-        field->judge_alpha = 64;
+        field->judge_alpha = (uint8_t)Ui::layout("calibration.receptor_alpha");
         field->upscroll = SettingsManager::settings.field_upscroll;
+        field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
+        field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
         field->mirror = SettingsManager::settings.field_mirror;
         field->note_gradient = SettingsManager::settings.field_note_gradient;
         on_resize();
@@ -308,8 +310,9 @@ namespace nascent {
         }
 
         olc::vi2d window_size = game->window->GetScreenSize();
-        field->pos = {(double)window_size.x / 4 * 3 - (double)window_size.x / 24, 0.0};
-        field->size = {(double)(window_size.x / 4), (double)window_size.y};
+        double field_width = Ui::layout("calibration.field_width");
+        field->pos = {(double)window_size.x * (1.0 - field_width) - (double)window_size.x * Ui::layout("calibration.field_right_margin"), 0.0};
+        field->size = {(double)(int32_t)(window_size.x * field_width), (double)window_size.y};
         field->judge_height = window_size.y * SettingsManager::settings.field_judge_line_percent / 100.0;
         field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(SettingsManager::settings.field_lane_gap)) : std::nullopt);
     }
@@ -320,8 +323,9 @@ namespace nascent {
         }
 
         olc::vi2d screen = window->GetScreenSize();
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = (int32_t)(screen.x * Ui::layout("calibration.left"));
+        int32_t y = (int32_t)(screen.y * Ui::layout("calibration.top"));
+        int32_t line_height = Ui::layout_px("calibration.line_height");
 
         const char* step_names[] = {"Visual offset", "Input offset", "Scroll speed"};
         const std::vector<std::vector<const char*>> step_descriptions = {
@@ -344,24 +348,24 @@ namespace nascent {
         int step_index = (int)step;
 
         draw_text(skin->display_font_large, "Offset Calibration", {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(90);
+        y += Ui::layout_px("calibration.step_title_offset");
 
         draw_text(skin->display_font_medium, std::format("Step {} of 3: {}", step_index + 1, step_names[step_index]), {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(50);
+        y += Ui::layout_px("calibration.description_offset");
 
         for (const char* line : step_descriptions[step_index]) {
             draw_text(skin->display_font_small, line, {x, y}, skin->color(SkinColor::TEXT_MUTED));
-            y += Ui::px(26);
+            y += line_height;
         }
 
-        y += Ui::px(20);
+        y += Ui::layout_px("calibration.instructions_gap");
 
         for (const char* line : step_instructions[step_index]) {
             draw_text(skin->display_font_small, line, {x, y}, skin->color(SkinColor::TEXT));
-            y += Ui::px(26);
+            y += line_height;
         }
 
-        y += Ui::px(34);
+        y += Ui::layout_px("calibration.rows_gap");
 
         std::string values[] = {
             std::format("{:+} ms", visual_offset),
@@ -373,29 +377,34 @@ namespace nascent {
         olc::Font& row_font = skin->display_font_medium;
         olc::FontRect row_metrics = text_bounds(row_font, "Hgjy");
         olc::vf2d mouse = window->GetMousePos();
+        int32_t value_column = Ui::layout_px("calibration.value_column");
+        float button_gap = Ui::layout_pxf("calibration.button_gap");
+        float label_width = Ui::layout_pxf("calibration.value_column");
+        float hit_padding = Ui::layout_pxf("calibration.row_hit_padding");
+        int32_t row_height = Ui::layout_px("calibration.row_height");
 
         for (int i = 0; i < 3; i++) {
-            Rect row = {{(float)x, (float)(y + row_metrics.offset.y)}, {Ui::pxf(VALUE_COLUMN), (float)row_metrics.size.y}};
-            spots.add(row.inflated(Ui::pxf(6)), SPOT_STEP + i);
+            Rect row = {{(float)x, (float)(y + row_metrics.offset.y)}, {label_width, (float)row_metrics.size.y}};
+            spots.add(row.inflated(hit_padding), SPOT_STEP + i);
             bool active = i == step_index || row.contains(mouse);
             olc::Pixel color = skin->color(active ? SkinColor::TEXT : SkinColor::TEXT_FAINT);
             draw_text(row_font, std::format("{}{}", i == step_index ? "> " : "  ", step_names[i]), {x, y}, color);
-            draw_text(row_font, values[i], {x + Ui::px(VALUE_COLUMN), y}, color);
-            float button_x = (float)(x + Ui::px(VALUE_COLUMN)) + text_bounds(row_font, "+000 ms").size.x + Ui::pxf(BUTTON_GAP);
-            draw_hints(window, row_font, {{"-", SPOT_MINUS + i}, {"+", SPOT_PLUS + i}}, {button_x, (float)y}, Ui::pxf(BUTTON_GAP), skin->color(i == step_index ? SkinColor::TEXT_MUTED : SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), spots);
-            y += Ui::px(ROW_HEIGHT);
+            draw_text(row_font, values[i], {x + value_column, y}, color);
+            float button_x = (float)(x + value_column) + text_bounds(row_font, "+000 ms").size.x + button_gap;
+            draw_hints(window, row_font, {{"-", SPOT_MINUS + i}, {"+", SPOT_PLUS + i}}, {button_x, (float)y}, button_gap, skin->color(i == step_index ? SkinColor::TEXT_MUTED : SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), spots);
+            y += row_height;
         }
 
-        y += Ui::px(30);
+        y += Ui::layout_px("calibration.taps_gap");
 
         if (step == Step::INPUT_OFFSET) {
             std::string taps = tap_errors.empty()
                 ? std::string("No taps yet")
                 : std::format("{} taps, average error {:+.1f} ms{}", tap_errors.size(), get_average_tap_error(), tap_errors.size() < MIN_TAPS_FOR_SUGGESTION ? " (keep tapping)" : "");
             draw_text(skin->display_font_small, taps, {x, y}, skin->color(SkinColor::TEXT));
-            y += Ui::px(26);
+            y += line_height;
             draw_hints(window, skin->display_font_small, {{"Ctrl+R: clear taps", SPOT_CLEAR_TAPS}}, {(float)x, (float)y}, 0.0f, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
-            y += Ui::px(40);
+            y += Ui::layout_px("calibration.clear_taps_gap");
         }
 
         if (!status_message.empty()) {
@@ -404,8 +413,8 @@ namespace nascent {
 
         std::vector<Hint> footer = {{"↑/↓:  change step"}, {"←/→ or wheel:  adjust (Shift for bigger steps)"}, {"Enter/Esc:  save and exit", SPOT_SAVE}};
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, "Hgjy");
-        int32_t footer_bottom = field != nullptr && !field->upscroll ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - screen.y / 12;
+        int32_t footer_bottom = field != nullptr && !field->upscroll ? (int32_t)std::lround(field->get_judge_bottom()) : screen.y - (int32_t)(screen.y * Ui::layout("calibration.footer_bottom"));
 
-        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::pxf(FOOTER_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
+        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::layout_pxf("calibration.footer_hint_gap"), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
     }
 }

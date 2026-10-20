@@ -5,6 +5,8 @@
 #include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
+#include "ChartFolders.h"
+#include "EtternaSkin.h"
 #include "EntityField.h"
 #include "gse/Game.h"
 #include "gse/Platform.h"
@@ -32,7 +34,6 @@
 
 namespace nascent {
     static constexpr int32_t PERCENT_STEP = 1;
-    static constexpr int32_t OPTIONS_FIELD_SPACING = 12;
     static constexpr int32_t LANE_WIDTH_MIN = 6;
     static constexpr int32_t LANE_WIDTH_MAX = 18;
     static constexpr int16_t LANE_GAP_MAX = 48;
@@ -47,14 +48,8 @@ namespace nascent {
     static constexpr int32_t PREVIEW_HOLD_BEATS = 2;
     static constexpr int32_t PREVIEW_HOLD_EVERY = 8;
     static constexpr int32_t PREVIEW_TAP_MS = 60;
-    static constexpr int32_t HEADER_HEIGHT = 156;
-    static constexpr int32_t FOOTER_GAP = 40;
-    static constexpr int32_t STATUS_OFFSET = 8;
-    static constexpr int32_t SCROLL_MARGIN = 72;
-    static constexpr float SCROLL_SPEED = 14.0f;
-    static constexpr int32_t EDGE_FADE = 28;
-    static constexpr int32_t SCROLLBAR_GAP = 24;
-    static constexpr int32_t SCROLLBAR_WIDTH = 4;
+    static constexpr const char* DELETE_SKIN_LABEL = "Delete skin";
+    static constexpr const char* SKIN_EXPORT_FOLDER = "exports";
     static constexpr std::array<uint16_t, 9> FRAME_RATE_OPTIONS = {0, 60, 120, 144, 165, 240, 360, 480, 1000};
     static constexpr float SERVER_CHECK_DELAY = 0.6f;
     static constexpr std::array<std::pair<const char*, float>, 4> TRANSITION_OPTIONS = {{{"Off", 0.0f}, {"Fast", 0.1f}, {"Normal", 0.2f}, {"Slow", 0.35f}}};
@@ -124,6 +119,8 @@ namespace nascent {
 
         form.add<SectionField>("Display");
         skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
+        export_skin_button = &form.add<ButtonField>("Export skin");
+        delete_skin_button = &form.add<ButtonField>(DELETE_SKIN_LABEL);
         note_gradient_field = &form.add<ChoiceField>("Note gradient", std::vector<std::string>{"Off", "On"}, settings.field_note_gradient ? 1 : 0);
         frame_rate_field = &form.add<ChoiceField>("Frame rate limit", frame_rate_labels, frame_rate_index);
         fps_counter_field = &form.add<ChoiceField>("FPS counter", std::vector<std::string>{"Off", "On"}, settings.show_fps ? 1 : 0);
@@ -147,6 +144,8 @@ namespace nascent {
         form.add<SectionField>("Playfield");
         lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width_percent, LANE_WIDTH_MIN, LANE_WIDTH_MAX, PERCENT_STEP, "%");
         background_brightness_field = &form.add<SliderField>("Background brightness", settings.field_background_brightness, 0, 100, PERCENT_STEP, "%");
+        note_opacity_field = &form.add<SliderField>("Note opacity", settings.field_note_opacity, 0, 100, PERCENT_STEP, "%");
+        receptor_opacity_field = &form.add<SliderField>("Receptor opacity", settings.field_receptor_opacity, 0, 100, PERCENT_STEP, "%");
 
         lane_gaps = {-1};
 
@@ -199,8 +198,17 @@ namespace nascent {
 
         form.add<SectionField>("Files");
         data_folder_button = &form.add<ButtonField>("Open data folder");
+        link_folder_button = &form.add<ButtonField>("Link a charts folder");
+        osu_songs = ChartFolders::osu_songs_folder();
 
-        form.spacing = OPTIONS_FIELD_SPACING;
+        if (osu_songs) {
+            link_osu_button = &form.add<ButtonField>("Link your osu! songs folder");
+        }
+
+        linked_folders_field = &form.add<ChoiceField>("Linked folders", std::vector<std::string>{"None"}, 0);
+        refresh_linked_folders();
+
+        form.spacing = Ui::layout("options.field_spacing");
         form.focus_field(0);
 
         build_preview_chart();
@@ -212,6 +220,7 @@ namespace nascent {
         if (!skins.empty() && skins[skin_field->selected].id != skin->get_id()) {
             settings.skin = skins[skin_field->selected].id;
             skin->reload(settings.skin);
+            report_skin_problems();
         }
 
         settings.master_volume = (uint8_t)master_volume_field->value;
@@ -238,6 +247,8 @@ namespace nascent {
         settings.title_songs = (TitleSongs)title_music_field->selected;
         settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
         settings.field_background_brightness = (uint8_t)background_brightness_field->value;
+        settings.field_note_opacity = (uint8_t)note_opacity_field->value;
+        settings.field_receptor_opacity = (uint8_t)receptor_opacity_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
         settings.field_judge_line_percent = (uint8_t)judge_offset_field->value;
         settings.field_audio_visual_offset = (int16_t)visual_offset_field->value;
@@ -304,11 +315,142 @@ namespace nascent {
         else if (*clicked == FOOTER_CONFIRM) {
             input.inject(actions::CONFIRM);
         }
+        else if (*clicked == FOOTER_RESET && form.focused_field() == linked_folders_field) {
+            unlink_requested = true;
+        }
         else if (KeyBindField* key_field = dynamic_cast<KeyBindField*>(form.focused_field()); key_field != nullptr && key_field->reset_binding()) {
             return true;
         }
 
         return false;
+    }
+
+    void SceneOptions::report_skin_problems() {
+        const std::vector<std::string>& problems = skin->problems();
+
+        if (problems.empty()) {
+            return;
+        }
+
+        std::string more = problems.size() > 1 ? std::format(" (and {} more, listed in nascent.log)", problems.size() - 1) : std::string();
+        game->notify(std::format("{} has a problem: {}{}", skin->manifest().name, problems.front(), more), true);
+    }
+
+    void SceneOptions::export_selected_skin() {
+        if (skins.empty() || skin_export.valid()) {
+            return;
+        }
+
+        const SkinInfo& chosen = skins[skin_field->selected];
+        std::filesystem::path folder = Skin::skin_directory(chosen.id);
+        std::filesystem::path archive = user_config_directory(SettingsManager::APP_NAME) / SKIN_EXPORT_FOLDER / utf8_path(chosen.id + ".zip");
+        exported_skin = chosen.name;
+        skin_export = run_detached([folder, archive] {
+            std::string error;
+            return export_skin_archive(folder, archive, error) ? std::string() : error;
+        });
+    }
+
+    void SceneOptions::delete_selected_skin() {
+        if (skins.empty()) {
+            return;
+        }
+
+        SkinInfo chosen = skins[skin_field->selected];
+        std::error_code ec;
+
+        if (std::filesystem::is_directory(Skin::builtin_skins_directory() / utf8_path(chosen.id), ec)) {
+            game->notify(std::format("{} is built in, so it can't be deleted", chosen.name), true);
+            return;
+        }
+
+        if (!delete_confirming) {
+            delete_confirming = true;
+            delete_skin_button->label = std::format("Press Enter again to delete {}", chosen.name);
+            return;
+        }
+
+        delete_confirming = false;
+        delete_skin_button->label = DELETE_SKIN_LABEL;
+
+        if (chosen.id == skin->get_id()) {
+            auto fallback = std::find_if(skins.begin(), skins.end(), [](const SkinInfo& info) {
+                return info.id == Skin::DEFAULT_SKIN;
+            });
+            skin_field->selected = fallback != skins.end() ? (size_t)(fallback - skins.begin()) : 0;
+            apply();
+        }
+
+        std::filesystem::remove_all(Skin::user_skins_directory() / utf8_path(chosen.id), ec);
+        Skin::list_changed();
+        game->notify(ec ? std::format("Couldn't delete {}: {}", chosen.name, ec.message()) : std::format("Deleted {}", chosen.name), (bool)ec);
+    }
+
+    void SceneOptions::update_skin_actions() {
+        if (delete_confirming && form.focused_field() != delete_skin_button) {
+            delete_confirming = false;
+            delete_skin_button->label = DELETE_SKIN_LABEL;
+        }
+
+        if (!is_ready(skin_export)) {
+            return;
+        }
+
+        std::string error = skin_export.get();
+
+        if (!error.empty()) {
+            game->notify(std::format("Couldn't export {}: {}", exported_skin, error), true);
+            return;
+        }
+
+        game->notify(std::format("Exported {} to the exports folder", exported_skin));
+        open_folder(user_config_directory(SettingsManager::APP_NAME) / SKIN_EXPORT_FOLDER);
+    }
+
+    void SceneOptions::refresh_linked_folders() {
+        const std::vector<std::string>& linked = SettingsManager::settings.list_linked_directories;
+        linked_folders_field->options.clear();
+
+        for (const std::string& folder : linked) {
+            linked_folders_field->options.push_back(ChartFolders::display_name(folder));
+        }
+
+        if (linked.empty()) {
+            linked_folders_field->options.push_back("None");
+        }
+
+        linked_folders_field->selected = std::min(linked_folders_field->selected, linked_folders_field->options.size() - 1);
+    }
+
+    void SceneOptions::link_folder(const std::filesystem::path& folder) {
+        FolderLinkResult result = ChartFolders::link(folder);
+        game->notify(result.message, !result.ok);
+
+        if (result.ok) {
+            refresh_linked_folders();
+            linked_folders_field->selected = linked_folders_field->options.size() - 1;
+        }
+    }
+
+    void SceneOptions::update_linked_folders() {
+        if (is_ready(folder_pick)) {
+            std::optional<std::filesystem::path> chosen = folder_pick.get();
+
+            if (!chosen) {
+                game->notify("Couldn't open a folder picker. On Linux, install zenity or kdialog", true);
+            }
+            else if (!chosen->empty()) {
+                link_folder(*chosen);
+            }
+        }
+
+        bool unlink = std::exchange(unlink_requested, false) || (form.focused_field() == linked_folders_field && game->input().key_pressed(olc::Key::DEL));
+
+        if (unlink && form.focused_field() == linked_folders_field && !SettingsManager::settings.list_linked_directories.empty()) {
+            FolderLinkResult result = ChartFolders::unlink(linked_folders_field->selected);
+            game->notify(result.message, !result.ok);
+            refresh_linked_folders();
+        }
     }
 
     void SceneOptions::refresh_skins() {
@@ -328,11 +470,20 @@ namespace nascent {
     }
 
     void SceneOptions::update(float elapsed_time) {
+        if (master_volume_field != nullptr) {
+            master_volume_field->value = SettingsManager::settings.master_volume;
+        }
+
         if (skin_field != nullptr && Skin::list_version() != skin_list_version) {
             refresh_skins();
         }
 
         bool reset = update_footer(game->input());
+
+        if (std::optional<float> position = scrollbar.update(game->input(), scroll_position())) {
+            scroll_to(*position);
+        }
+
         UiForm::Action action = form.update(game->input(), elapsed_time);
 
         if (reset) {
@@ -342,8 +493,24 @@ namespace nascent {
         if (data_folder_button->take_pressed()) {
             open_folder(user_config_directory(SettingsManager::APP_NAME));
         }
+        else if (link_folder_button->take_pressed()) {
+            if (!folder_pick.valid()) {
+                folder_pick = run_detached([] {
+                    return choose_folder("Choose a folder of charts, like your osu! Songs folder");
+                });
+            }
+        }
+        else if (link_osu_button != nullptr && link_osu_button->take_pressed()) {
+            link_folder(*osu_songs);
+        }
         else if (calibration_button->take_pressed()) {
             game->scenes().push(std::make_unique<SceneCalibration>(skin));
+        }
+        else if (export_skin_button->take_pressed()) {
+            export_selected_skin();
+        }
+        else if (delete_skin_button->take_pressed()) {
+            delete_selected_skin();
         }
         else if (action == UiForm::Action::CHANGED) {
             apply();
@@ -353,6 +520,8 @@ namespace nascent {
             game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
         }
 
+        update_linked_folders();
+        update_skin_actions();
         update_server(elapsed_time);
         update_scroll(elapsed_time);
         update_preview(elapsed_time);
@@ -459,7 +628,7 @@ namespace nascent {
         olc::vi2d screen = game->window->GetScreenSize();
         double width = screen.y * settings.field_lane_width_percent / 100.0 * PREVIEW_KEY_COUNT;
 
-        preview_field = std::make_unique<EntityField>(preview_chart.get(), skin, olc::vd2d{(double)screen.x * 3 / 4 - width / 2, 0.0}, olc::vd2d{width, (double)screen.y});
+        preview_field = std::make_unique<EntityField>(preview_chart.get(), skin, olc::vd2d{(double)screen.x * Ui::layout("options.preview_center") - width / 2, 0.0}, olc::vd2d{width, (double)screen.y});
         preview_field->draw_judge_colors = true;
         preview_field->draw_notes_past_judge = false;
         preview_field->draw_hit_score = settings.field_show_judgement;
@@ -467,9 +636,11 @@ namespace nascent {
         preview_field->judgement_height = settings.field_judgement_height / 100.0;
         preview_field->combo_height = settings.field_combo_height / 100.0;
         preview_field->set_attempt(preview_attempt.get());
-        preview_field->judge_alpha = 64;
+        preview_field->judge_alpha = (uint8_t)Ui::layout("options.preview_receptor_alpha");
         preview_field->judge_height = screen.y * settings.field_judge_line_percent / 100.0;
         preview_field->upscroll = settings.field_upscroll;
+        preview_field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
+        preview_field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
         preview_field->mirror = settings.field_mirror;
         preview_field->lane_cover = settings.field_lane_cover / 100.0;
         preview_field->note_gradient = settings.field_note_gradient;
@@ -528,11 +699,28 @@ namespace nascent {
         }
 
         float max_scroll = (float)std::max(0, form.height() - view_height);
-        float top = (float)(form.focused_top() - Ui::px(SCROLL_MARGIN));
-        float bottom = (float)(form.focused_bottom() + Ui::px(SCROLL_MARGIN) - view_height);
+        int32_t margin = Ui::layout_px("options.scroll_margin");
+        float top = (float)(form.focused_top() - margin);
+        float bottom = (float)(form.focused_bottom() + margin - view_height);
 
         scroll_target = std::clamp(std::clamp(scroll_target, bottom, std::max(top, bottom)), 0.0f, max_scroll);
-        scroll += (scroll_target - scroll) * std::min(1.0f, elapsed_time * SCROLL_SPEED);
+        scroll += (scroll_target - scroll) * std::min(1.0f, elapsed_time * (float)Ui::layout("options.scroll_ease_speed"));
+    }
+
+    float SceneOptions::scroll_position() const {
+        float max_scroll = (float)std::max(0, form.height() - (viewport_bottom - viewport_top));
+        return max_scroll > 0.0f ? scroll / max_scroll : 0.0f;
+    }
+
+    void SceneOptions::scroll_to(float position) {
+        int32_t view_height = viewport_bottom - viewport_top;
+        float max_scroll = (float)std::max(0, form.height() - view_height);
+        float margin = Ui::layout_pxf("options.scroll_margin");
+        scroll = scroll_target = position * max_scroll;
+
+        if ((float)form.focused_top() - margin < scroll || (float)(form.focused_bottom() - view_height) + margin > scroll) {
+            form.focus_nearest((int32_t)std::lround(scroll + view_height / 2.0f));
+        }
     }
 
     std::vector<Hint> SceneOptions::footer_hints() const {
@@ -546,6 +734,22 @@ namespace nascent {
             return {{"↑/↓:  choose"}, {"Enter:  rebind", FOOTER_CONFIRM}, {"Delete:  reset", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
         }
 
+        if (form.focused_field() == linked_folders_field && !SettingsManager::settings.list_linked_directories.empty()) {
+            return {{"←/→:  choose"}, {"Delete:  unlink", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
+        }
+
+        if (form.focused_field() == export_skin_button) {
+            return {{"↑/↓:  choose"}, {"Enter:  export", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
+        }
+
+        if (form.focused_field() == delete_skin_button) {
+            return {{"↑/↓:  choose"}, {"Enter:  delete", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
+        }
+
+        if (form.focused_field() == link_folder_button || (link_osu_button != nullptr && form.focused_field() == link_osu_button)) {
+            return {{"↑/↓:  choose"}, {"Enter:  link", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
+        }
+
         if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button)) {
             return {{"↑/↓:  choose"}, {"Enter:  open", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
@@ -557,35 +761,33 @@ namespace nascent {
         return {{"↑/↓:  choose"}, {"←/→:  change"}, {"Esc:  back", FOOTER_BACK}};
     }
 
-    void SceneOptions::draw_scrollbar(olc::PixelGameEngine* window, int32_t x) const {
+    void SceneOptions::draw_scrollbar(olc::PixelGameEngine* window, int32_t x) {
         int32_t view_height = viewport_bottom - viewport_top;
         int32_t content_height = form.height();
 
         if (view_height <= 0 || content_height <= view_height) {
+            scrollbar.hide();
             return;
         }
 
-        float track_x = (float)(x + RowField::width() + Ui::px(SCROLLBAR_GAP));
-        float track_width = std::max(1.0f, Ui::pxf(SCROLLBAR_WIDTH));
-        float thumb_height = (float)view_height * (float)view_height / (float)content_height;
-        float thumb_top = (float)viewport_top + ((float)view_height - thumb_height) * (scroll / (float)(content_height - view_height));
-
-        window->FillRectDecal({track_x, (float)viewport_top}, {track_width, (float)view_height}, skin->color(SkinColor::SCROLLBAR_TRACK));
-        window->FillRectDecal({track_x, thumb_top}, {track_width, thumb_height}, skin->color(SkinColor::SCROLLBAR_THUMB));
+        float track_x = (float)(x + RowField::width() + Ui::layout_px("options.scrollbar_gap"));
+        float track_width = std::max(1.0f, Ui::layout_pxf("options.scrollbar_width"));
+        scrollbar.layout({{track_x, (float)viewport_top}, {track_width, (float)view_height}}, (float)view_height / (float)content_height);
+        scrollbar.draw(window, scroll_position(), skin->color(SkinColor::SCROLLBAR_TRACK), skin->color(SkinColor::SCROLLBAR_THUMB));
     }
 
     void SceneOptions::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = (int32_t)(screen.x * Ui::layout("options.left"));
+        int32_t y = (int32_t)(screen.y * Ui::layout("options.top"));
 
         olc::FontRect footer_metrics = text_bounds(skin->display_font_small, "Hgjy");
-        int32_t footer_bottom = screen.y - screen.y / 12;
+        int32_t footer_bottom = screen.y - (int32_t)(screen.y * Ui::layout("options.footer_bottom"));
         int32_t footer_top = footer_bottom - (footer_metrics.offset.y + footer_metrics.size.y);
 
-        viewport_top = y + Ui::px(HEADER_HEIGHT);
-        viewport_bottom = footer_top - Ui::px(FOOTER_GAP);
-        float edge_fade = Ui::pxf(EDGE_FADE);
+        viewport_top = y + Ui::layout_px("options.header_height");
+        viewport_bottom = footer_top - Ui::layout_px("options.footer_gap");
+        float edge_fade = Ui::layout_pxf("options.edge_fade");
         form.set_clip(viewport_top, viewport_bottom);
         form.draw(window, *skin, {x, viewport_top - (int32_t)std::lround(scroll)});
 
@@ -610,19 +812,19 @@ namespace nascent {
 
             if (SettingsManager::settings.field_show_timing_bar && preview_attempt != nullptr) {
                 const Settings& settings = SettingsManager::settings;
-                draw_timing_bar(window, skin, *preview_attempt, screen.x * 3 / 4.0f, screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
+                draw_timing_bar(window, skin, *preview_attempt, (float)(screen.x * Ui::layout("options.preview_center")), screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
             }
         }
 
         draw_text(skin->display_font_large, "Options", {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(90);
+        y += Ui::layout_px("options.subtitle_offset");
         draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
 
         if (!status.empty()) {
-            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::px(STATUS_OFFSET)}, skin->color(SkinColor::TEXT_MUTED));
+            draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::layout_px("options.status_offset")}, skin->color(SkinColor::TEXT_MUTED));
         }
 
         footer_spots.clear();
-        draw_hints(window, skin->display_font_small, footer_hints(), {(float)x, (float)footer_top}, Ui::pxf(FOOTER_HINT_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), footer_spots);
+        draw_hints(window, skin->display_font_small, footer_hints(), {(float)x, (float)footer_top}, Ui::layout_pxf("options.footer_hint_gap"), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), footer_spots);
     }
 }

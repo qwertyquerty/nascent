@@ -1,5 +1,6 @@
 #include "EntityFFT.h"
 #include "Skin.h"
+#include "gse/ui/Ui.h"
 
 #include "olcPixelGameEngine.h"
 
@@ -32,13 +33,16 @@ namespace nascent {
     };
 
     void EntityFFT::draw(olc::PixelGameEngine* window) {
-        float w = size.x / ((double)FFT_BAR_COUNT + (double)FFT_BAR_COUNT * FFT_SPACING_RATIO - FFT_SPACING_RATIO);
+        double spacing = Ui::layout("visualizer.bar_spacing_ratio");
+        double height_scale = Ui::layout("visualizer.bar_height_scale");
+        uint8_t alpha = (uint8_t)std::lround(Ui::layout("visualizer.bar_alpha") * std::clamp(opacity, 0.0f, 1.0f));
+        float w = size.x / ((double)FFT_BAR_COUNT + (double)FFT_BAR_COUNT * spacing - spacing);
 
         for (int bar = 0; bar < FFT_BAR_COUNT; bar++) {
-            float x = (float)bar * w * (1 + FFT_SPACING_RATIO);
-            float h = std::min(bins[bar] / 4 * size.y, size.y);
+            float x = (float)bar * w * (1 + spacing);
+            float h = std::min(bins[bar] * height_scale * size.y, size.y);
             olc::Pixel c = skin->title_gradient_at(x / size.x, 0);
-            c.a = (uint8_t)std::lround(FFT_BAR_ALPHA * std::clamp(opacity, 0.0f, 1.0f));
+            c.a = alpha;
 
             float bar_x = (float)(mirrored ? pos.x + size.x - x - w : pos.x + x);
             float bar_y = (float)(flipped ? pos.y + size.y - h : pos.y);
@@ -65,7 +69,7 @@ namespace nascent {
 
         kiss_fftr(fft_cfg, input.data(), output.data());
 
-        float ratio = std::min(FFT_AVG_SMOOTHING_RATIO * (elapsed_time * 1000), 1.0);
+        float ratio = std::min(Ui::layout("visualizer.smoothing_per_ms") * (elapsed_time * 1000), 1.0);
 
         for (size_t i = 0; i < output.size(); i++) {
             magnitudes[i] = std::sqrt(output[i].r * output[i].r + output[i].i * output[i].i);

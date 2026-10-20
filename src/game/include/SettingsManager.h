@@ -43,6 +43,8 @@ namespace nascent {
         int8_t field_lane_cover = 0;
         bool field_hitsounds = false;
         uint8_t field_background_brightness = 0;
+        uint8_t field_note_opacity = 100;
+        uint8_t field_receptor_opacity = 100;
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;
@@ -67,6 +69,7 @@ namespace nascent {
         bool account_screen_seen = false;
 
         std::string list_song_directory;
+        std::vector<std::string> list_linked_directories;
 
         std::string discord_application_id = "1360933253070061718";
         bool discord_rich_presence = true;

@@ -78,9 +78,12 @@ namespace nascent {
     }
 
     void LeaderboardPanel::draw(olc::PixelGameEngine* window, Skin* skin, const std::string& gameplay_hash, float pitch, olc::vi2d position, olc::vi2d size) {
-        int32_t padding = Ui::px(PADDING);
-        int32_t row_height = Ui::px(ROW_HEIGHT);
-        int32_t header_height = Ui::px(HEADER_HEIGHT);
+        int32_t padding = Ui::layout_px("leaderboard.padding");
+        int32_t row_height = Ui::layout_px("leaderboard.row_height");
+        int32_t header_height = Ui::layout_px("leaderboard.header_height");
+        int32_t grade_offset = Ui::layout_px("leaderboard.grade_offset");
+        int32_t accuracy_offset = Ui::layout_px("leaderboard.accuracy_offset");
+        int32_t name_offset = Ui::layout_px("leaderboard.name_offset");
         int32_t left = position.x;
         int32_t width = size.x;
         int32_t top = position.y;
@@ -119,7 +122,7 @@ namespace nascent {
             Grade grade = grade_for_accuracy(accuracy);
             std::string combo_text = std::format("{}x", combo);
             int32_t combo_width = text_bounds(row_font, combo_text).size.x;
-            int32_t name_x = x + Ui::px(NAME_OFFSET);
+            int32_t name_x = x + name_offset;
             int32_t name_width = right - combo_width - padding / 2 - name_x;
 
             if (highlight) {
@@ -139,8 +142,8 @@ namespace nascent {
             }
 
             draw_text(row_font, std::format("#{}", rank), {x, baseline}, skin->rank_color(rank));
-            skin->draw_grade(grade, row_font, {(float)(x + Ui::px(GRADE_OFFSET)), (float)baseline});
-            draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + Ui::px(ACCURACY_OFFSET), baseline}, skin->color(SkinColor::TEXT));
+            skin->draw_grade(grade, row_font, {(float)(x + grade_offset), (float)baseline});
+            draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + accuracy_offset, baseline}, skin->color(SkinColor::TEXT));
             draw_text(row_font, name, {name_x, baseline}, skin->color(highlight ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
             draw_text(row_font, combo_text, {right - combo_width, baseline}, skin->color(SkinColor::TEXT_MUTED));
             y += row_height;
@@ -162,7 +165,7 @@ namespace nascent {
             }
         }
 
-        y = std::max(y, top + padding + header_height + row_height * LOCAL_ROWS) + Ui::px(SECTION_GAP);
+        y = std::max(y, top + padding + header_height + row_height * LOCAL_ROWS) + Ui::layout_px("leaderboard.section_gap");
 
         auto online = online_scores.find(board_key);
         const ChartLeaderboard* board = online != online_scores.end() && online->second.ok() ? &*online->second.value : nullptr;

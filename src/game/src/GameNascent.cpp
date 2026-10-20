@@ -1,6 +1,7 @@
 #include "GameNascent.h"
 
 #include "Account.h"
+#include "ChartFolders.h"
 #include "EntityStarfield.h"
 #include "Favorites.h"
 #include "InputManager.h"
@@ -47,6 +48,7 @@ namespace nascent {
         release_scenes();
         scene_list.reset();
         sky.reset();
+        Ui::set_layout_theme(nullptr);
         logo_skin.reset();
         skin.reset();
         text_cache_clear();
@@ -63,7 +65,7 @@ namespace nascent {
         LocalBests::load();
         Favorites::load();
         set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
-        audio().set_volumes(SettingsManager::volume_gain(SettingsManager::settings.master_volume), SettingsManager::volume_gain(SettingsManager::settings.music_volume), SettingsManager::volume_gain(SettingsManager::settings.effects_volume));
+        apply_volumes();
 
         olc::Font::init();
 
@@ -77,8 +79,10 @@ namespace nascent {
         Ui::set_screen(window->GetScreenSize());
         skin = std::make_unique<Skin>(this, SettingsManager::settings.skin);
         skin->set_font_scale(Ui::scale());
+        Ui::set_layout_theme(skin.get());
         logo_skin = std::make_unique<Skin>(this, "logo");
         logo_skin->set_font_scale(Ui::scale());
+        skin->set_logo_skin(logo_skin.get());
         olc::vi2d screen = window->GetScreenSize();
         sky = std::make_unique<EntityStarfield>(skin.get(), olc::vd2d{(double)screen.x, (double)screen.y});
         sky->init();
@@ -135,6 +139,7 @@ namespace nascent {
         limit_frame_rate(SettingsManager::settings.frame_rate_limit);
         begin_frame(elapsed_time);
         text_cache_begin_frame();
+        update_volume_keys(elapsed_time);
         handle_dropped_files();
 
         for (SubmissionNotice& notice : SubmissionQueue::take_notices()) {
@@ -162,10 +167,64 @@ namespace nascent {
             uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
             olc::FontRect metrics = text_bounds(skin->display_font_small, "Hgjy");
             int32_t baseline = (StatusBar::height() - metrics.size.y) / 2 - metrics.offset.y;
-            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::px(FPS_COUNTER_WIDTH), baseline, skin->color(SkinColor::TEXT));
+            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::layout_px("fps_counter.width"), baseline, skin->color(SkinColor::TEXT));
         }
 
         overlays().draw(window);
+    }
+
+    void GameNascent::apply_volumes() {
+        const Settings& settings = SettingsManager::settings;
+        audio().set_volumes(SettingsManager::volume_gain(settings.master_volume), SettingsManager::volume_gain(settings.music_volume), SettingsManager::volume_gain(settings.effects_volume));
+    }
+
+    void GameNascent::change_volume(int32_t delta) {
+        Settings& settings = SettingsManager::settings;
+        settings.master_volume = (uint8_t)std::clamp((int32_t)settings.master_volume + delta, 0, 100);
+        apply_volumes();
+        show_toast(std::format("Volume {}%", settings.master_volume), false, VOLUME_TOAST_TIME);
+        volume_save_delay = VOLUME_SAVE_DELAY;
+    }
+
+    void GameNascent::update_volume_keys(float elapsed_time) {
+        if (volume_save_delay > 0) {
+            volume_save_delay -= elapsed_time;
+
+            if (volume_save_delay <= 0) {
+                SettingsManager::save();
+            }
+        }
+
+        Input& keys = input();
+        int32_t wheel = keys.mouse_wheel();
+        bool up = keys.pressed(actions::UP);
+        bool down = keys.pressed(actions::DOWN);
+        bool up_held = keys.held(actions::UP);
+        bool down_held = keys.held(actions::DOWN);
+
+        if ((wheel == 0 && !up_held && !down_held) || !keys.focused() || !alt_held()) {
+            return;
+        }
+
+        keys.block(actions::UP);
+        keys.block(actions::DOWN);
+        int32_t steps = (wheel > 0) - (wheel < 0);
+
+        if (wheel != 0) {
+            keys.take_wheel();
+        }
+
+        if (volume_up_repeat.update(up, up_held, elapsed_time)) {
+            steps++;
+        }
+
+        if (volume_down_repeat.update(down, down_held, elapsed_time)) {
+            steps--;
+        }
+
+        if (steps != 0) {
+            change_volume(steps * VOLUME_STEP);
+        }
     }
 
     void GameNascent::check_client_version() {
@@ -221,7 +280,7 @@ namespace nascent {
     }
 
     int32_t GameNascent::fps_counter_width() {
-        return SettingsManager::settings.show_fps ? Ui::px(FPS_COUNTER_WIDTH) : 0;
+        return SettingsManager::settings.show_fps ? Ui::layout_px("fps_counter.width") : 0;
     }
 
     void GameNascent::show_toast(std::string message, bool is_error, float duration, std::function<void()> action) {
@@ -266,6 +325,14 @@ namespace nascent {
 
         for (const std::string& file : input().dropped_files()) {
             std::filesystem::path path = utf8_path(file);
+            std::error_code ec;
+
+            if (std::filesystem::is_directory(path, ec)) {
+                FolderLinkResult linked = ChartFolders::link(path);
+                show_toast(std::move(linked.message), !linked.ok, ToastOverlay::DEFAULT_TIME);
+                continue;
+            }
+
             std::string extension = path_utf8(path.extension());
 
             for (char& c : extension) {
@@ -289,7 +356,7 @@ namespace nascent {
             }
 
             if (extension != ".zip") {
-                show_toast("Drop an osu! .osz beatmap or an Etterna noteskin .zip to import it", true, ToastOverlay::DEFAULT_TIME);
+                show_toast("Drop an osu! .osz beatmap or a Nascent or Etterna skin .zip to import it", true, ToastOverlay::DEFAULT_TIME);
                 continue;
             }
 
@@ -301,7 +368,7 @@ namespace nascent {
             show_toast(std::format("Importing {}...", path_utf8(path.filename())), false, std::numeric_limits<float>::infinity());
             skin_import = std::async(std::launch::async, [path] {
                 try {
-                    return import_etterna_skin(path, Skin::user_skins_directory(), Skin::builtin_skins_directory());
+                    return import_skin_archive(path, Skin::user_skins_directory(), Skin::builtin_skins_directory());
                 }
                 catch (const std::exception& e) {
                     SkinImportResult result;

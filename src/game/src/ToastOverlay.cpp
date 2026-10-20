@@ -21,14 +21,15 @@ namespace nascent {
 
     void ToastOverlay::update(float elapsed_time) {
         timer = std::max(0.0f, timer - elapsed_time);
+        float fade_time = (float)Ui::layout("toast.fade_time");
         Input& input = game->input();
 
-        if (timer > FADE_TIME && input.clicked(0) && area.contains(input.mouse_position()) && input.take_click(0)) {
+        if (timer > fade_time && input.clicked(0) && area.contains(input.mouse_position()) && input.take_click(0)) {
             if (std::function<void()> clicked = std::exchange(action, {})) {
                 clicked();
             }
 
-            timer = FADE_TIME;
+            timer = fade_time;
         }
     }
 
@@ -45,17 +46,17 @@ namespace nascent {
         olc::Font& font = skin->display_font_small;
         olc::FontRect bounds = text_bounds(font, message);
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t padding = Ui::px(PADDING);
-        int32_t toast_top = Ui::px(TOP);
+        int32_t padding = Ui::layout_px("toast.padding");
+        int32_t toast_top = Ui::layout_px("toast.top");
         int32_t width = bounds.size.x + padding * 2;
         int32_t height = metrics.size.y + padding * 2;
         int32_t x = (window->GetScreenSize().x - width) / 2;
-        float opacity = std::min(1.0f, timer / FADE_TIME);
+        float opacity = std::min(1.0f, timer / (float)Ui::layout("toast.fade_time"));
 
         olc::Pixel border = fade(skin->color(is_error ? SkinColor::NEGATIVE : SkinColor::POSITIVE), opacity);
         float left = (float)x;
         float top = (float)toast_top;
-        float edge = std::max(1.0f, Ui::pxf(BORDER));
+        float edge = std::max(1.0f, Ui::layout_pxf("toast.border"));
         area = {{left, top}, {(float)width, (float)height}};
 
         window->FillRectDecal({left, top}, {(float)width, (float)height}, fade(skin->color(SkinColor::TOAST_BACKGROUND), opacity));

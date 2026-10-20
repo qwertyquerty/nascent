@@ -5,6 +5,7 @@
 #include "gse/ui/Ui.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace nascent {
     void UiForm::clear() {
@@ -63,6 +64,28 @@ namespace nascent {
 
         if (enabled) {
             fields[focus]->on_focus();
+        }
+    }
+
+    void UiForm::focus_nearest(int32_t y) {
+        std::optional<size_t> nearest;
+        int32_t best = 0;
+
+        for (size_t index = 0; index < field_tops.size() && index < fields.size(); index++) {
+            if (!fields[index]->focusable()) {
+                continue;
+            }
+
+            int32_t distance = std::abs((field_tops[index] + field_bottoms[index]) / 2 - y);
+
+            if (!nearest || distance < best) {
+                nearest = index;
+                best = distance;
+            }
+        }
+
+        if (nearest && *nearest != focus) {
+            focus_field(*nearest);
         }
     }
 
@@ -243,7 +266,7 @@ namespace nascent {
             field_tops[i] = y - position.y;
             y += fields[i]->draw(window, theme, {position.x, y}, enabled && i == focus);
             field_bottoms[i] = y - position.y;
-            y += Ui::px(spacing);
+            y += Ui::px(spacing.value_or(Ui::layout("form.field_spacing")));
         }
 
         return y - position.y;

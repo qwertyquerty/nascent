@@ -90,7 +90,7 @@ namespace olc
             SoundFileBuffer(ma_engine* engine);
             ~SoundFileBuffer();
 
-            bool Load(const std::string& path, olc::ResourcePack* pack = nullptr);
+            bool Load(const std::string& path, olc::ResourcePack* pack = nullptr, std::vector<char>* preloaded = nullptr);
             void Unload();
 
             std::vector<char> m_buffer;
@@ -140,7 +140,7 @@ namespace olc
         void SetBackgroundPlay(const bool state);
 
     public: // loading routines
-        const int LoadSound(const std::string& path, olc::ResourcePack* pack = nullptr, bool playOnce = false);
+        const int LoadSound(const std::string& path, olc::ResourcePack* pack = nullptr, bool playOnce = false, std::vector<char>* preloaded = nullptr);
         void UnloadSound(const int id);
     
     public: // playback routines
@@ -264,7 +264,7 @@ namespace olc
     {
     }
 
-    bool MiniAudio::SoundFileBuffer::Load(const std::string& path, olc::ResourcePack* pack)
+    bool MiniAudio::SoundFileBuffer::Load(const std::string& path, olc::ResourcePack* pack, std::vector<char>* preloaded)
     {
         if(m_loaded)
         {
@@ -273,7 +273,12 @@ namespace olc
             return true;
         }
 
-        if(pack != nullptr)
+        if(preloaded != nullptr)
+        {
+            PGEX_MA_LOG("loading sound file from memory");
+            m_buffer = std::move(*preloaded);
+        }
+        else if(pack != nullptr)
         {
             PGEX_MA_LOG("loading sound file via olc::ResourcePack");
             
@@ -547,7 +552,7 @@ namespace olc
         MiniAudio::m_background_playback = state;
     }
 
-    const int MiniAudio::LoadSound(const std::string& path, olc::ResourcePack* pack, bool playOnce)
+    const int MiniAudio::LoadSound(const std::string& path, olc::ResourcePack* pack, bool playOnce, std::vector<char>* preloaded)
     {
         int id = find_or_create_empty_sound_slot();
 
@@ -564,7 +569,7 @@ namespace olc
 
         try
         {
-            buffered = m_sound_file_buffers.at(path).Load(path, pack);
+            buffered = m_sound_file_buffers.at(path).Load(path, pack, preloaded);
         }
         catch(const std::exception&)
         {

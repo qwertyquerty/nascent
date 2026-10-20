@@ -53,8 +53,6 @@ namespace nascent {
         static constexpr int32_t SPOT_REBIND_ALL = 103;
         static constexpr int32_t SPOT_RESET = 104;
         static constexpr int32_t SPOT_BACK = 105;
-        static constexpr float BUTTON_GAP = 28.0f;
-        static constexpr float FOOTER_GAP = 48.0f;
         void on_enter() override;
         void update(float) override;
         void draw(olc::PixelGameEngine*) override;

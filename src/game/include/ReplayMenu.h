@@ -35,15 +35,6 @@ namespace nascent {
         using WatchCallback = std::function<void(Replay, std::string)>;
 
         static constexpr size_t MAX_ROWS = 8;
-        static constexpr int32_t WIDTH = 760;
-        static constexpr int32_t PADDING = 32;
-        static constexpr int32_t ROW_HEIGHT = 40;
-        static constexpr int32_t ROW_INSET = 14;
-        static constexpr int32_t GAP = 14;
-        static constexpr int32_t HEADER_HEIGHT = 44;
-        static constexpr int32_t GRADE_OFFSET = 70;
-        static constexpr int32_t ACCURACY_OFFSET = 120;
-        static constexpr int32_t DETAIL_OFFSET = 260;
 
         ReplayMenu(Skin* skin, const Chart& chart, const std::string& gameplay_hash, float rate, WatchCallback on_watch);
 

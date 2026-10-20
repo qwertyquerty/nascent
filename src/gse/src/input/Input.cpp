@@ -91,6 +91,7 @@ namespace nascent {
     void Input::begin_frame() {
         consumed.clear();
         injected.clear();
+        blocked.clear();
         consumed_clicks.fill(false);
         wheel_consumed = false;
         back_clicked = queue.drain_back_click();
@@ -129,7 +130,7 @@ namespace nascent {
     }
 
     bool Input::pressed(ActionId action) const {
-        if (suppressed > 0 || consumed.contains(action)) {
+        if (suppressed > 0 || consumed.contains(action) || blocked.contains(action)) {
             return false;
         }
 
@@ -153,7 +154,7 @@ namespace nascent {
     }
 
     bool Input::held(ActionId action) const {
-        if (suppressed > 0) {
+        if (suppressed > 0 || blocked.contains(action)) {
             return false;
         }
 
@@ -183,6 +184,10 @@ namespace nascent {
 
     void Input::consume(ActionId action) {
         consumed.insert(action);
+    }
+
+    void Input::block(ActionId action) {
+        blocked.insert(action);
     }
 
     void Input::inject(ActionId action) {

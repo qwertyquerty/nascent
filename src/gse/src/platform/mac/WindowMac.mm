@@ -80,6 +80,46 @@ namespace nascent {
         unblock_app_switching();
     }
 
+    std::optional<std::filesystem::path> choose_folder(const std::string& title) {
+        __block std::optional<std::filesystem::path> chosen;
+        NSString* message = [NSString stringWithUTF8String:title.c_str()];
+
+        void (^show)(void) = ^{
+          @autoreleasepool {
+              NSOpenPanel* panel = [NSOpenPanel openPanel];
+              panel.canChooseDirectories = YES;
+              panel.canChooseFiles = NO;
+              panel.allowsMultipleSelection = NO;
+              panel.message = message;
+              NSWindow* window = NSApp.mainWindow != nil ? NSApp.mainWindow : NSApp.keyWindow;
+
+              if (window != nil) {
+                  panel.level = std::max(panel.level, window.level + 1);
+              }
+
+              if ([panel runModal] == NSModalResponseOK && panel.URL != nil) {
+                  chosen = std::filesystem::path(panel.URL.path.UTF8String);
+              }
+              else {
+                  chosen = std::filesystem::path();
+              }
+          }
+        };
+
+        if (NSThread.isMainThread) {
+            show();
+        }
+        else {
+            dispatch_sync(dispatch_get_main_queue(), show);
+        }
+
+        return chosen;
+    }
+
+    bool alt_held() {
+        return (NSEvent.modifierFlags & NSEventModifierFlagOption) != 0;
+    }
+
     std::optional<bool> application_focused() {
         return NSApp != nil ? std::optional<bool>(NSApp.isActive) : std::nullopt;
     }

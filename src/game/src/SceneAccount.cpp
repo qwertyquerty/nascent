@@ -20,8 +20,6 @@
 #include <format>
 
 namespace nascent {
-    static constexpr double FFT_HEIGHT_RATIO = 0.28;
-
     SceneAccount::SceneAccount(Skin* skin, Scene* next_scene, EntityStarfield* sky, bool pan_in) {
         this->skin = skin;
         this->next_scene = next_scene;
@@ -31,7 +29,7 @@ namespace nascent {
 
     void SceneAccount::on_create() {
         olc::vi2d window_size = game->window->GetScreenSize();
-        double height = (double)window_size.y * FFT_HEIGHT_RATIO;
+        double height = (double)window_size.y * Ui::layout("account.spectrum_height");
 
         fft = std::make_unique<EntityFFT>(skin, olc::vd2d{0, (double)window_size.y - height}, olc::vd2d{(double)window_size.x, height}, 0);
         fft->flipped = true;
@@ -73,7 +71,7 @@ namespace nascent {
     void SceneAccount::set_mode(Mode mode) {
         this->mode = mode;
         form.clear();
-        login_field = email_field = password_field = nullptr;
+        login_field = email_field = password_field = confirm_field = nullptr;
         continue_button = submit_button = profile_button = sign_out_button = switch_button = forgot_button = terms_button = nullptr;
 
         if (mode == Mode::SIGNED_IN) {
@@ -91,6 +89,11 @@ namespace nascent {
         }
 
         password_field = &form.add<TextField>("Password", "", true);
+
+        if (mode == Mode::REGISTER) {
+            confirm_field = &form.add<TextField>("Retype password", "", true);
+        }
+
         submit_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "Sign in" : "Create account");
         switch_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "No account yet? Create one" : "Already have an account? Sign in");
 
@@ -111,6 +114,13 @@ namespace nascent {
             return;
         }
 
+        if (confirm_field != nullptr && confirm_field->value != password_field->value) {
+            status = "The passwords don't match";
+            status_is_error = true;
+            confirm_field->value.clear();
+            return;
+        }
+
         form.set_enabled(false);
         status_is_error = false;
 
@@ -127,6 +137,11 @@ namespace nascent {
     void SceneAccount::finish(const ServerResponse& response) {
         if (response.ok()) {
             password_field->value.clear();
+
+            if (confirm_field != nullptr) {
+                confirm_field->value.clear();
+            }
+
             leave();
             return;
         }
@@ -252,7 +267,7 @@ namespace nascent {
             return;
         }
 
-        if (form.focused_field() == password_field && input.take(actions::CONFIRM)) {
+        if (form.focused_field() == (confirm_field != nullptr ? confirm_field : password_field) && input.take(actions::CONFIRM)) {
             play_menu_sound();
             submit();
             return;
@@ -292,23 +307,23 @@ namespace nascent {
         sky->draw(window);
         fft->draw(window);
 
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = (int32_t)(screen.x * Ui::layout("account.left"));
+        int32_t y = (int32_t)(screen.y * Ui::layout("account.top"));
 
         const char* title = mode == Mode::SIGN_IN ? "Sign in" : mode == Mode::REGISTER ? "Create an account"
                                                                                        : "Account";
         draw_text(skin->display_font_large, title, {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(90);
+        y += Ui::layout_px("account.subtitle_offset");
 
         const char* subtitle = mode == Mode::REGISTER ? "Creating an account means you agree to the terms and privacy policy." : "Signing in lets your plays count towards the leaderboards.";
         draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(SkinColor::TEXT_MUTED));
-        y += Ui::px(26);
+        y += Ui::layout_px("account.server_offset");
         draw_text(skin->display_font_small, SettingsManager::settings.server_url, {x, y}, skin->color(SkinColor::TEXT_FAINT));
-        y += Ui::px(60);
+        y += Ui::layout_px("account.form_offset");
 
         if (mode == Mode::SIGNED_IN) {
             draw_text(skin->display_font_medium, std::format("Signed in as {}", Account::username()), {x, y}, skin->color(SkinColor::TEXT));
-            y += Ui::px(60);
+            y += Ui::layout_px("account.signed_in_offset");
         }
 
         y += form.draw(window, *skin, {x, y});
@@ -332,8 +347,8 @@ namespace nascent {
         }
 
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, "Hgjy");
-        int32_t footer_bottom = screen.y - screen.y / 12;
+        int32_t footer_bottom = screen.y - (int32_t)(screen.y * Ui::layout("account.footer_bottom"));
         footer_spots.clear();
-        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::pxf(FOOTER_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), footer_spots);
+        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::layout_pxf("account.footer_hint_gap"), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), footer_spots);
     }
 }

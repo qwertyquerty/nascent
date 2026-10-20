@@ -1,6 +1,7 @@
 #include "gse/ui/Layout.h"
 
 #include "gse/render/TextCache.h"
+#include "gse/ui/Ui.h"
 
 namespace nascent {
     bool Rect::contains(olc::vf2d point) const {
@@ -65,6 +66,7 @@ namespace nascent {
     void draw_hints(olc::PixelGameEngine* window, olc::Font& font, const std::vector<Hint>& hints, olc::vf2d baseline, float gap, olc::Pixel color, olc::Pixel hover_color, Hotspots& hotspots) {
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         olc::vf2d mouse = window->GetMousePos();
+        float hit_padding = gap * (float)Ui::layout("hints.hit_padding_fraction");
         float x = baseline.x;
 
         for (const Hint& hint : hints) {
@@ -73,7 +75,7 @@ namespace nascent {
             }
 
             float width = (float)text_bounds(font, hint.text).size.x;
-            Rect area = Rect{{x, baseline.y + metrics.offset.y}, {width, (float)metrics.size.y}}.inflated(gap / 4.0f);
+            Rect area = Rect{{x, baseline.y + metrics.offset.y}, {width, (float)metrics.size.y}}.inflated(hit_padding);
             bool clickable = hint.id >= 0;
 
             if (clickable) {

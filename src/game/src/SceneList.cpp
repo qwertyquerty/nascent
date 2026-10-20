@@ -2,6 +2,7 @@
 
 #include "Account.h"
 #include "BeatmapDownloads.h"
+#include "ChartFolders.h"
 #include "Chart.h"
 #include "ChartSearch.h"
 #include "Const.h"
@@ -166,7 +167,9 @@ namespace nascent {
         active = true;
         RichPresence::picking_song(selected_chart);
 
-        if (BeatmapDownloads::take_library_changed()) {
+        bool downloads_changed = BeatmapDownloads::take_library_changed();
+
+        if (ChartFolders::take_changed() || downloads_changed) {
             start_library_load();
         }
 
@@ -246,10 +249,10 @@ namespace nascent {
         }
 
         if (load_result && load_result->generation == load_generation) {
-            apply_background_load(std::move(load_result->image_path), std::move(load_result->levels));
+            apply_background_load(std::move(*load_result));
         }
 
-        crossfade_timer = std::max(0.0f, (crossfade_timer - elapsed_time * 6));
+        crossfade_timer = std::max(0.0f, (crossfade_timer - elapsed_time * (float)Ui::layout("song_list.background_crossfade_speed")));
 
         double now = now_ms();
 
@@ -280,7 +283,7 @@ namespace nascent {
             old_background_image.reset();
         }
 
-        list_scroll_offset *= std::abs(list_scroll_offset) > 1.0 ? (std::pow(0.005, elapsed_time * 2)) : 0;
+        list_scroll_offset *= std::abs(list_scroll_offset) > 1.0 ? (std::pow(0.005, elapsed_time * Ui::layout("song_list.scroll_settle_speed"))) : 0;
     };
 
     bool SceneList::run_status_action(StatusAction action, bool secondary) {
@@ -363,7 +366,7 @@ namespace nascent {
         if (std::optional<int32_t> spot = ui_spots.take_click(input)) {
             if (*spot == SPOT_SEARCH_CLEAR) {
                 search.clear();
-                apply_search(!visible.empty() ? visible[selected_chart_index] : SIZE_MAX);
+                apply_search(selected_library_index());
 
                 if (!visible.empty()) {
                     select_chart(selected_chart_index, false);
@@ -380,6 +383,16 @@ namespace nascent {
         }
 
         if (visible.empty()) {
+            return false;
+        }
+
+        if (std::optional<float> position = list_scrollbar.update(input, list_position())) {
+            int32_t index = (int32_t)std::lround(*position * (float)(visible.size() - 1));
+
+            if (index != selected_chart_index) {
+                select_chart(index, false);
+            }
+
             return false;
         }
 
@@ -414,6 +427,11 @@ namespace nascent {
         Input& input = game->input();
 
         if (update_mouse(input)) {
+            return false;
+        }
+
+        if (input.key_pressed(InputManager::full_reload_key) && input.key_held(InputManager::full_reload_modifier)) {
+            reload_everything();
             return false;
         }
 
@@ -531,12 +549,13 @@ namespace nascent {
 
         int32_t down_steps = (index - selected_chart_index + visible.size()) % visible.size();
         int32_t up_steps = (selected_chart_index - index + visible.size()) % visible.size();
-        int32_t row_height = Ui::px(LIST_ROW_HEIGHT);
+        int32_t row_height = Ui::layout_px("song_list.row_height");
+        int32_t scroll_limit = row_height * (int32_t)Ui::layout("song_list.scroll_max_rows");
 
         list_scroll_offset += std::clamp(
             (up_steps < down_steps ? -up_steps : down_steps) * row_height,
-            row_height * -5,
-            row_height * 5
+            -scroll_limit,
+            scroll_limit
         );
 
         selected_chart_index = index;
@@ -575,6 +594,8 @@ namespace nascent {
         field = std::make_unique<EntityField>(selected_chart, skin, olc::vd2d{(double)position.x, 0.0}, olc::vd2d{(double)size.x, (double)screen.y});
         field->draw_judge = false;
         field->upscroll = SettingsManager::settings.field_upscroll;
+        field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
+        field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
         field->mirror = SettingsManager::settings.field_mirror;
         field->note_gradient = SettingsManager::settings.field_note_gradient;
         field->set_position(preview_position);
@@ -582,11 +603,14 @@ namespace nascent {
     }
 
     olc::vi2d SceneList::side_panel_position(olc::vi2d screen) const {
-        return {screen.x / 4 * 3 - screen.x / 48, StatusBar::height()};
+        double width_fraction = Ui::layout("song_list.side_panel_width_fraction");
+        int32_t width = side_panel_size(screen).x;
+        int32_t margin = (int32_t)(screen.x * Ui::layout("song_list.margin_fraction"));
+        return {(int32_t)(width * (1.0 - width_fraction) / width_fraction) - margin, StatusBar::height()};
     }
 
     olc::vi2d SceneList::side_panel_size(olc::vi2d screen) const {
-        return {screen.x / 4, screen.y - StatusBar::height() * 2};
+        return {(int32_t)(screen.x * Ui::layout("song_list.side_panel_width_fraction")), screen.y - StatusBar::height() * 2};
     }
 
     std::string SceneList::selected_hash() const {
@@ -604,12 +628,13 @@ namespace nascent {
     void SceneList::request_background_load() {
         load_generation++;
 
+        std::string image_path = selected_chart->info.image_file.empty() ? "" : selected_chart->image_path.string();
+        std::filesystem::path audio_path = preview_audio_chart == selected_chart ? std::filesystem::path() : selected_chart->audio_path;
+        bool keep_image = background_image && !image_path.empty() && image_path == background_image_path;
+
         {
             std::lock_guard<std::mutex> lock(background_load_mutex);
-            pending_background_load = BackgroundLoadRequest{
-                load_generation,
-                selected_chart->info.image_file.empty() ? "" : selected_chart->image_path.string()
-            };
+            pending_background_load = BackgroundLoadRequest{load_generation, image_path, audio_path, keep_image};
         }
 
         background_load_cv.notify_one();
@@ -632,9 +657,15 @@ namespace nascent {
                 pending_background_load.reset();
             }
 
+            std::optional<PreparedSongAudio> audio;
+
+            if (!request.audio_path.empty()) {
+                audio = prepare_song_audio(request.audio_path);
+            }
+
             std::unique_ptr<olc::Sprite> sprite;
 
-            if (!request.image_path.empty()) {
+            if (!request.keep_image && !request.image_path.empty()) {
                 sprite = std::make_unique<olc::Sprite>();
 
                 if (sprite->LoadFromFile(request.image_path) != olc::OK) {
@@ -642,18 +673,20 @@ namespace nascent {
                 }
             }
 
+            std::vector<std::unique_ptr<olc::Sprite>> levels = request.keep_image ? std::vector<std::unique_ptr<olc::Sprite>>() : MipDecal::build_levels(std::move(sprite));
             std::lock_guard<std::mutex> lock(background_load_mutex);
-            completed_background_load = BackgroundLoadResult{request.generation, request.image_path, MipDecal::build_levels(std::move(sprite))};
+            completed_background_load = BackgroundLoadResult{request.generation, request.image_path, std::move(levels), request.keep_image, std::move(audio)};
         }
     }
 
-    void SceneList::apply_background_load(std::string image_path, std::vector<std::unique_ptr<olc::Sprite>> levels) {
-        old_background_image = std::move(background_image);
-        background_image = MipDecal(std::move(levels));
-        background_image_path = std::move(image_path);
-
-        crossfade_timer = 1;
-        crossfade = true;
+    void SceneList::apply_background_load(BackgroundLoadResult result) {
+        if (!result.keep_image) {
+            old_background_image = std::move(background_image);
+            background_image = MipDecal(std::move(result.levels));
+            background_image_path = std::move(result.image_path);
+            crossfade_timer = 1;
+            crossfade = true;
+        }
 
         if (preview_audio_chart == selected_chart) {
             return;
@@ -661,7 +694,8 @@ namespace nascent {
 
         stop_preview_audio();
 
-        selected_chart_audio_id = load_song_audio(game->audio().engine(), selected_chart->audio_path);
+        bool prepared = result.audio && result.audio->path == selected_chart->audio_path;
+        selected_chart_audio_id = prepared ? load_song_audio(game->audio().engine(), std::move(*result.audio)) : load_song_audio(game->audio().engine(), selected_chart->audio_path);
         preview_audio_chart = selected_chart;
         game->audio().fade_music(selected_chart_audio_id, 0.0f, 1.0f, SettingsManager::settings.list_preview_fade_in_time, false, PREVIEW_FADE_CURVE);
         game->audio().engine().Seek(selected_chart_audio_id, selected_chart->info.preview_time);
@@ -678,6 +712,12 @@ namespace nascent {
         }
     }
 
+    void SceneList::reload_everything() {
+        difficulty_cache->clear();
+        game->notify("Reloading every chart and recalculating difficulties");
+        start_library_load();
+    }
+
     void SceneList::start_library_load() {
         BeatmapDownloads::forget_missing();
 
@@ -689,19 +729,21 @@ namespace nascent {
         library_loading = true;
         library_load_progress.done = 0;
         library_load_progress.total = 0;
-        std::filesystem::path song_directory = SettingsManager::song_directory();
+        std::vector<std::filesystem::path> song_directories = ChartFolders::all();
         float load_pitch = pitch;
         DifficultyCache* cache = difficulty_cache.get();
 
-        library_loader = std::thread([this, song_directory, load_pitch, cache] {
-            ChartLibrary loaded = load_chart_library(song_directory, load_pitch, *cache, &library_load_progress);
+        library_loader = std::thread([this, song_directories, load_pitch, cache] {
+            ChartLibrary loaded = load_chart_library(song_directories, load_pitch, *cache, &library_load_progress);
             std::lock_guard<std::mutex> lock(library_load_mutex);
             completed_library_load = std::move(loaded);
         });
     }
 
     void SceneList::poll_library_load() {
-        if (BeatmapDownloads::take_library_changed()) {
+        bool downloads_changed = BeatmapDownloads::take_library_changed();
+
+        if (ChartFolders::take_changed() || downloads_changed) {
             start_library_load();
         }
 
@@ -884,8 +926,16 @@ namespace nascent {
         });
     }
 
+    size_t SceneList::selected_library_index() const {
+        auto found = std::find_if(library.charts.begin(), library.charts.end(), [&](const std::unique_ptr<Chart>& chart) {
+            return chart.get() == selected_chart;
+        });
+
+        return selected_chart != nullptr && found != library.charts.end() ? (size_t)(found - library.charts.begin()) : SIZE_MAX;
+    }
+
     void SceneList::refresh_search() {
-        apply_search(selected_chart != nullptr && !visible.empty() ? visible[selected_chart_index] : SIZE_MAX);
+        apply_search(selected_library_index());
     }
 
     void SceneList::update_search() {
@@ -910,8 +960,7 @@ namespace nascent {
             return;
         }
 
-        size_t keep_chart = !visible.empty() ? visible[selected_chart_index] : SIZE_MAX;
-        apply_search(keep_chart);
+        apply_search(selected_library_index());
 
         if (!visible.empty() && library.charts[visible[selected_chart_index]].get() != selected_chart) {
             select_chart(selected_chart_index);
@@ -938,8 +987,9 @@ namespace nascent {
         std::string count = std::format("{} / {}", visible.size(), library.size());
         int32_t count_width = text_bounds(font, count).size.x;
         draw_text(font, search, {padding, baseline}, skin->color(SkinColor::TEXT));
-        float clear_x = (float)padding + text_bounds(font, search).size.x + Ui::pxf(HINT_GAP);
-        draw_hints(window, font, {{"Esc  clear", SPOT_SEARCH_CLEAR}}, {clear_x, (float)baseline}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), ui_spots);
+        float hint_gap = Ui::layout_pxf("song_list.hint_gap");
+        float clear_x = (float)padding + text_bounds(font, search).size.x + hint_gap;
+        draw_hints(window, font, {{"Esc  clear", SPOT_SEARCH_CLEAR}}, {clear_x, (float)baseline}, hint_gap, skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), ui_spots);
         draw_text(font, count, {screensize.x - padding - GameNascent::fps_counter_width() - count_width, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
     }
 
@@ -954,18 +1004,20 @@ namespace nascent {
 
     void SceneList::draw_recommended(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = (int32_t)(screen.x * Ui::layout("song_list.empty_left_fraction"));
+        int32_t y = (int32_t)(screen.y * Ui::layout("song_list.empty_top_fraction"));
         bool any_failed = false;
         bool any_downloading = false;
         bool all_started = true;
         olc::FontRect metrics = text_bounds(skin->display_font_small, "Hgjy");
-        float row_height = Ui::pxf(RECOMMENDED_ROW_HEIGHT);
+        float row_height = Ui::layout_pxf("song_list.recommended_row_height");
+        int32_t row_step = Ui::layout_px("song_list.recommended_row_height");
+        int32_t status_offset = Ui::layout_px("song_list.recommended_status_offset");
 
         draw_text(skin->display_font_large, "Your library is empty", {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(70);
+        y += Ui::layout_px("song_list.empty_title_gap");
         draw_text(skin->display_font_small, "Download these recommended songs to get started.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
-        y += Ui::px(60);
+        y += Ui::layout_px("song_list.empty_subtitle_gap");
 
         for (size_t index = 0; index < std::size(RECOMMENDED_SONGS); index++) {
             const RecommendedSong& song = RECOMMENDED_SONGS[index];
@@ -990,7 +1042,7 @@ namespace nascent {
                         status_color = skin->color(SkinColor::POSITIVE);
                         break;
                     case BeatmapDownloads::State::FAILED:
-                        status = fit_text(skin->display_font_small, "Failed: " + download->error(), screen.x - x * 2 - Ui::px(RECOMMENDED_STATUS_OFFSET));
+                        status = fit_text(skin->display_font_small, "Failed: " + download->error(), screen.x - x * 2 - status_offset);
                         status_color = skin->color(SkinColor::TEXT_ERROR);
                         any_failed = true;
                         break;
@@ -998,14 +1050,14 @@ namespace nascent {
             }
 
             draw_text(skin->display_font_small, std::format("{} - {}", song.artist, song.title), {x, y}, skin->color(SkinColor::TEXT));
-            draw_text(skin->display_font_small, status, {x + Ui::px(RECOMMENDED_STATUS_OFFSET), y}, status_color);
+            draw_text(skin->display_font_small, status, {x + status_offset, y}, status_color);
             float row_top = (float)(y + metrics.offset.y) - (row_height - (float)metrics.size.y) / 2.0f;
-            float row_width = (float)(Ui::px(RECOMMENDED_STATUS_OFFSET) + text_bounds(skin->display_font_small, "Extracting").size.x);
+            float row_width = (float)(status_offset + text_bounds(skin->display_font_small, "Extracting").size.x);
             ui_spots.add(Rect{{(float)x, row_top}, {row_width, row_height}}, SPOT_RECOMMENDED_FIRST + (int32_t)index);
-            y += Ui::px(RECOMMENDED_ROW_HEIGHT);
+            y += row_step;
         }
 
-        y += Ui::px(30);
+        y += Ui::layout_px("song_list.empty_hints_gap");
 
         Hint download = !all_started ? Hint{"Enter:  download recommended songs", SPOT_DOWNLOAD}
             : any_failed             ? Hint{"Enter:  retry failed downloads", SPOT_DOWNLOAD}
@@ -1016,7 +1068,7 @@ namespace nascent {
             hints.push_back({"Right-click a song:  cancel"});
         }
 
-        draw_hints(window, skin->display_font_small, hints, {(float)x, (float)y}, Ui::pxf(HINT_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), ui_spots);
+        draw_hints(window, skin->display_font_small, hints, {(float)x, (float)y}, Ui::layout_pxf("song_list.hint_gap"), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), ui_spots);
     }
 
     void SceneList::select_chart_by_hash(std::string hash, std::filesystem::path path, int playing_audio_id) {
@@ -1117,6 +1169,12 @@ namespace nascent {
     void SceneList::delete_charts(bool whole_pack) {
         std::error_code ec;
         std::filesystem::path chart_path = selected_chart->file_path;
+
+        if (ChartFolders::in_linked_folder(chart_path)) {
+            game->notify("That chart is in a linked folder, so Nascent won't delete it", true);
+            return;
+        }
+
         std::filesystem::path folder = std::filesystem::weakly_canonical(chart_path.parent_path(), ec);
         std::filesystem::path songs = std::filesystem::weakly_canonical(SettingsManager::song_directory(), ec);
 
@@ -1183,8 +1241,28 @@ namespace nascent {
         game->notify(whole_pack ? std::format("Deleted {} ({} charts)", name, removed_count) : std::format("Deleted {}", name));
     }
 
+    float SceneList::list_position() const {
+        return visible.size() > 1 ? (float)selected_chart_index / (float)(visible.size() - 1) : 0.0f;
+    }
+
+    void SceneList::draw_list_scrollbar(olc::PixelGameEngine* window, int32_t charts_per_screen) {
+        if (visible.size() < 2) {
+            return;
+        }
+
+        olc::vi2d screensize = window->GetScreenSize();
+        float margin = Ui::layout_pxf("song_list.scrollbar_margin");
+        float track_width = std::max(1.0f, Ui::layout_pxf("song_list.scrollbar_width"));
+        float track_x = (float)side_panel_position(screensize).x - Ui::layout_pxf("song_list.scrollbar_gap") - track_width;
+        float track_top = (float)StatusBar::height() + margin;
+        float track_height = (float)(screensize.y - StatusBar::height() * 2) - margin * 2.0f;
+        list_scrollbar.layout({{track_x, track_top}, {track_width, track_height}}, (float)charts_per_screen / (float)visible.size());
+        list_scrollbar.draw(window, list_position(), skin->color(SkinColor::SCROLLBAR_TRACK), skin->color(SkinColor::SCROLLBAR_THUMB));
+    }
+
     void SceneList::draw_list(olc::PixelGameEngine* window) {
         olc::vi2d screensize = window->GetScreenSize();
+        list_scrollbar.hide();
 
         if (visible.empty()) {
             if (library.charts.empty() && (!library_loading || recommended_started)) {
@@ -1192,12 +1270,12 @@ namespace nascent {
                 return;
             }
 
-            draw_text(skin->display_font_medium, library.charts.empty() ? std::string("Loading charts...") : std::string("No charts match your search"), {screensize.x / 48, screensize.y / 2}, skin->color(SkinColor::TEXT_MUTED));
+            draw_text(skin->display_font_medium, library.charts.empty() ? std::string("Loading charts...") : std::string("No charts match your search"), {(int32_t)(screensize.x * Ui::layout("song_list.margin_fraction")), screensize.y / 2}, skin->color(SkinColor::TEXT_MUTED));
             return;
         }
 
         float beat_progress = selected_chart->beat_progress_at(preview_position);
-        uint8_t background_brightening = 15 * std::clamp((1.0 - beat_progress * 3 + std::max(0.0, beat_progress - 0.75) * 4), 0.0, 1.0);
+        uint8_t background_brightening = Ui::layout("song_list.background_beat_flash") * std::clamp((1.0 - beat_progress * 3 + std::max(0.0, beat_progress - 0.75) * 4), 0.0, 1.0);
 
         olc::vf2d rect[4] = {
             {0.0f, 0.0f},
@@ -1225,9 +1303,9 @@ namespace nascent {
             window->DrawWarpedDecal(old_background_image.pick(cover_scale(old_background_image)).decal, rect, fade(background_tint, crossfade_timer));
         }
 
-        int32_t row_height = Ui::px(LIST_ROW_HEIGHT);
+        int32_t row_height = Ui::layout_px("song_list.row_height");
         const int32_t charts_per_screen = screensize.y / std::max(1, row_height);
-        float list_margin = (float)screensize.x / 48;
+        float list_margin = (float)(screensize.x * Ui::layout("song_list.margin_fraction"));
 
         if (widest_grade < 0) {
             widest_grade = 0;
@@ -1237,11 +1315,29 @@ namespace nascent {
             }
         }
 
-        float grade_gap = Ui::pxf(GRADE_GAP);
-        float grade_indent = std::max(0.0f, Ui::pxf(GRADE_SCREEN_MARGIN) + widest_grade + grade_gap - list_margin);
-        float bar_width = Ui::pxf(DIFFICULTY_BAR_WIDTH);
+        float grade_gap = Ui::layout_pxf("song_list.grade_gap");
+        float grade_indent = std::max(0.0f, Ui::layout_pxf("song_list.grade_screen_margin") + widest_grade + grade_gap - list_margin);
+        float bar_width = Ui::layout_pxf("song_list.difficulty_bar_width");
         olc::Font& detail_font = skin->display_font_small;
-        float detail_gap = Ui::pxf(DETAIL_GAP);
+        float detail_gap = Ui::layout_pxf("song_list.detail_gap");
+        float row_hit_above = Ui::layout_pxf("song_list.row_hit_above");
+        double curve_reach = Ui::layout("song_list.curve_reach");
+        double curve_softness = Ui::layout("song_list.curve_softness");
+        float favorite_radius = Ui::layout_pxf("song_list.favorite_radius");
+        float favorite_gap = Ui::layout_pxf("song_list.favorite_gap");
+        float favorite_ratio = (float)Ui::layout("song_list.favorite_inner_ratio");
+        double idle_opacity = Ui::layout("song_list.difficulty_idle_opacity");
+        float bar_max = (float)Ui::layout("song_list.difficulty_bar_max");
+        uint8_t idle_bar_alpha = (uint8_t)Ui::layout("song_list.difficulty_bar_idle_alpha");
+        int32_t details_offset = Ui::layout_px("song_list.details_offset");
+        float bar_offset = Ui::layout_pxf("song_list.difficulty_bar_offset");
+        int32_t stats_offset = Ui::layout_px("song_list.stats_offset");
+        float grade_center_offset = Ui::layout_pxf("song_list.grade_center_offset");
+
+        if (favorite_ratio != favorite_star_ratio) {
+            favorite_star = StarSprite(favorite_ratio);
+            favorite_star_ratio = favorite_ratio;
+        }
 
         auto widest = [&](std::initializer_list<std::string_view> samples) {
             int32_t width = 0;
@@ -1257,7 +1353,7 @@ namespace nascent {
         float difficulty_column = keys_column + widest({"10K", "44K", "88K"}) + detail_gap;
         float length_column = difficulty_column + widest({"00.00", "44.44", "88.88"}) + detail_gap;
         float bpm_column = length_column + widest({"00:00", "44:44", "88:88"}) + detail_gap;
-        const ProgressBar difficulty_bar({bar_width, std::max(1.0f, Ui::pxf(DIFFICULTY_BAR_HEIGHT))}, skin->color(SkinColor::PROGRESS_TRACK));
+        const ProgressBar difficulty_bar({bar_width, std::max(1.0f, Ui::layout_pxf("song_list.difficulty_bar_height"))}, skin->color(SkinColor::PROGRESS_TRACK));
         wanted_difficulties.clear();
 
         if (show_leaderboards) {
@@ -1277,8 +1373,8 @@ namespace nascent {
             }
 
             double distance = std::abs((float)screensize.y / 2 - y) / Ui::scale();
-            float x = list_margin + grade_indent + Ui::pxf(std::pow(std::max(300.0 - distance, 0.0) / 50.0, 2));
-            Rect row_area = {{0.0f, y - Ui::pxf(ROW_HIT_ABOVE)}, {(float)side_panel_position(screensize).x, (float)row_height}};
+            float x = list_margin + grade_indent + Ui::pxf(std::pow(std::max(curve_reach - distance, 0.0) / curve_softness, 2));
+            Rect row_area = {{0.0f, y - row_hit_above}, {(float)side_panel_position(screensize).x, (float)row_height}};
             row_spots.add(row_area, ROW_SPOT_CENTER + (index - selected_chart_index));
             bool hovered = index != selected_chart_index && row_area.contains(window->GetMousePos());
             olc::Pixel text_color = skin->color(index == selected_chart_index || hovered ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
@@ -1287,12 +1383,11 @@ namespace nascent {
 
             if (Favorites::contains(library.hashes[chart_index])) {
                 olc::FontRect title_bounds = text_bounds(skin->display_font_medium, chart->info.title);
-                float radius = Ui::pxf(FAVORITE_RADIUS);
-                olc::vf2d star = {x + title_bounds.offset.x + title_bounds.size.x + Ui::pxf(FAVORITE_GAP) + radius, y + title_bounds.offset.y + title_bounds.size.y / 2.0f};
+                olc::vf2d star = {x + title_bounds.offset.x + title_bounds.size.x + favorite_gap + favorite_radius, y + title_bounds.offset.y + title_bounds.size.y / 2.0f};
                 olc::Pixel star_color = skin->color(SkinColor::ATTENTION);
-                favorite_star.draw(window, star, radius, index == selected_chart_index ? star_color : fade(star_color, DIFFICULTY_IDLE_OPACITY));
+                favorite_star.draw(window, star, favorite_radius, index == selected_chart_index ? star_color : fade(star_color, idle_opacity));
             }
-            draw_text(skin->display_font_small, library.details[chart_index], {(int)x, (int)y + Ui::px(36)}, text_color);
+            draw_text(skin->display_font_small, library.details[chart_index], {(int)x, (int)y + details_offset}, text_color);
 
             std::optional<float> rating = get_difficulty(chart_index);
 
@@ -1300,27 +1395,27 @@ namespace nascent {
                 wanted_difficulties.push_back(chart_index);
             }
 
-            float fill = rating ? std::clamp(*rating / DIFFICULTY_BAR_MAX, 0.0f, 1.0f) : 0.0f;
+            float fill = rating ? std::clamp(*rating / bar_max, 0.0f, 1.0f) : 0.0f;
             olc::Pixel rating_color = rating ? skin->difficulty_color(*rating) : skin->color(SkinColor::TEXT_MUTED);
             olc::Pixel bar_color = rating_color;
-            bar_color.a = index == selected_chart_index ? 255 : 140;
-            difficulty_bar.draw(window, {x, y + Ui::pxf(50)}, fill, bar_color);
-            draw_text(skin->display_font_small, std::format("{}K", chart->info.key_count), {(int)(x + keys_column), (int)y + Ui::px(58)}, text_color);
+            bar_color.a = index == selected_chart_index ? 255 : idle_bar_alpha;
+            difficulty_bar.draw(window, {x, y + bar_offset}, fill, bar_color);
+            draw_text(skin->display_font_small, std::format("{}K", chart->info.key_count), {(int)(x + keys_column), (int)y + stats_offset}, text_color);
 
             if (rating) {
-                olc::Pixel number_color = index == selected_chart_index ? rating_color : fade(rating_color, DIFFICULTY_IDLE_OPACITY);
-                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + difficulty_column), (int)y + Ui::px(58)}, number_color);
+                olc::Pixel number_color = index == selected_chart_index ? rating_color : fade(rating_color, idle_opacity);
+                draw_text(skin->display_font_small, std::format("{:.2f}", *rating), {(int)(x + difficulty_column), (int)y + stats_offset}, number_color);
             }
 
             int64_t length_ms = std::llround(library.lengths_ms[chart_index] / pitch);
-            draw_text(skin->display_font_small, std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60), {(int)(x + length_column), (int)y + Ui::px(58)}, text_color);
+            draw_text(skin->display_font_small, std::format("{}:{:02}", length_ms / 60000, (length_ms / 1000) % 60), {(int)(x + length_column), (int)y + stats_offset}, text_color);
 
             if (chart_index < library.bpms.size() && library.bpms[chart_index].main > 0) {
                 const BpmRange& bpm = library.bpms[chart_index];
                 long low = std::lround(bpm.min * pitch);
                 long high = std::lround(bpm.max * pitch);
                 std::string bpm_text = low == high ? std::format("{} BPM", std::lround(bpm.main * pitch)) : std::format("{}-{} BPM", low, high);
-                draw_text(skin->display_font_small, bpm_text, {(int)(x + bpm_column), (int)y + Ui::px(58)}, text_color);
+                draw_text(skin->display_font_small, bpm_text, {(int)(x + bpm_column), (int)y + stats_offset}, text_color);
             }
 
             const LocalBest* best = LocalBests::lookup(library.hashes[chart_index], pitch);
@@ -1329,11 +1424,12 @@ namespace nascent {
                 Grade grade = grade_for_accuracy(best->accuracy);
                 std::string_view grade_text = grade_name(grade);
                 olc::FontRect grade_bounds = text_bounds(skin->display_font_large, grade_text);
-                float grade_center_y = y + Ui::pxf(18);
+                float grade_center_y = y + grade_center_offset;
                 skin->draw_grade(grade, skin->display_font_large, {x - grade_gap - grade_bounds.size.x - grade_bounds.offset.x, grade_center_y - grade_bounds.size.y / 2.0f - grade_bounds.offset.y});
             }
         }
 
+        draw_list_scrollbar(window, charts_per_screen);
         request_difficulties();
     }
 

@@ -42,12 +42,6 @@ namespace nascent {
 
         public:
         static constexpr std::array<ChartAction, 5> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
-        static constexpr int32_t MIN_WIDTH = 720;
-        static constexpr int32_t SCREEN_MARGIN = 120;
-        static constexpr int32_t PADDING = 32;
-        static constexpr int32_t ROW_HEIGHT = 44;
-        static constexpr int32_t ROW_INSET = 14;
-        static constexpr int32_t GAP = 14;
 
         static bool is_destructive(ChartAction action);
 

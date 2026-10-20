@@ -72,6 +72,8 @@ namespace nascent {
         const MipDecal* borrowed_background = nullptr;
         std::future<std::vector<std::unique_ptr<olc::Sprite>>> background_load;
         float background_fade = 0;
+        const JudgedHit* last_judged = nullptr;
+        bool last_judged_release = false;
 
         static inline bool show_hit_log = false;
         bool finished = false;
@@ -85,6 +87,7 @@ namespace nascent {
         void finish();
         double chart_difficulty();
         void start_attempt();
+        void play_judgement_sound();
         void request_ticket();
         bool ticket_pending(double now);
         uint8_t chart_lane(uint8_t lane) const;
@@ -117,11 +120,9 @@ namespace nascent {
         static constexpr int32_t REPLAY_RESTART = 3;
         static constexpr int32_t REPLAY_MENU = 4;
         static constexpr int32_t REPLAY_STOP = 5;
-        static constexpr float BACKGROUND_FADE_TIME = 0.4f;
         static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
         static constexpr double CLOCK_SAMPLE_INTERVAL_MS = 1000.0;
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
-        static constexpr float TICKET_HINT_FADE_S = 0.3f;
 
         ScenePlay(Chart* chart, Skin* skin);
         ScenePlay(Chart* chart, Skin* skin, Replay replay, std::string replay_label);

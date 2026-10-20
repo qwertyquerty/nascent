@@ -39,11 +39,6 @@ namespace nascent {
 
         public:
         static constexpr const char* TITLE = "Sort songs by";
-        static constexpr int32_t WIDTH = 420;
-        static constexpr int32_t PADDING = 32;
-        static constexpr int32_t ROW_HEIGHT = 44;
-        static constexpr int32_t ROW_INSET = 14;
-        static constexpr int32_t GAP = 14;
 
         SortMenu(Skin* skin, ListSort current, std::function<void(ListSort)> on_choose);
 

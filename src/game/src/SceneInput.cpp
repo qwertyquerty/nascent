@@ -14,10 +14,6 @@
 #include <format>
 
 namespace nascent {
-    static constexpr float MAX_LANE_SIZE = 150.0f;
-    static constexpr float LANE_GAP_RATIO = 0.18f;
-    static constexpr uint8_t IDLE_NOTE_ALPHA = 70;
-
     SceneInput::SceneInput(Skin* skin, uint8_t key_count) {
         this->skin = skin;
         this->key_count = std::clamp(key_count, MIN_KEY_COUNT, MAX_KEY_COUNT);
@@ -204,16 +200,29 @@ namespace nascent {
 
     void SceneInput::draw_lanes(olc::PixelGameEngine* window, int32_t top) const {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t margin = screen.x / 24;
+        int32_t margin = (int32_t)(screen.x * Ui::layout("input.left"));
 
+        float gap_ratio = (float)Ui::layout("input.lane_gap_ratio");
         float available = (float)(screen.x - margin * 2);
-        float size = std::min(Ui::pxf(MAX_LANE_SIZE), available / (key_count + (key_count - 1) * LANE_GAP_RATIO));
-        float gap = size * LANE_GAP_RATIO;
+        float size = std::min(Ui::layout_pxf("input.max_lane_size"), available / (key_count + (key_count - 1) * gap_ratio));
+        float gap = size * gap_ratio;
         float total = size * key_count + gap * (key_count - 1);
         float left = (screen.x - total) / 2;
 
         uint32_t held = InputManager::get_lane_keys_held(game->input(), lane_keys);
         olc::FontRect metrics = text_bounds(skin->display_font_medium, "Hgjy");
+        uint8_t held_alpha = (uint8_t)Ui::layout("input.held_note_alpha");
+        uint8_t selected_alpha = (uint8_t)Ui::layout("input.selected_note_alpha");
+        uint8_t idle_alpha = (uint8_t)Ui::layout("input.idle_note_alpha");
+        float label_gap = Ui::layout_pxf("input.label_gap");
+        float label_padding = Ui::layout_pxf("input.label_padding");
+        float label_fit_margin = Ui::layout_pxf("input.label_fit_margin");
+        double hover_mix = Ui::layout("input.lane_hover_mix");
+        float underline = std::max(1.0f, Ui::layout_pxf("input.underline_thickness"));
+        float number_offset = Ui::layout_pxf("input.lane_number_offset");
+        double pulse_low = Ui::layout("input.capture_pulse_min_alpha");
+        double pulse_high = Ui::layout("input.capture_pulse_max_alpha");
+        float pulse_speed = (float)Ui::layout("input.capture_pulse_speed");
 
         for (uint8_t lane = 0; lane < key_count; lane++) {
             float lane_x = left + lane * (size + gap);
@@ -221,8 +230,8 @@ namespace nascent {
             bool waiting = capturing && selected;
 
             olc::Pixel color = skin->title_gradient_at(key_count > 1 ? (double)lane / (key_count - 1) : 0.5, 0.5);
-            color.a = (held >> lane) & 1 ? 255 : selected ? 170
-                                                          : IDLE_NOTE_ALPHA;
+            color.a = (held >> lane) & 1 ? held_alpha : selected ? selected_alpha
+                                                                 : idle_alpha;
 
             if (const MipDecal* note = skin->image(SkinImage::NOTE, lane, key_count)) {
                 float scale = size / note->size().x;
@@ -230,16 +239,16 @@ namespace nascent {
                 window->DrawDecal({lane_x, (float)top}, level.decal, {scale / level.factor, scale / level.factor}, color);
             }
 
-            float label_top = top + size + Ui::pxf(16);
-            Rect lane_area = {{lane_x, (float)top}, {size, label_top + (float)metrics.size.y + Ui::pxf(24) - top}};
+            float label_top = top + size + label_gap;
+            Rect lane_area = {{lane_x, (float)top}, {size, label_top + (float)metrics.size.y + label_padding * 2 - top}};
             spots.add(lane_area, SPOT_LANE + lane);
             olc::Pixel lane_background = skin->color(SkinColor::INPUT_LANE_BACKGROUND);
-            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + Ui::pxf(24)}, !capturing && lane_area.contains(window->GetMousePos()) ? mix(lane_background, skin->color(SkinColor::TEXT), 0.12) : lane_background);
+            window->FillRectDecal({lane_x, label_top}, {size, (float)metrics.size.y + label_padding * 2}, !capturing && lane_area.contains(window->GetMousePos()) ? mix(lane_background, skin->color(SkinColor::TEXT), hover_mix) : lane_background);
 
             std::string label = waiting ? "?" : InputManager::key_label(lane_keys[lane]);
             olc::Font* font = &skin->display_font_medium;
 
-            if (text_bounds(*font, label).size.x > size - Ui::pxf(12)) {
+            if (text_bounds(*font, label).size.x > size - label_fit_margin) {
                 font = &skin->display_font_small;
             }
 
@@ -247,46 +256,48 @@ namespace nascent {
             olc::Pixel label_color = skin->color(selected ? SkinColor::TEXT : SkinColor::TEXT_MUTED);
 
             if (waiting) {
-                label_color = fade(label_color, (140 + 115 * (0.5 + 0.5 * std::sin(timer * 6))) / 255.0);
+                label_color = fade(label_color, (pulse_low + (pulse_high - pulse_low) * (0.5 + 0.5 * std::sin(timer * pulse_speed))) / 255.0);
             }
 
             int32_t label_x = (int32_t)std::lround(lane_x + size / 2 - bounds.size.x / 2.0f - bounds.offset.x);
-            int32_t label_y = (int32_t)std::lround(label_top + Ui::pxf(12) + (metrics.size.y - bounds.size.y) / 2.0f - bounds.offset.y);
+            int32_t label_y = (int32_t)std::lround(label_top + label_padding + (metrics.size.y - bounds.size.y) / 2.0f - bounds.offset.y);
             draw_text(*font, label, {label_x, label_y}, label_color);
 
             if (selected) {
-                olc::Pixel underline = skin->title_gradient_at(key_count > 1 ? (double)lane / (key_count - 1) : 0.5, 0.5);
-                window->FillRectDecal({lane_x, label_top + metrics.size.y + Ui::pxf(24)}, {size, std::max(1.0f, Ui::pxf(3))}, underline);
+                olc::Pixel underline_color = skin->title_gradient_at(key_count > 1 ? (double)lane / (key_count - 1) : 0.5, 0.5);
+                window->FillRectDecal({lane_x, label_top + metrics.size.y + label_padding * 2}, {size, underline}, underline_color);
             }
 
             std::string number = std::format("{}", lane + 1);
             olc::FontRect number_bounds = text_bounds(skin->display_font_small, number);
             int32_t number_x = (int32_t)std::lround(lane_x + size / 2 - number_bounds.size.x / 2.0f - number_bounds.offset.x);
-            draw_text(skin->display_font_small, number, {number_x, (int32_t)(label_top + metrics.size.y + Ui::pxf(52))}, skin->color(SkinColor::TEXT_FAINT));
+            draw_text(skin->display_font_small, number, {number_x, (int32_t)(label_top + metrics.size.y + number_offset)}, skin->color(SkinColor::TEXT_FAINT));
         }
     }
 
     void SceneInput::draw(olc::PixelGameEngine* window) {
         olc::vi2d screen = window->GetScreenSize();
-        int32_t x = screen.x / 24;
-        int32_t y = screen.y / 10;
+        int32_t x = (int32_t)(screen.x * Ui::layout("input.left"));
+        int32_t y = (int32_t)(screen.y * Ui::layout("input.top"));
 
         draw_text(skin->display_font_large, "Input", {x, y}, skin->color(SkinColor::TEXT));
-        y += Ui::px(90);
+        y += Ui::layout_px("input.subtitle_offset");
 
         draw_text(skin->display_font_small, "Lane keys used while playing. Changes are saved as you make them.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
-        y += Ui::px(70);
+        y += Ui::layout_px("input.key_mode_offset");
 
         spots.clear();
+        int32_t mode_x = x + Ui::layout_px("input.key_mode_value_x");
+        float button_gap = Ui::layout_pxf("input.button_gap");
         draw_text(skin->display_font_medium, "Key mode", {x, y}, skin->color(SkinColor::TEXT_MUTED));
-        draw_text(skin->display_font_medium, std::format("{}K", key_count), {x + Ui::px(300), y}, skin->color(SkinColor::TEXT));
-        float mode_buttons = (float)(x + Ui::px(300)) + text_bounds(skin->display_font_medium, "10K").size.x + Ui::pxf(BUTTON_GAP);
-        draw_hints(window, skin->display_font_medium, {{"-", SPOT_MODE_DOWN}, {"+", SPOT_MODE_UP}}, {mode_buttons, (float)y}, Ui::pxf(BUTTON_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
+        draw_text(skin->display_font_medium, std::format("{}K", key_count), {mode_x, y}, skin->color(SkinColor::TEXT));
+        float mode_buttons = (float)mode_x + text_bounds(skin->display_font_medium, "10K").size.x + button_gap;
+        draw_hints(window, skin->display_font_medium, {{"-", SPOT_MODE_DOWN}, {"+", SPOT_MODE_UP}}, {mode_buttons, (float)y}, button_gap, skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
 
         bool custom = InputManager::is_custom_lane_keys(key_count);
-        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::px(460), y}, skin->color(custom ? SkinColor::ATTENTION : SkinColor::TEXT_FAINT));
+        draw_text(skin->display_font_small, custom ? "Custom layout" : "Default layout", {x + Ui::layout_px("input.layout_label_x"), y}, skin->color(custom ? SkinColor::ATTENTION : SkinColor::TEXT_FAINT));
 
-        draw_lanes(window, (int32_t)(screen.y * 0.38));
+        draw_lanes(window, (int32_t)(screen.y * Ui::layout("input.lanes_top")));
 
         std::string line = status;
         olc::Pixel line_color = skin->color(status_is_error ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED);
@@ -298,13 +309,13 @@ namespace nascent {
 
         if (!line.empty()) {
             olc::FontRect bounds = text_bounds(skin->display_font_small, line);
-            draw_text(skin->display_font_small, line, {(screen.x - bounds.size.x) / 2 - bounds.offset.x, (int32_t)(screen.y * 0.72)}, line_color);
+            draw_text(skin->display_font_small, line, {(screen.x - bounds.size.x) / 2 - bounds.offset.x, (int32_t)(screen.y * Ui::layout("input.status_top"))}, line_color);
         }
 
         std::vector<Hint> footer = capturing ? std::vector<Hint>{{"Press any key to bind it"}, {"Esc:  back", SPOT_BACK}}
                                              : std::vector<Hint>{{"←/→:  lane"}, {"↑/↓:  key mode"}, {"Enter:  rebind", SPOT_REBIND}, {"Shift+Enter:  rebind all", SPOT_REBIND_ALL}, {"Ctrl+R:  reset", SPOT_RESET}, {"Esc:  back", SPOT_BACK}};
         olc::FontRect footer_bounds = text_bounds(skin->display_font_small, "Hgjy");
-        int32_t footer_bottom = screen.y - screen.y / 12;
-        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::pxf(FOOTER_GAP), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
+        int32_t footer_bottom = screen.y - (int32_t)(screen.y * Ui::layout("input.footer_bottom"));
+        draw_hints(window, skin->display_font_small, footer, {(float)x, (float)(footer_bottom - (footer_bounds.offset.y + footer_bounds.size.y))}, Ui::layout_pxf("input.footer_hint_gap"), skin->color(SkinColor::TEXT_MUTED), skin->color(SkinColor::TEXT), spots);
     }
 }

@@ -33,13 +33,6 @@ namespace nascent {
         static constexpr float SELECTION_DELAY = 0.25f;
         static constexpr int32_t ONLINE_LIMIT = 50;
         static constexpr int32_t LOCAL_ROWS = 8;
-        static constexpr int32_t PADDING = 24;
-        static constexpr int32_t ROW_HEIGHT = 30;
-        static constexpr int32_t HEADER_HEIGHT = 52;
-        static constexpr int32_t SECTION_GAP = 30;
-        static constexpr int32_t GRADE_OFFSET = 56;
-        static constexpr int32_t ACCURACY_OFFSET = 90;
-        static constexpr int32_t NAME_OFFSET = 190;
 
         static std::string key(const std::string& gameplay_hash, float pitch);
 

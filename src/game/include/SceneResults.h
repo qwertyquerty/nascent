@@ -45,6 +45,11 @@ namespace nascent {
         void build_error_graph(olc::vi2d size);
         void layout_error_graph();
         void draw_bottom_bar(olc::PixelGameEngine* window) const;
+        std::optional<int64_t> submitted_play_id() const;
+        void open_play_page();
+
+        static constexpr int32_t SPOT_BACK = 0;
+        static constexpr int32_t SPOT_PLAY_PAGE = 1;
 
         public:
         SceneResults(Skin* skin, const Chart* chart, AttemptSummary summary, std::future<ApiResult<Submission>> submission, int song_audio_id = -1, bool new_best = false, std::string replay_label = {});

@@ -1,8 +1,13 @@
 #include "gse/Platform.h"
 #include "platform/PlatformDetail.h"
 
+#include <sys/wait.h>
+
+#include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <system_error>
 #include <vector>
 
@@ -18,6 +23,55 @@ namespace nascent {
     }
 
     void allow_app_switching_in_fullscreen() {
+    }
+
+    static constexpr int COMMAND_NOT_FOUND = 127;
+
+    static std::string shell_quote(const std::string& text) {
+        std::string quoted = "'";
+
+        for (char c : text) {
+            quoted += c == '\'' ? std::string("'\\''") : std::string(1, c);
+        }
+
+        return quoted + "'";
+    }
+
+    std::optional<std::filesystem::path> choose_folder(const std::string& title) {
+        std::string quoted = shell_quote(title);
+        std::array<std::string, 2> commands = {
+            "zenity --file-selection --directory --title=" + quoted + " 2>/dev/null",
+            "kdialog --title " + quoted + " --getexistingdirectory \"$HOME\" 2>/dev/null",
+        };
+
+        for (const std::string& command : commands) {
+            FILE* pipe = popen(command.c_str(), "r");
+
+            if (pipe == nullptr) {
+                continue;
+            }
+
+            std::string output;
+            std::array<char, 512> buffer = {};
+
+            while (size_t count = fread(buffer.data(), 1, buffer.size(), pipe)) {
+                output.append(buffer.data(), count);
+            }
+
+            int status = pclose(pipe);
+
+            if (status == -1 || !WIFEXITED(status) || WEXITSTATUS(status) == COMMAND_NOT_FOUND) {
+                continue;
+            }
+
+            while (!output.empty() && (output.back() == '\n' || output.back() == '\r')) {
+                output.pop_back();
+            }
+
+            return WEXITSTATUS(status) == 0 ? std::filesystem::path(output) : std::filesystem::path();
+        }
+
+        return std::nullopt;
     }
 
     std::optional<bool> application_focused() {

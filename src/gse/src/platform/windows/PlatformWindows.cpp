@@ -24,6 +24,10 @@
 #endif
 
 namespace nascent {
+    bool alt_held() {
+        return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    }
+
     static std::wstring widen(const std::string& text) {
         int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
         std::wstring wide(length, L'\0');

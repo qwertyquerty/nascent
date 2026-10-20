@@ -66,10 +66,6 @@ namespace nascent {
         static constexpr int32_t SPOT_PLUS = 20;
         static constexpr int32_t SPOT_CLEAR_TAPS = 30;
         static constexpr int32_t SPOT_SAVE = 31;
-        static constexpr int32_t VALUE_COLUMN = 380;
-        static constexpr int32_t BUTTON_GAP = 28;
-        static constexpr int32_t ROW_HEIGHT = 48;
-        static constexpr float FOOTER_GAP = 48.0f;
         void on_exit() override;
         void on_resize() override;
         void update(float) override;

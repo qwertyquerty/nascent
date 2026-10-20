@@ -18,9 +18,6 @@ namespace nascent {
     inline constexpr double FFT_MIN_FREQ = 30.0;
     inline constexpr double FFT_MAX_FREQ = 16000.0;
     inline constexpr int FFT_BAR_COUNT = 128;
-    inline constexpr double FFT_SPACING_RATIO = 0.25;
-    inline constexpr double FFT_AVG_SMOOTHING_RATIO = 0.05;
-    inline constexpr uint8_t FFT_BAR_ALPHA = 64;
 
     class EntityFFT {
         protected:

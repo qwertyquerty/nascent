@@ -27,10 +27,6 @@ namespace nascent {
         static constexpr size_t CONTINUE = 0;
         static constexpr size_t RESTART = 1;
         static constexpr size_t QUIT = 2;
-        static constexpr float TITLE_TOP = 0.26f;
-        static constexpr float ITEM_SPACING = 58.0f;
-        static constexpr float ITEM_PADDING = 12.0f;
-        static constexpr float HINT_BOTTOM = 80.0f;
 
         PauseOverlay(ScenePlay& play, Skin* skin);
 

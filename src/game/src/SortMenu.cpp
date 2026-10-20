@@ -67,11 +67,11 @@ namespace nascent {
         olc::Font& row_font = skin->display_font_small;
         olc::FontRect title_metrics = text_bounds(title_font, "Hgjy");
         olc::FontRect row_metrics = text_bounds(row_font, "Hgjy");
-        int32_t padding = Ui::px(PADDING);
-        int32_t row_height = Ui::px(ROW_HEIGHT);
-        int32_t row_inset = Ui::px(ROW_INSET);
-        int32_t gap = Ui::px(GAP);
-        int32_t width = Ui::px(WIDTH);
+        int32_t padding = Ui::layout_px("sort_menu.padding");
+        int32_t row_height = Ui::layout_px("sort_menu.row_height");
+        int32_t row_inset = Ui::layout_px("sort_menu.row_inset");
+        int32_t gap = Ui::layout_px("sort_menu.gap");
+        int32_t width = Ui::layout_px("sort_menu.width");
         int32_t height = padding * 2 + title_metrics.size.y + gap * 2 + (int32_t)LIST_SORT_NAMES.size() * row_height;
         int32_t left = (screen.x - width) / 2;
         int32_t top = (screen.y - height) / 2;

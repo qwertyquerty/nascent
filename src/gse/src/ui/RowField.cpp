@@ -14,8 +14,6 @@
 #include <utility>
 
 namespace nascent {
-    static constexpr int32_t CARET_INSET = 9;
-
     static int32_t text_width(olc::Font& font, const std::string& text) {
         return text.empty() ? 0 : text_bounds(font, text).size.x;
     }
@@ -67,12 +65,12 @@ namespace nascent {
 
         int32_t row_width = width();
         int32_t row_height = height();
-        int32_t padding = Ui::px(PADDING);
-        int32_t caret_inset = Ui::px(CARET_INSET);
+        int32_t padding = Ui::layout_px("form.row_padding");
+        int32_t caret_inset = Ui::layout_px("form.row_caret_inset");
         bool hovered = Rect{{(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}}.contains(window->GetMousePos());
         olc::Pixel background = theme.color(UiColor::INPUT_BACKGROUND);
         olc::Pixel focused_background = theme.color(UiColor::INPUT_BACKGROUND_FOCUSED);
-        olc::Pixel hover_background = hovered ? mix(background, focused_background, HOVER_MIX) : background;
+        olc::Pixel hover_background = hovered ? mix(background, focused_background, Ui::layout("form.hover_mix")) : background;
         window->FillRectDecal({(float)position.x, (float)position.y}, {(float)row_width, (float)row_height}, focused ? focused_background : hover_background);
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
@@ -85,20 +83,20 @@ namespace nascent {
         value_right = value_left + text_width(font, value);
         draw_text(font, value, {value_x, baseline}, value_color(theme, focused));
 
-        if (focused && shows_caret() && std::fmod(blink_timer, 1.0f) < 0.5f) {
+        if (focused && shows_caret() && std::fmod(blink_timer, (float)Ui::layout("form.caret_blink_period")) < (float)Ui::layout("form.caret_visible_time")) {
             int32_t caret = is_placeholder() ? position.x + row_width - padding : value_x + text_width(font, value) + 1;
-            window->FillRectDecal({(float)caret, (float)(position.y + caret_inset)}, {std::max(1.0f, Ui::pxf(2)), (float)(row_height - caret_inset * 2)}, theme.color(UiColor::TEXT));
+            window->FillRectDecal({(float)caret, (float)(position.y + caret_inset)}, {std::max(1.0f, Ui::layout_pxf("form.caret_width")), (float)(row_height - caret_inset * 2)}, theme.color(UiColor::TEXT));
         }
 
         return row_height;
     }
 
     int32_t RowField::width() {
-        return Ui::px(WIDTH);
+        return Ui::layout_px("form.row_width");
     }
 
     int32_t RowField::height() {
-        return Ui::px(HEIGHT);
+        return Ui::layout_px("form.row_height");
     }
 
     ChoiceField::ChoiceField(std::string label, std::vector<std::string> options, size_t selected) : RowField(std::move(label)), options(std::move(options)), selected(selected) {}
@@ -117,7 +115,7 @@ namespace nascent {
         olc::Font& font = theme.font(UiFont::SMALL);
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = position.y + (row_height - metrics.size.y) / 2 - metrics.offset.y;
-        float gap = Ui::pxf(ARROW_GAP);
+        float gap = Ui::layout_pxf("form.choice_arrow_gap");
         float left_width = (float)text_width(font, "←");
         float right_width = (float)text_width(font, "→");
         float widest = 0;
@@ -126,7 +124,7 @@ namespace nascent {
             widest = std::max(widest, (float)text_width(font, option));
         }
 
-        float right_x = (float)(width() - Ui::px(PADDING)) - right_width;
+        float right_x = (float)(width() - Ui::layout_px("form.row_padding")) - right_width;
         float slot_right = right_x - gap;
         float slot_left = slot_right - widest;
         float left_x = slot_left - gap - left_width;
@@ -146,7 +144,7 @@ namespace nascent {
             return row_height;
         }
 
-        float slack = Ui::pxf(ARROW_SLACK);
+        float slack = Ui::layout_pxf("form.choice_arrow_slack");
         bool over_previous = hovered && mouse.x >= left_x - slack && mouse.x <= previous_right + slack;
         bool over_next = hovered && !over_previous && mouse.x >= slot_left;
         olc::Pixel idle = theme.color(focused || hovered ? UiColor::TEXT_MUTED : UiColor::TEXT_FAINT);
@@ -181,7 +179,7 @@ namespace nascent {
             return false;
         }
 
-        float slack = Ui::pxf(ARROW_SLACK);
+        float slack = Ui::layout_pxf("form.choice_arrow_slack");
         bool previous = point.x >= previous_left - slack && point.x <= previous_right + slack;
         selected = previous ? (selected + options.size() - 1) % options.size() : (selected + 1) % options.size();
         return true;
@@ -213,8 +211,8 @@ namespace nascent {
     }
 
     bool SliderField::set_from_point(float x) {
-        float bar_left = Ui::pxf(BAR_LEFT);
-        float bar_width = Ui::pxf(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
+        float bar_left = Ui::layout_pxf("form.slider_left");
+        float bar_width = Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_left") - Ui::layout("form.slider_right_gap"));
         float fraction = std::clamp((x - bar_left) / std::max(1.0f, bar_width), 0.0f, 1.0f);
         int32_t steps = step > 0 ? (int32_t)std::lround(fraction * (maximum - minimum) / step) : 0;
         int32_t next = std::clamp(minimum + steps * step, minimum, maximum);
@@ -228,7 +226,8 @@ namespace nascent {
     }
 
     bool SliderField::click(olc::vf2d point, Input&) {
-        dragging_bar = point.x >= Ui::pxf(BAR_LEFT) - Ui::pxf(PADDING) && point.x <= Ui::pxf(WIDTH - BAR_RIGHT_GAP) + Ui::pxf(PADDING);
+        float padding = Ui::layout_pxf("form.row_padding");
+        dragging_bar = point.x >= Ui::layout_pxf("form.slider_left") - padding && point.x <= Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_right_gap")) + padding;
         return dragging_bar && set_from_point(point.x);
     }
 
@@ -238,13 +237,14 @@ namespace nascent {
 
     int32_t SliderField::draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const {
         int32_t row_height = RowField::draw(window, theme, position, focused);
-        float bar_width = Ui::pxf(WIDTH - BAR_LEFT - BAR_RIGHT_GAP);
-        float bar_height = std::max(1.0f, Ui::pxf(BAR_HEIGHT));
+        float bar_left = Ui::layout_pxf("form.slider_left");
+        float bar_width = Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_left") - Ui::layout("form.slider_right_gap"));
+        float bar_height = std::max(1.0f, Ui::layout_pxf("form.slider_height"));
         float fill = maximum > minimum ? (float)(value - minimum) / (float)(maximum - minimum) : 0.0f;
         olc::Pixel color = theme.accent(fill);
-        color.a = focused ? 255 : 140;
+        color.a = (uint8_t)Ui::layout(focused ? "form.slider_focused_alpha" : "form.slider_idle_alpha");
 
-        ProgressBar({bar_width, bar_height}, theme.color(UiColor::PROGRESS_TRACK)).draw(window, {(float)position.x + Ui::pxf(BAR_LEFT), (float)position.y + (row_height - bar_height) / 2}, fill, color);
+        ProgressBar({bar_width, bar_height}, theme.color(UiColor::PROGRESS_TRACK)).draw(window, {(float)position.x + bar_left, (float)position.y + (row_height - bar_height) / 2}, fill, color);
         return row_height;
     }
 
@@ -279,11 +279,11 @@ namespace nascent {
     int32_t SectionField::draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool) const {
         olc::Font& font = theme.font(UiFont::SMALL);
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        int32_t text_top = position.y + Ui::px(TOP_GAP);
+        int32_t text_top = position.y + Ui::layout_px("form.section_top_gap");
         draw_text(font, title, {position.x, text_top - metrics.offset.y}, theme.color(UiColor::TEXT));
 
-        int32_t line_top = text_top + metrics.size.y + Ui::px(LINE_GAP);
-        int32_t line_height = std::max(1, Ui::px(LINE_HEIGHT));
+        int32_t line_top = text_top + metrics.size.y + Ui::layout_px("form.section_line_gap");
+        int32_t line_height = std::max(1, Ui::layout_px("form.section_line_height"));
         window->FillRectDecal({(float)position.x, (float)line_top}, {(float)RowField::width(), (float)line_height}, theme.color(UiColor::SEPARATOR));
         return line_top + line_height - position.y;
     }

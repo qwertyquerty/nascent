@@ -9,20 +9,20 @@
 
 namespace nascent {
     static constexpr uint8_t MAX_HIT_LINES = 100;
-    static constexpr uint8_t WINDOW_ALPHA = 24;
 
     void draw_timing_bar(olc::PixelGameEngine* window, const Skin* skin, const Attempt& attempt, float center_x, float length, float thickness, float height) {
         olc::vi2d screensize = window->GetScreenSize();
-        float hit_width = screensize.x / 400;
+        float hit_width = (float)(int32_t)(screensize.x * skin->layout("timing_bar.hit_width_fraction"));
         float hit_height = thickness;
         length = std::min(length, screensize.x * TIMING_BAR_MAX_LENGTH / 100.0f);
         float px_per_ms = length / get_window_from_hit_acc_diff(HitScore::BAD, attempt.hit_accuracy) / 2;
         float y = (1 - height) * (screensize.y - hit_height);
+        uint8_t window_alpha = (uint8_t)skin->layout("timing_bar.window_alpha");
 
         for (auto it = TIMED_HIT_SCORES.rbegin(); it != TIMED_HIT_SCORES.rend(); ++it) {
             uint16_t hit_err_window = get_window_from_hit_acc_diff(*it, attempt.hit_accuracy);
             olc::Pixel c = skin->judgement_color(*it);
-            c.a = WINDOW_ALPHA;
+            c.a = window_alpha;
             window->FillRectDecal({center_x - hit_err_window * px_per_ms, y}, {hit_err_window * 2 * px_per_ms, hit_height}, c);
         }
 

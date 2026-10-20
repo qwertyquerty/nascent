@@ -226,6 +226,10 @@ namespace nascent {
         return website_url(user_path(user));
     }
 
+    std::string ServerApi::play_page_url(int64_t play_id) {
+        return website_url(std::format("/plays/{}", play_id));
+    }
+
     std::future<ApiResult<ServerHealth>> ServerApi::health() {
         return health(SettingsManager::settings.server_url);
     }

@@ -24,10 +24,6 @@ namespace nascent {
         static constexpr std::array<const char*, 2> ITEMS = {"Quit", "Cancel"};
         static constexpr size_t QUIT = 0;
         static constexpr size_t CANCEL = 1;
-        static constexpr float TITLE_TOP = 0.36f;
-        static constexpr float ITEM_SPACING = 58.0f;
-        static constexpr float ITEM_PADDING = 12.0f;
-        static constexpr float HINT_BOTTOM = 80.0f;
 
         explicit QuitOverlay(Skin* skin);
 

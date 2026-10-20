@@ -163,15 +163,19 @@ namespace nascent {
         olc::Font& row_font = skin->display_font_small;
         olc::FontRect title_metrics = text_bounds(title_font, "Hgjy");
         olc::FontRect row_metrics = text_bounds(row_font, "Hgjy");
-        int32_t padding = Ui::px(PADDING);
-        int32_t row_height = Ui::px(ROW_HEIGHT);
-        int32_t row_inset = Ui::px(ROW_INSET);
-        int32_t gap = Ui::px(GAP);
-        int32_t header_height = Ui::px(HEADER_HEIGHT);
+        int32_t padding = Ui::layout_px("replay_menu.padding");
+        int32_t row_height = Ui::layout_px("replay_menu.row_height");
+        int32_t row_inset = Ui::layout_px("replay_menu.row_inset");
+        int32_t gap = Ui::layout_px("replay_menu.gap");
+        int32_t header_height = Ui::layout_px("replay_menu.header_height");
+        int32_t header_text_lift = Ui::layout_px("replay_menu.header_text_lift");
+        int32_t grade_offset = Ui::layout_px("replay_menu.grade_offset");
+        int32_t accuracy_offset = Ui::layout_px("replay_menu.accuracy_offset");
+        int32_t detail_offset = Ui::layout_px("replay_menu.detail_offset");
 
         size_t local_rows = std::max<size_t>(1, local.size());
         size_t online_rows = std::max<size_t>(1, online.size());
-        int32_t width = std::min(screen.x - padding * 2, Ui::px(WIDTH));
+        int32_t width = std::min(screen.x - padding * 2, Ui::layout_px("replay_menu.width"));
         int32_t height = padding * 2 + title_metrics.size.y + gap + row_metrics.size.y + gap + header_height * 2 + (int32_t)(local_rows + online_rows) * row_height;
         int32_t left = (screen.x - width) / 2;
         int32_t top = std::max(padding, (screen.y - height) / 2);
@@ -188,7 +192,7 @@ namespace nascent {
         y += row_metrics.size.y + gap;
 
         auto header = [&](const std::string& text) {
-            draw_text(row_font, text, {x, y + header_height - row_metrics.size.y - Ui::px(8) - row_metrics.offset.y}, skin->color(SkinColor::TEXT_FAINT));
+            draw_text(row_font, text, {x, y + header_height - row_metrics.size.y - header_text_lift - row_metrics.offset.y}, skin->color(SkinColor::TEXT_FAINT));
             y += header_height;
         };
 
@@ -210,13 +214,13 @@ namespace nascent {
 
             std::string lead = entry.path ? std::format("{:.2f}x", entry.rate) : std::format("#{}", entry.rank);
             draw_text(row_font, lead, {x + row_inset, baseline}, entry.path ? text_color : skin->rank_color(entry.rank));
-            skin->draw_grade(grade_for_accuracy(entry.accuracy), row_font, {(float)(x + row_inset + Ui::px(GRADE_OFFSET)), (float)baseline});
-            draw_text(row_font, std::format("{:.2f}%", std::floor(entry.accuracy * 10000.0) / 100.0), {x + row_inset + Ui::px(ACCURACY_OFFSET), baseline}, text_color);
+            skin->draw_grade(grade_for_accuracy(entry.accuracy), row_font, {(float)(x + row_inset + grade_offset), (float)baseline});
+            draw_text(row_font, std::format("{:.2f}%", std::floor(entry.accuracy * 10000.0) / 100.0), {x + row_inset + accuracy_offset, baseline}, text_color);
 
             std::string detail = downloading && *downloading == index ? std::string("Downloading...")
                 : entry.path                                          ? std::format("{}x    {}", entry.max_combo, short_date(entry.played_at))
                                                                       : std::format("{}    {}x", entry.player, entry.max_combo);
-            draw_text(row_font, detail, {x + row_inset + Ui::px(DETAIL_OFFSET), baseline}, text_color);
+            draw_text(row_font, detail, {x + row_inset + detail_offset, baseline}, text_color);
             y += row_height;
         };
 

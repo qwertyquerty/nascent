@@ -12,10 +12,6 @@ namespace nascent {
         size_t cursor = 0;
 
         public:
-        static constexpr int32_t WIDTH = 640;
-        static constexpr int32_t HEIGHT = 46;
-        static constexpr int32_t PADDING = 12;
-
         static int32_t width();
 
         std::string label;

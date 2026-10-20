@@ -1,3 +1,4 @@
+#include "gse/Platform.h"
 #include "gse/input/KeySource.h"
 
 #include <poll.h>
@@ -31,6 +32,33 @@ namespace nascent {
     static std::array<int, 2> wake_pipe = {-1, -1};
     static std::atomic<KeyEventQueue*> key_queue = nullptr;
     static Display* key_display = nullptr;
+    static Display* modifier_display = nullptr;
+    static bool modifier_display_opened = false;
+    static constexpr size_t KEYMAP_BYTES = 32;
+
+    bool alt_held() {
+        if (!modifier_display_opened) {
+            modifier_display_opened = true;
+            modifier_display = XOpenDisplay(nullptr);
+        }
+
+        if (modifier_display == nullptr) {
+            return false;
+        }
+
+        std::array<char, KEYMAP_BYTES> keys = {};
+        XQueryKeymap(modifier_display, keys.data());
+
+        for (KeySym symbol : {XK_Alt_L, XK_Alt_R}) {
+            KeyCode code = XKeysymToKeycode(modifier_display, symbol);
+
+            if (code != 0 && (keys[code / 8] & (1 << (code % 8))) != 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     static olc::Key key_from_keysym(KeySym symbol) {
         if (symbol >= XK_a && symbol <= XK_z) {

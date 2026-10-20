@@ -40,6 +40,7 @@ namespace nascent {
         TextField* login_field = nullptr;
         TextField* email_field = nullptr;
         TextField* password_field = nullptr;
+        TextField* confirm_field = nullptr;
         ButtonField* continue_button = nullptr;
         ButtonField* submit_button = nullptr;
         ButtonField* profile_button = nullptr;
@@ -73,7 +74,6 @@ namespace nascent {
         static constexpr int32_t SPOT_SWITCH = 1;
         static constexpr int32_t SPOT_BACK = 2;
         static constexpr int32_t SPOT_SUBMIT = 3;
-        static constexpr float FOOTER_GAP = 48.0f;
         void on_enter() override;
         void on_exit() override;
         void update(float) override;

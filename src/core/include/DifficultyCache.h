@@ -32,6 +32,7 @@ namespace nascent {
         void store(const Chart& chart, float pitch, double difficulty);
         double difficulty(const Chart& chart, float pitch);
         void retain(const std::unordered_set<std::string>& difficulty_keys);
+        void clear();
         size_t size() const;
     };
 }

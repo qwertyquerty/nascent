@@ -38,20 +38,84 @@ namespace nascent {
             {"hold_body", std::nullopt},
             {"hold_cap", std::nullopt},
             {"mascot", std::nullopt},
+            {"judgement_perfect", std::nullopt},
+            {"judgement_amazing", std::nullopt},
+            {"judgement_great", std::nullopt},
+            {"judgement_good", std::nullopt},
+            {"judgement_bad", std::nullopt},
+            {"judgement_miss", std::nullopt},
+            {"play_background", std::nullopt},
+            {"menu_background", std::nullopt},
         }};
 
-        constexpr std::array<const char*, SKIN_SOUND_COUNT> SOUND_STEMS = {"hitsound", "idle_loop", "account_loop"};
-        constexpr std::array<const char*, 4> SOUND_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac"};
+        constexpr std::array<const char*, SKIN_SOUND_COUNT> SOUND_STEMS = {
+            "hitsound",
+            "idle_loop",
+            "account_loop",
+            "judgement_perfect",
+            "judgement_amazing",
+            "judgement_great",
+            "judgement_good",
+            "judgement_bad",
+            "judgement_miss",
+        };
 
-        nlohmann::json read_manifest(const std::filesystem::path& directory) {
+        constexpr std::array<const char*, 4> SOUND_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac"};
+        constexpr std::array<std::string_view, 12> GENERAL_KEYS = {"format", "name", "author", "version", "source", "inherits", "hidden", "colors", "difficulty_scale", "fonts", "layout", "keymodes"};
+        constexpr std::array<std::string_view, 15> PLAYFIELD_KEYS = {
+            "tint",
+            "tint_notes",
+            "hold_style",
+            "hold_alpha",
+            "hold_body_aspect",
+            "hold_body_head_offset",
+            "hold_body_tail_offset",
+            "key_spacing",
+            "note_alpha",
+            "receptor_alpha",
+            "receptor_pressed_alpha",
+            "lane_images",
+            "mascot",
+            "frame_rate",
+            "frame_rates",
+        };
+        constexpr std::string_view MENU_PLUCK_PREFIX = "menu_pluck_";
+        constexpr double MAX_FRAME_RATE = 240.0;
+        constexpr double MIN_FONT_SIZE = 4.0;
+        constexpr double MAX_FONT_SIZE = 400.0;
+
+        template <size_t N>
+        bool listed(const std::array<std::string_view, N>& keys, std::string_view key) {
+            return std::find(keys.begin(), keys.end(), key) != keys.end();
+        }
+
+        nlohmann::json read_manifest(const std::filesystem::path& directory, std::string* error = nullptr) {
             std::ifstream file(directory / Skin::MANIFEST_FILE);
 
             if (!file) {
                 return nlohmann::json::object();
             }
 
-            nlohmann::json config = nlohmann::json::parse(file, nullptr, false);
-            return config.is_object() ? config : nlohmann::json::object();
+            try {
+                nlohmann::json config = nlohmann::json::parse(file);
+
+                if (config.is_object()) {
+                    return config;
+                }
+
+                if (error != nullptr) {
+                    *error = "skin.json must be a JSON object, like { \"name\": \"My skin\" }";
+                }
+            }
+            catch (const nlohmann::json::parse_error& e) {
+                if (error != nullptr) {
+                    std::string_view message = e.what();
+                    size_t bracket = message.find("] ");
+                    *error = std::format("skin.json isn't valid JSON: {}", bracket == std::string_view::npos ? message : message.substr(bracket + 2));
+                }
+            }
+
+            return nlohmann::json::object();
         }
 
         bool is_valid_id(const std::string& id) {
@@ -88,6 +152,73 @@ namespace nascent {
 
             return olc::Pixel(channels[0], channels[1], channels[2], channels[3]);
         }
+
+        std::optional<uint8_t> parse_key_count(std::string_view text) {
+            if (!text.empty() && (text.back() == 'k' || text.back() == 'K')) {
+                text.remove_suffix(1);
+            }
+
+            int value = 0;
+            auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+
+            if (text.empty() || error != std::errc() || end != text.data() + text.size() || value < 1 || value > MAX_LANES) {
+                return std::nullopt;
+            }
+
+            return (uint8_t)value;
+        }
+
+        std::optional<uint8_t> keymode_folder(std::string_view name) {
+            return name.ends_with('k') ? parse_key_count(name) : std::nullopt;
+        }
+
+        std::string_view without_number_suffix(std::string_view text, char separator) {
+            size_t split = text.rfind(separator);
+
+            if (split == std::string_view::npos || split + 1 == text.size()) {
+                return text;
+            }
+
+            std::string_view digits = text.substr(split + 1);
+            return std::all_of(digits.begin(), digits.end(), [](char c) { return c >= '0' && c <= '9'; }) ? text.substr(0, split) : text;
+        }
+
+        bool is_image_stem(std::string_view stem) {
+            if (stem == "title_gradient") {
+                return true;
+            }
+
+            return std::any_of(IMAGE_SLOTS.begin(), IMAGE_SLOTS.end(), [&](const ImageSlot& slot) {
+                return stem == slot.stem;
+            });
+        }
+
+        double seconds_since(std::chrono::steady_clock::time_point start) {
+            return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        }
+
+        std::optional<SkinImage> judgement_slot(HitScore score) {
+            switch (score) {
+                case HitScore::PERFECT:
+                    return SkinImage::JUDGEMENT_PERFECT;
+                case HitScore::AMAZING:
+                    return SkinImage::JUDGEMENT_AMAZING;
+                case HitScore::GREAT:
+                    return SkinImage::JUDGEMENT_GREAT;
+                case HitScore::GOOD:
+                    return SkinImage::JUDGEMENT_GOOD;
+                case HitScore::BAD:
+                    return SkinImage::JUDGEMENT_BAD;
+                case HitScore::MISS:
+                    return SkinImage::JUDGEMENT_MISS;
+                default:
+                    return std::nullopt;
+            }
+        }
+    }
+
+    void SkinManifest::problem(std::string message) {
+        problems.push_back(std::move(message));
     }
 
     void SkinManifest::apply_colors(const nlohmann::json& config) {
@@ -98,23 +229,33 @@ namespace nascent {
         apply_difficulty_scale(config);
         auto entries = config.find("colors");
 
-        if (entries == config.end() || !entries->is_object()) {
+        if (entries == config.end()) {
+            return;
+        }
+
+        if (!entries->is_object()) {
+            problem("\"colors\" should be an object of color names, like { \"text\": \"#ffffff\" }");
             return;
         }
 
         for (const auto& [key, value] : entries->items()) {
+            if (key.starts_with('_')) {
+                continue;
+            }
+
             auto slot = std::find_if(SKIN_COLOR_NAMES.begin(), SKIN_COLOR_NAMES.end(), [&](const char* name) {
                 return key == name;
             });
 
             if (slot == SKIN_COLOR_NAMES.end()) {
+                problem(std::format("\"{}\" isn't a color name", key));
                 continue;
             }
 
             std::optional<olc::Pixel> color = value.is_string() ? parse_color(value.get<std::string>()) : std::nullopt;
 
             if (!color) {
-                std::cerr << "Skin color \"" << key << "\" must look like #rrggbb or #rrggbbaa" << std::endl;
+                problem(std::format("color \"{}\" must look like #rrggbb or #rrggbbaa", key));
                 continue;
             }
 
@@ -125,7 +266,12 @@ namespace nascent {
     void SkinManifest::apply_difficulty_scale(const nlohmann::json& config) {
         auto scale = config.find("difficulty_scale");
 
-        if (scale == config.end() || !scale->is_array()) {
+        if (scale == config.end()) {
+            return;
+        }
+
+        if (!scale->is_array()) {
+            problem("\"difficulty_scale\" should be a list like [[0, \"#6fa8ff\"], [100, \"#f2eaff\"]]");
             return;
         }
 
@@ -135,7 +281,7 @@ namespace nascent {
             std::optional<olc::Pixel> color = stop.is_array() && stop.size() == 2 && stop[0].is_number() && stop[1].is_string() ? parse_color(stop[1].get<std::string>()) : std::nullopt;
 
             if (!color) {
-                std::cerr << "Skin difficulty_scale entries must look like [difficulty, \"#rrggbb\"]" << std::endl;
+                problem("difficulty_scale entries must look like [difficulty, \"#rrggbb\"]");
                 return;
             }
 
@@ -146,82 +292,191 @@ namespace nascent {
         difficulty_scale = std::move(stops);
     }
 
-    void SkinManifest::apply(const nlohmann::json& config) {
-        if (!config.is_object()) {
+    void SkinManifest::apply_fonts(const nlohmann::json& config) {
+        auto entries = config.find("fonts");
+
+        if (entries == config.end()) {
             return;
         }
 
-        auto has = [&](const char* key, nlohmann::json::value_t type) {
+        if (!entries->is_object()) {
+            problem("\"fonts\" should be an object, like { \"large\": { \"file\": \"title.ttf\", \"size\": 72 } }");
+            return;
+        }
+
+        for (const auto& [role, value] : entries->items()) {
+            if (role.starts_with('_')) {
+                continue;
+            }
+
+            auto slot = std::find_if(SKIN_FONT_NAMES.begin(), SKIN_FONT_NAMES.end(), [&](const char* name) {
+                return role == name;
+            });
+
+            if (slot == SKIN_FONT_NAMES.end()) {
+                problem(std::format("\"{}\" isn't a font; the fonts are large, medium, small, judgement and combo", role));
+                continue;
+            }
+
+            if (!value.is_object()) {
+                problem(std::format("font \"{}\" should look like {{ \"file\": \"font.ttf\", \"size\": 36 }}", role));
+                continue;
+            }
+
+            SkinFontSpec& spec = fonts[(size_t)(slot - SKIN_FONT_NAMES.begin())];
+
+            for (const auto& [key, setting] : value.items()) {
+                if (key == "file" && setting.is_string()) {
+                    spec.file = setting.get<std::string>();
+                }
+                else if (key == "size" && setting.is_number()) {
+                    spec.size = std::clamp(setting.get<double>(), MIN_FONT_SIZE, MAX_FONT_SIZE);
+                }
+                else if (!key.starts_with('_')) {
+                    problem(std::format("font \"{}\" has an unknown or invalid \"{}\"; use \"file\" (text) and \"size\" (number)", role, key));
+                }
+            }
+        }
+    }
+
+    void SkinManifest::apply_layout(const nlohmann::json& config, const std::string& prefix) {
+        for (const auto& [key, value] : config.items()) {
+            if (key.starts_with('_')) {
+                continue;
+            }
+
+            std::string name = prefix.empty() ? key : prefix + "." + key;
+
+            if (value.is_object()) {
+                apply_layout(value, name);
+            }
+            else if (value.is_number()) {
+                layout[name] = value.get<double>();
+            }
+            else if (value.is_boolean()) {
+                layout[name] = value.get<bool>() ? 1.0 : 0.0;
+            }
+            else {
+                problem(std::format("layout value \"{}\" should be a number", name));
+            }
+        }
+    }
+
+    void SkinManifest::apply_playfield(const nlohmann::json& config, const std::string& context) {
+        auto setting = [&](const char* key, bool (nlohmann::json::*check)() const noexcept, const char* expected) -> const nlohmann::json* {
             auto it = config.find(key);
-            return it != config.end() && (it->type() == type || (type == nlohmann::json::value_t::number_float && it->is_number()));
+
+            if (it == config.end()) {
+                return nullptr;
+            }
+
+            if (!((*it).*check)()) {
+                problem(std::format("{}\"{}\" should be {}", context, key, expected));
+                return nullptr;
+            }
+
+            return &*it;
         };
 
-        if (has("name", nlohmann::json::value_t::string)) {
-            name = config["name"].get<std::string>();
+        auto number = [&](const char* key) {
+            return setting(key, &nlohmann::json::is_number, "a number");
+        };
+
+        if (const nlohmann::json* value = setting("tint", &nlohmann::json::is_string, "\"gradient\" or \"none\"")) {
+            std::string style = value->get<std::string>();
+            tint = style == "none" ? SkinTint::NONE : SkinTint::GRADIENT;
+
+            if (style != "none" && style != "gradient") {
+                problem(std::format("{}\"tint\" should be \"gradient\" or \"none\"", context));
+            }
+        }
+        else if (const nlohmann::json* legacy = setting("tint_notes", &nlohmann::json::is_boolean, "true or false")) {
+            tint = legacy->get<bool>() ? SkinTint::GRADIENT : SkinTint::NONE;
         }
 
-        if (config.contains("inherits")) {
-            inherits = config["inherits"].is_string() ? config["inherits"].get<std::string>() : std::string();
-        }
-
-        if (has("hidden", nlohmann::json::value_t::boolean)) {
-            hidden = config["hidden"].get<bool>();
-        }
-
-        if (has("tint", nlohmann::json::value_t::string)) {
-            tint = config["tint"].get<std::string>() == "none" ? SkinTint::NONE : SkinTint::GRADIENT;
-        }
-        else if (has("tint_notes", nlohmann::json::value_t::boolean)) {
-            tint = config["tint_notes"].get<bool>() ? SkinTint::GRADIENT : SkinTint::NONE;
-        }
-
-        if (has("hold_style", nlohmann::json::value_t::string)) {
-            std::string style = config["hold_style"].get<std::string>();
+        if (const nlohmann::json* value = setting("hold_style", &nlohmann::json::is_string, "\"repeat\", \"stretch\" or \"tile\"")) {
+            std::string style = value->get<std::string>();
             hold_style = style == "stretch" ? HoldStyle::STRETCH : style == "tile" ? HoldStyle::TILE
                                                                                    : HoldStyle::REPEAT;
+
+            if (style != "stretch" && style != "tile" && style != "repeat") {
+                problem(std::format("{}\"hold_style\" should be \"repeat\", \"stretch\" or \"tile\"", context));
+            }
         }
 
-        if (has("hold_body_aspect", nlohmann::json::value_t::number_float)) {
-            hold_body_aspect = std::clamp(config["hold_body_aspect"].get<double>(), 0.001, 1000.0);
+        if (const nlohmann::json* value = number("hold_body_aspect")) {
+            hold_body_aspect = std::clamp(value->get<double>(), 0.001, 1000.0);
         }
 
-        if (has("hold_body_head_offset", nlohmann::json::value_t::number_float)) {
-            hold_body_head_offset = std::clamp(config["hold_body_head_offset"].get<double>(), -4.0, 4.0);
+        if (const nlohmann::json* value = number("hold_body_head_offset")) {
+            hold_body_head_offset = std::clamp(value->get<double>(), -4.0, 4.0);
         }
 
-        if (has("hold_body_tail_offset", nlohmann::json::value_t::number_float)) {
-            hold_body_tail_offset = std::clamp(config["hold_body_tail_offset"].get<double>(), -4.0, 4.0);
+        if (const nlohmann::json* value = number("hold_body_tail_offset")) {
+            hold_body_tail_offset = std::clamp(value->get<double>(), -4.0, 4.0);
         }
 
-        if (has("key_spacing", nlohmann::json::value_t::number_float)) {
-            key_spacing = std::clamp(config["key_spacing"].get<double>(), 0.0, 4.0);
+        if (const nlohmann::json* value = number("key_spacing")) {
+            key_spacing = std::clamp(value->get<double>(), 0.0, 4.0);
         }
 
-        if (has("hold_alpha", nlohmann::json::value_t::number_float)) {
-            hold_alpha = clamp_alpha(config["hold_alpha"]);
+        if (const nlohmann::json* value = number("hold_alpha")) {
+            hold_alpha = clamp_alpha(*value);
         }
 
-        if (has("receptor_alpha", nlohmann::json::value_t::number_float)) {
-            receptor_alpha = clamp_alpha(config["receptor_alpha"]);
+        if (const nlohmann::json* value = number("note_alpha")) {
+            note_alpha = clamp_alpha(*value);
         }
 
-        if (has("mascot", nlohmann::json::value_t::object)) {
-            const nlohmann::json& settings = config["mascot"];
+        if (const nlohmann::json* value = number("receptor_alpha")) {
+            receptor_alpha = clamp_alpha(*value);
+        }
 
-            for (auto [key, target] : {std::pair{"width", &mascot.width}, std::pair{"x", &mascot.x}, std::pair{"y", &mascot.y}}) {
-                if (settings.contains(key) && settings[key].is_number()) {
-                    *target = std::clamp(settings[key].get<double>(), 0.0, 100.0);
+        if (const nlohmann::json* value = number("receptor_pressed_alpha")) {
+            receptor_pressed_alpha = clamp_alpha(*value);
+        }
+
+        if (const nlohmann::json* value = number("frame_rate")) {
+            frame_rate = std::clamp(value->get<double>(), 0.0, MAX_FRAME_RATE);
+        }
+
+        if (const nlohmann::json* value = setting("frame_rates", &nlohmann::json::is_object, "an object of image names, like { \"mascot\": 8 }")) {
+            for (const auto& [image, rate] : value->items()) {
+                if (image.starts_with('_')) {
+                    continue;
+                }
+
+                if (!is_image_stem(image) || !rate.is_number()) {
+                    problem(std::format("{}frame_rates \"{}\" should be an image name with a number", context, image));
+                    continue;
+                }
+
+                frame_rates[image] = std::clamp(rate.get<double>(), 0.0, MAX_FRAME_RATE);
+            }
+        }
+
+        if (const nlohmann::json* value = setting("mascot", &nlohmann::json::is_object, "an object with width, x and y")) {
+            std::map<std::string_view, double*> targets = {{"width", &mascot.width}, {"x", &mascot.x}, {"y", &mascot.y}};
+
+            for (const auto& [key, amount] : value->items()) {
+                auto found = targets.find(key);
+                double* target = found != targets.end() ? found->second : nullptr;
+
+                if (target != nullptr && amount.is_number()) {
+                    *target = std::clamp(amount.get<double>(), 0.0, 100.0);
+                }
+                else if (!key.starts_with('_')) {
+                    problem(std::format("{}mascot \"{}\" should be width, x or y with a number", context, key));
                 }
             }
         }
 
-        apply_colors(config);
+        if (const nlohmann::json* value = setting("lane_images", &nlohmann::json::is_object, "an object of key counts, like { \"4\": [1, 2, 2, 1] }")) {
+            for (const auto& [keys, lanes] : value->items()) {
+                std::optional<uint8_t> key_count = parse_key_count(keys);
 
-        if (has("lane_images", nlohmann::json::value_t::object)) {
-            for (const auto& [keys, lanes] : config["lane_images"].items()) {
-                int key_count = std::atoi(keys.c_str());
-
-                if (key_count < 1 || key_count > MAX_LANES || !lanes.is_array()) {
+                if (!key_count || !lanes.is_array()) {
+                    problem(std::format("{}lane_images \"{}\" should be a key count with a list of image numbers", context, keys));
                     continue;
                 }
 
@@ -231,7 +486,79 @@ namespace nascent {
                     mapping.push_back(lane.is_number() ? (uint8_t)std::clamp(lane.get<int>(), 1, (int)MAX_LANES) : (uint8_t)1);
                 }
 
-                lane_images[(uint8_t)key_count] = std::move(mapping);
+                lane_images[*key_count] = std::move(mapping);
+            }
+        }
+    }
+
+    void SkinManifest::apply(const nlohmann::json& config) {
+        if (!config.is_object()) {
+            return;
+        }
+
+        for (const auto& [key, value] : config.items()) {
+            if (!key.starts_with('_') && !listed(GENERAL_KEYS, key) && !listed(PLAYFIELD_KEYS, key)) {
+                problem(std::format("\"{}\" isn't a skin setting", key));
+            }
+        }
+
+        if (config.contains("name")) {
+            if (config["name"].is_string()) {
+                name = config["name"].get<std::string>();
+            }
+            else {
+                problem("\"name\" should be text");
+            }
+        }
+
+        if (config.contains("inherits")) {
+            inherits = config["inherits"].is_string() ? config["inherits"].get<std::string>() : std::string();
+        }
+
+        if (config.contains("hidden") && config["hidden"].is_boolean()) {
+            hidden = config["hidden"].get<bool>();
+        }
+
+        apply_playfield(config, "");
+        apply_colors(config);
+        apply_fonts(config);
+
+        if (config.contains("layout")) {
+            if (config["layout"].is_object()) {
+                apply_layout(config["layout"], "");
+            }
+            else {
+                problem("\"layout\" should be an object, like { \"results\": { \"graph_height\": 0.32 } }");
+            }
+        }
+
+        if (config.contains("keymodes")) {
+            if (!config["keymodes"].is_object()) {
+                problem("\"keymodes\" should be an object of key counts, like { \"7\": { \"key_spacing\": 0.1 } }");
+                return;
+            }
+
+            for (const auto& [keys, overrides] : config["keymodes"].items()) {
+                std::optional<uint8_t> key_count = parse_key_count(keys);
+
+                if (!key_count || !overrides.is_object()) {
+                    problem(std::format("keymodes \"{}\" should be a key count with an object of settings", keys));
+                    continue;
+                }
+
+                for (const auto& [key, value] : overrides.items()) {
+                    if (!key.starts_with('_') && !listed(PLAYFIELD_KEYS, key)) {
+                        problem(std::format("keymodes {}: \"{}\" can't be changed per key count", keys, key));
+                    }
+                }
+
+                nlohmann::json& merged = keymodes[*key_count];
+
+                if (!merged.is_object()) {
+                    merged = nlohmann::json::object();
+                }
+
+                merged.update(overrides);
             }
         }
     }
@@ -289,7 +616,7 @@ namespace nascent {
             for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
                 std::string id = path_utf8(entry.path().filename());
 
-                if (!entry.is_directory(ec) || !is_valid_id(id) || !seen.insert(id).second) {
+                if (!entry.is_directory(ec) || !is_valid_id(id) || entry.path().extension() == ".part" || !seen.insert(id).second) {
                     continue;
                 }
 
@@ -313,31 +640,86 @@ namespace nascent {
         return skins;
     }
 
-    void Skin::reload(const std::string& id) {
+    void Skin::reload(const std::string& id, std::filesystem::path overlay) {
         unload();
         this->id = id;
+        this->overlay = std::move(overlay);
         load();
+        sync_logo();
+    }
+
+    void Skin::set_logo_skin(Skin* logo) {
+        logo_skin = logo;
+        sync_logo();
+    }
+
+    void Skin::sync_logo() {
+        if (logo_skin == nullptr) {
+            return;
+        }
+
+        std::filesystem::path folder;
+        std::error_code ec;
+
+        for (const std::filesystem::path& directory : chain) {
+            if (std::filesystem::is_directory(directory / LOGO_FOLDER, ec)) {
+                folder = directory / LOGO_FOLDER;
+                break;
+            }
+        }
+
+        logo_skin->reload(LOGO_SKIN, folder);
+
+        if (!folder.empty()) {
+            for (const std::string& problem : logo_skin->problems()) {
+                load_problems.push_back(std::format("logo: {}", problem));
+            }
+        }
     }
 
     void Skin::load() {
+        loaded_at = std::chrono::steady_clock::now();
+        load_problems.clear();
+        keymode_manifests.clear();
+        missing_layout.clear();
+
         if (skin_directory(id).empty()) {
-            std::cerr << "Skin \"" << id << "\" was not found, using the default skin" << std::endl;
+            load_problems.push_back(std::format("the skin \"{}\" wasn't found, so the default skin is used", id));
             id = DEFAULT_SKIN;
         }
 
         std::vector<nlohmann::json> configs;
+        std::vector<std::filesystem::path> config_directories;
+        std::vector<std::string> read_errors;
+        std::error_code ec;
+
+        auto add = [&](const std::filesystem::path& directory) {
+            std::string error;
+            chain.push_back(directory);
+            configs.push_back(read_manifest(directory, &error));
+            config_directories.push_back(directory);
+            read_errors.push_back(std::move(error));
+        };
+
+        if (!overlay.empty() && std::filesystem::is_directory(overlay, ec)) {
+            add(overlay);
+        }
+
         std::string current = id;
 
         while (!current.empty() && chain.size() < MAX_INHERITANCE_DEPTH) {
             std::filesystem::path directory = skin_directory(current);
 
-            if (directory.empty() || std::find(chain.begin(), chain.end(), directory) != chain.end()) {
+            if (directory.empty()) {
+                load_problems.push_back(std::format("it builds on the skin \"{}\", which isn't installed", current));
                 break;
             }
 
-            chain.push_back(directory);
-            configs.push_back(read_manifest(directory));
+            if (std::find(chain.begin(), chain.end(), directory) != chain.end()) {
+                break;
+            }
 
+            add(directory);
             SkinManifest own;
             own.inherits = current == DEFAULT_SKIN ? std::string() : std::string(DEFAULT_SKIN);
             own.apply(configs.back());
@@ -345,24 +727,63 @@ namespace nascent {
         }
 
         std::filesystem::path fallback = skin_directory(DEFAULT_SKIN);
+        bool fallback_listed = std::find(chain.begin(), chain.end(), fallback) != chain.end();
 
-        if (!fallback.empty() && std::find(chain.begin(), chain.end(), fallback) == chain.end()) {
+        if (!fallback.empty() && !fallback_listed) {
             chain.push_back(fallback);
         }
 
         skin_manifest = SkinManifest();
+        nlohmann::json defaults = fallback.empty() ? nlohmann::json::object() : read_manifest(fallback);
 
-        if (!fallback.empty()) {
-            skin_manifest.apply_colors(read_manifest(fallback));
+        if (!fallback_listed) {
+            skin_manifest.apply(defaults);
         }
 
-        for (auto config = configs.rbegin(); config != configs.rend(); ++config) {
-            skin_manifest.apply(*config);
+        auto builtin = [&](const std::filesystem::path& directory) {
+            std::filesystem::path root = std::filesystem::weakly_canonical(builtin_skins_directory(), ec);
+            std::filesystem::path folder = std::filesystem::weakly_canonical(directory, ec);
+            auto [end, unused] = std::mismatch(root.begin(), root.end(), folder.begin(), folder.end());
+            return end == root.end();
+        };
+
+        for (size_t index = configs.size(); index-- > 0;) {
+            size_t before = skin_manifest.problems.size();
+            skin_manifest.apply(configs[index]);
+            std::string label = config_directories[index] == overlay ? std::string("logo/skin.json") : path_utf8(config_directories[index].filename()) + "/skin.json";
+
+            if (!read_errors[index].empty()) {
+                load_problems.push_back(std::format("{}: {}", label, read_errors[index]));
+            }
+
+            if (!builtin(config_directories[index])) {
+                for (size_t problem = before; problem < skin_manifest.problems.size(); problem++) {
+                    load_problems.push_back(std::format("{}: {}", label, skin_manifest.problems[problem]));
+                }
+            }
+        }
+
+        SkinManifest known;
+        known.apply(defaults);
+
+        for (const auto& [key, value] : skin_manifest.layout) {
+            if (!known.layout.contains(key)) {
+                load_problems.push_back(std::format("\"layout.{}\" isn't a layout value", key));
+            }
         }
 
         for (size_t index = 0; index < SKIN_COLOR_COUNT; index++) {
             if (!skin_manifest.colors[index]) {
-                std::cerr << "Skin \"" << id << "\" has no color \"" << SKIN_COLOR_NAMES[index] << "\", using white" << std::endl;
+                load_problems.push_back(std::format("there's no color \"{}\", so white is used", SKIN_COLOR_NAMES[index]));
+            }
+        }
+
+        for (size_t role = 0; role < SKIN_FONT_COUNT; role++) {
+            const std::string& file = skin_manifest.fonts[role].file;
+
+            if (!file.empty() && !std::filesystem::exists(find(file), ec)) {
+                load_problems.push_back(std::format("the {} font file \"{}\" wasn't found", SKIN_FONT_NAMES[role], file));
+                skin_manifest.fonts[role].file.clear();
             }
         }
 
@@ -372,34 +793,81 @@ namespace nascent {
         skin_manifest.hidden = own.hidden;
         skin_manifest.inherits = own.inherits;
 
+        for (const std::filesystem::path& directory : chain) {
+            if (!builtin(directory)) {
+                check_files(directory);
+            }
+        }
+
+        for (const std::string& problem : load_problems) {
+            std::cerr << "Skin \"" << id << "\": " << problem << std::endl;
+        }
+
         title_gradient = std::make_unique<olc::Sprite>(find(GRADIENT_FILE).string());
         load_fonts();
         start_image_loads();
     }
 
+    void Skin::check_files(const std::filesystem::path& directory) {
+        std::error_code ec;
+        std::string folder = directory == overlay ? std::string(LOGO_FOLDER) : path_utf8(directory.filename());
+
+        for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
+            std::string name = path_utf8(entry.path().filename());
+
+            if (entry.is_directory(ec)) {
+                if (keymode_folder(name)) {
+                    check_files(entry.path());
+                }
+                else if (name != LOGO_FOLDER || directory == overlay) {
+                    load_problems.push_back(std::format("{}: the folder \"{}\" isn't used; key count folders are named like 7k", folder, name));
+                }
+
+                continue;
+            }
+
+            std::string extension = lowercase(path_utf8(entry.path().extension()));
+            std::string stem = path_utf8(entry.path().stem());
+
+            if (extension == ".png") {
+                std::string_view base = without_number_suffix(without_number_suffix(stem, '-'), '_');
+
+                if (!is_image_stem(base)) {
+                    load_problems.push_back(std::format("{}: \"{}\" isn't an image Nascent uses", folder, name));
+                }
+            }
+            else if (std::find(SOUND_EXTENSIONS.begin(), SOUND_EXTENSIONS.end(), extension) != SOUND_EXTENSIONS.end()) {
+                bool known = stem.starts_with(MENU_PLUCK_PREFIX) || std::find(SOUND_STEMS.begin(), SOUND_STEMS.end(), stem) != SOUND_STEMS.end();
+
+                if (!known) {
+                    load_problems.push_back(std::format("{}: \"{}\" isn't a sound Nascent uses", folder, name));
+                }
+            }
+        }
+    }
+
     void Skin::load_fonts() {
-        auto size = [&](uint16_t reference) {
-            return (uint16_t)std::max<long>(1, std::lround(reference * font_scale));
-        };
+        std::array<olc::Font*, SKIN_FONT_COUNT> targets = {&display_font_large, &display_font_medium, &display_font_small, &judgement_font, &combo_font};
+        bool symbols = std::filesystem::exists(SYMBOL_FONT_PATH);
 
-        std::string font_path = find(DISPLAY_FONT_FILE).string();
-        display_font_small = {font_path, size(DISPLAY_FONT_SMALL_SIZE)};
-        display_font_medium = {font_path, size(DISPLAY_FONT_MEDIUM_SIZE)};
-        display_font_large = {font_path, size(DISPLAY_FONT_LARGE_SIZE)};
+        for (size_t role = 0; role < SKIN_FONT_COUNT; role++) {
+            const SkinFontSpec& spec = skin_manifest.fonts[role];
+            double reference = spec.size > 0 ? spec.size : DEFAULT_FONT_SIZES[role];
+            uint16_t size = (uint16_t)std::max<long>(1, std::lround(reference * font_scale));
+            *targets[role] = {find(spec.file.empty() ? std::string(DISPLAY_FONT_FILE) : spec.file).string(), size};
 
-        if (std::filesystem::exists(SYMBOL_FONT_PATH)) {
-            display_font_small.AddFallbackFont(SYMBOL_FONT_PATH);
-            display_font_medium.AddFallbackFont(SYMBOL_FONT_PATH);
-            display_font_large.AddFallbackFont(SYMBOL_FONT_PATH);
+            if (symbols) {
+                targets[role]->AddFallbackFont(SYMBOL_FONT_PATH);
+            }
         }
 
         for (HitScore h : ALL_HIT_SCORES) {
-            hit_score_decals[(size_t)h] = render_text_decal(display_font_large, hit_score_name(h), olc::WHITE);
+            hit_score_decals[(size_t)h] = render_text_decal(judgement_font, hit_score_name(h), olc::WHITE);
         }
     }
 
     void Skin::unload_fonts() {
-        for (const olc::Font* font : {&display_font_large, &display_font_medium, &display_font_small}) {
+        for (const olc::Font* font : {&display_font_large, &display_font_medium, &display_font_small, &judgement_font, &combo_font}) {
             text_cache_forget(*font);
         }
     }
@@ -425,6 +893,16 @@ namespace nascent {
             sound.reset();
         }
 
+        for (std::optional<std::vector<int32_t>>& pool : voices) {
+            if (pool) {
+                for (int32_t sound : *pool) {
+                    game->audio().engine().UnloadSound(sound);
+                }
+            }
+
+            pool.reset();
+        }
+
         if (menu_plucks) {
             for (int32_t sound : *menu_plucks) {
                 game->audio().engine().UnloadSound(sound);
@@ -433,22 +911,9 @@ namespace nascent {
             menu_plucks.reset();
         }
 
-        if (hitsound_voices) {
-            for (int32_t sound : *hitsound_voices) {
-                game->audio().engine().UnloadSound(sound);
-            }
-
-            hitsound_voices.reset();
-        }
-
-        for (std::optional<std::vector<MipDecal>>& slot : images) {
-            slot.reset();
-        }
-
-        for (auto& pending : pending_images) {
-            pending.clear();
-        }
-
+        image_files.clear();
+        decals.clear();
+        pending_decals.clear();
         chain.clear();
     }
 
@@ -460,16 +925,52 @@ namespace nascent {
         return skin_manifest;
     }
 
+    const SkinManifest& Skin::manifest(uint8_t key_count) const {
+        auto overrides = skin_manifest.keymodes.find(key_count);
+
+        if (overrides == skin_manifest.keymodes.end()) {
+            return skin_manifest;
+        }
+
+        auto cached = keymode_manifests.find(key_count);
+
+        if (cached == keymode_manifests.end()) {
+            SkinManifest merged = skin_manifest;
+            merged.apply_playfield(overrides->second, "");
+            cached = keymode_manifests.emplace(key_count, std::move(merged)).first;
+        }
+
+        return cached->second;
+    }
+
+    const std::vector<std::string>& Skin::problems() const {
+        return load_problems;
+    }
+
+    double Skin::layout(std::string_view key) const {
+        auto found = skin_manifest.layout.find(key);
+
+        if (found != skin_manifest.layout.end()) {
+            return found->second;
+        }
+
+        if (missing_layout.emplace(key).second) {
+            std::cerr << "Skin layout value \"" << key << "\" is missing from the default skin" << std::endl;
+        }
+
+        return 0;
+    }
+
     std::filesystem::path Skin::find(const std::string& file) const {
         std::error_code ec;
 
         for (const std::filesystem::path& directory : chain) {
-            if (std::filesystem::exists(directory / file, ec)) {
-                return directory / file;
+            if (std::filesystem::exists(directory / utf8_path(file), ec)) {
+                return directory / utf8_path(file);
             }
         }
 
-        return chain.empty() ? std::filesystem::path(file) : chain.back() / file;
+        return chain.empty() ? utf8_path(file) : chain.back() / utf8_path(file);
     }
 
     std::optional<std::filesystem::path> Skin::find_sound(const std::string& stem) const {
@@ -488,80 +989,181 @@ namespace nascent {
         return std::nullopt;
     }
 
-    std::vector<std::filesystem::path> Skin::image_paths(SkinImage image) const {
-        std::vector<std::filesystem::path> paths;
+    Skin::ImageLanes Skin::image_paths(SkinImage image, uint8_t key_count) const {
         std::error_code ec;
         std::string stem = IMAGE_SLOTS[(size_t)image].stem;
 
-        for (const std::filesystem::path& directory : chain) {
-            for (uint8_t lane = 1; lane <= MAX_LANES; lane++) {
-                std::filesystem::path path = directory / std::format("{}_{}.png", stem, lane);
+        auto frames_of = [&](const std::filesystem::path& folder, const std::string& name) {
+            ImageFrames frames;
+
+            if (std::filesystem::exists(folder / (name + ".png"), ec)) {
+                frames.push_back(folder / (name + ".png"));
+                return frames;
+            }
+
+            for (size_t frame = 0; frame < MAX_ANIMATION_FRAMES; frame++) {
+                std::filesystem::path path = folder / std::format("{}-{}.png", name, frame);
 
                 if (!std::filesystem::exists(path, ec)) {
                     break;
                 }
 
-                paths.push_back(path);
+                frames.push_back(path);
             }
 
-            if (paths.empty() && std::filesystem::exists(directory / (stem + ".png"), ec)) {
-                paths.push_back(directory / (stem + ".png"));
+            return frames;
+        };
+
+        for (const std::filesystem::path& directory : chain) {
+            std::vector<std::filesystem::path> folders;
+
+            if (key_count > 0) {
+                folders.push_back(directory / std::format("{}k", key_count));
             }
 
-            if (!paths.empty()) {
-                break;
+            folders.push_back(directory);
+
+            for (const std::filesystem::path& folder : folders) {
+                ImageLanes lanes;
+
+                for (uint8_t lane = 1; lane <= MAX_LANES; lane++) {
+                    ImageFrames frames = frames_of(folder, std::format("{}_{}", stem, lane));
+
+                    if (frames.empty()) {
+                        break;
+                    }
+
+                    lanes.push_back(std::move(frames));
+                }
+
+                if (lanes.empty()) {
+                    ImageFrames frames = frames_of(folder, stem);
+
+                    if (!frames.empty()) {
+                        lanes.push_back(std::move(frames));
+                    }
+                }
+
+                if (!lanes.empty()) {
+                    return lanes;
+                }
             }
         }
 
-        return paths;
+        return {};
     }
 
     void Skin::start_image_loads() {
-        for (size_t index = 0; index < SKIN_IMAGE_COUNT; index++) {
-            pending_images[index].clear();
+        std::set<uint8_t> key_counts = {0};
+        std::error_code ec;
 
-            for (const std::filesystem::path& path : image_paths((SkinImage)index)) {
-                pending_images[index].push_back(run_detached([path] {
-                    return MipDecal::build_levels(std::make_unique<olc::Sprite>(path.string()));
-                }));
+        for (const std::filesystem::path& directory : chain) {
+            for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
+                if (std::optional<uint8_t> keys = keymode_folder(path_utf8(entry.path().filename())); keys && entry.is_directory(ec)) {
+                    key_counts.insert(*keys);
+                }
+            }
+        }
+
+        for (uint8_t key_count : key_counts) {
+            ImageFiles& files = image_files[key_count];
+            bool tiled = manifest(key_count).hold_style == HoldStyle::TILE;
+
+            for (size_t slot = 0; slot < SKIN_IMAGE_COUNT; slot++) {
+                files[slot] = image_paths((SkinImage)slot, key_count);
+                bool clamp = (SkinImage)slot != SkinImage::HOLD_BODY || !tiled;
+
+                for (const ImageFrames& frames : files[slot]) {
+                    for (const std::filesystem::path& path : frames) {
+                        DecalKey key = {path, clamp};
+
+                        if (pending_decals.contains(key)) {
+                            continue;
+                        }
+
+                        auto build = [path] {
+                            return MipDecal::build_levels(std::make_unique<olc::Sprite>(path.string()));
+                        };
+                        pending_decals.emplace(key, run_detached(build));
+                    }
+                }
             }
         }
     }
 
-    const std::vector<MipDecal>& Skin::lane_images(SkinImage image) {
-        std::optional<std::vector<MipDecal>>& slot = images[(size_t)image];
+    const MipDecal& Skin::decal(const std::filesystem::path& path, bool clamp) {
+        DecalKey key = {path, clamp};
 
-        if (!slot) {
-            slot.emplace();
-            bool clamp = image != SkinImage::HOLD_BODY || skin_manifest.hold_style != HoldStyle::TILE;
-
-            for (auto& pending : pending_images[(size_t)image]) {
-                slot->emplace_back(pending.get(), clamp);
-            }
-
-            pending_images[(size_t)image].clear();
+        if (auto found = decals.find(key); found != decals.end()) {
+            return found->second;
         }
 
-        std::optional<SkinImage> fallback = IMAGE_SLOTS[(size_t)image].fallback;
-        return slot->empty() && fallback ? lane_images(*fallback) : *slot;
+        std::vector<std::unique_ptr<olc::Sprite>> levels;
+
+        if (auto pending = pending_decals.find(key); pending != pending_decals.end()) {
+            levels = pending->second.get();
+            pending_decals.erase(pending);
+        }
+        else {
+            levels = MipDecal::build_levels(std::make_unique<olc::Sprite>(path.string()));
+        }
+
+        return decals.emplace(key, MipDecal(std::move(levels), clamp)).first->second;
     }
 
     const MipDecal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count) {
-        const std::vector<MipDecal>& decals = lane_images(image);
+        auto files = image_files.find(key_count);
 
-        if (decals.empty()) {
+        if (files == image_files.end()) {
+            files = image_files.find(0);
+        }
+
+        if (files == image_files.end()) {
             return nullptr;
         }
 
-        size_t index = lane;
-        auto mapping = skin_manifest.lane_images.find(key_count);
+        size_t slot = (size_t)image;
 
-        if (mapping != skin_manifest.lane_images.end() && lane < mapping->second.size()) {
+        while (files->second[slot].empty() && IMAGE_SLOTS[slot].fallback) {
+            slot = (size_t)*IMAGE_SLOTS[slot].fallback;
+        }
+
+        const ImageLanes& lanes = files->second[slot];
+
+        if (lanes.empty()) {
+            return nullptr;
+        }
+
+        const SkinManifest& settings = manifest(key_count);
+        size_t index = lane;
+        auto mapping = settings.lane_images.find(key_count);
+
+        if (mapping != settings.lane_images.end() && lane < mapping->second.size()) {
             index = (size_t)mapping->second[lane] - 1;
         }
 
-        const MipDecal& chosen = decals[index % decals.size()];
+        const ImageFrames& frames = lanes[index % lanes.size()];
+
+        if (frames.empty()) {
+            return nullptr;
+        }
+
+        size_t frame = 0;
+
+        if (frames.size() > 1) {
+            auto rate = settings.frame_rates.find(IMAGE_SLOTS[slot].stem);
+            double fps = rate != settings.frame_rates.end() ? rate->second : settings.frame_rate;
+            frame = fps > 0 ? (size_t)(seconds_since(loaded_at) * fps) % frames.size() : 0;
+        }
+
+        bool clamp = (SkinImage)slot != SkinImage::HOLD_BODY || settings.hold_style != HoldStyle::TILE;
+        const MipDecal& chosen = decal(frames[frame], clamp);
         return chosen ? &chosen : nullptr;
+    }
+
+    const MipDecal* Skin::judgement_image(HitScore score, uint8_t key_count) {
+        std::optional<SkinImage> slot = judgement_slot(score);
+        return slot ? image(*slot, 0, key_count) : nullptr;
     }
 
     const SkinMascot& Skin::mascot() const {
@@ -584,6 +1186,21 @@ namespace nascent {
 
     olc::Pixel Skin::color(SkinColor color) const {
         return skin_manifest.colors[(size_t)color].value_or(olc::WHITE);
+    }
+
+    olc::Font& Skin::font(SkinFont font) {
+        switch (font) {
+            case SkinFont::LARGE:
+                return display_font_large;
+            case SkinFont::MEDIUM:
+                return display_font_medium;
+            case SkinFont::JUDGEMENT:
+                return judgement_font;
+            case SkinFont::COMBO:
+                return combo_font;
+            default:
+                return display_font_small;
+        }
     }
 
     olc::Font& Skin::font(UiFont font) {
@@ -714,7 +1331,15 @@ namespace nascent {
         return fade(color, GRADE_GLOW_ALPHA * opacity);
     }
 
-    void Skin::draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity) const {
+    void Skin::draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity) {
+        if (const MipDecal* picture = judgement_image(score); picture != nullptr && picture->size().y > 0) {
+            olc::FontRect metrics = text_bounds(font, "Hgjy");
+            float scale = (float)metrics.size.y / picture->size().y;
+            MipDecal::Pick level = picture->pick(scale);
+            game->window->DrawDecal({baseline.x, baseline.y + metrics.offset.y}, level.decal, {scale / level.factor, scale / level.factor}, fade(olc::WHITE, opacity));
+            return;
+        }
+
         std::string_view text = hit_score_name(score);
         olc::Pixel base = judgement_color(score);
 
@@ -763,26 +1388,42 @@ namespace nascent {
         return *slot;
     }
 
-    int32_t Skin::hitsound_voice() {
-        if (!hitsound_voices) {
-            hitsound_voices.emplace();
+    int32_t Skin::voice(SkinSound sound) {
+        std::optional<std::vector<int32_t>>& pool = voices[(size_t)sound];
 
-            if (std::optional<std::filesystem::path> path = find_sound(SOUND_STEMS[(size_t)SkinSound::HITSOUND])) {
+        if (!pool) {
+            pool.emplace();
+
+            if (std::optional<std::filesystem::path> path = find_sound(SOUND_STEMS[(size_t)sound])) {
                 for (size_t index = 0; index < HITSOUND_VOICES; index++) {
                     int32_t id = game->audio().engine().LoadSound(path->string());
 
                     if (id != -1) {
-                        hitsound_voices->push_back(id);
+                        pool->push_back(id);
                     }
                 }
             }
         }
 
-        if (hitsound_voices->empty()) {
+        if (pool->empty()) {
             return -1;
         }
 
-        return (*hitsound_voices)[next_hitsound_voice++ % hitsound_voices->size()];
+        return (*pool)[next_voice[(size_t)sound]++ % pool->size()];
+    }
+
+    int32_t Skin::hitsound_voice() {
+        return voice(SkinSound::HITSOUND);
+    }
+
+    int32_t Skin::judgement_voice(HitScore score) {
+        std::optional<SkinImage> slot = judgement_slot(score);
+
+        if (!slot) {
+            return -1;
+        }
+
+        return voice((SkinSound)((size_t)SkinSound::JUDGEMENT_PERFECT + ((size_t)*slot - (size_t)SkinImage::JUDGEMENT_PERFECT)));
     }
 
     int32_t Skin::get_random_menu_pluck() {

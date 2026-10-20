@@ -21,11 +21,6 @@ namespace nascent {
         virtual bool shows_caret() const;
 
         public:
-        static constexpr int32_t WIDTH = 640;
-        static constexpr int32_t HEIGHT = 40;
-        static constexpr int32_t PADDING = 14;
-        static constexpr double HOVER_MIX = 0.5;
-
         static int32_t width();
         static int32_t height();
 
@@ -47,9 +42,6 @@ namespace nascent {
         const std::string& current() const;
 
         public:
-        static constexpr int32_t ARROW_GAP = 14;
-        static constexpr int32_t ARROW_SLACK = 10;
-
         std::vector<std::string> options;
         size_t selected = 0;
 
@@ -71,10 +63,6 @@ namespace nascent {
         std::string display_value(bool focused) const override;
 
         public:
-        static constexpr int32_t BAR_LEFT = 250;
-        static constexpr int32_t BAR_RIGHT_GAP = 110;
-        static constexpr int32_t BAR_HEIGHT = 6;
-
         int32_t value;
         int32_t minimum;
         int32_t maximum;
@@ -107,10 +95,6 @@ namespace nascent {
 
     class SectionField : public UiField {
         public:
-        static constexpr int32_t TOP_GAP = 24;
-        static constexpr int32_t LINE_GAP = 10;
-        static constexpr int32_t LINE_HEIGHT = 2;
-
         std::string title;
 
         SectionField(std::string title);

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -19,7 +20,9 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace nascent {
@@ -32,18 +35,43 @@ namespace nascent {
         HOLD_HEAD,
         HOLD_BODY,
         HOLD_CAP,
-        MASCOT
+        MASCOT,
+        JUDGEMENT_PERFECT,
+        JUDGEMENT_AMAZING,
+        JUDGEMENT_GREAT,
+        JUDGEMENT_GOOD,
+        JUDGEMENT_BAD,
+        JUDGEMENT_MISS,
+        PLAY_BACKGROUND,
+        MENU_BACKGROUND
     };
 
-    inline constexpr size_t SKIN_IMAGE_COUNT = 7;
+    inline constexpr size_t SKIN_IMAGE_COUNT = 15;
 
     enum class SkinSound : uint8_t {
         HITSOUND,
         IDLE_LOOP,
-        ACCOUNT_LOOP
+        ACCOUNT_LOOP,
+        JUDGEMENT_PERFECT,
+        JUDGEMENT_AMAZING,
+        JUDGEMENT_GREAT,
+        JUDGEMENT_GOOD,
+        JUDGEMENT_BAD,
+        JUDGEMENT_MISS
     };
 
-    inline constexpr size_t SKIN_SOUND_COUNT = 3;
+    inline constexpr size_t SKIN_SOUND_COUNT = 9;
+
+    enum class SkinFont : uint8_t {
+        LARGE,
+        MEDIUM,
+        SMALL,
+        JUDGEMENT,
+        COMBO
+    };
+
+    inline constexpr std::array<const char*, 5> SKIN_FONT_NAMES = {"large", "medium", "small", "judgement", "combo"};
+    inline constexpr size_t SKIN_FONT_COUNT = SKIN_FONT_NAMES.size();
 
     enum class SkinTint : uint8_t {
         GRADIENT,
@@ -183,6 +211,11 @@ namespace nascent {
         double y = 70;
     };
 
+    struct SkinFontSpec {
+        std::string file;
+        double size = 0;
+    };
+
     struct SkinManifest {
         std::string name;
         std::string inherits;
@@ -195,14 +228,26 @@ namespace nascent {
         double hold_body_head_offset = 0;
         double hold_body_tail_offset = 0;
         std::optional<uint8_t> receptor_alpha;
+        uint8_t receptor_pressed_alpha = 255;
+        uint8_t note_alpha = 255;
+        double frame_rate = 12;
+        std::map<std::string, double, std::less<>> frame_rates;
         std::map<uint8_t, std::vector<uint8_t>> lane_images;
+        std::map<uint8_t, nlohmann::json> keymodes;
         SkinMascot mascot;
+        std::array<SkinFontSpec, SKIN_FONT_COUNT> fonts;
         std::array<std::optional<olc::Pixel>, SKIN_COLOR_COUNT> colors;
         std::vector<std::pair<double, olc::Pixel>> difficulty_scale;
+        std::map<std::string, double, std::less<>> layout;
+        std::vector<std::string> problems;
 
         void apply(const nlohmann::json& config);
+        void apply_playfield(const nlohmann::json& config, const std::string& context);
         void apply_colors(const nlohmann::json& config);
         void apply_difficulty_scale(const nlohmann::json& config);
+        void apply_fonts(const nlohmann::json& config);
+        void apply_layout(const nlohmann::json& config, const std::string& prefix);
+        void problem(std::string message);
     };
 
     struct SkinInfo {
@@ -217,14 +262,26 @@ namespace nascent {
         std::vector<std::filesystem::path> chain;
         SkinManifest skin_manifest;
 
-        std::array<std::optional<std::vector<MipDecal>>, SKIN_IMAGE_COUNT> images;
-        std::array<std::vector<std::future<std::vector<std::unique_ptr<olc::Sprite>>>>, SKIN_IMAGE_COUNT> pending_images;
+        using ImageFrames = std::vector<std::filesystem::path>;
+        using ImageLanes = std::vector<ImageFrames>;
+        using ImageFiles = std::array<ImageLanes, SKIN_IMAGE_COUNT>;
+        using DecalKey = std::pair<std::filesystem::path, bool>;
+
+        std::filesystem::path overlay;
+        Skin* logo_skin = nullptr;
+        std::map<uint8_t, ImageFiles> image_files;
+        std::map<DecalKey, MipDecal> decals;
+        std::map<DecalKey, std::future<std::vector<std::unique_ptr<olc::Sprite>>>> pending_decals;
+        mutable std::map<uint8_t, SkinManifest> keymode_manifests;
+        mutable std::set<std::string, std::less<>> missing_layout;
+        std::vector<std::string> load_problems;
         std::array<std::optional<int32_t>, SKIN_SOUND_COUNT> sounds;
+        std::array<std::optional<std::vector<int32_t>>, SKIN_SOUND_COUNT> voices;
+        std::array<size_t, SKIN_SOUND_COUNT> next_voice = {};
         std::optional<std::vector<int32_t>> menu_plucks;
-        std::optional<std::vector<int32_t>> hitsound_voices;
-        size_t next_hitsound_voice = 0;
         std::array<SpriteDecal, HIT_SCORE_COUNT> hit_score_decals;
         std::unique_ptr<olc::Sprite> title_gradient;
+        std::chrono::steady_clock::time_point loaded_at;
 
         double font_scale = 1.0;
 
@@ -232,24 +289,27 @@ namespace nascent {
         void unload();
         void load_fonts();
         void unload_fonts();
+        void check_files(const std::filesystem::path& directory);
+        void sync_logo();
         std::filesystem::path find(const std::string& file) const;
         std::optional<std::filesystem::path> find_sound(const std::string& stem) const;
-        std::vector<std::filesystem::path> image_paths(SkinImage image) const;
+        ImageLanes image_paths(SkinImage image, uint8_t key_count) const;
         void start_image_loads();
-        const std::vector<MipDecal>& lane_images(SkinImage image);
+        const MipDecal& decal(const std::filesystem::path& path, bool clamp);
 
         public:
         static constexpr const char* DEFAULT_SKIN = "default";
+        static constexpr const char* LOGO_SKIN = "logo";
+        static constexpr const char* LOGO_FOLDER = "logo";
         static constexpr const char* MANIFEST_FILE = "skin.json";
         static constexpr const char* DISPLAY_FONT_FILE = "display_font.ttf";
         static constexpr const char* GRADIENT_FILE = "title_gradient.png";
         static constexpr const char* SYMBOL_FONT_PATH = "assets/fonts/OpenArrow-Regular.ttf";
         static constexpr size_t MAX_INHERITANCE_DEPTH = 8;
         static constexpr size_t MAX_MENU_PLUCKS = 10;
+        static constexpr size_t MAX_ANIMATION_FRAMES = 256;
         static constexpr size_t HITSOUND_VOICES = 8;
-        static constexpr uint16_t DISPLAY_FONT_LARGE_SIZE = 72;
-        static constexpr uint16_t DISPLAY_FONT_MEDIUM_SIZE = 36;
-        static constexpr uint16_t DISPLAY_FONT_SMALL_SIZE = 18;
+        static constexpr std::array<uint16_t, SKIN_FONT_COUNT> DEFAULT_FONT_SIZES = {72, 36, 18, 72, 72};
         static constexpr double DIFFICULTY_GRADIENT_MAX = 100.0;
         static constexpr double GRADE_GLOW_CYCLE = 0.25;
         static constexpr float GRADE_GLOW_RADIUS = 3.0f;
@@ -267,22 +327,30 @@ namespace nascent {
         olc::Font display_font_large;
         olc::Font display_font_medium;
         olc::Font display_font_small;
+        olc::Font judgement_font;
+        olc::Font combo_font;
 
         Skin(Game* game, const std::string& id);
         ~Skin();
         Skin(const Skin&) = delete;
         Skin& operator=(const Skin&) = delete;
 
-        void reload(const std::string& id);
+        void reload(const std::string& id, std::filesystem::path overlay = {});
+        void set_logo_skin(Skin* logo);
         void set_font_scale(double scale);
         const std::string& get_id() const;
         const SkinManifest& manifest() const;
+        const SkinManifest& manifest(uint8_t key_count) const;
+        const std::vector<std::string>& problems() const;
+        double layout(std::string_view key) const override;
 
         const MipDecal* image(SkinImage image, uint8_t lane, uint8_t key_count);
+        const MipDecal* judgement_image(HitScore score, uint8_t key_count = 0);
         const SkinMascot& mascot() const;
         olc::Decal* hit_score_decal(HitScore score) const;
         olc::Pixel title_gradient_at(double x, double y) const;
         olc::Pixel color(SkinColor color) const;
+        olc::Font& font(SkinFont font);
         olc::Font& font(UiFont font) override;
         olc::Pixel color(UiColor color) const override;
         olc::Pixel accent(double position) const override;
@@ -293,9 +361,11 @@ namespace nascent {
         static std::array<olc::vf2d, GRADE_GLOW_STEPS> glow_offsets(float radius);
         static olc::Pixel glow_color(olc::Pixel color, float opacity);
         void draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale = 1.0f, float opacity = 1.0f) const;
-        void draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity = 1.0f) const;
+        void draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity = 1.0f);
         int32_t sound(SkinSound sound);
+        int32_t voice(SkinSound sound);
         int32_t hitsound_voice();
+        int32_t judgement_voice(HitScore score);
         int32_t get_random_menu_pluck();
     };
 }

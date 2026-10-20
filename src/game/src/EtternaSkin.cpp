@@ -403,7 +403,143 @@ namespace nascent {
         }
     }
 
-    SkinImportResult import_etterna_skin(const std::filesystem::path& archive_path, const std::filesystem::path& skins_directory, const std::filesystem::path& builtin_skins_directory) {
+    namespace {
+        SkinImportResult import_nascent_skin(Archive& archive, const std::vector<std::pair<std::string, mz_uint>>& entries, const std::string& root, const std::filesystem::path& archive_path, const std::filesystem::path& skins_directory, const std::filesystem::path& builtin_skins_directory) {
+            SkinImportResult result;
+            std::error_code ec;
+            std::string prefix = root.empty() ? std::string() : root + "/";
+            auto manifest_entry = std::find_if(entries.begin(), entries.end(), [&](const auto& entry) {
+                return entry.first == prefix + "skin.json";
+            });
+            std::optional<std::string> manifest_text = archive.read(manifest_entry->second, MAX_SKIN_MANIFEST_BYTES);
+            nlohmann::json manifest = manifest_text ? nlohmann::json::parse(*manifest_text, nullptr, false) : nlohmann::json();
+
+            if (manifest.is_discarded() || !manifest.is_object()) {
+                result.error = "its skin.json couldn't be read";
+                return result;
+            }
+
+            if (manifest.contains("inherits") && manifest["inherits"].is_string()) {
+                std::string parent = manifest["inherits"].get<std::string>();
+
+                if (!parent.empty() && !std::filesystem::is_directory(builtin_skins_directory / utf8_path(parent), ec) && !std::filesystem::is_directory(skins_directory / utf8_path(parent), ec)) {
+                    result.error = std::format("it builds on the \"{}\" skin, which isn't installed", parent);
+                    return result;
+                }
+            }
+
+            result.name = safe_skin_name(root.empty() ? path_utf8(archive_path.stem()) : file_of(root));
+
+            if (result.name.empty()) {
+                result.name = "Imported skin";
+            }
+
+            if (std::filesystem::exists(builtin_skins_directory / utf8_path(result.name), ec)) {
+                result.name += " (imported)";
+            }
+
+            std::filesystem::path destination = skins_directory / utf8_path(result.name);
+            std::filesystem::path staging = destination;
+            staging += ".part";
+            std::filesystem::remove_all(staging, ec);
+            std::filesystem::create_directories(staging, ec);
+
+            if (ec) {
+                result.error = std::format("could not create {}", path_utf8(staging));
+                return result;
+            }
+
+            size_t extracted = 0;
+
+            for (const auto& [name, index] : entries) {
+                if (!name.starts_with(prefix)) {
+                    continue;
+                }
+
+                std::optional<std::string> data = archive.read(index, MAX_SKIN_FILE_BYTES);
+                extracted += data ? data->size() : 0;
+
+                if (!data || extracted > MAX_SKIN_EXTRACTED_BYTES) {
+                    std::filesystem::remove_all(staging, ec);
+                    result.error = data ? std::format("it unpacks to more than {} MB", MAX_SKIN_EXTRACTED_BYTES / (1024 * 1024)) : std::format("{} is unreadable or larger than {} MB", file_of(name), MAX_SKIN_FILE_BYTES / (1024 * 1024));
+                    return result;
+                }
+
+                std::filesystem::path target = staging / utf8_path(name.substr(prefix.size()));
+                std::filesystem::create_directories(target.parent_path(), ec);
+                std::ofstream out(target, std::ios::binary | std::ios::trunc);
+                out.write(data->data(), (std::streamsize)data->size());
+
+                if (!out) {
+                    std::filesystem::remove_all(staging, ec);
+                    result.error = std::format("could not write {}", file_of(name));
+                    return result;
+                }
+            }
+
+            std::filesystem::remove_all(destination, ec);
+
+            if (!move_into_place(staging, destination, ec)) {
+                std::filesystem::remove_all(staging, ec);
+                result.error = std::format("could not move the skin into {}", path_utf8(skins_directory));
+                return result;
+            }
+
+            result.ok = true;
+            return result;
+        }
+    }
+
+    bool export_skin_archive(const std::filesystem::path& skin_folder, const std::filesystem::path& archive_path, std::string& error) {
+        mz_zip_archive zip = {};
+
+        if (!mz_zip_writer_init_heap(&zip, 0, 0)) {
+            error = "the archive could not be started";
+            return false;
+        }
+
+        std::error_code ec;
+        std::string root = path_utf8(skin_folder.filename());
+        bool written = true;
+
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(skin_folder, ec)) {
+            if (!entry.is_regular_file(ec)) {
+                continue;
+            }
+
+            std::string relative = path_utf8(std::filesystem::relative(entry.path(), skin_folder, ec));
+            std::replace(relative.begin(), relative.end(), '\\', '/');
+            std::ifstream in(entry.path(), std::ios::binary);
+            std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+            if (!mz_zip_writer_add_mem(&zip, (root + "/" + relative).c_str(), data.data(), data.size(), (mz_uint)MZ_DEFAULT_LEVEL)) {
+                error = std::format("{} could not be added", relative);
+                written = false;
+                break;
+            }
+        }
+
+        void* buffer = nullptr;
+        size_t size = 0;
+        written = written && mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size);
+
+        if (written) {
+            std::filesystem::create_directories(archive_path.parent_path(), ec);
+            std::ofstream out(archive_path, std::ios::binary | std::ios::trunc);
+            out.write((const char*)buffer, (std::streamsize)size);
+            written = (bool)out;
+            error = written ? std::string() : std::format("{} could not be written", path_utf8(archive_path));
+        }
+        else if (error.empty()) {
+            error = "the archive could not be finished";
+        }
+
+        mz_free(buffer);
+        mz_zip_writer_end(&zip);
+        return written;
+    }
+
+    SkinImportResult import_skin_archive(const std::filesystem::path& archive_path, const std::filesystem::path& skins_directory, const std::filesystem::path& builtin_skins_directory) {
         SkinImportResult result;
         std::error_code ec;
         uintmax_t archive_size = std::filesystem::file_size(archive_path, ec);
@@ -426,6 +562,7 @@ namespace nascent {
         mz_uint count = mz_zip_reader_get_num_files(&archive.zip);
         std::vector<std::pair<std::string, mz_uint>> entries;
         std::optional<std::string> root;
+        std::optional<std::string> nascent_root;
 
         for (mz_uint index = 0; index < count; index++) {
             mz_zip_archive_file_stat stat;
@@ -447,11 +584,19 @@ namespace nascent {
                 root = folder_of(name);
             }
 
+            if (file_of(name) == "skin.json" && (!nascent_root || folder_of(name).size() < nascent_root->size())) {
+                nascent_root = folder_of(name);
+            }
+
             entries.emplace_back(name, index);
         }
 
+        if (nascent_root) {
+            return import_nascent_skin(archive, entries, *nascent_root, archive_path, skins_directory, builtin_skins_directory);
+        }
+
         if (!root) {
-            result.error = "no Etterna noteskin was found in it (there is no NoteSkin.lua or metrics.ini)";
+            result.error = "no skin was found in it (there is no skin.json, NoteSkin.lua or metrics.ini)";
             return result;
         }
 

@@ -34,7 +34,7 @@ namespace nascent {
 
     inline constexpr std::array<KeyBindingInfo, 6> KEY_BINDINGS = {{
         {"pause", "Pause", olc::Key::TAB},
-        {"restart", "Quick restart (hold)", olc::Key::OEM_3},
+        {"restart", "Quick restart", olc::Key::OEM_3},
         {"diagnostics", "Diagnostics overlay", olc::Key::F10},
         {"copy_diagnostics", "Copy diagnostics", olc::Key::F11},
         {"skip_intro", "Skip intro", olc::Key::SPACE},
@@ -48,9 +48,12 @@ namespace nascent {
         static const olc::Key calibration_key = olc::Key::F3;
         static const olc::Key account_key = olc::Key::F4;
         static const olc::Key browse_key = olc::Key::F5;
+        static const olc::Key full_reload_key = olc::Key::F5;
+        static const olc::Key full_reload_modifier = olc::Key::CTRL;
         static const olc::Key input_key = olc::Key::F6;
         static const olc::Key chart_menu_key = olc::Key::F7;
         static const olc::Key sort_key = olc::Key::F8;
+        static const olc::Key play_page_key = olc::Key::F7;
         static const olc::Key field_key = olc::Key::TAB;
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;

@@ -37,9 +37,7 @@ namespace nascent {
         std::optional<Action> update_mouse(Input& input);
 
         public:
-        static constexpr int32_t FIELD_SPACING = 28;
-
-        int32_t spacing = FIELD_SPACING;
+        std::optional<double> spacing;
         olc::Key reverse_modifier = olc::Key::SHIFT;
         olc::Key blocking_modifier = olc::Key::CTRL;
 
@@ -51,6 +49,7 @@ namespace nascent {
 
         void clear();
         void focus_field(size_t index);
+        void focus_nearest(int32_t y);
         void set_enabled(bool enabled);
         bool is_enabled() const;
         bool is_empty() const;

@@ -66,7 +66,6 @@ namespace nascent {
 
         public:
         static constexpr int32_t PAGE_SIZE = 50;
-        static constexpr int32_t ROW_HEIGHT = 76;
         static constexpr float QUERY_DELAY = 0.35f;
         static constexpr size_t PREFETCH_ROWS = 10;
 

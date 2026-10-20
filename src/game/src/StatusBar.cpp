@@ -95,11 +95,11 @@ namespace nascent {
     }
 
     int32_t StatusBar::height() {
-        return Ui::px(HEIGHT);
+        return Ui::layout_px("status_bar.height");
     }
 
     int32_t StatusBar::padding() {
-        return Ui::px(PADDING);
+        return Ui::layout_px("status_bar.padding");
     }
 
     std::optional<StatusAction> StatusBar::take_click(Input& input, uint32_t button) const {
@@ -111,9 +111,9 @@ namespace nascent {
         olc::vi2d screen = window->GetScreenSize();
         int32_t bar_height = height();
         int32_t top = screen.y - bar_height;
-        int32_t segment_gap = Ui::px(SEGMENT_GAP);
-        int32_t label_gap = Ui::px(LABEL_GAP);
-        int32_t radius = std::max(1, Ui::px(DOT_RADIUS));
+        int32_t segment_gap = Ui::layout_px("status_bar.segment_gap");
+        int32_t label_gap = Ui::layout_px("status_bar.label_gap");
+        int32_t radius = std::max(1, Ui::layout_px("status_bar.dot_radius"));
         olc::Font& font = skin->display_font_small;
 
         window->FillRectDecal({0.0f, (float)top}, {(float)screen.x, (float)bar_height}, skin->color(SkinColor::STATUS_BAR_BACKGROUND));

@@ -1,15 +1,18 @@
 #pragma once
 
+#include "gse/ui/Theme.h"
 #include "olcPixelGameEngine.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 namespace nascent {
     class Ui {
         static inline double current_scale = 1.0;
         static inline olc::vi2d current_screen = {1920, 1080};
+        static inline const UiTheme* layout_theme = nullptr;
 
         public:
         static constexpr double REFERENCE_WIDTH = 1920.0;
@@ -38,6 +41,22 @@ namespace nascent {
 
         static float pxf(double reference) {
             return (float)(reference * current_scale);
+        }
+
+        static void set_layout_theme(const UiTheme* theme) {
+            layout_theme = theme;
+        }
+
+        static double layout(std::string_view key) {
+            return layout_theme != nullptr ? layout_theme->layout(key) : 0.0;
+        }
+
+        static int32_t layout_px(std::string_view key) {
+            return px(layout(key));
+        }
+
+        static float layout_pxf(std::string_view key) {
+            return pxf(layout(key));
         }
 
         static olc::vi2d px(olc::vi2d reference) {

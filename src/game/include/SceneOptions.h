@@ -3,11 +3,14 @@
 #include "gse/Scene.h"
 #include "ServerApi.h"
 #include "gse/ui/Layout.h"
+#include "gse/ui/ScrollBar.h"
 #include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <future>
+#include <optional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -40,10 +43,23 @@ namespace nascent {
         ChoiceField* fullscreen_field = nullptr;
         ChoiceField* mirror_field = nullptr;
         ChoiceField* instant_restart_field = nullptr;
+        ChoiceField* linked_folders_field = nullptr;
+        ButtonField* link_folder_button = nullptr;
+        ButtonField* export_skin_button = nullptr;
+        ButtonField* delete_skin_button = nullptr;
+        bool delete_confirming = false;
+        std::future<std::string> skin_export;
+        std::string exported_skin;
+        ButtonField* link_osu_button = nullptr;
+        std::optional<std::filesystem::path> osu_songs;
+        std::future<std::optional<std::filesystem::path>> folder_pick;
+        bool unlink_requested = false;
         SliderField* lane_cover_field = nullptr;
         ChoiceField* hitsounds_field = nullptr;
         SliderField* lane_width_field = nullptr;
         SliderField* background_brightness_field = nullptr;
+        SliderField* note_opacity_field = nullptr;
+        SliderField* receptor_opacity_field = nullptr;
         ChoiceField* lane_gap_field = nullptr;
         std::vector<int16_t> lane_gaps;
         SliderField* judge_offset_field = nullptr;
@@ -81,6 +97,7 @@ namespace nascent {
         float scroll = 0;
         float scroll_target = 0;
         Hotspots footer_spots;
+        ScrollBar scrollbar;
         int32_t viewport_top = 0;
         int32_t viewport_bottom = 0;
 
@@ -99,18 +116,26 @@ namespace nascent {
         void update_server(float elapsed_time);
         void commit_server();
         void update_scroll(float elapsed_time);
+        float scroll_position() const;
+        void scroll_to(float position);
         void build_preview_chart();
         void rebuild_preview();
         void refresh_skins();
+        void refresh_linked_folders();
+        void link_folder(const std::filesystem::path& folder);
+        void update_linked_folders();
+        void export_selected_skin();
+        void report_skin_problems();
+        void delete_selected_skin();
+        void update_skin_actions();
         void update_preview(float elapsed_time);
         std::vector<Hint> footer_hints() const;
         bool update_footer(Input& input);
-        void draw_scrollbar(olc::PixelGameEngine* window, int32_t x) const;
+        void draw_scrollbar(olc::PixelGameEngine* window, int32_t x);
 
         static constexpr int32_t FOOTER_BACK = 0;
         static constexpr int32_t FOOTER_CONFIRM = 1;
         static constexpr int32_t FOOTER_RESET = 2;
-        static constexpr float FOOTER_HINT_GAP = 48.0f;
 
         public:
         SceneOptions(Skin* skin);

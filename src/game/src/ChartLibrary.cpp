@@ -4,12 +4,16 @@
 #include "Const.h"
 #include "DifficultyCache.h"
 #include "LocalReplays.h"
+#include "OsuFormat.h"
 #include "Replay.h"
 #include "Sha256.h"
 #include "Utf8Path.h"
 
 #include <format>
+#include <fstream>
 #include <iostream>
+#include <iterator>
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,6 +37,70 @@ namespace nascent {
             }
 
             return folder;
+        }
+
+        constexpr int32_t OSU_HEADER_LINES = 64;
+        constexpr std::string_view OSU_MANIA_MODE_VALUE = "3";
+
+        std::string_view header_trim(std::string_view text) {
+            while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+                text.remove_prefix(1);
+            }
+
+            while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r')) {
+                text.remove_suffix(1);
+            }
+
+            return text;
+        }
+
+        bool may_be_mania(std::string_view contents) {
+            bool general = false;
+            int32_t count = 0;
+
+            while (!contents.empty() && count++ < OSU_HEADER_LINES) {
+                size_t end = contents.find('\n');
+                std::string_view text = header_trim(contents.substr(0, end));
+                contents = end == std::string_view::npos ? std::string_view() : contents.substr(end + 1);
+
+                if (text.starts_with('[')) {
+                    if (general) {
+                        return false;
+                    }
+
+                    general = text == "[General]";
+                    continue;
+                }
+
+                if (general && text.starts_with("Mode") && text.find(':') != std::string_view::npos) {
+                    return header_trim(text.substr(text.find(':') + 1)) == OSU_MANIA_MODE_VALUE;
+                }
+            }
+
+            return true;
+        }
+
+        std::u8string file_key(const std::filesystem::path& name) {
+            std::u8string key = name.u8string();
+#if defined(_WIN32) || defined(__APPLE__)
+            for (char8_t& c : key) {
+                if (c >= u8'A' && c <= u8'Z') {
+                    c = (char8_t)(c - u8'A' + u8'a');
+                }
+            }
+#endif
+            return key;
+        }
+
+        bool audio_listed(const Chart& chart, const std::unordered_set<std::u8string>& folder_files) {
+            std::filesystem::path relative = utf8_path(chart.info.audio_file).lexically_normal();
+            std::error_code ec;
+
+            if (relative.has_parent_path()) {
+                return std::filesystem::is_regular_file(chart.audio_path, ec);
+            }
+
+            return folder_files.contains(file_key(relative));
         }
 
         int64_t folder_time(const std::filesystem::path& folder) {
@@ -147,14 +215,15 @@ namespace nascent {
         return library;
     }
 
-    ChartLibrary load_chart_library(const std::filesystem::path& song_directory, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress) {
+    ChartLibrary load_chart_library(const std::vector<std::filesystem::path>& song_directories, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress) {
         std::error_code ec;
         std::vector<LoadedChart> loaded;
 
-        if (std::filesystem::is_directory(song_directory, ec)) {
+        {
             struct ChartFile {
                 std::filesystem::path path;
                 std::u8string folder;
+                std::shared_ptr<const std::unordered_set<std::u8string>> folder_files;
             };
 
             std::vector<ChartFile> chart_files;
@@ -164,15 +233,24 @@ namespace nascent {
                 return (size_t)(found - CHART_FILE_EXTENSIONS.begin());
             };
 
-            for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
-                if (!chart_folder.is_directory(ec) || chart_folder.path().extension() == ".part") {
-                    continue;
+            std::vector<std::filesystem::path> chart_folders;
+
+            for (const std::filesystem::path& song_directory : song_directories) {
+                for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
+                    if (chart_folder.is_directory(ec) && chart_folder.path().extension() != ".part") {
+                        chart_folders.push_back(chart_folder.path());
+                    }
                 }
+            }
 
-                std::u8string folder = folder_key(chart_folder.path());
+            for (const std::filesystem::path& chart_folder : chart_folders) {
+                std::u8string folder = folder_key(chart_folder);
                 std::vector<std::filesystem::path> paths;
+                auto files = std::make_shared<std::unordered_set<std::u8string>>();
 
-                for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder.path(), ec)) {
+                for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder, ec)) {
+                    files->insert(file_key(chart_file.path().filename()));
+
                     if (extension_rank(chart_file.path()) < CHART_FILE_EXTENSIONS.size()) {
                         paths.push_back(chart_file.path());
                     }
@@ -183,7 +261,7 @@ namespace nascent {
                 });
 
                 for (std::filesystem::path& path : paths) {
-                    chart_files.push_back({std::move(path), folder});
+                    chart_files.push_back({std::move(path), folder, files});
                 }
             }
 
@@ -195,15 +273,28 @@ namespace nascent {
             }
 
             parallel_for(chart_files.size(), [&](size_t index) {
+                const ChartFile& source = chart_files[index];
                 std::string error;
-                std::unique_ptr<Chart> chart = Chart::load(chart_files[index].path, pitch, error);
-                std::error_code audio_ec;
+                std::unique_ptr<Chart> chart;
+                std::ifstream file(source.path, std::ios::binary);
+                std::string contents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
                 if (progress != nullptr) {
                     progress->done++;
                 }
 
-                if (chart != nullptr && !std::filesystem::is_regular_file(chart->audio_path, audio_ec)) {
+                if (source.path.extension() == OSU_FILE_EXTENSION && !may_be_mania(contents)) {
+                    return;
+                }
+
+                if (!file && contents.empty()) {
+                    error = "could not open file";
+                }
+                else {
+                    chart = Chart::load_text(contents, source.path, pitch, error);
+                }
+
+                if (chart != nullptr && !audio_listed(*chart, *source.folder_files)) {
                     error = std::format("audio file {} is missing", path_utf8(chart->audio_path));
                     chart.reset();
                 }
