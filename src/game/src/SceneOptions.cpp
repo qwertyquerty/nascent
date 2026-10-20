@@ -1,6 +1,7 @@
 #include "SceneOptions.h"
 #include "RichPresence.h"
 #include "SceneCalibration.h"
+#include "SceneCredits.h"
 
 #include "Account.h"
 #include "Attempt.h"
@@ -207,6 +208,9 @@ namespace nascent {
 
         linked_folders_field = &form.add<ChoiceField>("Linked folders", std::vector<std::string>{"None"}, 0);
         refresh_linked_folders();
+
+        form.add<SectionField>("About");
+        credits_button = &form.add<ButtonField>("Credits");
 
         form.spacing = Ui::layout("options.field_spacing");
         form.focus_field(0);
@@ -512,6 +516,9 @@ namespace nascent {
         else if (delete_skin_button->take_pressed()) {
             delete_selected_skin();
         }
+        else if (credits_button->take_pressed()) {
+            game->scenes().push(std::make_unique<SceneCredits>(skin));
+        }
         else if (action == UiForm::Action::CHANGED) {
             apply();
         }
@@ -750,7 +757,7 @@ namespace nascent {
             return {{"↑/↓:  choose"}, {"Enter:  link", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 
-        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button)) {
+        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button || form.focused_field() == credits_button)) {
             return {{"↑/↓:  choose"}, {"Enter:  open", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 

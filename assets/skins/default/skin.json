@@ -304,6 +304,24 @@
             "scroll_speed": 14,
             "hint_line_height": 28
         },
+        "credits": {
+            "scroll_speed": 46,
+            "start_fraction": 0.62,
+            "edge_fade_fraction": 0.16,
+            "logo_width": 720,
+            "title_gap": 120,
+            "heading_gap": 58,
+            "name_gap": 56,
+            "lead_gap": 96,
+            "section_gap": 110,
+            "name_gradient_step": 0.11,
+            "arrow_min_size": 18,
+            "arrow_max_size": 44,
+            "arrow_min_speed": 18,
+            "arrow_max_speed": 64,
+            "arrow_alpha": 54,
+            "hint_gap": 36
+        },
         "account": {
             "left": 0.041666666666666664,
             "top": 0.1,
