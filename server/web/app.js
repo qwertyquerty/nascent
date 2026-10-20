@@ -59,7 +59,7 @@ const paged = (params) => ({limit: PAGE_SIZE, offset: (pageOf(params) - 1) * PAG
 const SESSION_KEY = "nascent-session";
 const SIGNED_OUT = "nascent-signed-out";
 const STAFF_ROLES = ["moderator", "admin"];
-const DEFAULT_INFO = {ranked_key_counts: [4, 5, 6, 7, 8, 9, 10], password_reset: false};
+const DEFAULT_INFO = {ranked_key_counts: [4, 5, 6, 7, 8, 9, 10], password_reset: false, email_verification: false};
 
 let memorySession = null;
 let servedTitle = true;
@@ -565,6 +565,24 @@ const loaders = {
         return {title: "Choose a new password", token: token || null};
     },
 
+    async verify() {
+        const token = location.hash.slice(1);
+
+        if (!token) {
+            return {title: "Verify email", token: null, verified: false, error: null};
+        }
+
+        history.replaceState(null, "", location.pathname);
+
+        try {
+            const {user} = await api("/auth/verify-email", null, {method: "POST", body: {token}, anonymous: true});
+            return {title: "Email verified", token, verified: true, username: user.username, error: null};
+        }
+        catch (error) {
+            return {title: "Verify email", token, verified: false, error: error.message};
+        }
+    },
+
     async account() {
         const signIn = {redirect: link.to("/login", {next: "/account"})};
 
@@ -573,8 +591,8 @@ const loaders = {
         }
 
         try {
-            const [{user}, {sessions}] = await Promise.all([api("/me"), api("/auth/sessions")]);
-            return {title: "Account", user, sessions};
+            const [{user}, {sessions}, info] = await Promise.all([api("/me"), api("/auth/sessions"), serverInfo()]);
+            return {title: "Account", user, sessions, verification: info.email_verification};
         }
         catch (error) {
             if (error.status === 401) {
@@ -779,6 +797,14 @@ const app = Vue.createApp({
                 this.user = user;
                 this.flash = "Your password was changed and every other device was signed out.";
                 this.go("/account");
+            });
+        },
+
+        sendVerification() {
+            return this.submitForm("verify", async () => {
+                const {verified} = await api("/me/verify-email", null, {method: "POST"});
+                this.view.user.email_verified = verified;
+                this.formNotice = verified ? "Your email is already verified." : `A verification link was sent to ${this.view.user.email}.`;
             });
         },
 

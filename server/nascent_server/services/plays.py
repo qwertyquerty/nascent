@@ -18,7 +18,7 @@ from ..ratelimit import check_rate_limit
 from ..security import TICKET_PREFIX, hash_token, new_token, require_not_banned
 from ..storage import put_json_gz, sharded_key
 from ..versions import parse_release_version
-from . import anticheat, ranking
+from . import anticheat, email_verification, ranking
 from .calculator import calculator_version, performance, require_rate_key
 from .charts import MAX_DURATION_MS, chart_difficulty, get_chart, native_chart, parse_chart, register_chart
 
@@ -371,6 +371,7 @@ def submit_play(
 
     if not imported:
         require_supported_client(raw_replay)
+        email_verification.require_verified(user)
 
     chart_hash = chart_hash.lower()
     chart = get_chart(chart_hash)

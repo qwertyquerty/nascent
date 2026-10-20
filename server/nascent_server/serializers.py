@@ -51,7 +51,14 @@ def user_profile(user: User, stats: dict[str, Any], key_modes: list[dict[str, An
 
 
 def private_user(user: User) -> dict[str, Any]:
-    return {**user_summary(user), "email": user.email, "role": user.role, "is_restricted": user.is_banned, "created_at": isoformat(user.created_at)}
+    return {
+        **user_summary(user),
+        "email": user.email,
+        "email_verified": user.email_verified_at is not None,
+        "role": user.role,
+        "is_restricted": user.is_banned,
+        "created_at": isoformat(user.created_at),
+    }
 
 
 def chart_summary(chart: Chart, include_sources: bool = False) -> dict[str, Any]:

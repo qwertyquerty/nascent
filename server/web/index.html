@@ -536,12 +536,26 @@
                 <p v-if="view.token" class="has-text-grey">Link expired? <a href="/forgot">Ask for a new one</a>.</p>
             </template>
 
+            <template v-else-if="route.name === 'verify'">
+                <h1 class="title is-3">{{ view.verified ? "Email verified" : "Verify your email" }}</h1>
+                <div class="box auth-box">
+                    <p v-if="view.verified">Thanks, {{ view.username }}. Your email is verified and your plays will be submitted.</p>
+                    <p v-else-if="!view.token">This link is incomplete. Open it from the email again, or send a new one from your <a href="/account">account page</a>.</p>
+                    <p v-else class="has-text-danger" role="alert">{{ view.error }}</p>
+                </div>
+                <p v-if="!view.verified && view.token" class="has-text-grey">Need a new link? Send one from your <a href="/account">account page</a>.</p>
+            </template>
+
             <template v-else-if="route.name === 'account'">
                 <div class="level is-mobile mb-4">
                     <div class="level-left"><h1 class="title is-3">Account</h1></div>
                     <div class="level-right"><button type="button" class="button is-small" @click="signOut()">Sign out</button></div>
                 </div>
                 <p v-if="formError" class="notification is-danger is-light" role="alert">{{ formError }}</p>
+                <div v-if="view.verification && view.user.email_verified === false" class="notification is-warning is-light">
+                    <p class="mb-2">Your email isn't verified yet, so your plays won't be submitted. Open the link we emailed you, or send a new one.</p>
+                    <button type="button" class="button is-small" :class="{'is-loading': busy === 'verify'}" @click="sendVerification()">Send verification email</button>
+                </div>
                 <div class="columns">
                     <div class="column is-5">
                         <div class="box">

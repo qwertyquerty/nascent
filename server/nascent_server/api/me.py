@@ -1,4 +1,4 @@
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, current_app, g, jsonify
 
 from ..errors import ApiError
 from ..extensions import db
@@ -6,7 +6,8 @@ from ..ratelimit import check_rate_limit
 from ..schemas import AccountDeleteIn, PasswordChangeIn, parse_body
 from ..security import auth_required, current_user, hash_password, revoke_user_sessions, verify_password
 from ..serializers import private_user
-from ..services import accounts
+from ..services import accounts, email_verification
+from ..tasks import enqueue
 
 blueprint = Blueprint("me", __name__, url_prefix="/me")
 
@@ -15,6 +16,28 @@ blueprint = Blueprint("me", __name__, url_prefix="/me")
 @auth_required
 def me():
     return {"user": private_user(current_user())}
+
+
+@blueprint.post("/verify-email")
+@auth_required
+def send_verification_email():
+    user = current_user()
+
+    if user.email_verified_at is not None:
+        return {"sent": False, "verified": True}
+
+    if not email_verification.required():
+        raise ApiError(409, "verification_off", "This server doesn't ask for email verification")
+
+    check_rate_limit("verify_email_send", user.id)
+
+    try:
+        enqueue(email_verification.send_verification, user.id)
+    except Exception:
+        current_app.logger.exception("could not send a verification email to user %s", user.id)
+        raise ApiError(503, "mail_unavailable", "The verification email couldn't be sent, try again later") from None
+
+    return {"sent": True, "verified": False}, 202
 
 
 @blueprint.get("/export")

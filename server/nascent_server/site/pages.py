@@ -17,7 +17,7 @@ INDEX = "index, follow, max-image-preview:large"
 NOINDEX = "noindex, follow"
 PAGE_SIZE = 50
 NAV = [("/", "Home"), ("/leaderboard", "Leaderboard"), ("/charts", "Charts"), ("/plays", "Plays"), ("/stats", "Stats")]
-PRIVATE = {"staff": "Staff", "login": "Sign in", "forgot": "Forgot password", "reset": "Choose a new password", "account": "Account"}
+PRIVATE = {"staff": "Staff", "login": "Sign in", "forgot": "Forgot password", "reset": "Choose a new password", "verify": "Verify email", "account": "Account"}
 
 
 @dataclass

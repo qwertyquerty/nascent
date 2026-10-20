@@ -7,10 +7,10 @@ from ..errors import ApiError
 from ..extensions import db
 from ..models import AuthSession, User
 from ..ratelimit import check_rate_limit, over_rate_limit
-from ..schemas import LoginIn, PasswordResetConfirmIn, PasswordResetIn, RefreshIn, RegisterIn, parse_body
+from ..schemas import EmailVerifyIn, LoginIn, PasswordResetConfirmIn, PasswordResetIn, RefreshIn, RegisterIn, parse_body
 from ..security import auth_required, client_ip, current_user, hash_password, issue_session, revoke_user_sessions, rotate_session, verify_password
 from ..serializers import private_user
-from ..services import mail, password_reset
+from ..services import email_verification, mail, password_reset
 from ..tasks import enqueue
 
 blueprint = Blueprint("auth", __name__, url_prefix="/auth")
@@ -42,6 +42,13 @@ def register():
 
     tokens = issue_session(user)
     db.session.commit()
+
+    if email_verification.required():
+        try:
+            enqueue(email_verification.send_verification, user.id)
+        except Exception:
+            current_app.logger.exception("could not send a verification email to user %s", user.id)
+
     return {"user": private_user(user), "tokens": tokens.to_dict()}, 201
 
 
@@ -103,6 +110,15 @@ def confirm_password_reset():
     tokens = issue_session(user)
     db.session.commit()
     return {"user": private_user(user), "tokens": tokens.to_dict()}
+
+
+@blueprint.post("/verify-email")
+def verify_email():
+    check_rate_limit("verify_email_confirm", client_ip())
+    body = parse_body(EmailVerifyIn)
+    user = email_verification.redeem(body.token)
+    db.session.commit()
+    return {"user": private_user(user)}
 
 
 @blueprint.post("/logout")

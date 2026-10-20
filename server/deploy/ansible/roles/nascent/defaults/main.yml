@@ -8,6 +8,7 @@ nascent_letsencrypt_email: ""
 nascent_letsencrypt_staging: false
 nascent_cors_origins: ""
 nascent_min_client_version: ""
+nascent_email_verification: false
 
 nascent_resend_api_key: ""
 nascent_mail_domain: "{{ nascent_domain }}"

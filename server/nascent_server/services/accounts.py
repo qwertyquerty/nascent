@@ -8,12 +8,12 @@ from sqlalchemy import case, delete, select, update
 from .. import timeutil
 from ..cache import store
 from ..extensions import db
-from ..models import AuthSession, Chart, PasswordReset, Play, PlayTicket, RankSnapshot, User, UserKeyStats
+from ..models import AuthSession, Chart, EmailVerification, PasswordReset, Play, PlayTicket, RankSnapshot, User, UserKeyStats
 from ..serializers import play_out, private_user
 from ..storage import sharded_key, storage
 from . import ranking
 
-OWNED_BY_USER = (Play, PlayTicket, AuthSession, PasswordReset, UserKeyStats, RankSnapshot)
+OWNED_BY_USER = (Play, PlayTicket, AuthSession, PasswordReset, EmailVerification, UserKeyStats, RankSnapshot)
 
 
 def export_account(user: User) -> dict[str, Any]:

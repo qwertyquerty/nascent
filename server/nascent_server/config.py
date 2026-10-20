@@ -47,6 +47,8 @@ class Config:
     REFRESH_TOKEN_TTL = timedelta(days=90)
     SESSION_TOUCH_INTERVAL = timedelta(minutes=5)
     PASSWORD_RESET_TTL = timedelta(hours=1)
+    EMAIL_VERIFICATION = os.environ.get("NASCENT_EMAIL_VERIFICATION", "").strip().lower() in {"1", "true", "yes", "on"}
+    EMAIL_VERIFICATION_TTL = timedelta(days=7)
 
     MIN_CLIENT_VERSION = os.environ.get("NASCENT_MIN_CLIENT_VERSION", "").strip()
 
@@ -80,6 +82,8 @@ class Config:
         "password_reset_ip": (10, 3600),
         "password_reset_account": (3, 3600),
         "password_reset_confirm": (30, 3600),
+        "verify_email_send": (3, 3600),
+        "verify_email_confirm": (30, 3600),
         "account_delete": (5, 3600),
         "ticket": (2000, 3600),
         "submit_burst": (6, 60),

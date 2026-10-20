@@ -77,6 +77,10 @@ class PasswordResetIn(Body):
     login: str = Field(min_length=1, max_length=254)
 
 
+class EmailVerifyIn(Body):
+    token: str = Field(min_length=1, max_length=200)
+
+
 class PasswordResetConfirmIn(Body):
     token: str = Field(min_length=1, max_length=200)
     new_password: str

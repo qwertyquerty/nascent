@@ -85,6 +85,7 @@ class User(db.Model):
     role: Mapped[str] = mapped_column(String(16), default=Role.USER)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
+    email_verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     play_count: Mapped[int] = mapped_column(Integer, default=0)
     ranked_play_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -159,6 +160,20 @@ class PasswordReset(db.Model):
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
     used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     ip: Mapped[str] = mapped_column(String(45), default="")
+
+    user: Mapped[User] = relationship()
+
+
+class EmailVerification(db.Model):
+    __tablename__ = "email_verifications"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    email_key: Mapped[str] = mapped_column(String(254))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     user: Mapped[User] = relationship()
 
