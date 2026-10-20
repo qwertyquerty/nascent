@@ -55,16 +55,17 @@
 
 - name: Read which calculator the deployed release uses
   ansible.builtin.command:
-    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, calculator-status]
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, calculator-status, --require-current]
     chdir: "{{ nascent_compose_dir }}"
   register: difficulty_status_deployed
   changed_when: false
+  failed_when: false
 
-- name: Stop if the calculator did not change
+- name: Stop if nothing is left on an older calculator
   ansible.builtin.assert:
-    that: nascent_difficulty_force | bool or difficulty_status_deployed.stdout_lines[-1] != difficulty_status_before.stdout_lines[-1]
+    that: nascent_difficulty_force | bool or difficulty_status_deployed.rc != 0
     fail_msg: >-
-      the deployed release still uses {{ difficulty_status_deployed.stdout_lines[-1] }}, so there is nothing to recalculate.
+      every chart, chart difficulty and play already uses {{ difficulty_status_deployed.stdout_lines[-1] }}, so there is nothing to recalculate.
       Set nascent_difficulty_force=true to recalculate anyway.
 
 - name: Recalculate every chart, play and profile
