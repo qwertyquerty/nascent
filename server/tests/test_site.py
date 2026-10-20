@@ -72,6 +72,9 @@ def test_page_shell_meta(api, clock):
 
     calculator = api.get("/difficulty").get_data(as_text=True)
     assert "<title>Difficulty calculator · Nascent</title>" in calculator
+    assert "og:image" not in calculator
+    assert '<meta property="og:description" content="Nascent Calc V2 analysis">' in calculator
+    assert 'property="og:image"' in home
 
     missing = api.get("/users/nobody")
     assert missing.status_code == 404

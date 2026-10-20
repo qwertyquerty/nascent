@@ -103,7 +103,7 @@ def sitemap_part(name: str) -> Response:
 
 def render(path: str) -> tuple[str, str, int]:
     page = build_page(path)
-    head = render_template("seo/head.html", page=page, canonical=site_url(page.path), image=site_url("/og.png"))
+    head = render_template("seo/head.html", page=page, canonical=site_url(page.path), image=site_url("/og.png") if page.image else None)
     body = render_template("seo/body.html", page=page, nav=NAV) if page.sections is not None else ""
     return head, body, page.status
 

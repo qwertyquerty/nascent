@@ -32,6 +32,7 @@ class Page:
     sections: list[tuple[str, list[tuple[str, str, str]]]] | None = None
     structured: list[dict[str, Any]] = field(default_factory=list)
     html: str = ""
+    image: bool = True
 
 
 def site_url(path: str) -> str:
@@ -240,8 +241,8 @@ def stats() -> Page:
 
 
 def difficulty() -> Page:
-    description = "How Nascent's difficulty calculator works and how it compares with Etterna MSD and osu! star ratings."
-    return Page(f"Difficulty calculator · {SITE_NAME}", "Difficulty calculator", description, "/difficulty")
+    description = "Nascent Calc V2 analysis"
+    return Page(f"Difficulty calculator · {SITE_NAME}", "Difficulty calculator", description, "/difficulty", image=False)
 
 
 def plays() -> Page:
