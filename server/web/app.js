@@ -30,6 +30,9 @@ function difficultyColor(value) {
 const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases?per_page=10";
 const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases";
 const INSTALLER_SUFFIXES = {win: ["-setup.exe", ".zip"], mac: [".dmg", ".zip"], linux: [".AppImage", ".zip"]};
+const OS_LABELS = {win: "Windows", mac: "macOS", linux: "Linux"};
+const PACKAGE_KINDS = {"-setup.exe": "Installer", ".dmg": "Disk image", ".AppImage": "AppImage", ".zip": "Portable zip"};
+const PACKAGE_PATTERN = /-(win|mac|linux)-([a-z0-9_]+?)(-setup\.exe|\.dmg|\.AppImage|\.zip)$/;
 const PAGE_SIZE = 50;
 const SEARCH_DELAY_MS = 180;
 const DAY_MS = 86400000;
@@ -392,6 +395,15 @@ function installerFor(assets, os, architecture) {
     return null;
 }
 
+function releasePackages(assets) {
+    const order = Object.keys(OS_LABELS);
+    return assets
+        .map((asset) => [asset, asset.name.match(PACKAGE_PATTERN)])
+        .filter(([, match]) => match)
+        .sort(([, a], [, b]) => order.indexOf(a[1]) - order.indexOf(b[1]))
+        .map(([asset, [, os, arch, suffix]]) => ({url: asset.browser_download_url, label: `${OS_LABELS[os]} ${arch}`, kind: PACKAGE_KINDS[suffix], size: `${Math.max(1, Math.round(asset.size / 1048576))} MB`}));
+}
+
 async function latestRelease() {
     const platform = detectPlatform();
 
@@ -409,10 +421,11 @@ async function latestRelease() {
         }
 
         const asset = platform ? installerFor(release.assets, platform.os, await detectArchitecture(platform.os)) : null;
-        return {version: release.tag_name, page: release.html_url, url: asset?.browser_download_url ?? null, label: asset ? platform.label : null};
+        const url = asset?.browser_download_url ?? null;
+        return {version: release.tag_name, page: release.html_url, url, label: asset ? platform.label : null, packages: releasePackages(release.assets).filter((item) => item.url !== url)};
     }
     catch {
-        return {version: null, page: RELEASES_PAGE, url: null, label: null};
+        return {version: null, page: RELEASES_PAGE, url: null, label: null, packages: []};
     }
 }
 
@@ -970,13 +983,50 @@ app.component("player-search", {
 });
 
 app.component("download-button", {
-    props: {release: Object, size: {type: String, default: ""}},
-    data: () => ({fallback: RELEASES_PAGE}),
+    props: {release: Object, size: {type: String, default: ""}, compact: Boolean},
+    data: () => ({fallback: RELEASES_PAGE, open: false}),
+    mounted() {
+        this.outside = (event) => this.open && !this.$el.contains(event.target) && (this.open = false);
+        document.addEventListener("click", this.outside);
+    },
+    unmounted() {
+        document.removeEventListener("click", this.outside);
+    },
+    methods: {
+        close() {
+            if (this.open) {
+                this.open = false;
+                this.$refs.toggle.focus();
+            }
+        },
+        leave(event) {
+            if (event.relatedTarget && !this.$el.contains(event.relatedTarget)) {
+                this.open = false;
+            }
+        },
+    },
     template: `<div class="download">
-        <a class="button is-primary download-button" :class="size" :href="release?.url || release?.page || fallback">
-            {{ release?.label ? 'Download for ' + release.label : 'Download Nascent' }}
-        </a>
-        <p v-if="release?.version" class="is-size-7 mt-2 has-text-grey">{{ release.version }}</p>
+        <div class="dropdown download-dropdown" :class="{'is-active': open, 'is-right': compact}" @keydown.esc="close" @focusout="leave">
+            <div class="buttons has-addons">
+                <a class="button is-primary download-button" :class="size" :href="release?.url || release?.page || fallback">
+                    {{ compact ? 'Download' : release?.label ? 'Download for ' + release.label : 'Download Nascent' }}
+                </a>
+                <button v-if="release?.packages?.length" ref="toggle" type="button" class="button is-primary download-toggle" :class="size"
+                    :aria-expanded="open" :aria-controls="compact ? 'download-menu-nav' : 'download-menu'" aria-label="Other downloads" @click="open = !open">
+                    <span class="download-caret" aria-hidden="true"></span>
+                </button>
+            </div>
+            <div v-if="release?.packages?.length" :id="compact ? 'download-menu-nav' : 'download-menu'" class="dropdown-menu download-menu">
+                <div class="dropdown-content">
+                    <a v-for="item in release.packages" :key="item.url" class="dropdown-item" :href="item.url" @click="open = false">
+                        <span>{{ item.label }} <span class="has-text-grey">{{ item.kind }}</span></span><span class="has-text-grey is-size-7">{{ item.size }}</span>
+                    </a>
+                    <hr class="dropdown-divider">
+                    <a class="dropdown-item" :href="release.page" @click="open = false">All releases</a>
+                </div>
+            </div>
+        </div>
+        <p v-if="release?.version && !compact" class="is-size-7 mt-2 has-text-grey">{{ release.version }}</p>
     </div>`,
 });
 

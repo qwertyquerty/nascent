@@ -123,6 +123,38 @@ a.navbar-item.is-active:focus-within {
     filter: brightness(1.08);
 }
 
+.download-dropdown .buttons {
+    align-items: stretch;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+}
+
+.button.is-primary.download-toggle {
+    background: var(--nascent-green);
+    border-inline-start: 1px solid rgba(4, 16, 21, 0.25);
+    padding-inline: 0.75em;
+}
+
+.download-caret {
+    width: 0.45em;
+    height: 0.45em;
+    margin-top: -0.25em;
+    border: solid currentColor;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.download-menu {
+    max-width: calc(100vw - 2rem);
+}
+
+.download-menu a.dropdown-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-inline-end: 1rem;
+}
+
 .is-refreshing {
     opacity: 0.55;
     pointer-events: none;
@@ -131,7 +163,6 @@ a.navbar-item.is-active:focus-within {
 
 .hero {
     position: relative;
-    overflow: hidden;
     margin-bottom: 2rem;
     border-radius: 12px;
     background: radial-gradient(ellipse at 20% 0%, rgba(0, 177, 225, 0.18), transparent 60%), radial-gradient(ellipse at 90% 100%, rgba(0, 245, 154, 0.12), transparent 55%), #070a0e;
@@ -146,6 +177,7 @@ a.navbar-item.is-active:focus-within {
     position: absolute;
     inset: 0 0 0 auto;
     width: 45%;
+    overflow: hidden;
     pointer-events: none;
     mask-image: linear-gradient(90deg, transparent, #000 40%);
 }
@@ -866,6 +898,11 @@ th:has(.reveal-button) {
 @media screen and (max-width: 1023px) {
     .hero-notes {
         display: none;
+    }
+
+    .navbar .download-dropdown.is-right .dropdown-menu {
+        left: 0;
+        right: auto;
     }
 }
 

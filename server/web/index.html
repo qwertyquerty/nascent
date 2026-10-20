@@ -43,7 +43,7 @@
                     <div class="navbar-item"><player-search></player-search></div>
                     <a v-if="user" class="navbar-item" :class="{'is-active': route.name === 'account'}" href="/account" :aria-current="route.name === 'account' ? 'page' : null">{{ user.username }}</a>
                     <a v-else class="navbar-item" :class="{'is-active': route.name === 'login'}" href="/login">Sign in</a>
-                    <div class="navbar-item"><a class="button is-small is-primary download-button" :href="release?.url || release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a></div>
+                    <div class="navbar-item"><download-button :release="release" size="is-small" compact></download-button></div>
                 </div>
             </div>
         </div>
