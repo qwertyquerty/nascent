@@ -293,4 +293,12 @@ NASCENT_TEST(gse_mip_downsampling) {
 
     std::unique_ptr<olc::Sprite> tiny = downsample_half(*half);
     CHECK(tiny->width == 1 && tiny->height == 1);
+
+    olc::Sprite odd(3, 1);
+    odd.SetPixel(0, 0, olc::Pixel(0, 0, 0, 0));
+    odd.SetPixel(1, 0, olc::Pixel(0, 0, 0, 0));
+    odd.SetPixel(2, 0, olc::Pixel(255, 255, 255, 255));
+    std::unique_ptr<olc::Sprite> edge = downsample_half(odd);
+    CHECK(edge->width == 2 && edge->height == 1);
+    CHECK(edge->GetPixel(1, 0).a == 255);
 }

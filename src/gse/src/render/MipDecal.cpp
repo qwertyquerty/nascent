@@ -6,8 +6,8 @@
 
 namespace nascent {
     std::unique_ptr<olc::Sprite> downsample_half(const olc::Sprite& source) {
-        int32_t width = std::max(1, source.width / 2);
-        int32_t height = std::max(1, source.height / 2);
+        int32_t width = std::max(1, (source.width + 1) / 2);
+        int32_t height = std::max(1, (source.height + 1) / 2);
         auto result = std::make_unique<olc::Sprite>(width, height);
 
         for (int32_t y = 0; y < height; y++) {
