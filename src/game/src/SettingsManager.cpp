@@ -61,6 +61,7 @@ namespace nascent {
         effects_volume,
         show_fps,
         account_screen_seen,
+        last_run_version,
         list_song_directory,
         list_linked_directories,
         discord_application_id,
@@ -120,6 +121,7 @@ namespace nascent {
 
         std::string error;
         SettingsLoadStatus status = settings_store()->load(error);
+        load_status = status;
 
         if (!error.empty()) {
             std::cerr << "Settings: " << error << std::endl;

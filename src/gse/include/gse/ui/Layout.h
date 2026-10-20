@@ -43,4 +43,5 @@ namespace nascent {
 
     olc::FontRect draw_text_centered(olc::Font& font, std::string_view text, float center_x, float baseline, olc::Pixel color, float scale = 1.0f);
     Rect text_rect(olc::Font& font, std::string_view text, olc::vf2d baseline, float scale = 1.0f);
+    std::vector<std::string> wrap_text(olc::Font& font, std::string_view text, float max_width);
 }

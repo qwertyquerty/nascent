@@ -6,6 +6,7 @@
 #include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
+#include "ChangelogOverlay.h"
 #include "ChartFolders.h"
 #include "EtternaSkin.h"
 #include "EntityField.h"
@@ -211,6 +212,7 @@ namespace nascent {
 
         form.add<SectionField>("About");
         credits_button = &form.add<ButtonField>("Credits");
+        changelog_button = &form.add<ButtonField>(std::format("Changelog (version {})", NASCENT_VERSION_STRING));
 
         form.spacing = Ui::layout("options.field_spacing");
         form.focus_field(0);
@@ -519,6 +521,9 @@ namespace nascent {
         else if (credits_button->take_pressed()) {
             game->scenes().push(std::make_unique<SceneCredits>(skin));
         }
+        else if (changelog_button->take_pressed()) {
+            overlays.open(std::make_unique<ChangelogOverlay>(skin, Changelog::load(), "Changelog", "Every update so far"));
+        }
         else if (action == UiForm::Action::CHANGED) {
             apply();
         }
@@ -757,7 +762,7 @@ namespace nascent {
             return {{"↑/↓:  choose"}, {"Enter:  link", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 
-        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button || form.focused_field() == credits_button)) {
+        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button || form.focused_field() == credits_button || form.focused_field() == changelog_button)) {
             return {{"↑/↓:  choose"}, {"Enter:  open", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 

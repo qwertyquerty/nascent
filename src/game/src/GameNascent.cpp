@@ -1,6 +1,7 @@
 #include "GameNascent.h"
 
 #include "Account.h"
+#include "ChangelogOverlay.h"
 #include "ChartFolders.h"
 #include "EntityStarfield.h"
 #include "Favorites.h"
@@ -62,6 +63,7 @@ namespace nascent {
         SubmissionQueue::start();
         Updater::check();
         server_info = ServerApi::info();
+        pending_changelog = Changelog::since_last_run();
         LocalBests::load();
         Favorites::load();
         set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
@@ -136,6 +138,7 @@ namespace nascent {
 
         update_screenshot();
         check_client_version();
+        show_pending_changelog();
         limit_frame_rate(SettingsManager::settings.frame_rate_limit);
         begin_frame(elapsed_time);
         text_cache_begin_frame();
@@ -225,6 +228,17 @@ namespace nascent {
         if (steps != 0) {
             change_volume(steps * VOLUME_STEP);
         }
+    }
+
+    void GameNascent::show_pending_changelog() {
+        Scene* scene = scenes().top();
+
+        if (pending_changelog.empty() || scene == nullptr || !scene->is_created() || scenes().is_transitioning()) {
+            return;
+        }
+
+        std::string subtitle = std::format("You're now on Nascent {}", NASCENT_VERSION_STRING);
+        scene->overlays.open(std::make_unique<ChangelogOverlay>(skin.get(), std::exchange(pending_changelog, {}), "What's new", std::move(subtitle)));
     }
 
     void GameNascent::check_client_version() {

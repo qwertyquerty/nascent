@@ -441,6 +441,28 @@
             "top": 60,
             "border": 2
         },
+        "changelog": {
+            "width": 1100,
+            "padding": 48,
+            "subtitle_gap": 10,
+            "top_fraction": 0.08,
+            "bottom_fraction": 0.08,
+            "header_gap": 36,
+            "footer_gap": 24,
+            "release_gap": 14,
+            "release_spacing": 44,
+            "section_gap": 12,
+            "section_spacing": 22,
+            "line_gap": 6,
+            "item_gap": 10,
+            "bullet_size": 6,
+            "bullet_indent": 26,
+            "edge_fade": 28,
+            "scroll_step": 120,
+            "scroll_speed": 900,
+            "scrollbar_width": 4,
+            "hint_gap": 36
+        },
         "fps_counter": {
             "width": 100
         }

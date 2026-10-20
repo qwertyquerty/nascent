@@ -67,6 +67,7 @@ namespace nascent {
         uint8_t effects_volume = 75;
         bool show_fps = true;
         bool account_screen_seen = false;
+        std::string last_run_version;
 
         std::string list_song_directory;
         std::vector<std::string> list_linked_directories;
@@ -96,6 +97,7 @@ namespace nascent {
         static constexpr const char* LEGACY_SONG_DIRECTORY = "assets/songs";
 
         static Settings settings;
+        static inline SettingsLoadStatus load_status = SettingsLoadStatus::CREATED;
 
         static std::filesystem::path get_settings_path();
         static std::filesystem::path song_directory();

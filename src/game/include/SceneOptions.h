@@ -46,6 +46,7 @@ namespace nascent {
         ChoiceField* linked_folders_field = nullptr;
         ButtonField* link_folder_button = nullptr;
         ButtonField* credits_button = nullptr;
+        ButtonField* changelog_button = nullptr;
         ButtonField* export_skin_button = nullptr;
         ButtonField* delete_skin_button = nullptr;
         bool delete_confirming = false;

@@ -4,6 +4,38 @@
 #include "gse/ui/Ui.h"
 
 namespace nascent {
+    std::vector<std::string> wrap_text(olc::Font& font, std::string_view text, float max_width) {
+        std::vector<std::string> lines;
+        std::string line;
+        size_t start = 0;
+
+        while (start < text.size()) {
+            size_t end = text.find(' ', start);
+            std::string_view word = text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+            start = end == std::string_view::npos ? text.size() : end + 1;
+
+            if (word.empty()) {
+                continue;
+            }
+
+            std::string candidate = line.empty() ? std::string(word) : line + " " + std::string(word);
+
+            if (!line.empty() && (float)text_bounds(font, candidate).size.x > max_width) {
+                lines.push_back(std::move(line));
+                line = std::string(word);
+            }
+            else {
+                line = std::move(candidate);
+            }
+        }
+
+        if (!line.empty()) {
+            lines.push_back(std::move(line));
+        }
+
+        return lines;
+    }
+
     bool Rect::contains(olc::vf2d point) const {
         return point.x >= position.x && point.x <= position.x + size.x && point.y >= position.y && point.y <= position.y + size.y;
     }

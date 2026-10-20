@@ -107,6 +107,7 @@ add_custom_target(package_stage
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/fonts" "${nascent_assets_dir}/assets/fonts"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/logo" "${nascent_assets_dir}/assets/logo"
     COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/assets/credits.json" "${nascent_assets_dir}/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/assets/changelog.json" "${nascent_assets_dir}/assets"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${nascent_libs}/kissfft/LICENSES" "${nascent_root}/licenses/kissfft"
     ${nascent_copy_commands}
     ${nascent_platform_commands}

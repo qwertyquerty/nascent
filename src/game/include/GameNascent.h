@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BeatmapDownloads.h"
+#include "Changelog.h"
 #include "EtternaSkin.h"
 #include "Screenshots.h"
 #include "ServerApi.h"
@@ -35,6 +36,7 @@ namespace nascent {
         bool screenshot_requested = false;
         std::future<ScreenshotResult> screenshot_save;
         std::future<ApiResult<ServerInfo>> server_info;
+        std::vector<ChangelogRelease> pending_changelog;
         KeyRepeat volume_up_repeat;
         KeyRepeat volume_down_repeat;
         float volume_save_delay = 0;
@@ -43,6 +45,7 @@ namespace nascent {
         void handle_dropped_files();
         void update_screenshot();
         void check_client_version();
+        void show_pending_changelog();
         void update_volume_keys(float elapsed_time);
         void change_volume(int32_t delta);
         void apply_volumes();

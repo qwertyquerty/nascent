@@ -1,0 +1,56 @@
+{
+    "releases": [
+        {
+            "version": "0.2.0.beta8",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "Link other song folders, like your osu! Songs folder, so you can play those charts without copying them.",
+                        "Skins can now change almost everything about how the game looks.",
+                        "Skins can animate any image and can use different settings and images for each key count.",
+                        "Export, delete and import skins.",
+                        "When a skin has a mistake in it, Nascent tells you what's wrong as soon as you pick it.",
+                        "Note opacity and Receptor opacity settings in Options.",
+                        "Change the volume anywhere with Alt and the mouse wheel, or Alt and Up or Down.",
+                        "Press F7 on the results screen to open your replay on the website.",
+                        "An Instant restart option in Options under Keys, so the restart key restarts straight away instead of needing to be held.",
+                        "Press Shift and F2 to go back to the song you had before shuffling.",
+                        "Sort the song list by key count.",
+                        "Press Ctrl and F5 on the song list to reload every chart and recalculate every difficulty.",
+                        "A Credits screen and changelog, both in Options under About."
+                    ]
+                },
+                {
+                    "title": "Improved",
+                    "notes": [
+                        "Big song folders load much faster. After the first launch the song list opens almost straight away, and new or changed songs are picked up in the background.",
+                        "The loading bar on the title screen now covers every step of loading your songs, so it no longer sits full while the game is still working.",
+                        "Picking a song on a slow drive no longer freezes the game. The song loads in the background and its preview starts as soon as it's ready.",
+                        "Scrollbars on the song list and in Options can be clicked and dragged.",
+                        "The results screen's hit error graph is labelled Early and Late.",
+                        "Clearing a search keeps the song you had selected, even when the search had no results.",
+                        "The account screen opens on Create account the first time, and both forms have a button to submit them.",
+                        "Creating an account asks you to type your password twice.",
+                        "Sign up errors explain exactly what's wrong with the username or password.",
+                        "A newly imported skin shows up in the Options skin list right away."
+                    ]
+                },
+                {
+                    "title": "Fixed",
+                    "notes": [
+                        "Songs you deleted can be downloaded again.",
+                        "Notes and other images drawn small no longer have a sliver of their right or bottom edge cut off."
+                    ]
+                },
+                {
+                    "title": "Online",
+                    "notes": [
+                        "The website's download button has a menu with the downloads for every platform.",
+                        "Very old versions of the game are now told to update before their plays can be submitted."
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -6,6 +6,8 @@ add_library(game
     src/ChartFolders.cpp
     src/ChartLibrary.cpp
     src/ChartMenu.cpp
+    src/Changelog.cpp
+    src/ChangelogOverlay.cpp
     src/EntityFFT.cpp
     src/EntityField.cpp
     src/EtternaSkin.cpp
