@@ -1299,7 +1299,7 @@ namespace nascent {
         olc::vi2d screensize = window->GetScreenSize();
         float margin = Ui::layout_pxf("song_list.scrollbar_margin");
         float track_width = std::max(1.0f, Ui::layout_pxf("song_list.scrollbar_width"));
-        float track_x = (float)side_panel_position(screensize).x - Ui::layout_pxf("song_list.scrollbar_gap") - track_width;
+        float track_x = Ui::layout_pxf("song_list.scrollbar_gap");
         float track_top = (float)StatusBar::height() + margin;
         float track_height = (float)(screensize.y - StatusBar::height() * 2) - margin * 2.0f;
         list_scrollbar.layout({{track_x, track_top}, {track_width, track_height}}, (float)charts_per_screen / (float)visible.size());
