@@ -62,7 +62,10 @@
             "hit_log_top": 160,
             "hit_log_spacing": 26,
             "hit_log_score_x": 20,
-            "hit_log_error_x": 80
+            "hit_log_error_x": 80,
+            "replay_seek_height": 6,
+            "replay_seek_gap": 14,
+            "replay_seek_step_ms": 40
         },
         "pause_menu": {
             "title_top": 0.26,

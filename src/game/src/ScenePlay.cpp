@@ -750,6 +750,10 @@ namespace nascent {
         }
 
         if (replay && !paused) {
+            update_replay_seek(input, now);
+        }
+
+        if (replay && !paused) {
             std::optional<int32_t> spot = replay_spots.take_click(input);
 
             if (spot == REPLAY_MENU) {
@@ -992,11 +996,48 @@ namespace nascent {
         }
 
         if (replay) {
-            draw_replay_bar(window);
+            draw_replay_seek(window, position);
+            draw_replay_bar(window, position);
         }
     };
 
-    void ScenePlay::draw_replay_bar(olc::PixelGameEngine* window) const {
+    void ScenePlay::update_replay_seek(Input& input, double now) {
+        double end = std::max(1, chart->get_chart_end_ms());
+        double position = replay_paused ? paused_position : session->song_position(now);
+        std::optional<float> fraction = replay_seek.update(input, (float)std::clamp(position / end, 0.0, 1.0));
+
+        if (!fraction) {
+            replay_seek_target = -1;
+            return;
+        }
+
+        double target = *fraction * end;
+
+        if (replay_seek_target >= 0 && std::abs(target - replay_seek_target) < Ui::layout("play.replay_seek_step_ms")) {
+            return;
+        }
+
+        replay_seek_target = target;
+        seek_replay(target, now);
+
+        if (replay_paused) {
+            paused_position = session->song_position(now);
+            game->audio().engine().Pause(chart_audio_id);
+        }
+    }
+
+    void ScenePlay::draw_replay_seek(olc::PixelGameEngine* window, double position) const {
+        olc::vi2d screen = window->GetScreenSize();
+        float margin = (float)StatusBar::padding();
+        float height = std::max(1.0f, Ui::layout_pxf("play.replay_seek_height"));
+        float width = std::max(1.0f, (float)screen.x - margin * 2.0f);
+        float top = (float)(screen.y - StatusBar::height()) - Ui::layout_pxf("play.replay_seek_gap") - height;
+        double end = std::max(1, chart->get_chart_end_ms());
+        replay_seek.layout({{margin, top}, {width, height}}, 0.0f, ScrollAxis::HORIZONTAL);
+        replay_seek.draw(window, (float)std::clamp(position / end, 0.0, 1.0), skin->color(SkinColor::SCROLLBAR_TRACK), skin->color(SkinColor::SCROLLBAR_THUMB));
+    }
+
+    void ScenePlay::draw_replay_bar(olc::PixelGameEngine* window, double position) const {
         olc::vi2d screen = window->GetScreenSize();
         int32_t bar_height = StatusBar::height();
         int32_t top = screen.y - bar_height;
@@ -1008,7 +1049,13 @@ namespace nascent {
 
         olc::FontRect metrics = text_bounds(font, "Hgjy");
         int32_t baseline = top + (bar_height - metrics.size.y) / 2 - metrics.offset.y;
-        draw_text(font, replay_paused ? "Paused" : "Playing", {StatusBar::padding(), baseline}, skin->color(SkinColor::TEXT));
+        auto clock = [](double milliseconds) {
+            int64_t seconds = std::max<int64_t>(0, (int64_t)(milliseconds / 1000.0));
+            return std::format("{}:{:02}", seconds / 60, seconds % 60);
+        };
+
+        std::string status = std::format("{}  {} / {}", replay_paused ? "Paused" : "Playing", clock(position), clock(chart->get_chart_end_ms()));
+        draw_text(font, status, {StatusBar::padding(), baseline}, skin->color(SkinColor::TEXT));
 
         std::vector<Hint> hints = {
             {replay_paused ? "Space  play" : "Space  pause", REPLAY_TOGGLE},

@@ -4,6 +4,7 @@
 #include "gse/Scene.h"
 #include "gse/render/MipDecal.h"
 #include "gse/ui/Layout.h"
+#include "gse/ui/ScrollBar.h"
 #include "ServerApi.h"
 #include "olcPixelGameEngine.h"
 
@@ -67,6 +68,8 @@ namespace nascent {
         bool paused = false;
         bool replay_paused = false;
         mutable Hotspots replay_spots;
+        mutable ScrollBar replay_seek;
+        double replay_seek_target = -1;
 
         MipDecal background_image;
         const MipDecal* borrowed_background = nullptr;
@@ -84,6 +87,8 @@ namespace nascent {
         void toggle_replay_pause(double now);
         void feed_replay(double position, bool sounds);
         void seek_replay(double target, double now);
+        void update_replay_seek(Input& input, double now);
+        void draw_replay_seek(olc::PixelGameEngine* window, double position) const;
         void finish();
         double chart_difficulty();
         void start_attempt();
@@ -104,7 +109,7 @@ namespace nascent {
         void copy_diagnostics();
         nlohmann::json timing_diagnostics() const;
         void draw_timing_diagnostics(olc::PixelGameEngine* window) const;
-        void draw_replay_bar(olc::PixelGameEngine* window) const;
+        void draw_replay_bar(olc::PixelGameEngine* window, double position) const;
         void load_background();
         void draw_background(olc::PixelGameEngine* window) const;
         void draw_mascot(olc::PixelGameEngine* window) const;
