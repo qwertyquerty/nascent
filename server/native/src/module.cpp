@@ -2,6 +2,7 @@
 #include "Attempt.h"
 #include "Chart.h"
 #include "Const.h"
+#include "DifficultyCache.h"
 #include "DifficultyCalculator.h"
 #include "OsuFormat.h"
 #include "Replay.h"
@@ -284,7 +285,7 @@ PYBIND11_MODULE(nascent_core, m) {
     m.def("simulate", &simulate, py::arg("chart"), py::arg("replay"));
     m.def("performance", &performance_for, py::arg("difficulty"), py::arg("accuracy"));
     m.def("grade", [](double accuracy) { return std::string(grade_name(grade_for_accuracy(accuracy))); }, py::arg("accuracy"));
-    m.def("difficulty_parameters", []() { return nlohmann::json(DifficultyParameters{}).dump(); });
+    m.def("difficulty_fingerprint", []() { return DifficultyCache::fingerprint(); });
     m.def(
         "convert_osu",
         [](const std::string& text) {

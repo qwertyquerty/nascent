@@ -28,3 +28,7 @@ nascent_cloudflare: false
 nascent_db_admin_email: "{{ nascent_letsencrypt_email }}"
 nascent_db_admin_port: 5050
 nascent_replay_import_dir: /opt/nascent/replay-import
+nascent_difficulty_deploy: true
+nascent_difficulty_force: false
+nascent_difficulty_job_timeout: 21600
+nascent_difficulty_report_dir: /opt/nascent/difficulty-reports

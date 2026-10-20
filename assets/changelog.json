@@ -18,7 +18,8 @@
                         "Press Shift and F2 to go back to the song you had before shuffling.",
                         "Sort the song list by key count.",
                         "Press Ctrl and F5 on the song list to reload every chart and recalculate every difficulty.",
-                        "A Credits screen and changelog, both in Options under About."
+                        "A Credits screen and changelog, both in Options under About.",
+                        "Replays have a seek bar at the bottom."
                     ]
                 },
                 {

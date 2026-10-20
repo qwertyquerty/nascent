@@ -70,6 +70,9 @@ def test_page_shell_meta(api, clock):
     assert "alice · " in play_page
     assert "on Test Artist - Test Song [Hard]" in play_page
 
+    calculator = api.get("/difficulty").get_data(as_text=True)
+    assert "<title>Difficulty calculator · Nascent</title>" in calculator
+
     missing = api.get("/users/nobody")
     assert missing.status_code == 404
     assert "<title>Page not found · Nascent</title>" in missing.get_data(as_text=True)

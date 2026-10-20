@@ -925,3 +925,8 @@ th:has(.reveal-button) {
 .is-selected-mode td {
     background: rgba(0, 177, 225, 0.07);
 }
+
+.plotly-chart {
+    width: 100%;
+}
+

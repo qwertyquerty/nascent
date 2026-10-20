@@ -137,6 +137,12 @@ namespace nascent {
         bool difficulty_busy = false;
         bool difficulty_stopping = false;
         std::thread difficulty_worker;
+        std::vector<const Chart*> rate_charts;
+        std::vector<float> rate_pitches;
+        size_t rate_next = 0;
+        size_t rate_busy = 0;
+        bool rate_paused = false;
+        std::vector<std::thread> rate_workers;
 
         float widest_grade = -1.0f;
 
@@ -168,6 +174,9 @@ namespace nascent {
         void difficulty_loop();
         void request_difficulties();
         void cancel_difficulties(bool wait);
+        void rate_loop();
+        void queue_all_rates();
+        void pause_rates(bool paused);
         void collect_difficulties();
 
         void request_background_load();

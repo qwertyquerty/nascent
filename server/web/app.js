@@ -490,6 +490,20 @@ const loaders = {
         return {title: "Stats", stats, activity, keyPeak, gradeTotal};
     },
 
+    async difficulty() {
+        const [data] = await Promise.all([
+            fetch("/difficulty-data.json").then((response) => {
+                if (!response.ok) {
+                    throw new Error("Couldn't load the difficulty calculator data.");
+                }
+
+                return response.json();
+            }),
+            loadPlotly(),
+        ]);
+        return {title: "Difficulty calculator", data, figures: difficultyFigures(data)};
+    },
+
     async charts({params}) {
         const result = await api("/charts", {
             q: params.q,
@@ -936,6 +950,28 @@ app.component("rel-time", {
 app.component("rank-cell", {
     props: {rank: Number},
     template: `<span :class="rank <= 3 ? 'rank-medal rank-' + rank : null" :title="rank <= 3 ? ['', 'First place', 'Second place', 'Third place'][rank] : null">{{ $f.rank(rank) }}</span>`,
+});
+
+app.component("plotly-chart", {
+    props: {figure: Object, height: {type: Number, default: 420}, label: String},
+    mounted() {
+        window.Plotly.newPlot(this.$el, this.figure.data, {...this.figure.layout, height: this.height}, {responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"]});
+    },
+    beforeUnmount() {
+        window.Plotly.purge(this.$el);
+    },
+    template: `<div class="plotly-chart" role="img" :aria-label="label" :style="{minHeight: height + 'px'}"></div>`,
+});
+
+app.component("chart-tabs", {
+    props: {charts: Array, label: String},
+    data: () => ({selected: 0}),
+    template: `<div>
+        <div class="tabs is-small is-toggle mb-3" role="tablist" :aria-label="label"><ul>
+            <li v-for="(chart, index) in charts" :key="chart.label" :class="{'is-active': index === selected}"><a role="tab" :aria-selected="index === selected" href="#" @click.prevent="selected = index">{{ chart.label }}</a></li>
+        </ul></div>
+        <plotly-chart :key="selected" :figure="charts[selected].figure" :height="charts[selected].height" :label="label + ': ' + charts[selected].label"></plotly-chart>
+    </div>`,
 });
 
 app.component("difficulty-value", {

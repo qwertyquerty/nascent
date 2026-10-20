@@ -1,435 +1,272 @@
 #include "DifficultyCalculator.h"
 #include "Accuracy.h"
+#include "DifficultyBasis.h"
+#include "DifficultyEvents.h"
+#include "DifficultyModel.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <optional>
-#include <utility>
+#include <span>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 namespace nascent {
     namespace {
-        constexpr double WINDOW = 1000.0;
-        constexpr double STEP = 250.0;
-        constexpr double MIN_RATE_INTERVAL = 30.0;
-        constexpr double MIN_BURST_GAP = 25.0;
-        constexpr std::array<int, 10> SNAP_DIVISORS = {1, 2, 4, 3, 8, 6, 12, 16, 24, 32};
+        constexpr size_t GRID_SIZE = 73;
+        constexpr double GRID_LOW = -8.0;
+        constexpr double GRID_HIGH = 10.0;
+        constexpr double STRAIN_EPSILON = 1e-3;
+        constexpr double MIN_COVARIATE_NOTES = 200.0;
+        constexpr double MAX_COVARIATE_NOTES = 30000.0;
+        constexpr double MIN_COVARIATE_LENGTH_MS = 1000.0;
+        constexpr double MAX_COVARIATE_LENGTH_MS = 1800000.0;
+        constexpr double STRICTNESS_REFERENCE = 5.0;
+        constexpr size_t START_POINT = 32;
+        constexpr size_t MAX_WALK_STEPS = 6;
+        constexpr double WALK_FALLBACK = 4.0;
 
-        struct Note {
-            double time;
-            uint8_t column;
-            std::optional<double> end;
+        struct Model {
+            std::vector<size_t> features;
+            std::array<std::vector<double>, 4> weights;
+            BasisMask mask;
         };
 
-        struct Window {
-            std::vector<double> columns;
-            std::vector<double> busy_columns;
-            std::vector<double> release_columns;
-            std::vector<double> hand_actions;
-            std::vector<double> hand_chord_extra;
-            double onsets = 0;
-            double irregularity = 0;
-            double hand_speed = 0;
-            double hand_burst = 0;
-            double finger_speed = 0;
-            double snap = 0;
-            double burst = 0;
-            double variety = 0;
-            double tempo = 0;
-            double coverage = 0;
+        struct Group {
+            double weak;
+            double strong;
+            uint8_t kind;
+            double notes;
         };
 
-        uint8_t hand_of(uint8_t column, uint8_t keys) {
-            uint8_t half = keys / 2;
-
-            if (keys % 2 == 1 && column == half) {
-                return 2;
-            }
-
-            return column < half ? 0 : 1;
-        }
-
-        double snap_value(int divisor) {
-            switch (divisor) {
-                case 1:
-                case 2:
-                    return 0.0;
-                case 4:
-                    return 0.1;
-                case 8:
-                    return 0.3;
-                case 3:
-                    return 0.5;
-                case 6:
-                    return 0.6;
-                case 12:
-                    return 0.8;
-                case 16:
-                    return 0.7;
-                default:
-                    return 0.9;
-            }
-        }
-
-        double snap_complexity(double time, const std::vector<ChartTimingPoint>& timing_points) {
-            if (timing_points.empty()) {
-                return 0.0;
-            }
-
-            auto after = std::partition_point(timing_points.begin(), timing_points.end(), [time](const ChartTimingPoint& tp) {
-                return tp.time <= time + 1;
-            });
-            const ChartTimingPoint* point = after == timing_points.begin() ? &timing_points.front() : &*std::prev(after);
-
-            double beats = (time - point->time) / point->beat_length;
-            double fraction = beats - std::floor(beats);
-            double tolerance = 3.0 / point->beat_length;
-
-            for (int divisor : SNAP_DIVISORS) {
-                double position = fraction * divisor;
-
-                if (std::abs(position - std::round(position)) * (1.0 / divisor) < tolerance) {
-                    return snap_value(divisor);
+        double lookup(std::span<const difficulty_model::NamedWeight> table, std::string_view name, double fallback) {
+            for (const difficulty_model::NamedWeight& entry : table) {
+                if (entry.name == name) {
+                    return entry.value;
                 }
             }
 
-            return 1.0;
+            return fallback;
         }
 
-        double power_mean(const std::vector<double>& values, double power) {
-            if (values.empty()) {
-                return 0.0;
+        Model build_model(uint8_t key_count) {
+            std::unordered_map<std::string, size_t> positions;
+
+            for (size_t index = 0; index < BASIS_SIZE; index++) {
+                positions.emplace(basis_name(index), index);
             }
 
-            double total = 0.0;
+            std::span<const difficulty_model::NamedWeight> mode;
 
-            for (double value : values) {
-                total += std::pow(value, power);
+            if (key_count == 4) {
+                mode = difficulty_model::MODE_4_FACTORS;
+            } else if (key_count == 7) {
+                mode = difficulty_model::MODE_7_FACTORS;
             }
 
-            return std::pow(total / values.size(), 1.0 / power);
-        }
+            Model model;
 
-        double median_of_smallest(std::vector<double> values, size_t count) {
-            size_t kept = std::min(count, values.size());
-            std::partial_sort(values.begin(), values.begin() + (std::ptrdiff_t)kept, values.end());
-            values.resize(kept);
+            for (const difficulty_model::NamedWeight& entry : difficulty_model::WEIGHTS) {
+                auto found = positions.find(std::string(entry.name));
 
-            size_t middle = values.size() / 2;
-            return values.size() % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2.0;
-        }
-    }
-
-    double DifficultyCalculator::calculate(const Chart& chart, const DifficultyParameters& parameters) {
-        return calculate(chart.hits, chart.info.key_count, chart.timing_points, RANKED_HIT_ACC_DIFFICULTY, parameters);
-    }
-
-    double DifficultyCalculator::calculate_at_pitch(const Chart& chart, float pitch, const DifficultyParameters& parameters) {
-        std::vector<Hit> hits;
-        std::vector<ChartTimingPoint> timing_points;
-        chart.pitched_timing(pitch, hits, timing_points);
-        return calculate(hits, chart.unpitched_key_count(), timing_points, RANKED_HIT_ACC_DIFFICULTY, parameters);
-    }
-
-    double DifficultyCalculator::strictness_factor(uint8_t hit_accuracy, const DifficultyParameters& p) {
-        double accuracy = std::clamp<double>(hit_accuracy, MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY);
-        double reference = std::clamp<double>(p.strictness_reference, MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY);
-        double widest = 2.0 * MAX_HIT_ACC_DIFFICULTY;
-        return std::pow((widest - reference) / (widest - accuracy), p.strictness_exponent);
-    }
-
-    double DifficultyCalculator::calculate(const std::vector<Hit>& hits, uint8_t keys, const std::vector<ChartTimingPoint>& timing_points, uint8_t hit_accuracy, const DifficultyParameters& p) {
-        if (hits.empty() || keys == 0) {
-            return 0.0;
-        }
-
-        const uint8_t hand_count = keys % 2 == 1 ? 3 : 2;
-
-        std::vector<Note> notes;
-        notes.reserve(hits.size());
-
-        for (const Hit& hit : hits) {
-            bool is_hold = hit.hit_type == HitType::HOLD && hit.end_time > hit.time;
-            notes.push_back({(double)hit.time, hit.key, is_hold ? std::optional<double>(hit.end_time) : std::nullopt});
-        }
-
-        std::stable_sort(notes.begin(), notes.end(), [](const Note& a, const Note& b) {
-            return a.time < b.time || (a.time == b.time && a.column < b.column);
-        });
-
-        std::vector<std::pair<double, double>> holds;
-        std::vector<std::pair<double, uint8_t>> releases;
-        std::vector<std::pair<std::pair<double, double>, uint8_t>> holds_by_start;
-
-        for (const Note& note : notes) {
-            if (note.end) {
-                holds.push_back({note.time, *note.end});
-                releases.push_back({*note.end, note.column});
-                holds_by_start.push_back({{note.time, *note.end}, note.column});
-            }
-        }
-
-        std::stable_sort(releases.begin(), releases.end(), [](const auto& a, const auto& b) {
-            return a.first < b.first || (a.first == b.first && a.second < b.second);
-        });
-
-        std::vector<bool> busy(notes.size(), false);
-        std::vector<std::optional<std::pair<double, double>>> active_hold(keys);
-        size_t next_hold = 0;
-
-        for (size_t i = 0; i < notes.size(); i++) {
-            const Note& note = notes[i];
-
-            while (next_hold < holds_by_start.size() && holds_by_start[next_hold].first.first < note.time) {
-                active_hold[holds_by_start[next_hold].second] = holds_by_start[next_hold].first;
-                next_hold++;
-            }
-
-            uint8_t hand = hand_of(note.column, keys);
-
-            for (uint8_t column = 0; column < keys; column++) {
-                if (column == note.column || hand_of(column, keys) != hand || !active_hold[column]) {
+                if (found == positions.end()) {
                     continue;
                 }
 
-                if (active_hold[column]->first < note.time && note.time < active_hold[column]->second) {
-                    busy[i] = true;
+                double weight = entry.value * lookup(mode, entry.name, 1.0);
+                double strong = lookup(difficulty_model::STRONG_FACTORS, entry.name, 1.0);
+                double release = lookup(difficulty_model::RELEASE_FACTORS, entry.name, 1.0);
+                model.features.push_back(found->second);
+                model.mask.set(found->second);
+                model.weights[0].push_back(weight);
+                model.weights[1].push_back(weight * strong);
+                model.weights[2].push_back(weight * release);
+                model.weights[3].push_back(weight * strong * release);
+            }
+
+            return model;
+        }
+
+        const Model& model_for(uint8_t key_count) {
+            static const Model four = build_model(4);
+            static const Model seven = build_model(7);
+            static const Model other = build_model(0);
+            return key_count == 4 ? four : key_count == 7 ? seven : other;
+        }
+
+        double log_sigmoid(double x) {
+            return x >= 0 ? -std::log1p(std::exp(-x)) : x - std::log1p(std::exp(x));
+        }
+
+        double skill_rating(const std::vector<Hit>& sorted_hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points) {
+            std::vector<DifficultyEvent> events = extract_difficulty_events(sorted_hits, key_count, timing_points);
+
+            if (events.empty()) {
+                return GRID_LOW;
+            }
+
+            const Model& model = model_for(key_count);
+            std::vector<Group> groups;
+            BasisAccumulator accumulator(model.mask);
+
+            for (size_t first = 0; first < events.size();) {
+                size_t last = first;
+                const BasisVector* features = nullptr;
+
+                while (last < events.size() && basis_same_group(events[first], events[last])) {
+                    features = &accumulator.push(events[last]);
+                    last++;
+                }
+
+                uint8_t kind = events[first][(size_t)EventChannel::RELEASE] > 0.5 ? 1 : 0;
+                const std::vector<double>& weak_weights = model.weights[kind * 2];
+                const std::vector<double>& strong_weights = model.weights[kind * 2 + 1];
+                double a = 0, b = 0;
+
+                for (size_t index = 0; index < model.features.size(); index++) {
+                    double value = (*features)[model.features[index]];
+                    a += weak_weights[index] * value;
+                    b += strong_weights[index] * value;
+                }
+
+                groups.push_back({a, b, kind, (double)(last - first)});
+                first = last;
+            }
+
+            double presses = (double)sorted_hits.size();
+            double holds = (double)std::count_if(sorted_hits.begin(), sorted_hits.end(), [](const Hit& hit) {
+                return hit.hit_type == HitType::HOLD && hit.end_time > hit.time;
+            });
+            double length = active_time_ms(sorted_hits);
+            double shift = difficulty_model::SLOPE_NOTES * std::log(std::clamp(presses, MIN_COVARIATE_NOTES, MAX_COVARIATE_NOTES) / 1000.0) +
+                           difficulty_model::SLOPE_LENGTH * std::log(std::clamp(length, MIN_COVARIATE_LENGTH_MS, MAX_COVARIATE_LENGTH_MS) / 120000.0) +
+                           difficulty_model::SLOPE_HOLDS * holds / std::max(presses, 1.0);
+            double target = std::log(1.0 - difficulty_model::TARGET_ACCURACY);
+
+            auto grid = [](size_t point) {
+                return GRID_LOW + (GRID_HIGH - GRID_LOW) * (double)point / (double)(GRID_SIZE - 1);
+            };
+
+            auto curve = [&](size_t point) {
+                double skill = grid(point);
+                double mix = 0.5 * (1.0 + std::tanh(0.5 * (skill - difficulty_model::SKILL_CENTER) / difficulty_model::SKILL_WIDTH));
+                double total = 0;
+
+                for (const Group& group : groups) {
+                    const difficulty_model::NoteCurve& c = difficulty_model::CURVES[group.kind];
+                    double strain = std::log((1 - mix) * group.weak + mix * group.strong + STRAIN_EPSILON) + shift + (group.kind ? difficulty_model::RELEASE_OFFSET : 0.0);
+                    double loss = c.floor + c.span * std::exp(c.shape * log_sigmoid(c.steepness * (strain - skill)));
+                    total += group.notes * std::pow(loss, difficulty_model::POWER);
+                }
+
+                return std::log(total / (double)events.size()) / difficulty_model::POWER;
+            };
+
+            std::array<double, GRID_SIZE> values;
+            std::array<bool, GRID_SIZE> known = {};
+
+            auto value = [&](size_t point) {
+                if (!known[point]) {
+                    values[point] = curve(point);
+                    known[point] = true;
+                }
+
+                return values[point];
+            };
+
+            size_t below = START_POINT;
+
+            for (size_t step = 0; step < MAX_WALK_STEPS; step++) {
+                double low = value(below), high = value(below + 1);
+
+                if (low > target && high <= target) {
                     break;
                 }
+
+                if (low <= target && below == 0) {
+                    return grid(0);
+                }
+
+                if (high > target && below + 2 == GRID_SIZE) {
+                    return grid(GRID_SIZE - 1);
+                }
+
+                double slope = high - low;
+                double estimate = slope < -1e-12 ? (double)below + (target - low) / slope : (low <= target ? (double)below - WALK_FALLBACK : (double)below + WALK_FALLBACK);
+
+                if (low <= target) {
+                    below = (size_t)std::clamp(std::floor(estimate), 0.0, (double)below - 1.0);
+                } else {
+                    below = (size_t)std::clamp(std::floor(estimate), (double)below + 1.0, (double)(GRID_SIZE - 2));
+                }
             }
+
+            if (!(value(below) > target && value(below + 1) <= target)) {
+                if (value(0) <= target) {
+                    return grid(0);
+                }
+
+                if (value(GRID_SIZE - 1) > target) {
+                    return grid(GRID_SIZE - 1);
+                }
+
+                size_t low = 0, high = GRID_SIZE - 1;
+
+                while (high - low > 1) {
+                    size_t middle = (low + high) / 2;
+                    (value(middle) <= target ? high : low) = middle;
+                }
+
+                below = low;
+            }
+
+            double below_value = value(below), above_value = value(below + 1);
+            double fraction = std::clamp((below_value - target) / std::max(below_value - above_value, 1e-9), 0.0, 1.0);
+            return grid(below) + fraction * (grid(below + 1) - grid(below));
         }
 
-        std::vector<std::optional<double>> hand_rate(notes.size());
-        std::vector<double> finger_rate(notes.size());
-        std::vector<double> note_snap(notes.size());
-        std::vector<std::optional<double>> hand_last(hand_count);
-        std::vector<std::optional<double>> finger_last(keys);
-
-        for (size_t i = 0; i < notes.size(); i++) {
-            const Note& note = notes[i];
-            uint8_t hand = hand_of(note.column, keys);
-
-            if (hand_last[hand] && note.time > *hand_last[hand]) {
-                hand_rate[i] = 1000.0 / std::max(note.time - *hand_last[hand], MIN_RATE_INTERVAL);
-            }
-            else if (hand_last[hand] && note.time == *hand_last[hand]) {
-                hand_rate[i] = std::nullopt;
-            }
-            else {
-                hand_rate[i] = 1.0;
-            }
-
-            hand_last[hand] = note.time;
-
-            finger_rate[i] = finger_last[note.column] ? 1000.0 / std::max(note.time - *finger_last[note.column], MIN_RATE_INTERVAL) : 1.0;
-            finger_last[note.column] = note.time;
-
-            note_snap[i] = snap_complexity(note.time, timing_points);
+        double displayed(double rating) {
+            double position = std::max(0.0, (rating - difficulty_model::DISPLAY_FLOOR) / (difficulty_model::DISPLAY_ANCHOR - difficulty_model::DISPLAY_FLOOR));
+            double below = 1.0 - std::min(position, 1.0);
+            double power = difficulty_model::DISPLAY_HIGH_POWER + (difficulty_model::DISPLAY_LOW_POWER - difficulty_model::DISPLAY_HIGH_POWER) * below * below;
+            return 1.0 + 99.0 * std::pow(position, power);
         }
+    }
 
-        double start = notes.front().time;
-        double end = start;
+    double DifficultyCalculator::calculate(const Chart& chart) {
+        return calculate(chart.hits, chart.info.key_count, chart.timing_points, RANKED_HIT_ACC_DIFFICULTY);
+    }
 
-        for (const Note& note : notes) {
-            end = std::max(end, note.time);
-        }
+    double DifficultyCalculator::calculate_at_pitch(const Chart& chart, float pitch) {
+        std::vector<Hit> hits;
+        std::vector<ChartTimingPoint> timing_points;
+        chart.pitched_timing(pitch, hits, timing_points);
+        return calculate(hits, chart.unpitched_key_count(), timing_points, RANKED_HIT_ACC_DIFFICULTY);
+    }
 
-        std::vector<double> note_times(notes.size());
-        std::transform(notes.begin(), notes.end(), note_times.begin(), [](const Note& n) { return n.time; });
+    double DifficultyCalculator::strictness_factor(uint8_t hit_accuracy) {
+        double accuracy = std::clamp<double>(hit_accuracy, MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY);
+        double widest = 2.0 * MAX_HIT_ACC_DIFFICULTY;
+        return (widest - STRICTNESS_REFERENCE) / (widest - accuracy);
+    }
 
-        std::vector<double> release_times(releases.size());
-        std::transform(releases.begin(), releases.end(), release_times.begin(), [](const auto& r) { return r.first; });
-
-        std::vector<double> timing_point_times(timing_points.size());
-        std::transform(timing_points.begin(), timing_points.end(), timing_point_times.begin(), [](const ChartTimingPoint& tp) { return (double)tp.time; });
-
-        const double fatigue_alpha = 1.0 - std::exp(-(STEP / 1000.0) / p.fatigue_time);
-        const double scale = 1000.0 / WINDOW;
-
-        double fatigue = 0.0;
-        double aggregate = 0.0;
-        size_t window_count = 0;
-
-        std::vector<double> onset_times;
-        std::vector<double> gaps;
-        std::vector<double> buckets;
-        std::vector<double> columns(keys);
-        std::vector<double> actions(hand_count);
-        std::vector<size_t> active_holds;
-        size_t next_coverage_hold = 0;
-
-        Window window;
-        window.columns.resize(keys);
-        window.busy_columns.resize(keys);
-        window.release_columns.resize(keys);
-        window.hand_actions.resize(hand_count);
-        window.hand_chord_extra.resize(hand_count);
-
-        for (size_t step = 0;; step++) {
-            double window_start = start + step * STEP;
-
-            if (window_start > end + 1e-9) {
-                break;
-            }
-
-            double window_end = window_start + WINDOW;
-
-            std::fill(window.columns.begin(), window.columns.end(), 0.0);
-            std::fill(window.busy_columns.begin(), window.busy_columns.end(), 0.0);
-            std::fill(window.release_columns.begin(), window.release_columns.end(), 0.0);
-            std::fill(window.hand_actions.begin(), window.hand_actions.end(), 0.0);
-            std::fill(window.hand_chord_extra.begin(), window.hand_chord_extra.end(), 0.0);
-            window.onsets = window.irregularity = window.hand_speed = window.hand_burst = 0.0;
-            window.finger_speed = window.snap = window.burst = window.variety = window.tempo = window.coverage = 0.0;
-
-            size_t first = std::lower_bound(note_times.begin(), note_times.end(), window_start) - note_times.begin();
-            size_t last = std::lower_bound(note_times.begin(), note_times.end(), window_end) - note_times.begin();
-
-            onset_times.clear();
-            double hand_rate_total = 0.0;
-            size_t hand_rate_count = 0;
-            double snap_total = 0.0;
-
-            for (size_t i = first; i < last; i++) {
-                const Note& note = notes[i];
-                window.columns[note.column] += 1;
-
-                if (busy[i]) {
-                    window.busy_columns[note.column] += 1;
-                }
-
-                uint8_t hand = hand_of(note.column, keys);
-
-                if (i > first && notes[i - 1].time == note.time && hand_of(notes[i - 1].column, keys) == hand) {
-                    window.hand_chord_extra[hand] += 1;
-                }
-                else {
-                    window.hand_actions[hand] += 1;
-                }
-
-                if (onset_times.empty() || onset_times.back() != note.time) {
-                    onset_times.push_back(note.time);
-                }
-
-                if (hand_rate[i]) {
-                    hand_rate_total += *hand_rate[i];
-                    hand_rate_count++;
-                    window.hand_burst = std::max(window.hand_burst, *hand_rate[i]);
-                }
-
-                window.finger_speed = std::max(window.finger_speed, finger_rate[i]);
-                snap_total += note_snap[i];
-            }
-
-            window.onsets = (double)onset_times.size();
-
-            if (onset_times.size() >= 2) {
-                gaps.clear();
-
-                for (size_t i = 1; i < onset_times.size(); i++) {
-                    gaps.push_back(std::max(onset_times[i] - onset_times[i - 1], MIN_BURST_GAP));
-                }
-
-                window.burst = 1000.0 / median_of_smallest(gaps, 3);
-
-                buckets.clear();
-
-                for (double gap : gaps) {
-                    buckets.push_back(std::nearbyint(gap / 10.0));
-                }
-
-                std::sort(buckets.begin(), buckets.end());
-                window.variety = (double)(std::unique(buckets.begin(), buckets.end()) - buckets.begin());
-            }
-
-            window.tempo = (double)(std::lower_bound(timing_point_times.begin(), timing_point_times.end(), window_end) - std::lower_bound(timing_point_times.begin(), timing_point_times.end(), window_start));
-
-            if (onset_times.size() >= 3) {
-                gaps.clear();
-
-                for (size_t i = 1; i < onset_times.size(); i++) {
-                    double gap = onset_times[i] - onset_times[i - 1];
-
-                    if (gap > 0) {
-                        gaps.push_back(gap);
-                    }
-                }
-
-                if (gaps.size() >= 2) {
-                    double total = 0.0;
-
-                    for (size_t i = 1; i < gaps.size(); i++) {
-                        total += std::abs(std::log2(gaps[i] / gaps[i - 1]));
-                    }
-
-                    window.irregularity = std::min(total / (gaps.size() - 1), 2.0);
-                }
-            }
-
-            if (hand_rate_count > 0) {
-                window.hand_speed = hand_rate_total / hand_rate_count;
-            }
-
-            if (last > first) {
-                window.snap = snap_total / (last - first);
-            }
-            else {
-                window.finger_speed = 0.0;
-            }
-
-            size_t release_first = std::lower_bound(release_times.begin(), release_times.end(), window_start) - release_times.begin();
-            size_t release_last = std::lower_bound(release_times.begin(), release_times.end(), window_end) - release_times.begin();
-
-            for (size_t i = release_first; i < release_last; i++) {
-                window.release_columns[releases[i].second] += 1;
-            }
-
-            if (p.hold_coverage_weight != 0.0) {
-                double covered = 0.0;
-
-                while (next_coverage_hold < holds.size() && holds[next_coverage_hold].first < window_end) {
-                    active_holds.push_back(next_coverage_hold++);
-                }
-
-                std::erase_if(active_holds, [&](size_t index) {
-                    return holds[index].second <= window_start;
-                });
-
-                for (size_t index : active_holds) {
-                    const auto& [hold_start, hold_end] = holds[index];
-                    covered += std::max(std::min(hold_end, window_end) - std::max(hold_start, window_start), 0.0);
-                }
-
-                window.coverage = covered / WINDOW;
-            }
-
-            for (uint8_t column = 0; column < keys; column++) {
-                columns[column] = window.columns[column] + p.hold_busy_weight * window.busy_columns[column] + p.release_weight * window.release_columns[column];
-            }
-
-            for (uint8_t hand = 0; hand < hand_count; hand++) {
-                actions[hand] = window.hand_actions[hand] + p.chord_bonus * window.hand_chord_extra[hand];
-            }
-
-            double finger = power_mean(columns, p.finger_power) * keys;
-            double hand = power_mean(actions, p.hand_power) * hand_count;
-
-            double load = (p.finger_weight * finger + p.hand_weight * hand + p.onset_weight * window.onsets) * scale;
-            load += p.hand_speed_weight * window.hand_speed + p.hand_burst_weight * window.hand_burst + p.finger_speed_weight * window.finger_speed;
-            load += p.burst_weight * window.burst + p.hold_coverage_weight * window.coverage;
-            load *= 1.0 + p.rhythm_weight * window.irregularity + p.snap_weight * window.snap + p.variety_weight * window.variety / 10.0 + p.tempo_weight * std::min(window.tempo, 4.0);
-
-            fatigue = fatigue_alpha * load + (1.0 - fatigue_alpha) * fatigue;
-            double effective = (1.0 - p.fatigue_blend) * load + p.fatigue_blend * fatigue;
-
-            aggregate += std::pow(effective, p.aggregate_power);
-            window_count++;
-        }
-
-        if (window_count == 0) {
+    double DifficultyCalculator::calculate(const std::vector<Hit>& hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points, uint8_t hit_accuracy) {
+        if (hits.empty() || key_count == 0) {
             return 0.0;
         }
 
-        return std::pow(aggregate / window_count, 1.0 / p.aggregate_power) * p.rating_scale * strictness_factor(hit_accuracy, p);
+        std::vector<Hit> sorted_hits = hits;
+        std::vector<ChartTimingPoint> sorted_points = timing_points;
+
+        std::stable_sort(sorted_hits.begin(), sorted_hits.end(), [](const Hit& a, const Hit& b) {
+            return a.time < b.time;
+        });
+
+        std::stable_sort(sorted_points.begin(), sorted_points.end(), [](const ChartTimingPoint& a, const ChartTimingPoint& b) {
+            return a.time < b.time;
+        });
+
+        return displayed(skill_rating(sorted_hits, key_count, sorted_points)) * strictness_factor(hit_accuracy);
     }
 }

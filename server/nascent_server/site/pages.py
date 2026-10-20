@@ -239,6 +239,11 @@ def stats() -> Page:
     return Page(f"Stats · {SITE_NAME}", "Nascent stats", description, "/stats")
 
 
+def difficulty() -> Page:
+    description = "How Nascent's difficulty calculator works and how it compares with Etterna MSD and osu! star ratings."
+    return Page(f"Difficulty calculator · {SITE_NAME}", "Difficulty calculator", description, "/difficulty")
+
+
 def plays() -> Page:
     description = "Recent and top plays on Nascent, a vertical scrolling rhythm game passion project, with accuracy, performance and replays."
     return Page(f"Plays · {SITE_NAME}", "Plays", description, "/plays", NOINDEX)
@@ -254,7 +259,7 @@ def not_found() -> Page:
 
 def build_page(path: str) -> Page:
     parts = [part for part in path.split("/") if part]
-    sections = {"leaderboard": leaderboard, "charts": charts, "plays": plays, "stats": stats}
+    sections = {"leaderboard": leaderboard, "charts": charts, "plays": plays, "stats": stats, "difficulty": difficulty}
     details = {"users": user, "charts": chart, "plays": play}
 
     if not parts:

@@ -42,7 +42,7 @@ def rate_for_key(rate_key: int) -> float:
 def _calculator_version(judge_revision: int) -> str:
     payload = json.dumps(
         {
-            "difficulty": json.loads(nc.difficulty_parameters()),
+            "difficulty": nc.difficulty_fingerprint(),
             "chart_hash": nc.CHART_HASH_FORMAT,
             "performance_floor": nc.PERFORMANCE_ACCURACY_FLOOR,
             "judge": judge_revision,

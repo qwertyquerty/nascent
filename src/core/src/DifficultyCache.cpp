@@ -14,7 +14,7 @@ namespace nascent {
     }
 
     std::string DifficultyCache::fingerprint() {
-        return sha256_hex(std::format("{}\n{}\n{}", NASCENT_DIFFICULTY_SOURCE_HASH, nlohmann::json(DifficultyParameters{}).dump(), Chart::CHART_HASH_FORMAT));
+        return sha256_hex(std::format("{}\n{}", NASCENT_DIFFICULTY_SOURCE_HASH, Chart::CHART_HASH_FORMAT));
     }
 
     int32_t DifficultyCache::rate_key(float pitch) {

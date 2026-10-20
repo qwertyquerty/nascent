@@ -70,6 +70,23 @@ def enqueue(func: Callable, *args, depends_on: list[str] | None = None, job_time
     return job.id
 
 
+def pending_jobs() -> dict[str, int] | None:
+    target = queue()
+
+    if target is None:
+        return None
+
+    from rq.registry import DeferredJobRegistry, FailedJobRegistry, ScheduledJobRegistry, StartedJobRegistry
+
+    return {
+        "queued": target.count,
+        "running": StartedJobRegistry(queue=target).count,
+        "waiting": DeferredJobRegistry(queue=target).count,
+        "retrying": ScheduledJobRegistry(queue=target).count,
+        "failed": FailedJobRegistry(queue=target).count,
+    }
+
+
 def _batches(values: list[int], size: int) -> Iterable[list[int]]:
     for start in range(0, len(values), size):
         yield values[start : start + size]

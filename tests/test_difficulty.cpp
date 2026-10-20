@@ -1,6 +1,8 @@
 #include "Chart.h"
 #include "DifficultyCache.h"
+#include "DifficultyBasis.h"
 #include "DifficultyCalculator.h"
+#include "DifficultyModel.h"
 #include "TestSupport.h"
 
 #include <algorithm>
@@ -10,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -37,6 +40,26 @@ NASCENT_TEST(difficulty) {
     double normal = DifficultyCalculator::calculate(*chart);
     chart->set_pitch(1.2f);
     CHECK(DifficultyCalculator::calculate(*chart) > normal);
+}
+
+NASCENT_TEST(difficulty_model_matches_features) {
+    std::set<std::string> names;
+
+    for (size_t index = 0; index < BASIS_SIZE; index++) {
+        names.insert(basis_name(index));
+    }
+
+    for (const difficulty_model::NamedWeight& weight : difficulty_model::WEIGHTS) {
+        CHECK(names.contains(std::string(weight.name)));
+    }
+}
+
+NASCENT_TEST(difficulty_scale) {
+    CHECK(DifficultyCalculator::calculate({}, 4, {}, 5) == 0.0);
+    double single = DifficultyCalculator::calculate({tap(0, 1000)}, 4, {}, 5);
+    CHECK(single > 0.5 && single < 1.5);
+    CHECK(DifficultyCalculator::calculate(stream(63, false), 7, {}, 5) > 0.0);
+    CHECK(DifficultyCalculator::calculate(stream(63, false), 5, {}, 5) > 0.0);
 }
 
 static std::filesystem::path cache_path(const std::string& name) {

@@ -1,0 +1,130 @@
+- name: Read the time for this update's file names
+  ansible.builtin.command: date -u +%Y%m%dT%H%M%SZ
+  register: difficulty_stamp
+  changed_when: false
+
+- name: Make a folder for the before and after reports
+  ansible.builtin.file:
+    path: "{{ nascent_difficulty_report_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Wait for anything already queued to finish
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, wait-for-jobs, --timeout, "900"]
+    chdir: "{{ nascent_compose_dir }}"
+  changed_when: false
+
+- name: Read which calculator the database uses now
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, calculator-status]
+    chdir: "{{ nascent_compose_dir }}"
+  register: difficulty_status_before
+  changed_when: false
+
+- name: Record the leaderboards and chart difficulties before the change
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, difficulty-report]
+    chdir: "{{ nascent_compose_dir }}"
+  register: difficulty_report_before
+  changed_when: false
+
+- name: Save the report from before the change
+  ansible.builtin.copy:
+    content: "{{ difficulty_report_before.stdout }}"
+    dest: "{{ nascent_difficulty_report_dir }}/{{ difficulty_stamp.stdout }}-before.json"
+    mode: "0600"
+
+- name: Back up the database before changing anything
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - backup
+      - sh
+      - -c
+      - pg_dump --format=custom --file=/backups/pre-difficulty-{{ difficulty_stamp.stdout }}.dump.partial && mv /backups/pre-difficulty-{{ difficulty_stamp.stdout }}.dump.partial /backups/pre-difficulty-{{ difficulty_stamp.stdout }}.dump
+    chdir: "{{ nascent_compose_dir }}"
+  changed_when: true
+
+- name: Deploy {{ nascent_ref }} with the new calculator
+  when: nascent_difficulty_deploy | bool
+  ansible.builtin.include_tasks: release.yml
+
+- name: Read which calculator the deployed release uses
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, calculator-status]
+    chdir: "{{ nascent_compose_dir }}"
+  register: difficulty_status_deployed
+  changed_when: false
+
+- name: Stop if the calculator did not change
+  ansible.builtin.assert:
+    that: nascent_difficulty_force | bool or difficulty_status_deployed.stdout_lines[-1] != difficulty_status_before.stdout_lines[-1]
+    fail_msg: >-
+      the deployed release still uses {{ difficulty_status_deployed.stdout_lines[-1] }}, so there is nothing to recalculate.
+      Set nascent_difficulty_force=true to recalculate anyway.
+
+- name: Recalculate every chart, play and profile
+  ansible.builtin.include_tasks: recalculate.yml
+
+- name: Wait for the recalculation to finish
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, wait-for-jobs, --timeout, "{{ nascent_difficulty_job_timeout }}", --interval, "60"]
+    chdir: "{{ nascent_compose_dir }}"
+  async: "{{ nascent_difficulty_job_timeout | int + 600 }}"
+  poll: 30
+  changed_when: false
+
+- name: Rebuild the leaderboards from the database
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, rebuild-leaderboard]
+    chdir: "{{ nascent_compose_dir }}"
+  changed_when: true
+
+- name: Record today's ranks under the new calculator
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, snapshot-ranks]
+    chdir: "{{ nascent_compose_dir }}"
+  changed_when: true
+
+- name: Check that nothing is left on the old calculator
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, calculator-status, --require-current]
+    chdir: "{{ nascent_compose_dir }}"
+  register: difficulty_status_after
+  changed_when: false
+
+- name: Record the leaderboards and chart difficulties after the change
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, difficulty-report]
+    chdir: "{{ nascent_compose_dir }}"
+  register: difficulty_report_after
+  changed_when: false
+
+- name: Compare before and after
+  ansible.builtin.command:
+    argv: [docker, compose, exec, -T, api, flask, --app, wsgi, nascent, difficulty-report, --compare-to, "-"]
+    chdir: "{{ nascent_compose_dir }}"
+    stdin: "{{ difficulty_report_before.stdout }}"
+  register: difficulty_comparison
+  changed_when: false
+
+- name: Save the report and comparison from after the change
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ nascent_difficulty_report_dir }}/{{ difficulty_stamp.stdout }}-{{ item.name }}"
+    mode: "0600"
+  loop:
+    - name: after.json
+      content: "{{ difficulty_report_after.stdout }}"
+    - name: comparison.txt
+      content: "{{ difficulty_comparison.stdout }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ difficulty_status_after.stdout_lines + [''] + difficulty_comparison.stdout_lines + ['', 'database backup: /opt/nascent/data/backups/pre-difficulty-' + difficulty_stamp.stdout + '.dump', 'reports: ' + nascent_difficulty_report_dir] }}"

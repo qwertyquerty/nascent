@@ -112,6 +112,12 @@ namespace nascent {
             difficulty_loop();
         });
 
+        for (unsigned worker = 0; worker < std::max(1u, std::thread::hardware_concurrency() / 2); worker++) {
+            rate_workers.emplace_back([this] {
+                rate_loop();
+            });
+        }
+
         start_library_load();
     };
 
@@ -142,6 +148,10 @@ namespace nascent {
             difficulty_worker.join();
         }
 
+        for (std::thread& worker : rate_workers) {
+            worker.join();
+        }
+
         std::string error;
 
         if (!difficulty_cache->save(error)) {
@@ -166,6 +176,7 @@ namespace nascent {
 
     void SceneList::on_enter() {
         active = true;
+        pause_rates(false);
         RichPresence::picking_song(selected_chart);
 
         bool downloads_changed = BeatmapDownloads::take_library_changed();
@@ -217,6 +228,7 @@ namespace nascent {
 
     void SceneList::on_exit() {
         active = false;
+        pause_rates(true);
         stop_preview_audio();
         load_generation++;
     }
@@ -829,6 +841,7 @@ namespace nascent {
         cancel_difficulties(true);
         library = std::move(loaded);
         local_hashes = std::unordered_set<std::string>(library.hashes.begin(), library.hashes.end());
+        queue_all_rates();
 
         if (library.pitch != pitch) {
             library.difficulties.assign(library.size(), std::nullopt);
@@ -1529,8 +1542,69 @@ namespace nascent {
         difficulty_results.clear();
 
         if (wait) {
-            difficulty_cv.wait(lock, [this] { return !difficulty_busy; });
+            rate_charts.clear();
+            rate_next = 0;
+            difficulty_cv.wait(lock, [this] { return !difficulty_busy && rate_busy == 0; });
         }
+    }
+
+    void SceneList::rate_loop() {
+        std::unique_lock<std::mutex> lock(difficulty_mutex);
+
+        while (true) {
+            difficulty_cv.wait(lock, [this] { return difficulty_stopping || (!rate_paused && rate_next < rate_charts.size() * rate_pitches.size()); });
+
+            if (difficulty_stopping) {
+                return;
+            }
+
+            size_t item = rate_next++;
+            const Chart* chart = rate_charts[item % rate_charts.size()];
+            float rate = rate_pitches[item / rate_charts.size()];
+            rate_busy++;
+            lock.unlock();
+
+            difficulty_cache->difficulty(*chart, rate);
+
+            lock.lock();
+            rate_busy--;
+            difficulty_cv.notify_all();
+        }
+    }
+
+    void SceneList::queue_all_rates() {
+        std::vector<float> pitches;
+
+        for (int32_t step = (int32_t)std::lround(PITCH_MINIMUM * PITCH_STEPS_PER_UNIT); step <= (int32_t)std::lround(PITCH_MAXIMUM * PITCH_STEPS_PER_UNIT); step++) {
+            pitches.push_back((float)step / (float)PITCH_STEPS_PER_UNIT);
+        }
+
+        std::stable_sort(pitches.begin(), pitches.end(), [this](float a, float b) {
+            return std::abs(a - pitch) < std::abs(b - pitch);
+        });
+
+        {
+            std::lock_guard<std::mutex> lock(difficulty_mutex);
+            rate_charts.clear();
+
+            for (const std::unique_ptr<Chart>& chart : library.charts) {
+                rate_charts.push_back(chart.get());
+            }
+
+            rate_pitches = std::move(pitches);
+            rate_next = 0;
+        }
+
+        difficulty_cv.notify_all();
+    }
+
+    void SceneList::pause_rates(bool paused) {
+        {
+            std::lock_guard<std::mutex> lock(difficulty_mutex);
+            rate_paused = paused;
+        }
+
+        difficulty_cv.notify_all();
     }
 
     void SceneList::collect_difficulties() {
@@ -1555,6 +1629,7 @@ namespace nascent {
         this->pitch = snap_pitch(pitch);
         status_bar.set_rate(this->pitch);
         cancel_difficulties(false);
+        queue_all_rates();
         library.difficulties.assign(library.size(), std::nullopt);
         refresh_search();
 

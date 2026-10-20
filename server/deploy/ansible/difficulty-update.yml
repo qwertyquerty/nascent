@@ -1,0 +1,9 @@
+- name: Ship a difficulty calculator change and recalculate every chart, play and profile
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Update the difficulty calculator
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: difficulty_update

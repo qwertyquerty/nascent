@@ -6,7 +6,9 @@ add_library(core
     src/Chart.cpp
     src/ChartSearch.cpp
     src/DifficultyCache.cpp
+    src/DifficultyBasis.cpp
     src/DifficultyCalculator.cpp
+    src/DifficultyEvents.cpp
     src/Hit.cpp
     src/OsuFormat.cpp
     src/PlaySession.cpp
@@ -23,9 +25,14 @@ set(NASCENT_DIFFICULTY_SOURCES
     include/Accuracy.h
     include/Chart.h
     include/Const.h
+    include/DifficultyBasis.h
     include/DifficultyCalculator.h
+    include/DifficultyEvents.h
+    include/DifficultyModel.h
     src/Chart.cpp
+    src/DifficultyBasis.cpp
     src/DifficultyCalculator.cpp
+    src/DifficultyEvents.cpp
 )
 set(NASCENT_DIFFICULTY_SOURCE_DIGESTS "")
 

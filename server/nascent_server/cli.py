@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ from sqlalchemy import delete, func, inspect, select
 from . import tasks, timeutil
 from .errors import ApiError
 from .extensions import db
-from .models import AuthSession, Chart, ChartStatus, PasswordReset, Play, PlayTicket, Role, User
+from .models import AuthSession, Chart, ChartDifficulty, ChartStatus, PasswordReset, Play, PlayTicket, Role, User
 from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
@@ -302,6 +303,138 @@ def apply_play_changes(username: str | None, chart_hash: str | None):
         click.echo(f"queued {len(jobs)} jobs for {len(user_ids)} players")
     else:
         click.echo(f"refreshed the bests and stats of {len(user_ids)} players")
+
+
+@nascent_cli.command("calculator-status")
+@click.option("--require-current", is_flag=True, help="Fail if anything still uses an older calculator version")
+def calculator_status(require_current: bool):
+    version = calculator_version()
+    older = 0
+
+    for label, model in (("charts", Chart), ("chart difficulties", ChartDifficulty), ("plays", Play)):
+        total = db.session.scalar(select(func.count()).select_from(model)) or 0
+        stale = db.session.scalar(select(func.count()).select_from(model).where(model.calculator_version != version)) or 0
+        older += stale
+        click.echo(f"{label}: {total - stale} on the current calculator, {stale} on an older one")
+
+    pending = tasks.pending_jobs()
+
+    if pending is not None:
+        click.echo(
+            f"background jobs: {pending['queued']} queued, {pending['running']} running, {pending['waiting']} waiting on others, "
+            f"{pending['retrying']} retrying, {pending['failed']} failed"
+        )
+
+    click.echo(f"current calculator {version}")
+
+    if require_current and older:
+        raise click.ClickException(f"{older} rows still use an older calculator")
+
+
+@nascent_cli.command("wait-for-jobs")
+@click.option("--timeout", type=int, default=6 * 3600, help="Give up after this many seconds")
+@click.option("--interval", type=int, default=15, help="Seconds between progress reports")
+def wait_for_jobs(timeout: int, interval: int):
+    pending = tasks.pending_jobs()
+
+    if pending is None:
+        click.echo("tasks run inline, so there is nothing to wait for")
+        return
+
+    failed_before = pending["failed"]
+    deadline = time.monotonic() + timeout
+
+    while True:
+        outstanding = pending["queued"] + pending["running"] + pending["waiting"] + pending["retrying"]
+
+        if pending["failed"] > failed_before:
+            raise click.ClickException(f"{pending['failed'] - failed_before} jobs failed; read them with rq info or the worker logs")
+
+        if outstanding == 0:
+            click.echo("every background job has finished")
+            return
+
+        if time.monotonic() > deadline:
+            raise click.ClickException(f"gave up after {timeout}s with {outstanding} jobs still outstanding")
+
+        click.echo(f"{pending['queued']} queued, {pending['running']} running, {pending['waiting']} waiting on others, {pending['retrying']} retrying")
+        time.sleep(interval)
+        pending = tasks.pending_jobs()
+
+
+def _quantiles(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {"count": 0}
+
+    ordered = sorted(values)
+
+    def pick(fraction: float) -> float:
+        return ordered[min(len(ordered) - 1, int(fraction * (len(ordered) - 1) + 0.5))]
+
+    return {"count": len(ordered), "p10": pick(0.1), "p50": pick(0.5), "p90": pick(0.9), "max": ordered[-1]}
+
+
+def _difficulty_report() -> dict:
+    boards = {}
+
+    for key_count in ranking.ranked_key_counts():
+        difficulties = list(db.session.scalars(select(Chart.difficulty).where(Chart.key_count == key_count, Chart.status == ChartStatus.RANKED)))
+        board = ranking.leaderboard_users_query(key_count).subquery()
+        players = db.session.execute(
+            select(board.c.user_id, User.username, board.c.performance)
+            .join(User, User.id == board.c.user_id)
+            .order_by(board.c.performance.desc(), board.c.user_id.asc())
+        ).all()
+        boards[str(key_count)] = {
+            "chart_difficulty": _quantiles(difficulties),
+            "players": [{"id": row.user_id, "name": row.username, "performance": row.performance} for row in players],
+        }
+
+    return {"calculator": calculator_version(), "generated_at": timeutil.utcnow().isoformat(), "boards": boards}
+
+
+def _compare_reports(before: dict, after: dict, top: int) -> list[str]:
+    lines = [f"calculator {before.get('calculator')} -> {after['calculator']}"]
+
+    for key_count, board in after["boards"].items():
+        previous = before.get("boards", {}).get(key_count, {"chart_difficulty": {}, "players": []})
+        old_rank = {player["id"]: (index + 1, player["performance"]) for index, player in enumerate(previous["players"])}
+        new_rank = {player["id"]: index + 1 for index, player in enumerate(board["players"])}
+        old_spread, new_spread = previous["chart_difficulty"], board["chart_difficulty"]
+        lines.append(
+            f"{key_count}K: {new_spread.get('count', 0)} ranked charts, median difficulty {old_spread.get('p50', 0):.2f} -> {new_spread.get('p50', 0):.2f}, "
+            f"90th percentile {old_spread.get('p90', 0):.2f} -> {new_spread.get('p90', 0):.2f}"
+        )
+        lines.append(f"  {len(board['players'])} players on the leaderboard (was {len(previous['players'])}); new top {top}:")
+
+        for index, player in enumerate(board["players"][:top]):
+            rank, performance = old_rank.get(player["id"], (None, None))
+            moved = "new" if rank is None else f"{rank - (index + 1):+d}"
+            was = "" if performance is None else f" (was #{rank}, {performance:.2f})"
+            lines.append(f"  #{index + 1:<4} {player['name']:24} {player['performance']:10.2f}  {moved:>5}{was}")
+
+        names = {player["id"]: player["name"] for player in board["players"]}
+        movers = sorted((abs(new_rank[pid] - rank), pid, rank) for pid, (rank, _) in old_rank.items() if pid in new_rank and min(rank, new_rank[pid]) <= 200)
+        lines.append("  biggest moves among the top 200:")
+
+        for _, pid, rank in reversed(movers[-10:]):
+            lines.append(f"    {names[pid]:24} #{rank} -> #{new_rank[pid]} ({rank - new_rank[pid]:+d})")
+
+    return lines
+
+
+@nascent_cli.command("difficulty-report")
+@click.option("--compare-to", type=click.File("r"), default=None, help="An earlier report to compare against, or - for standard input")
+@click.option("--top", type=int, default=25, help="Leaderboard places to list when comparing")
+def difficulty_report(compare_to, top: int):
+    report = _difficulty_report()
+
+    if compare_to is None:
+        click.echo(json.dumps(report))
+        return
+
+    for line in _compare_reports(json.load(compare_to), report, top):
+        click.echo(line)
 
 
 @nascent_cli.command("refresh-users")

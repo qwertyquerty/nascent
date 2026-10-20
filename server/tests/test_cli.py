@@ -44,3 +44,59 @@ def test_import_replays(api, app, tmp_path):
 
     again = run(app, "import-replays", str(tmp_path / "replays"), "--user", "alice")
     assert "0 added, 2 already on the server, 1 skipped, 1 not replays" in again.output
+
+
+def test_calculator_status(api, app):
+    rank_chart(api)
+
+    result = run(app, "calculator-status", "--require-current")
+    assert result.exit_code == 0, result.output
+    assert "charts: 1 on the current calculator, 0 on an older one" in result.output
+
+    with app.app_context():
+        from sqlalchemy import update
+
+        from nascent_server.extensions import db
+        from nascent_server.models import Chart
+
+        db.session.execute(update(Chart).values(calculator_version="older"))
+        db.session.commit()
+
+    stale = run(app, "calculator-status", "--require-current")
+    assert stale.exit_code != 0
+    assert "charts: 0 on the current calculator, 1 on an older one" in stale.output
+
+
+def test_wait_for_jobs_inline(app):
+    result = run(app, "wait-for-jobs")
+    assert result.exit_code == 0, result.output
+    assert "nothing to wait for" in result.output
+
+
+def test_difficulty_report(api, app):
+    rank_chart(api)
+
+    before = run(app, "difficulty-report")
+    assert before.exit_code == 0, before.output
+    report = json.loads(before.output)
+    assert report["boards"]["4"]["chart_difficulty"]["count"] == 1
+
+    compared = run(app, "difficulty-report", "--compare-to", "-", input=before.output)
+    assert compared.exit_code == 0, compared.output
+    assert f"calculator {report['calculator']} -> {report['calculator']}" in compared.output
+    assert "4K: 1 ranked charts" in compared.output
+
+
+def test_calculator_version_follows_the_difficulty_code(monkeypatch, app):
+    import nascent_core as nc
+
+    from nascent_server.services import calculator
+
+    with app.app_context():
+        original = calculator.calculator_version()
+        calculator._calculator_version.cache_clear()
+        monkeypatch.setattr(nc, "difficulty_fingerprint", lambda: "a different calculator")
+        changed = calculator.calculator_version()
+        calculator._calculator_version.cache_clear()
+
+    assert changed != original

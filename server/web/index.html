@@ -19,13 +19,14 @@
     <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js" integrity="sha384-W/1Fp/LgAYO/oTn9Gs+PbeWuMuq1eQCnUMPCeg8POmMYchhzxctjEqtbiCIxDOON" crossorigin="anonymous"></script>
     <script src="/palette.js" defer></script>
     <script src="/replay.js" defer></script>
+    <script src="/difficulty.js" defer></script>
     <script src="/app.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to content</a>
 <!--prerender-->
 <template id="app-template">
-    <nav class="navbar has-shadow" aria-label="Main">
+    <nav v-if="route.name !== 'difficulty'" class="navbar has-shadow" aria-label="Main">
         <div class="container">
             <div class="navbar-brand">
                 <a class="navbar-item" href="/" aria-label="Nascent home"><img class="nav-logo" src="/logo_n.png" alt=""></a>
@@ -321,6 +322,74 @@
                         </ul>
                     </div>
                 </div>
+            </template>
+
+            <template v-else-if="route.name === 'difficulty'">
+                <h1 class="title">{{ view.data.model.name }}</h1>
+
+                <h2 class="title is-4">Scale</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.display" :height="620" label="Display curve from model skill to displayed difficulty, with the dan courses marked"></plotly-chart>
+
+                <h2 class="title is-4">Dans at every rate</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.rates" :height="620" label="Heatmap of each dan course's difficulty at rates from 0.75x to 1.5x"></plotly-chart>
+
+                <h2 class="title is-4">Nascent Benchmark</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.scores" :height="340" label="Difficulty implied by player scores on held-out osu!mania charts against Nascent, MSD and osu! star ratings"></plotly-chart>
+
+                <h2 class="title is-4">CalcTestList</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.calcTest" :height="340" label="CalcTestList targets against Nascent, MSD and osu! star ratings"></plotly-chart>
+
+                <h2 class="title is-4">2015 community vote</h2>
+                <plotly-chart class="mb-4" :figure="view.figures.community" :height="340" label="2015 community ratings against Nascent, MSD and osu! star ratings"></plotly-chart>
+
+                <div class="table-container mb-6">
+                    <table class="table is-fullwidth">
+                        <thead>
+                            <tr><th scope="col" rowspan="2">Calculator</th><th scope="colgroup" colspan="2" class="has-text-centered">Nascent Benchmark</th><th scope="colgroup" colspan="2" class="has-text-centered">CalcTestList</th><th scope="colgroup" colspan="2" class="has-text-centered">2015 vote</th></tr>
+                            <tr><th scope="col" class="is-numeric">Agreement</th><th scope="col" class="is-numeric">Error</th><th scope="col" class="is-numeric">Agreement</th><th scope="col" class="is-numeric">Error</th><th scope="col" class="is-numeric">Agreement</th><th scope="col" class="is-numeric">Error</th></tr>
+                        </thead>
+                        <tbody><tr v-for="row in view.figures.benchmarks" :key="row.name">
+                            <th scope="row">{{ row.name }}</th>
+                            <td class="is-numeric">{{ row.scores.spearman.toFixed(3) }}</td><td class="is-numeric">{{ row.scores.error.toFixed(3) }}</td>
+                            <td class="is-numeric">{{ row.calcTest.spearman.toFixed(3) }}</td><td class="is-numeric">{{ row.calcTest.error.toFixed(2) }}</td>
+                            <td class="is-numeric">{{ row.community.spearman.toFixed(3) }}</td><td class="is-numeric">{{ row.community.error.toFixed(3) }}</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+
+                <h2 class="title is-4">Against Etterna MSD</h2>
+                <plotly-chart class="mb-6" :figure="view.figures.scatter" :height="620" label="Scatter of Nascent difficulty against MSD for thousands of charts, with the dan courses marked"></plotly-chart>
+
+                <h2 class="title is-4">Against osu! star rating</h2>
+                <plotly-chart class="mb-6" :figure="view.figures.osuScatter" :height="620" label="Scatter of Nascent difficulty against osu! star rating for thousands of osu!mania charts, with the dan courses marked"></plotly-chart>
+
+                <div class="columns">
+                    <div class="column">
+                        <h2 class="title is-4">Difficulty to accuracy</h2>
+                        <plotly-chart :figure="view.figures.loss" :height="360" label="Accuracy lost per note against difficulty minus skill, for presses and releases"></plotly-chart>
+                    </div>
+                    <div class="column">
+                        <h2 class="title is-4">Stronger players</h2>
+                        <plotly-chart :figure="view.figures.mix" :height="360" label="Share of strong-player weights used at each skill level"></plotly-chart>
+                    </div>
+                </div>
+
+                <h2 class="title is-4">Length, notes and holds</h2>
+                <div class="columns mb-5">
+                    <div v-for="(figure, index) in view.figures.covariates" :key="index" class="column"><plotly-chart :figure="figure" :height="280" :label="['Difficulty multiplier by note count', 'Difficulty multiplier by active length', 'Difficulty multiplier by hold share'][index]"></plotly-chart></div>
+                </div>
+
+                <h2 class="title is-4">Jacks</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.jack" :height="400" label="Jack difficulty by gap for short and long runs, on a log scale"></plotly-chart>
+
+                <h2 class="title is-4">Biggest contributors</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.contribution" :height="600" label="Share of total difficulty by feature group"></plotly-chart>
+
+                <h2 class="title is-4">Every weight</h2>
+                <chart-tabs class="mb-5" :charts="view.figures.heatmaps" label="Weight heatmaps"></chart-tabs>
+
+                <h2 class="title is-4">Weight adjustments</h2>
+                <plotly-chart :figure="view.figures.factors" :height="340" label="Strong-player and hold-release factors against each base weight"></plotly-chart>
             </template>
 
             <template v-else-if="route.name === 'charts'">
@@ -663,7 +732,7 @@
         </div>
     </main>
 
-    <footer class="footer has-text-centered is-size-7 has-text-grey">
+    <footer v-if="route.name !== 'difficulty'" class="footer has-text-centered is-size-7 has-text-grey">
         Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/staff">Staff</a>
     </footer>
 </template>
