@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import zlib
 from typing import Any, Literal, TypeVar
 
@@ -27,18 +28,40 @@ class Body(BaseModel):
         return value
 
 
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 256
+
+
+def check_password(value: str) -> str:
+    if len(value) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f"Passwords must be at least {PASSWORD_MIN_LENGTH} characters long")
+
+    if len(value) > PASSWORD_MAX_LENGTH:
+        raise ValueError(f"Passwords can't be longer than {PASSWORD_MAX_LENGTH} characters")
+
+    return value
+
+
 class RegisterIn(Body):
-    username: str = Field(pattern=USERNAME_PATTERN)
+    username: str
     email: EmailStr
-    password: str = Field(min_length=8, max_length=256)
+    password: str
 
     @field_validator("username")
     @classmethod
-    def has_letter(cls, value: str) -> str:
+    def valid_username(cls, value: str) -> str:
+        if not re.fullmatch(USERNAME_PATTERN, value):
+            raise ValueError("Usernames must be 3 to 20 characters long and can only use letters, numbers, underscores (_) and dashes (-)")
+
         if not any(character.isalpha() for character in value):
-            raise ValueError("username must contain a letter")
+            raise ValueError("Usernames must contain at least one letter")
 
         return value
+
+    @field_validator("password")
+    @classmethod
+    def valid_password(cls, value: str) -> str:
+        return check_password(value)
 
 
 class LoginIn(Body):
@@ -56,7 +79,12 @@ class PasswordResetIn(Body):
 
 class PasswordResetConfirmIn(Body):
     token: str = Field(min_length=1, max_length=200)
-    new_password: str = Field(min_length=8, max_length=256)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def valid_password(cls, value: str) -> str:
+        return check_password(value)
 
 
 class AccountDeleteIn(Body):
@@ -65,7 +93,12 @@ class AccountDeleteIn(Body):
 
 class PasswordChangeIn(Body):
     current_password: str = Field(min_length=1, max_length=256)
-    new_password: str = Field(min_length=8, max_length=256)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def valid_password(cls, value: str) -> str:
+        return check_password(value)
 
 
 class TicketIn(Body):

@@ -17,6 +17,7 @@ from ..models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, PlayStatus
 from ..ratelimit import check_rate_limit
 from ..security import TICKET_PREFIX, hash_token, new_token, require_not_banned
 from ..storage import put_json_gz, sharded_key
+from ..versions import parse_release_version
 from . import anticheat, ranking
 from .calculator import calculator_version, performance, require_rate_key
 from .charts import MAX_DURATION_MS, chart_difficulty, get_chart, native_chart, parse_chart, register_chart
@@ -332,6 +333,29 @@ def _fingerprint_history(user: User) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def require_supported_client(raw_replay: dict) -> None:
+    minimum = current_app.config["MIN_CLIENT_VERSION"]
+    required = parse_release_version(minimum) if minimum else None
+
+    if required is None:
+        return
+
+    diagnostics = raw_replay.get("diagnostics")
+    version = diagnostics.get("version") if isinstance(diagnostics, dict) else None
+    current = parse_release_version(version) if isinstance(version, str) else None
+
+    if isinstance(version, str) and current is None:
+        return
+
+    if current is None or current < required:
+        raise ApiError(
+            426,
+            "client_outdated",
+            f"This version of Nascent is too old to submit plays. You can keep playing, but update to {minimum} or newer to submit them",
+            {"min_client_version": minimum},
+        )
+
+
 def submit_play(
     user: User,
     chart_hash: str,
@@ -344,6 +368,10 @@ def submit_play(
     submitted_at: datetime | None = None,
 ) -> SubmissionResult:
     require_not_banned(user)
+
+    if not imported:
+        require_supported_client(raw_replay)
+
     chart_hash = chart_hash.lower()
     chart = get_chart(chart_hash)
 

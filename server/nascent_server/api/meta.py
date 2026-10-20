@@ -36,4 +36,5 @@ def info():
         "ranked_key_counts": list(current_app.config["RANKED_KEY_COUNTS"]),
         "performance_accuracy_floor": nc.PERFORMANCE_ACCURACY_FLOOR,
         "password_reset": mail.enabled(),
+        "min_client_version": current_app.config["MIN_CLIENT_VERSION"] or None,
     }

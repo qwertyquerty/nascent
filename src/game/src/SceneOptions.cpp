@@ -110,6 +110,7 @@ namespace nascent {
         }
 
         skins = Skin::available_skins();
+        skin_list_version = Skin::list_version();
         std::vector<std::string> skin_labels;
         size_t skin_index = 0;
 
@@ -185,6 +186,7 @@ namespace nascent {
         timing_bar_width_field = &form.add<SliderField>("Hit timing bar width", settings.field_timing_bar_width, TIMING_BAR_WIDTH_MIN, TIMING_BAR_WIDTH_MAX, PERCENT_STEP, "%");
 
         form.add<SectionField>("Keys");
+        instant_restart_field = &form.add<ChoiceField>("Instant restart", std::vector<std::string>{"Off", "On"}, settings.field_instant_restart ? 1 : 0);
 
         for (size_t index = 0; index < KEY_BINDINGS.size(); index++) {
             key_fields.push_back(&form.add<KeyBindField>((KeyBinding)index));
@@ -229,6 +231,7 @@ namespace nascent {
         settings.display_fullscreen = fullscreen_field->selected == 1;
         settings.field_hitsounds = hitsounds_field->selected == 1;
         settings.field_mirror = mirror_field->selected == 1;
+        settings.field_instant_restart = instant_restart_field->selected == 1;
         settings.field_lane_cover = (int8_t)lane_cover_field->value;
         settings.field_note_gradient = note_gradient_field->selected == 1;
         settings.field_show_judgement_line = judgement_line_field->selected == 1;
@@ -308,7 +311,27 @@ namespace nascent {
         return false;
     }
 
+    void SceneOptions::refresh_skins() {
+        skin_list_version = Skin::list_version();
+        std::string chosen = skins.empty() ? skin->get_id() : skins[skin_field->selected].id;
+        skins = Skin::available_skins();
+        skin_field->options.clear();
+        skin_field->selected = 0;
+
+        for (size_t index = 0; index < skins.size(); index++) {
+            skin_field->options.push_back(skins[index].name);
+
+            if (skins[index].id == chosen) {
+                skin_field->selected = index;
+            }
+        }
+    }
+
     void SceneOptions::update(float elapsed_time) {
+        if (skin_field != nullptr && Skin::list_version() != skin_list_version) {
+            refresh_skins();
+        }
+
         bool reset = update_footer(game->input());
         UiForm::Action action = form.update(game->input(), elapsed_time);
 

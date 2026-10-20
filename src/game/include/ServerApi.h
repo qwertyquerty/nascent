@@ -45,6 +45,7 @@ namespace nascent {
         std::string chart_hash_format;
         std::string calculator_version;
         std::vector<uint8_t> ranked_key_counts;
+        std::string min_client_version;
     };
 
     struct UserSummary {

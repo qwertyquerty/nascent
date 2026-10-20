@@ -16,6 +16,7 @@
 #include "Skin.h"
 #include "SubmissionQueue.h"
 #include "ToastOverlay.h"
+#include "ReleaseUpdate.h"
 #include "Updater.h"
 #include "Utf8Path.h"
 #include "gse/render/TextCache.h"
@@ -58,6 +59,7 @@ namespace nascent {
         Account::load();
         SubmissionQueue::start();
         Updater::check();
+        server_info = ServerApi::info();
         LocalBests::load();
         Favorites::load();
         set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
@@ -129,6 +131,7 @@ namespace nascent {
         }
 
         update_screenshot();
+        check_client_version();
         limit_frame_rate(SettingsManager::settings.frame_rate_limit);
         begin_frame(elapsed_time);
         text_cache_begin_frame();
@@ -163,6 +166,28 @@ namespace nascent {
         }
 
         overlays().draw(window);
+    }
+
+    void GameNascent::check_client_version() {
+        if (!is_ready(server_info)) {
+            return;
+        }
+
+        ApiResult<ServerInfo> result = server_info.get();
+
+        if (!result.ok() || result.value->min_client_version.empty()) {
+            return;
+        }
+
+        std::optional<ReleaseVersion> current = parse_release_version(NASCENT_VERSION_STRING);
+        std::optional<ReleaseVersion> minimum = parse_release_version(result.value->min_client_version);
+
+        if (current && minimum && *current < *minimum) {
+            std::string message = std::format("This version is too old to submit plays. You can keep playing, but update to {} to submit them", result.value->min_client_version);
+            show_toast(std::move(message), true, OUTDATED_CLIENT_TOAST_TIME, [] {
+                Updater::start();
+            });
+        }
     }
 
     void GameNascent::update_screenshot() {
@@ -214,6 +239,7 @@ namespace nascent {
             SkinImportResult result = skin_import.get();
 
             if (result.ok) {
+                Skin::list_changed();
                 show_toast(std::format("Imported the {} skin, choose it in options (F1)", result.name), false, ToastOverlay::DEFAULT_TIME);
             }
             else {

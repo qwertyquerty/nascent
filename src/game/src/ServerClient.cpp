@@ -160,6 +160,8 @@ namespace nascent {
         return std::string();
     }
 
+    static constexpr const char* GENERIC_VALIDATION_MESSAGE = "The request body is invalid";
+
     std::string ServerResponse::message() const {
         if (!error.empty()) {
             return std::format("could not reach the server: {}", error);
@@ -168,6 +170,11 @@ namespace nascent {
         if (body.is_object() && body.contains("error") && body["error"].is_object()) {
             const nlohmann::json& problem = body["error"];
             const nlohmann::json& details = problem.value("details", nlohmann::json());
+            std::string summary = problem.value("message", std::string());
+
+            if (problem.value("code", std::string()) == "validation_error" && !summary.empty() && summary != GENERIC_VALIDATION_MESSAGE) {
+                return summary;
+            }
 
             if (details.is_array() && !details.empty() && details[0].is_object() && details[0].contains("message")) {
                 return std::format("{}: {}", details[0].value("field", std::string("request")), details[0]["message"].get<std::string>());

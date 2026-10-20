@@ -21,6 +21,7 @@ namespace nascent {
             std::atomic<State> state = State::DOWNLOADING;
             std::atomic<double> progress = 0.0;
             std::atomic<bool> cancelled = false;
+            std::filesystem::path destination;
 
             std::string error() const;
             void fail(std::string message);
@@ -47,6 +48,7 @@ namespace nascent {
         static std::shared_ptr<Download> find(int64_t set_id);
         static bool cancel(int64_t set_id);
         static bool take_library_changed();
+        static void forget_missing();
         static bool take_access_denied();
         static ImportResult import_archive(const std::filesystem::path& file);
     };

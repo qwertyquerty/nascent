@@ -41,6 +41,7 @@ namespace nascent {
         TextField* email_field = nullptr;
         TextField* password_field = nullptr;
         ButtonField* continue_button = nullptr;
+        ButtonField* submit_button = nullptr;
         ButtonField* profile_button = nullptr;
         ButtonField* sign_out_button = nullptr;
         ButtonField* switch_button = nullptr;

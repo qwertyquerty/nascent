@@ -39,6 +39,7 @@ namespace nascent {
         ChoiceField* title_music_field = nullptr;
         ChoiceField* fullscreen_field = nullptr;
         ChoiceField* mirror_field = nullptr;
+        ChoiceField* instant_restart_field = nullptr;
         SliderField* lane_cover_field = nullptr;
         ChoiceField* hitsounds_field = nullptr;
         SliderField* lane_width_field = nullptr;
@@ -91,6 +92,7 @@ namespace nascent {
 
         std::vector<uint16_t> frame_rates;
         std::vector<SkinInfo> skins;
+        uint32_t skin_list_version = 0;
         bool changed = false;
 
         void apply();
@@ -99,6 +101,7 @@ namespace nascent {
         void update_scroll(float elapsed_time);
         void build_preview_chart();
         void rebuild_preview();
+        void refresh_skins();
         void update_preview(float elapsed_time);
         std::vector<Hint> footer_hints() const;
         bool update_footer(Input& input);

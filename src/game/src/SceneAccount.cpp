@@ -49,7 +49,16 @@ namespace nascent {
 
         game->audio().play_music(skin->sound(SkinSound::ACCOUNT_LOOP), true);
         status.clear();
-        set_mode(Account::signed_in() ? Mode::SIGNED_IN : Mode::SIGN_IN);
+        Settings& settings = SettingsManager::settings;
+        Mode initial = Account::signed_in() ? Mode::SIGNED_IN : settings.account_screen_seen ? Mode::SIGN_IN
+                                                                                             : Mode::REGISTER;
+
+        if (!settings.account_screen_seen) {
+            settings.account_screen_seen = true;
+            SettingsManager::save();
+        }
+
+        set_mode(initial);
     }
 
     void SceneAccount::on_exit() {
@@ -65,7 +74,7 @@ namespace nascent {
         this->mode = mode;
         form.clear();
         login_field = email_field = password_field = nullptr;
-        continue_button = profile_button = sign_out_button = switch_button = forgot_button = terms_button = nullptr;
+        continue_button = submit_button = profile_button = sign_out_button = switch_button = forgot_button = terms_button = nullptr;
 
         if (mode == Mode::SIGNED_IN) {
             continue_button = &form.add<ButtonField>("Continue");
@@ -82,7 +91,8 @@ namespace nascent {
         }
 
         password_field = &form.add<TextField>("Password", "", true);
-        switch_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "Create an account instead" : "Sign in instead");
+        submit_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "Sign in" : "Create account");
+        switch_button = &form.add<ButtonField>(mode == Mode::SIGN_IN ? "No account yet? Create one" : "Already have an account? Sign in");
 
         if (mode == Mode::SIGN_IN) {
             forgot_button = &form.add<ButtonField>("Forgot password?");
@@ -250,7 +260,11 @@ namespace nascent {
 
         UiForm::Action action = form.update(input, elapsed_time);
 
-        if (switch_button->take_pressed() || InputManager::switch_pressed(input)) {
+        if (submit_button->take_pressed()) {
+            play_menu_sound();
+            submit();
+        }
+        else if (switch_button->take_pressed() || InputManager::switch_pressed(input)) {
             play_menu_sound();
             status.clear();
             set_mode(mode == Mode::SIGN_IN ? Mode::REGISTER : Mode::SIGN_IN);

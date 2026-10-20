@@ -714,7 +714,15 @@ namespace nascent {
             copy_diagnostics();
         }
 
-        if (!finished && input.key_held(InputManager::get_key(KeyBinding::RESTART))) {
+        bool instant_restart = SettingsManager::settings.field_instant_restart;
+        olc::Key restart_key = InputManager::get_key(KeyBinding::RESTART);
+
+        if (!finished && instant_restart && input.key_pressed(restart_key)) {
+            restart();
+            return;
+        }
+
+        if (!finished && !instant_restart && input.key_held(restart_key)) {
             restart_hold += elapsed_time;
 
             if (restart_hold >= RESTART_HOLD_TIME) {

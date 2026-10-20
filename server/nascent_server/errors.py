@@ -15,6 +15,11 @@ class ApiError(Exception):
         self.headers = headers or {}
 
 
+def validation_message(item: dict) -> str:
+    reason = item.get("ctx", {}).get("error")
+    return str(reason) if isinstance(reason, ValueError) else item["msg"]
+
+
 def error_response(status: int, code: str, message: str, details: Any = None, headers: dict[str, str] | None = None):
     body: dict[str, Any] = {"code": code, "message": message}
 
@@ -37,8 +42,8 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(ValidationError)
     def handle_validation_error(error: ValidationError):
-        details = [{"field": ".".join(str(part) for part in item["loc"]), "message": item["msg"]} for item in error.errors()]
-        return error_response(400, "validation_error", "The request body is invalid", details)
+        details = [{"field": ".".join(str(part) for part in item["loc"]), "message": validation_message(item)} for item in error.errors()]
+        return error_response(400, "validation_error", details[0]["message"] if details else "The request body is invalid", details)
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(error: HTTPException):

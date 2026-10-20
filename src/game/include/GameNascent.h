@@ -3,6 +3,7 @@
 #include "BeatmapDownloads.h"
 #include "EtternaSkin.h"
 #include "Screenshots.h"
+#include "ServerApi.h"
 #include "gse/Game.h"
 
 #include <cstdint>
@@ -32,10 +33,12 @@ namespace nascent {
         ToastOverlay* toasts = nullptr;
         bool screenshot_requested = false;
         std::future<ScreenshotResult> screenshot_save;
+        std::future<ApiResult<ServerInfo>> server_info;
 
         void bind_actions();
         void handle_dropped_files();
         void update_screenshot();
+        void check_client_version();
         void on_screen_resize() override;
         void on_back() override;
         void show_toast(std::string message, bool is_error, float duration, std::function<void()> action = {});
@@ -43,6 +46,7 @@ namespace nascent {
         public:
         static constexpr int32_t FPS_COUNTER_WIDTH = 100;
         static constexpr float ACCESS_DENIED_TOAST_TIME = 12.0f;
+        static constexpr float OUTDATED_CLIENT_TOAST_TIME = 15.0f;
 
         static int32_t fps_counter_width();
 

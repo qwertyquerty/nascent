@@ -48,3 +48,16 @@ def test_sessions_can_be_listed_and_revoked(api, client):
 
     assert api.post("/api/v1/auth/logout", token=first).status_code == 204
     assert api.get("/api/v1/me", first).status_code == 401
+
+
+def test_signup_errors_explain_the_rules(api):
+    def error(username, password="correct horse battery"):
+        response = api.post("/api/v1/auth/register", {"username": username, "email": f"{len(username)}@example.com", "password": password})
+        assert response.status_code == 400
+        return response.get_json()["error"]
+
+    bad_name = error("no spaces allowed")
+    assert bad_name["message"].startswith("Usernames must be 3 to 20 characters long")
+    assert bad_name["details"][0]["message"] == bad_name["message"]
+    assert error("12345")["message"] == "Usernames must contain at least one letter"
+    assert error("alice", password="short")["message"] == "Passwords must be at least 8 characters long"

@@ -39,6 +39,7 @@ namespace nascent {
         uint8_t field_timing_bar_length = 33; // % of the screen width
         uint8_t field_timing_bar_width = 5; // % of the screen height
         bool field_mirror = false;
+        bool field_instant_restart = false;
         int8_t field_lane_cover = 0;
         bool field_hitsounds = false;
         uint8_t field_background_brightness = 0;
@@ -63,6 +64,7 @@ namespace nascent {
         uint8_t music_volume = 75;
         uint8_t effects_volume = 75;
         bool show_fps = true;
+        bool account_screen_seen = false;
 
         std::string list_song_directory;
 

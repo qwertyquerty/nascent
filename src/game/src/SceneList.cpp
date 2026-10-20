@@ -476,7 +476,22 @@ namespace nascent {
             return true;
         }
 
-        if (input.key_pressed(InputManager::random_chart_key)) {
+        if (input.key_pressed(InputManager::random_chart_key) && input.key_held(olc::Key::SHIFT)) {
+            if (!shuffle_history.empty()) {
+                auto [hash, path] = std::move(shuffle_history.back());
+                shuffle_history.pop_back();
+                select_chart_by_hash(hash, path);
+            }
+        }
+        else if (input.key_pressed(InputManager::random_chart_key)) {
+            if (selected_chart != nullptr) {
+                shuffle_history.emplace_back(selected_chart->gameplay_hash(), selected_chart->file_path);
+
+                if (shuffle_history.size() > SHUFFLE_HISTORY_LIMIT) {
+                    shuffle_history.erase(shuffle_history.begin());
+                }
+            }
+
             select_chart(rand() % visible.size());
         }
 
@@ -664,6 +679,8 @@ namespace nascent {
     }
 
     void SceneList::start_library_load() {
+        BeatmapDownloads::forget_missing();
+
         if (library_loading) {
             library_reload_pending = true;
             return;
@@ -859,6 +876,8 @@ namespace nascent {
                     return library.lengths_ms[a] < library.lengths_ms[b];
                 case ListSort::DATE_ADDED:
                     return added(a) > added(b);
+                case ListSort::KEY_COUNT:
+                    return library.charts[a]->info.key_count < library.charts[b]->info.key_count;
                 default:
                     return false;
             }
@@ -1160,6 +1179,7 @@ namespace nascent {
             library_reload_pending = true;
         }
 
+        BeatmapDownloads::forget_missing();
         game->notify(whole_pack ? std::format("Deleted {} ({} charts)", name, removed_count) : std::format("Deleted {}", name));
     }
 

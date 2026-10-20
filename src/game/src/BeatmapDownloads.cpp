@@ -356,6 +356,7 @@ namespace nascent {
         }
 
         std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(folder_name(std::format("{} {} - {}", set_id, artist, title)));
+        download->destination = destination;
 
         std::thread([download, urls, destination, set_id] {
             std::string error = "no beatmap download mirrors are configured";
@@ -404,6 +405,14 @@ namespace nascent {
         existing->second->cancelled = true;
         downloads.erase(existing);
         return true;
+    }
+
+    void BeatmapDownloads::forget_missing() {
+        std::lock_guard<std::mutex> lock(downloads_mutex);
+        std::erase_if(downloads, [](const auto& entry) {
+            std::error_code ec;
+            return entry.second->state == State::DONE && !std::filesystem::exists(entry.second->destination, ec);
+        });
     }
 
     bool BeatmapDownloads::take_library_changed() {

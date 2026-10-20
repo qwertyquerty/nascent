@@ -11,6 +11,7 @@
 #include "gse/concurrency/Async.h"
 
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -233,6 +234,16 @@ namespace nascent {
                 lane_images[(uint8_t)key_count] = std::move(mapping);
             }
         }
+    }
+
+    static std::atomic<uint32_t> skin_list_version = 0;
+
+    uint32_t Skin::list_version() {
+        return skin_list_version.load();
+    }
+
+    void Skin::list_changed() {
+        skin_list_version++;
     }
 
     Skin::Skin(Game* game, const std::string& id) : game(game) {

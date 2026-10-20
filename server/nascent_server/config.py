@@ -48,6 +48,8 @@ class Config:
     SESSION_TOUCH_INTERVAL = timedelta(minutes=5)
     PASSWORD_RESET_TTL = timedelta(hours=1)
 
+    MIN_CLIENT_VERSION = os.environ.get("NASCENT_MIN_CLIENT_VERSION", "").strip()
+
     TICKET_GRACE = timedelta(hours=1)
     TICKET_MIN_ELAPSED_RATIO = 0.95
     RANKED_MIN_DURATION_MS = 15_000

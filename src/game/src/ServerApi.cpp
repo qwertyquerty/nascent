@@ -252,6 +252,7 @@ namespace nascent {
             info.chart_hash_format = get_string(j, "chart_hash_format");
             info.calculator_version = get_string(j, "calculator_version");
             info.ranked_key_counts = get_list<uint8_t>(j, "ranked_key_counts", [](const json& count) { return count.get<uint8_t>(); });
+            info.min_client_version = get_string(j, "min_client_version");
             return info;
         });
     }

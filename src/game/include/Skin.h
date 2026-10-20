@@ -261,6 +261,8 @@ namespace nascent {
         static std::filesystem::path user_skins_directory();
         static std::filesystem::path skin_directory(const std::string& id);
         static std::vector<SkinInfo> available_skins();
+        static uint32_t list_version();
+        static void list_changed();
 
         olc::Font display_font_large;
         olc::Font display_font_medium;
