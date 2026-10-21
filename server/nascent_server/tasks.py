@@ -155,14 +155,15 @@ def refresh_users(user_ids: list[int], chart_ids: list[int]) -> None:
 
 @task
 def apply_chart_status(chart_id: int) -> None:
+    from .services.plays import is_rankable
+
     chart = db.session.get(Chart, chart_id)
 
     if chart is None:
         return
 
-    long_enough = Play.duration_ms >= current_app.config["RANKED_MIN_DURATION_MS"]
-    rankable = chart.status == ChartStatus.RANKED and chart.note_count >= current_app.config["RANKED_MIN_NOTES"]
-    ranked = and_(Play.eligible, Play.status.in_(COUNTED_PLAY_STATUSES), long_enough) if rankable else false()
+    rankable = chart.status == ChartStatus.RANKED and is_rankable(chart.duration_ms, chart.note_count)
+    ranked = and_(Play.eligible, Play.status.in_(COUNTED_PLAY_STATUSES)) if rankable else false()
     db.session.execute(update(Play).where(Play.chart_id == chart.id).values(ranked=ranked))
     db.session.commit()
 
@@ -215,7 +216,7 @@ def recalculate_chart(chart_id: int, resimulate: bool) -> None:
 
         play.difficulty = chart_difficulty(chart, play.rate_key)
         play.performance = performance(play.difficulty, play.accuracy)
-        play.ranked = play.eligible and play.status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED and is_rankable(play.duration_ms, chart.note_count)
+        play.ranked = play.eligible and play.status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED and is_rankable(chart.duration_ms, chart.note_count)
         play.calculator_version = version
 
     db.session.flush()

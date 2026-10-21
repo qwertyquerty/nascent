@@ -454,7 +454,7 @@ def submit_play(
         key_count=native.key_count,
         status=status,
         eligible=eligible,
-        ranked=eligible and status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED and is_rankable(chart_length_ms, chart.note_count),
+        ranked=eligible and status in COUNTED_PLAY_STATUSES and chart.status == ChartStatus.RANKED and is_rankable(chart.duration_ms, chart.note_count),
         **judgement_fields(simulation),
         duration_ms=chart_length_ms,
         difficulty=difficulty,
@@ -567,7 +567,7 @@ def is_rankable(duration_ms: int, note_count: int) -> bool:
 def review_play(play: Play, moderator: User | None, approve: bool, note: str) -> None:
     play.status = PlayStatus.VERIFIED if approve else PlayStatus.REJECTED
     play.eligible = play.eligible or approve
-    play.ranked = approve and play.chart.status == ChartStatus.RANKED and is_rankable(play.duration_ms, play.chart.note_count)
+    play.ranked = approve and play.chart.status == ChartStatus.RANKED and is_rankable(play.chart.duration_ms, play.chart.note_count)
     play.reviewed_by_id = moderator.id if moderator is not None else None
     play.reviewed_at = timeutil.utcnow()
     play.review_note = note[:500]

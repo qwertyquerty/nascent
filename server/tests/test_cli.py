@@ -180,7 +180,7 @@ def test_unrank_short_charts(api, app):
     preview = run(app, "unrank-short-charts", "--dry-run")
     assert preview.exit_code == 0, preview.output
     assert "would unrank" in preview.output and "Short" in preview.output and "Long" not in preview.output
-    assert "1 ranked charts have fewer than 15 notes" in preview.output
+    assert "1 ranked charts have fewer than 20 notes" in preview.output
 
     result = run(app, "unrank-short-charts")
     assert result.exit_code == 0, result.output
