@@ -1,5 +1,5 @@
-from flask import Blueprint, request, send_file
-from sqlalchemy import func, or_, select
+from flask import Blueprint, current_app, request, send_file
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload, selectinload
 
 from ..errors import ApiError
@@ -31,6 +31,8 @@ SORTS = {
 }
 
 
+DOWNLOADABLE_SOURCES = ("osu", "etterna")
+
 @blueprint.get("")
 def list_charts():
     limit, offset = pagination()
@@ -61,8 +63,17 @@ def list_charts():
 
     source = (request.args.get("source") or "").replace("\x00", "")
 
-    if source:
+    if source == "none":
+        query = query.where(~Chart.sources.any())
+    elif source:
         query = query.where(Chart.sources.any(ChartSource.source == source[:16]))
+
+    if request.args.get("downloadable") in ("1", "true"):
+        query = query.where(
+            Chart.sources.any(and_(ChartSource.source.in_(DOWNLOADABLE_SOURCES), ChartSource.source_set_id.is_not(None))),
+            Chart.note_count >= current_app.config["RANKED_MIN_NOTES"],
+            Chart.duration_ms >= current_app.config["RANKED_MIN_DURATION_MS"],
+        )
 
     search = (request.args.get("q") or "").replace("\x00", "").strip()[:100]
 

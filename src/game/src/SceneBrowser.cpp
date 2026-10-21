@@ -2,6 +2,7 @@
 #include "RichPresence.h"
 
 #include "BeatmapDownloads.h"
+#include "ConfirmOverlay.h"
 #include "gse/Game.h"
 #include "InputManager.h"
 #include "gse/ui/ProgressBar.h"
@@ -17,14 +18,34 @@
 #include "gse/concurrency/Async.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
+#include <memory>
+#include <string_view>
 #include <utility>
 
 namespace nascent {
     static constexpr uint8_t FIRST_KEY_COUNT = 4;
     static constexpr uint8_t LAST_KEY_COUNT = 10;
+    static constexpr std::array<std::string_view, 3> SOURCE_VALUES = {"", "osu", "etterna"};
+
+    struct BrowserSort {
+        std::string_view label;
+        std::string_view key;
+        bool descending;
+    };
+
+    static constexpr std::array<BrowserSort, 7> BROWSER_SORTS = {{
+        {"Title", "title", false},
+        {"Artist", "artist", false},
+        {"Difficulty", "difficulty", false},
+        {"Length", "length", false},
+        {"Plays", "play_count", true},
+        {"Newest", "created_at", true},
+        {"Keys", "key_count", false},
+    }};
 
     static int32_t text_width(olc::Font& font, const std::string& text) {
         return text.empty() ? 0 : text_bounds(font, text).size.x;
@@ -45,6 +66,25 @@ namespace nascent {
         return std::nullopt;
     }
 
+    static std::optional<int64_t> etterna_pack_id(const ServerChart& chart) {
+        for (const ServerChartSource& source : chart.sources) {
+            if (source.source == "etterna" && source.set_id) {
+                return source.set_id;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    static std::shared_ptr<BeatmapDownloads::Download> download_for(const ServerChart& chart) {
+        if (std::optional<int64_t> set_id = osu_set_id(chart)) {
+            return BeatmapDownloads::find(*set_id);
+        }
+
+        std::optional<int64_t> pack_id = etterna_pack_id(chart);
+        return pack_id ? BeatmapDownloads::find_etterna_pack(*pack_id) : nullptr;
+    }
+
     SceneBrowser::SceneBrowser(Skin* skin, SceneList* list) : skin(skin), list(list) {}
 
     void SceneBrowser::on_create() {
@@ -57,8 +97,14 @@ namespace nascent {
         form.spacing = Ui::layout("browser.field_gap");
         search_field = &form.add<TextField>("Title, artist or mapper");
         key_field = &form.add<ChoiceField>("Keys", key_options);
-        status_field = &form.add<ChoiceField>("Status", std::vector<std::string>{"Ranked", "Unranked", "Any"});
-        downloadable_field = &form.add<ChoiceField>("Downloadable only", std::vector<std::string>{"Yes", "No"});
+        source_field = &form.add<ChoiceField>("Source", std::vector<std::string>{"Any", "osu!", "Etterna"});
+        std::vector<std::string> sort_options;
+
+        for (const BrowserSort& sort : BROWSER_SORTS) {
+            sort_options.emplace_back(sort.label);
+        }
+
+        sort_field = &form.add<ChoiceField>("Sort by", sort_options);
         min_difficulty_field = &form.add<NumberField>("Min diff", "", 1.0, 1000.0);
         max_difficulty_field = &form.add<NumberField>("Max diff", "", 1.0, 1000.0);
         min_length_field = &form.add<NumberField>("Min length", "s", 30.0, 36000.0);
@@ -79,12 +125,14 @@ namespace nascent {
         ChartQuery query;
         query.search = search_field->value;
         query.key_count = key_field->selected > 0 ? std::optional<uint8_t>((uint8_t)(FIRST_KEY_COUNT + key_field->selected - 1)) : std::nullopt;
-        query.status = status_field->selected == 0 ? "ranked" : status_field->selected == 1 ? "unranked"
-                                                                                            : "";
-        query.source = downloadable_field->selected == 0 ? "osu" : "";
+        query.source = std::string(SOURCE_VALUES[std::min<size_t>(source_field->selected, SOURCE_VALUES.size() - 1)]);
+        query.downloadable = true;
         query.min_difficulty = min_difficulty_field->value();
         query.max_difficulty = max_difficulty_field->value();
         query.min_duration_s = min_length_field->value();
+        const BrowserSort& sort = BROWSER_SORTS[std::min<size_t>(sort_field->selected, BROWSER_SORTS.size() - 1)];
+        query.sort = std::string(sort.key);
+        query.descending = sort.descending;
         query.max_duration_s = max_length_field->value();
         query.limit = PAGE_SIZE;
         return query;
@@ -112,11 +160,19 @@ namespace nascent {
             return;
         }
 
+        std::vector<ServerChart> page = std::move(result.value->charts);
+        size_t received = page.size();
+        std::erase_if(page, [](const ServerChart& chart) {
+            return !osu_set_id(chart) && !etterna_pack_id(chart);
+        });
+
         if (appending && shown == first_page) {
-            results.insert(results.end(), result.value->charts.begin(), result.value->charts.end());
+            results.insert(results.end(), page.begin(), page.end());
+            fetched += received;
         }
         else {
-            results = std::move(result.value->charts);
+            results = std::move(page);
+            fetched = received;
             selected = 0;
             scroll = 0;
 
@@ -151,14 +207,53 @@ namespace nascent {
             return false;
         }
 
-        if (!set_id) {
-            error = "This chart has no osu! beatmap to download";
+        if (set_id) {
+            error.clear();
+            notice.clear();
+            BeatmapDownloads::start(*set_id, chart.artist, chart.title);
+            return true;
+        }
+
+        std::optional<int64_t> pack_id = etterna_pack_id(chart);
+
+        if (!pack_id) {
+            error = "This chart has no osu! beatmap or EtternaOnline pack to download";
             return false;
         }
 
         error.clear();
-        BeatmapDownloads::start(*set_id, chart.artist, chart.title);
+        std::shared_ptr<BeatmapDownloads::Download> existing = BeatmapDownloads::find_etterna_pack(*pack_id);
+
+        if ((existing != nullptr && existing->state != BeatmapDownloads::State::FAILED) || pack_lookup.valid()) {
+            return false;
+        }
+
+        pack_lookup_hash = chart.hash;
+        notice = "Looking up the pack on EtternaOnline...";
+        pack_lookup = run_detached([id = *pack_id] {
+            return BeatmapDownloads::lookup_etterna_pack(id);
+        });
         return true;
+    }
+
+    void SceneBrowser::poll_pack_lookup() {
+        if (pack_lookup.valid() && is_ready(pack_lookup)) {
+            BeatmapDownloads::PackLookup lookup = pack_lookup.get();
+            notice.clear();
+
+            if (!lookup.pack) {
+                error = lookup.error;
+            }
+            else if (selected < results.size() && results[selected].hash == pack_lookup_hash) {
+                BeatmapDownloads::EtternaPack pack = *lookup.pack;
+                std::string songs = pack.song_count == 1 ? std::string("1 song") : std::format("{} songs", pack.song_count);
+                std::string details = pack.size.empty() ? songs : std::format("{}, {}", songs, pack.size);
+                std::vector<std::string> lines = {pack.name, details, "This chart only comes as part of this EtternaOnline pack"};
+                overlays.open(std::make_unique<ConfirmOverlay>(skin, "Download the whole pack?", std::move(lines), "Download", [pack] {
+                    BeatmapDownloads::start_etterna_pack(pack);
+                }));
+            }
+        }
     }
 
     bool SceneBrowser::is_downloading(size_t index) const {
@@ -166,8 +261,7 @@ namespace nascent {
             return false;
         }
 
-        std::optional<int64_t> set_id = osu_set_id(results[index]);
-        std::shared_ptr<BeatmapDownloads::Download> download = set_id ? BeatmapDownloads::find(*set_id) : nullptr;
+        std::shared_ptr<BeatmapDownloads::Download> download = download_for(results[index]);
         return download != nullptr && download->state == BeatmapDownloads::State::DOWNLOADING;
     }
 
@@ -176,8 +270,12 @@ namespace nascent {
             return false;
         }
 
-        std::optional<int64_t> set_id = osu_set_id(results[index]);
-        return set_id && BeatmapDownloads::cancel(*set_id);
+        if (std::optional<int64_t> set_id = osu_set_id(results[index])) {
+            return BeatmapDownloads::cancel(*set_id);
+        }
+
+        std::optional<int64_t> pack_id = etterna_pack_id(results[index]);
+        return pack_id && BeatmapDownloads::cancel_etterna_pack(*pack_id);
     }
 
     bool SceneBrowser::update_mouse(Input& input) {
@@ -300,14 +398,15 @@ namespace nascent {
 
         query_delay = std::max(0.0f, query_delay - elapsed_time);
         poll_results();
+        poll_pack_lookup();
 
         if (!pending.valid() && query_delay <= 0.0f) {
             if (shown != wanted) {
                 request_page(wanted);
             }
-            else if ((int64_t)results.size() < total && selected + PREFETCH_ROWS >= results.size()) {
+            else if ((int64_t)fetched < total && selected + PREFETCH_ROWS >= results.size()) {
                 ChartQuery next = wanted;
-                next.offset = (int32_t)results.size();
+                next.offset = (int32_t)fetched;
                 request_page(next);
             }
         }
@@ -328,6 +427,9 @@ namespace nascent {
         if (!error.empty()) {
             subtitle = error;
         }
+        else if (!notice.empty()) {
+            subtitle = notice;
+        }
         else if (!shown) {
             subtitle = "Searching...";
         }
@@ -335,7 +437,7 @@ namespace nascent {
             subtitle = std::format("{} charts on {}", total, SettingsManager::settings.server_url);
         }
 
-        draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(error.empty() ? SkinColor::TEXT_MUTED : SkinColor::TEXT_ERROR));
+        draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(!error.empty() ? SkinColor::TEXT_ERROR : !notice.empty() ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
         y += Ui::layout_px("browser.subtitle_gap");
 
         form.draw(window, *skin, {x, y});
@@ -382,7 +484,8 @@ namespace nascent {
             std::string status;
             olc::Pixel status_color = skin->color(SkinColor::TEXT_MUTED);
             std::optional<int64_t> set_id = osu_set_id(chart);
-            std::shared_ptr<BeatmapDownloads::Download> download = set_id ? BeatmapDownloads::find(*set_id) : nullptr;
+            std::optional<int64_t> pack_id = set_id ? std::nullopt : etterna_pack_id(chart);
+            std::shared_ptr<BeatmapDownloads::Download> download = download_for(chart);
             BeatmapDownloads::State download_state = download != nullptr ? download->state.load() : BeatmapDownloads::State::FAILED;
             bool downloading = download != nullptr && (download_state == BeatmapDownloads::State::DOWNLOADING || download_state == BeatmapDownloads::State::EXTRACTING);
             olc::vf2d box_position = {(float)panel_x, row_top};
@@ -423,9 +526,8 @@ namespace nascent {
                 status = fit_text(detail_font, "Failed: " + download->error(), status_width);
                 status_color = skin->color(SkinColor::TEXT_ERROR);
             }
-            else if (!set_id) {
-                status = "Not on osu!";
-                status_color = skin->color(SkinColor::TEXT_FAINT);
+            else if (pack_id) {
+                status = is_selected && results_focused ? "Enter:  download from pack" : "Download from pack";
             }
             else {
                 status = is_selected && results_focused ? "Enter:  download" : "Download";
@@ -437,7 +539,7 @@ namespace nascent {
 
             std::string keys = std::format("{}K      ", chart.key_count);
             std::string difficulty = std::format("{:.2f}", chart.difficulty);
-            std::string details = std::format("      {}      {} notes      {}      mapped by {}", format_length(chart.duration_ms), chart.note_count, chart.status, chart.mapper);
+            std::string details = std::format("      {}      {} notes      {}      {}      mapped by {}", format_length(chart.duration_ms), chart.note_count, chart.status, set_id ? "osu!" : "Etterna", chart.mapper);
             int32_t detail_baseline = row_y + row_height - detail_bottom - (detail_metrics.size.y + detail_metrics.offset.y);
             int32_t detail_x = panel_x + row_padding;
             int32_t detail_room = panel_width - status_width - row_padding * 3;

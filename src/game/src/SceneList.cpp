@@ -1162,7 +1162,30 @@ namespace nascent {
         status_bar.draw(window, skin);
     }
 
+    static std::optional<std::filesystem::path> pack_folder_of(const Chart& chart) {
+        std::error_code ec;
+        std::filesystem::path song = std::filesystem::weakly_canonical(chart.file_path.parent_path(), ec);
+        std::filesystem::path songs = std::filesystem::weakly_canonical(SettingsManager::song_directory(), ec);
+
+        if (ec || song.empty() || song.parent_path() == songs || song.parent_path().parent_path() != songs) {
+            return std::nullopt;
+        }
+
+        return song.parent_path();
+    }
+
     size_t SceneList::pack_chart_count() const {
+        if (selected_chart == nullptr || !pack_folder_of(*selected_chart)) {
+            return 0;
+        }
+
+        std::filesystem::path pack = selected_chart->file_path.parent_path().parent_path();
+        return (size_t)std::count_if(library.charts.begin(), library.charts.end(), [&](const std::unique_ptr<Chart>& chart) {
+            return chart->file_path.parent_path().parent_path() == pack;
+        });
+    }
+
+    size_t SceneList::song_chart_count() const {
         if (selected_chart == nullptr) {
             return 0;
         }
@@ -1175,7 +1198,7 @@ namespace nascent {
 
     void SceneList::open_chart_menu() {
         game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
-        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, pack_chart_count(), Favorites::contains(selected_hash()), [this](ChartAction action) {
+        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, song_chart_count(), pack_chart_count(), Favorites::contains(selected_hash()), [this](ChartAction action) {
             handle_chart_action(action);
         }));
     }
@@ -1202,7 +1225,7 @@ namespace nascent {
 
                 break;
             default:
-                delete_charts(action == ChartAction::DELETE_PACK);
+                delete_charts(action);
                 break;
         }
     }
@@ -1245,9 +1268,10 @@ namespace nascent {
         }
     }
 
-    void SceneList::delete_charts(bool whole_pack) {
+    void SceneList::delete_charts(ChartAction action) {
         std::error_code ec;
         std::filesystem::path chart_path = selected_chart->file_path;
+        bool whole_pack = action != ChartAction::DELETE_CHART;
 
         if (ChartFolders::in_linked_folder(chart_path)) {
             game->notify("That chart is in a linked folder, so Nascent won't delete it", true);
@@ -1262,17 +1286,29 @@ namespace nascent {
         std::filesystem::path folder = std::filesystem::weakly_canonical(chart_path.parent_path(), ec);
         std::filesystem::path songs = std::filesystem::weakly_canonical(SettingsManager::song_directory(), ec);
 
-        if (ec || folder.empty() || folder.parent_path() != songs) {
+        if (ec || folder.empty() || (folder.parent_path() != songs && folder.parent_path().parent_path() != songs)) {
             game->notify("That chart isn't in your songs folder, so it wasn't deleted", true);
             return;
+        }
+
+        if (action == ChartAction::DELETE_PACK) {
+            std::optional<std::filesystem::path> pack = pack_folder_of(*selected_chart);
+
+            if (!pack) {
+                game->notify("That chart isn't part of a pack", true);
+                return;
+            }
+
+            folder = *pack;
         }
 
         std::vector<bool> removed(library.size(), false);
         size_t removed_count = 0;
 
         for (size_t index = 0; index < library.size(); index++) {
-            bool in_pack = std::filesystem::weakly_canonical(library.charts[index]->file_path.parent_path(), ec) == folder;
-            removed[index] = whole_pack ? in_pack : library.charts[index].get() == selected_chart;
+            std::filesystem::path chart_folder = std::filesystem::weakly_canonical(library.charts[index]->file_path.parent_path(), ec);
+            bool inside = action == ChartAction::DELETE_PACK ? chart_folder.parent_path() == folder : chart_folder == folder;
+            removed[index] = whole_pack ? inside : library.charts[index].get() == selected_chart;
             removed_count += removed[index] ? 1 : 0;
         }
 

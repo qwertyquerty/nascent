@@ -191,6 +191,7 @@ namespace nascent {
         std::optional<double> min_notes;
         std::optional<double> max_notes;
         std::string source;
+        bool downloadable = false;
         std::string sort = "difficulty";
         bool descending = false;
         int32_t limit = 50;

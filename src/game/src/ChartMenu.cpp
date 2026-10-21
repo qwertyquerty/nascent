@@ -2,6 +2,7 @@
 
 #include "Chart.h"
 #include "ChartFolders.h"
+#include "ChartLibrary.h"
 #include "InputManager.h"
 #include "Skin.h"
 #include "Utf8Path.h"
@@ -39,7 +40,7 @@ namespace nascent {
     }
 
     bool ChartMenu::enabled(ChartAction action) const {
-        return !(linked && is_destructive(action));
+        return !(linked && is_destructive(action)) && !(shared_file && action == ChartAction::DELETE_CHART) && !(pack_count == 0 && action == ChartAction::DELETE_PACK);
     }
 
     void ChartMenu::step_selection(bool down) {
@@ -53,15 +54,17 @@ namespace nascent {
     }
 
     bool ChartMenu::is_destructive(ChartAction action) {
-        return action == ChartAction::DELETE_CHART || action == ChartAction::DELETE_PACK;
+        return action == ChartAction::DELETE_CHART || action == ChartAction::DELETE_SONG || action == ChartAction::DELETE_PACK;
     }
 
-    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action)
+    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t song_count, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action)
         : skin(skin),
           title(std::format("{} - {}", chart.info.artist, chart.info.title)),
           subtitle(std::format("[{}]  in  {}", chart.info.difficulty_name, path_utf8(chart.file_path.parent_path().filename()))),
           linked(ChartFolders::in_linked_folder(chart.file_path)),
+          shared_file(holds_several_charts(chart.file_path)),
           details(std::format("{}  from {}", format_label(chart), linked ? "a linked folder" : "your Nascent songs folder")),
+          song_count(song_count),
           pack_count(pack_count),
           favorite(favorite),
           on_action(std::move(on_action)) {}
@@ -72,6 +75,7 @@ namespace nascent {
 
     std::string ChartMenu::label(ChartAction action, bool confirming_action) const {
         std::string pack_charts = pack_count == 1 ? std::string("1 chart") : std::format("{} charts", pack_count);
+        std::string song_charts = song_count == 1 ? std::string("its only difficulty") : std::format("all {} difficulties", song_count);
 
         switch (action) {
             case ChartAction::WATCH_REPLAY:
@@ -83,9 +87,15 @@ namespace nascent {
             case ChartAction::OPEN_FOLDER:
                 return "Open chart folder";
             case ChartAction::DELETE_CHART:
-                return confirming_action ? "Press Enter again to delete this chart" : "Delete chart";
+                return confirming_action ? "Press Enter again to delete this difficulty" : "Delete this difficulty";
+            case ChartAction::DELETE_SONG:
+                return confirming_action ? std::format("Press Enter again to delete {}", song_charts) : std::format("Delete all difficulties ({})", song_count);
             default:
-                return confirming_action ? std::format("Press Enter again to delete the pack and its {}", pack_charts) : std::format("Delete pack ({})", pack_charts);
+                if (pack_count == 0) {
+                    return "Delete pack";
+                }
+
+                return confirming_action ? std::format("Press Enter again to delete the pack and its {}", pack_charts) : std::format("Delete pack ({})", pack_count);
         }
     }
 

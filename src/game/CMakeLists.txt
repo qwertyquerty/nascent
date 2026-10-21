@@ -6,6 +6,7 @@ add_library(game
     src/ChartFolders.cpp
     src/ChartLibrary.cpp
     src/ChartMenu.cpp
+    src/ConfirmOverlay.cpp
     src/Changelog.cpp
     src/ChangelogOverlay.cpp
     src/EntityFFT.cpp

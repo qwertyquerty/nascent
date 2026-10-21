@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <fstream>
 #include <mutex>
 #include <string_view>
 #include <utility>
@@ -322,7 +323,120 @@ namespace nascent {
         return 0;
     }
 
-    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled) {
+    struct FileTarget {
+        std::ofstream* file = nullptr;
+        uint64_t written = 0;
+        uint64_t max_bytes = 0;
+        const std::function<void(double)>* progress = nullptr;
+        const std::atomic<bool>* cancelled = nullptr;
+    };
+
+    static size_t write_download_file(char* data, size_t size, size_t count, void* target) {
+        FileTarget* download = static_cast<FileTarget*>(target);
+
+        if (download->written + size * count > download->max_bytes) {
+            return 0;
+        }
+
+        download->file->write(data, (std::streamsize)(size * count));
+
+        if (!*download->file) {
+            return 0;
+        }
+
+        download->written += size * count;
+        return size * count;
+    }
+
+    static int report_file_progress(void* target, curl_off_t total, curl_off_t now, curl_off_t, curl_off_t) {
+        FileTarget* download = static_cast<FileTarget*>(target);
+
+        if (download->cancelled != nullptr && *download->cancelled) {
+            return 1;
+        }
+
+        if (total > 0 && *download->progress) {
+            (*download->progress)((double)now / (double)total);
+        }
+
+        return 0;
+    }
+
+    bool ServerClient::download_to_file(const std::string& url, const std::filesystem::path& destination, uint64_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled) {
+        retryable = false;
+
+        if (!is_https(url)) {
+            error = "download addresses must start with https://";
+            return false;
+        }
+
+        std::ofstream file(destination, std::ios::binary | std::ios::trunc);
+
+        if (!file) {
+            error = "could not create the download file";
+            return false;
+        }
+
+        PooledHandle handle;
+        CURL* curl = handle.get();
+
+        if (curl == nullptr) {
+            error = "could not start a download";
+            return false;
+        }
+
+        FileTarget target{&file, 0, max_bytes, &progress, cancelled};
+        char error_buffer[CURL_ERROR_SIZE] = {};
+        long status = 0;
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_download_file);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &target);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, report_file_progress);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &target);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, CONNECT_TIMEOUT_S);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, DOWNLOAD_LOW_SPEED_BYTES);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, DOWNLOAD_LOW_SPEED_TIME_S);
+
+        CURLcode result = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+        curl_easy_reset(curl);
+        file.close();
+
+        if (result == CURLE_WRITE_ERROR && target.written + CURL_MAX_WRITE_SIZE > max_bytes) {
+            error = std::format("the download is larger than {} GB", max_bytes / (1024 * 1024 * 1024));
+            return false;
+        }
+
+        if (result == CURLE_ABORTED_BY_CALLBACK) {
+            error = "the download was cancelled";
+            return false;
+        }
+
+        if (result == CURLE_WRITE_ERROR) {
+            error = "could not write the download to disk";
+            return false;
+        }
+
+        if (result != CURLE_OK) {
+            error = error_buffer[0] != '\0' ? error_buffer : curl_easy_strerror(result);
+            retryable = result != CURLE_URL_MALFORMAT && result != CURLE_UNSUPPORTED_PROTOCOL;
+            return false;
+        }
+
+        if (status >= 400) {
+            error = std::format("the download server answered with HTTP {}", status);
+            retryable = status == 429 || status >= 500;
+            return false;
+        }
+
+        return true;
+    }
+
+    std::optional<std::string> ServerClient::download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled, const std::vector<std::string>& headers) {
         retryable = false;
 
         if (!is_https(url)) {
@@ -341,8 +455,14 @@ namespace nascent {
         DownloadTarget target{std::string(), max_bytes, &progress, cancelled};
         char error_buffer[CURL_ERROR_SIZE] = {};
         long status = 0;
+        curl_slist* header_list = nullptr;
+
+        for (const std::string& header : headers) {
+            header_list = curl_slist_append(header_list, header.c_str());
+        }
 
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, append_download);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &target);
@@ -357,6 +477,7 @@ namespace nascent {
         CURLcode result = curl_easy_perform(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
         curl_easy_reset(curl);
+        curl_slist_free_all(header_list);
 
         if (result == CURLE_WRITE_ERROR && target.data.size() + CURL_MAX_WRITE_SIZE > max_bytes) {
             error = std::format("the download is larger than {} MB", max_bytes / (1024 * 1024));

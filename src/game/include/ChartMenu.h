@@ -20,6 +20,7 @@ namespace nascent {
         OPEN_WEBSITE,
         OPEN_FOLDER,
         DELETE_CHART,
+        DELETE_SONG,
         DELETE_PACK
     };
 
@@ -29,7 +30,9 @@ namespace nascent {
         std::string title;
         std::string subtitle;
         bool linked;
+        bool shared_file;
         std::string details;
+        size_t song_count;
         size_t pack_count;
         bool favorite;
         std::function<void(ChartAction)> on_action;
@@ -46,11 +49,11 @@ namespace nascent {
         std::string label(ChartAction action, bool confirming_action) const;
 
         public:
-        static constexpr std::array<ChartAction, 6> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::OPEN_FOLDER, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
+        static constexpr std::array<ChartAction, 7> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::OPEN_FOLDER, ChartAction::DELETE_CHART, ChartAction::DELETE_SONG, ChartAction::DELETE_PACK};
 
         static bool is_destructive(ChartAction action);
 
-        ChartMenu(Skin* skin, const Chart& chart, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action);
+        ChartMenu(Skin* skin, const Chart& chart, size_t song_count, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action);
 
         void on_open() override;
         void update(float elapsed_time) override;

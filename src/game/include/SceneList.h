@@ -214,9 +214,10 @@ namespace nascent {
         void open_replay_menu();
         void watch_replay(Replay replay, std::string label);
         void toggle_favorite();
+        size_t song_chart_count() const;
         size_t pack_chart_count() const;
         void open_chart_website();
-        void delete_charts(bool whole_pack);
+        void delete_charts(ChartAction action);
 
         public:
         static constexpr size_t SHUFFLE_HISTORY_LIMIT = 100;

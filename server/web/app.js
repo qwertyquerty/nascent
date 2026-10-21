@@ -32,6 +32,8 @@ const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases";
 const INSTALLER_SUFFIXES = {win: ["-setup.exe", ".zip"], mac: [".dmg", ".zip"], linux: [".AppImage", ".zip"]};
 const OS_LABELS = {win: "Windows", mac: "macOS", linux: "Linux"};
 const SOURCE_NAMES = {osu: "osu!", etterna: "EtternaOnline"};
+const SOURCE_LABELS = {osu: "osu!", etterna: "Etterna"};
+const SOURCE_FILTERS = [["osu", "osu!"], ["etterna", "Etterna"], ["none", "Uploaded"]];
 const PACKAGE_KINDS = {"-setup.exe": "Installer", ".dmg": "Disk image", ".AppImage": "AppImage", ".zip": "Portable zip"};
 const PACKAGE_PATTERN = /-(win|mac|linux)-([a-z0-9_]+?)(-setup\.exe|\.dmg|\.AppImage|\.zip)$/;
 const PAGE_SIZE = 50;
@@ -260,6 +262,10 @@ const format = {
     accuracy: (value) => `${(Number(value ?? 0) * 100).toFixed(2)}%`,
     rank: (value) => (value ? `#${value.toLocaleString()}` : "—"),
     rate: (value) => `${Number(value).toFixed(2)}x`,
+    source(chart) {
+        const names = [...new Set((chart?.sources ?? []).map((source) => SOURCE_LABELS[source.source] ?? source.source))];
+        return names.length ? names.join(", ") : "Uploaded";
+    },
     client(value) {
         if (!value) {
             return "Unknown device";
@@ -510,6 +516,7 @@ const loaders = {
             q: params.q,
             key_count: params.key_count,
             status: params.status === "all" ? "" : "ranked",
+            source: params.source,
             min_difficulty: params.min_difficulty,
             max_difficulty: params.max_difficulty,
             min_duration: seconds(params.min_length),
@@ -518,8 +525,8 @@ const loaders = {
             order: params.order || "desc",
             ...paged(params),
         });
-        const filtered = ["q", "key_count", "status", "min_difficulty", "max_difficulty", "min_length", "max_length", "sort", "order"].some((name) => params[name]);
-        return {title: "Charts", filtered, ...result};
+        const filtered = ["q", "key_count", "status", "source", "min_difficulty", "max_difficulty", "min_length", "max_length", "sort", "order"].some((name) => params[name]);
+        return {title: "Charts", filtered, sources: SOURCE_FILTERS, ...result};
     },
 
     async staff({params}) {

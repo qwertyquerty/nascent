@@ -417,6 +417,14 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="control">
+                            <div class="select">
+                                <select name="source" aria-label="Source" @change="$event.target.form.requestSubmit()">
+                                    <option value="">Any source</option>
+                                    <option v-for="[source, label] in view.sources" :value="source" :selected="route.params.source === source">{{ label }}</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     <div class="field is-grouped is-grouped-multiline is-align-items-center">
                         <div class="control"><span class="has-text-grey">Difficulty</span></div>
@@ -463,6 +471,7 @@
                             ]" :key="field" scope="col" :class="classes" :aria-sort="ariaSort(field, {sort: 'play_count', order: 'desc'})">
                                 <sort-link :field="field" :label="label" :defaults="{sort: 'play_count', order: 'desc'}" :first="first"></sort-link>
                             </th>
+                            <th scope="col" class="is-hidden-mobile">Source</th>
                             <th scope="col" class="is-hidden-mobile">Status</th>
                         </tr></thead>
                         <tbody><tr v-for="chart in view.charts" :key="chart.hash">
@@ -474,6 +483,7 @@
                             <td class="is-numeric"><difficulty-value :value="chart.difficulty"></difficulty-value></td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.length(chart.duration_ms) }}</td>
                             <td class="is-numeric is-hidden-mobile">{{ $f.number(chart.play_count) }}</td>
+                            <td class="is-hidden-mobile">{{ $f.source(chart) }}</td>
                             <td class="is-hidden-mobile"><span class="tag" :class="chart.status === 'ranked' ? 'is-success is-dark' : 'is-light'">{{ chart.status }}</span></td>
                         </tr></tbody>
                     </table>
@@ -487,6 +497,7 @@
                 <p class="subtitle is-6 mt-2">
                     [{{ view.chart.difficulty_name }}] by {{ view.chart.mapper }}
                     <span class="tag is-light" :class="{'is-success': view.chart.status === 'ranked'}">{{ view.chart.status }}</span>
+                    <span class="tag is-light">{{ $f.source(view.chart) }}</span>
                 </p>
                 <div v-if="view.downloads.length || view.pages.length" class="buttons chart-links">
                     <a v-for="download in view.downloads" :key="download.url" class="button is-small is-primary" :href="download.url" rel="noopener noreferrer">Download from {{ download.name }}</a>

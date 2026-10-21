@@ -370,7 +370,23 @@ namespace nascent {
             }
 
             if (extension != ".zip") {
-                show_toast("Drop an osu! .osz beatmap or a Nascent or Etterna skin .zip to import it", true, ToastOverlay::DEFAULT_TIME);
+                show_toast("Drop an osu! .osz beatmap, a song pack .zip, or a Nascent or Etterna skin .zip to import it", true, ToastOverlay::DEFAULT_TIME);
+                continue;
+            }
+
+            if (BeatmapDownloads::archive_has_charts(path)) {
+                show_toast(std::format("Importing {}...", path_utf8(path.filename())), false, std::numeric_limits<float>::infinity());
+                beatmap_imports.push_back(std::async(std::launch::async, [path] {
+                    try {
+                        return BeatmapDownloads::import_pack(path);
+                    }
+                    catch (const std::exception& e) {
+                        BeatmapDownloads::ImportResult result;
+                        result.name = path_utf8(path.stem());
+                        result.error = e.what();
+                        return result;
+                    }
+                }));
                 continue;
             }
 

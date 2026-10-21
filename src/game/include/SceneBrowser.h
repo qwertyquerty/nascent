@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BeatmapDownloads.h"
 #include "gse/Scene.h"
 #include "ServerApi.h"
 #include "gse/ui/KeyRepeat.h"
@@ -29,8 +30,8 @@ namespace nascent {
         UiForm form;
         TextField* search_field = nullptr;
         ChoiceField* key_field = nullptr;
-        ChoiceField* status_field = nullptr;
-        ChoiceField* downloadable_field = nullptr;
+        ChoiceField* source_field = nullptr;
+        ChoiceField* sort_field = nullptr;
         NumberField* min_difficulty_field = nullptr;
         NumberField* max_difficulty_field = nullptr;
         NumberField* min_length_field = nullptr;
@@ -38,6 +39,7 @@ namespace nascent {
 
         bool results_focused = false;
         std::vector<ServerChart> results;
+        size_t fetched = 0;
         int64_t total = 0;
         size_t selected = 0;
         KeyRepeat up_repeat;
@@ -54,10 +56,14 @@ namespace nascent {
         float query_delay = 0;
         std::future<ApiResult<ChartList>> pending;
         std::string error;
+        std::string notice;
+        std::future<BeatmapDownloads::PackLookup> pack_lookup;
+        std::string pack_lookup_hash;
 
         ChartQuery build_query() const;
         void request_page(const ChartQuery& query);
         void poll_results();
+        void poll_pack_lookup();
         bool download_selected();
         bool is_downloading(size_t index) const;
         bool cancel_download(size_t index);

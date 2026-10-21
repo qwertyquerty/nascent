@@ -3,12 +3,14 @@
 #include "gse/Platform.h"
 #include "ServerClient.h"
 #include "SettingsManager.h"
+#include "json.h"
 #include "Utf8Path.h"
 
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include <miniz.h>
 
 #include <cctype>
+#include <cstdio>
 #include <cerrno>
 #include <chrono>
 #include <filesystem>
@@ -23,7 +25,15 @@
 
 namespace nascent {
     static std::mutex downloads_mutex;
-    static std::map<int64_t, std::shared_ptr<BeatmapDownloads::Download>> downloads;
+    static std::map<std::string, std::shared_ptr<BeatmapDownloads::Download>> downloads;
+
+    static std::string osu_key(int64_t set_id) {
+        return std::format("osu:{}", set_id);
+    }
+
+    static std::string pack_key(int64_t pack_id) {
+        return std::format("etterna:{}", pack_id);
+    }
     static std::atomic<bool> library_changed = false;
     static std::atomic<bool> access_denied = false;
 
@@ -334,14 +344,14 @@ namespace nascent {
 
     std::shared_ptr<BeatmapDownloads::Download> BeatmapDownloads::start(int64_t set_id, const std::string& artist, const std::string& title) {
         std::lock_guard<std::mutex> lock(downloads_mutex);
-        auto existing = downloads.find(set_id);
+        auto existing = downloads.find(osu_key(set_id));
 
         if (existing != downloads.end() && existing->second->state != State::FAILED) {
             return existing->second;
         }
 
         auto download = std::make_shared<Download>();
-        downloads[set_id] = download;
+        downloads[osu_key(set_id)] = download;
 
         std::vector<std::string> urls;
 
@@ -388,23 +398,369 @@ namespace nascent {
         return download;
     }
 
-    std::shared_ptr<BeatmapDownloads::Download> BeatmapDownloads::find(int64_t set_id) {
+    static std::shared_ptr<BeatmapDownloads::Download> find_key(const std::string& key) {
         std::lock_guard<std::mutex> lock(downloads_mutex);
-        auto existing = downloads.find(set_id);
+        auto existing = downloads.find(key);
         return existing != downloads.end() ? existing->second : nullptr;
     }
 
-    bool BeatmapDownloads::cancel(int64_t set_id) {
+    static bool cancel_key(const std::string& key) {
         std::lock_guard<std::mutex> lock(downloads_mutex);
-        auto existing = downloads.find(set_id);
+        auto existing = downloads.find(key);
 
-        if (existing == downloads.end() || existing->second->state != State::DOWNLOADING) {
+        if (existing == downloads.end() || existing->second->state != BeatmapDownloads::State::DOWNLOADING) {
             return false;
         }
 
         existing->second->cancelled = true;
         downloads.erase(existing);
         return true;
+    }
+
+    std::shared_ptr<BeatmapDownloads::Download> BeatmapDownloads::find(int64_t set_id) {
+        return find_key(osu_key(set_id));
+    }
+
+    bool BeatmapDownloads::cancel(int64_t set_id) {
+        return cancel_key(osu_key(set_id));
+    }
+
+    std::shared_ptr<BeatmapDownloads::Download> BeatmapDownloads::find_etterna_pack(int64_t pack_id) {
+        return find_key(pack_key(pack_id));
+    }
+
+    bool BeatmapDownloads::cancel_etterna_pack(int64_t pack_id) {
+        return cancel_key(pack_key(pack_id));
+    }
+
+    static std::string quote_url(const std::string& url) {
+        static constexpr const char* HEX = "0123456789ABCDEF";
+        std::string quoted;
+
+        for (size_t index = 0; index < url.size(); index++) {
+            unsigned char c = (unsigned char)url[index];
+            bool escape = c == '%' && index + 2 < url.size() && std::isxdigit((unsigned char)url[index + 1]) && std::isxdigit((unsigned char)url[index + 2]);
+
+            if (std::isalnum(c) || std::string_view("-._~:/").find((char)c) != std::string_view::npos || escape) {
+                quoted.push_back((char)c);
+            }
+            else {
+                quoted.push_back('%');
+                quoted.push_back(HEX[c >> 4]);
+                quoted.push_back(HEX[c & 0x0f]);
+            }
+        }
+
+        return quoted;
+    }
+
+    BeatmapDownloads::PackLookup BeatmapDownloads::lookup_etterna_pack(int64_t pack_id) {
+        PackLookup lookup;
+        bool retryable = false;
+        std::optional<std::string> body = ServerClient::download(std::format("{}{}", ETTERNA_PACK_API, pack_id), MAX_PACK_LOOKUP_BYTES, [](double) {}, lookup.error, retryable, nullptr, {"Accept: application/json"});
+
+        if (!body) {
+            lookup.error = std::format("could not reach EtternaOnline: {}", lookup.error);
+            return lookup;
+        }
+
+        try {
+            nlohmann::json data = nlohmann::json::parse(*body).at("data");
+            EtternaPack pack;
+            pack.id = pack_id;
+            pack.name = data.value("name", std::string());
+            pack.song_count = data.value("song_count", (int64_t)0);
+            pack.size = data.value("size", std::string());
+            pack.download_url = quote_url(data.at("download").get<std::string>());
+
+            if (!pack.download_url.starts_with("https://")) {
+                lookup.error = "EtternaOnline has no download for this pack";
+                return lookup;
+            }
+
+            lookup.pack = std::move(pack);
+        }
+        catch (const nlohmann::json::exception&) {
+            lookup.error = "EtternaOnline sent an unexpected answer";
+        }
+
+        return lookup;
+    }
+
+    static FILE* open_for_reading(const std::filesystem::path& path) {
+#ifdef _WIN32
+        return _wfopen(path.c_str(), L"rb");
+#else
+        return std::fopen(path.c_str(), "rb");
+#endif
+    }
+
+    static size_t write_entry(void* target, mz_uint64, const void* data, size_t size) {
+        std::ofstream* file = static_cast<std::ofstream*>(target);
+        file->write(static_cast<const char*>(data), (std::streamsize)size);
+        return *file ? size : 0;
+    }
+
+    static bool is_chart_name(const std::filesystem::path& path) {
+        std::string extension = path_utf8(path.extension());
+
+        for (char& c : extension) {
+            c = (char)std::tolower((unsigned char)c);
+        }
+
+        return extension == ".sm" || extension == ".ssc" || extension == ".dwi" || extension == ".osu";
+    }
+
+    static bool extract_pack(const std::filesystem::path& archive, const std::filesystem::path& destination, std::atomic<bool>& cancelled, std::string& error) {
+        std::error_code ec;
+        uint64_t archive_size = std::filesystem::file_size(archive, ec);
+        FILE* handle = ec ? nullptr : open_for_reading(archive);
+
+        if (handle == nullptr) {
+            error = "could not open the downloaded pack";
+            return false;
+        }
+
+        mz_zip_archive zip = {};
+
+        if (!mz_zip_reader_init_cfile(&zip, handle, archive_size, 0)) {
+            std::fclose(handle);
+            error = "the download is not a valid zip archive";
+            return false;
+        }
+
+        mz_uint count = mz_zip_reader_get_num_files(&zip);
+        std::optional<std::string> shared_root;
+        bool rooted = true;
+
+        for (mz_uint index = 0; index < count && rooted; index++) {
+            mz_zip_archive_file_stat stat;
+
+            if (!mz_zip_reader_file_stat(&zip, index, &stat) || mz_zip_reader_is_file_a_directory(&zip, index)) {
+                continue;
+            }
+
+            std::string name = stat.m_filename;
+            size_t slash = name.find_first_of("/\\");
+
+            if (slash == std::string::npos) {
+                rooted = false;
+                continue;
+            }
+
+            std::string root = name.substr(0, slash);
+            rooted = !shared_root || *shared_root == root;
+            shared_root = root;
+        }
+
+        size_t strip = rooted && shared_root ? shared_root->size() + 1 : 0;
+        size_t charts_written = 0;
+        std::string first_failure;
+
+        for (mz_uint index = 0; index < count && !cancelled; index++) {
+            mz_zip_archive_file_stat stat;
+
+            if (!mz_zip_reader_file_stat(&zip, index, &stat) || mz_zip_reader_is_file_a_directory(&zip, index)) {
+                continue;
+            }
+
+            std::string name = stat.m_filename;
+            std::optional<std::filesystem::path> entry = safe_entry(name.size() > strip ? name.substr(strip) : name);
+
+            if (!entry) {
+                continue;
+            }
+
+            std::filesystem::path target = destination / *entry;
+            bool is_chart = is_chart_name(target);
+            std::string failure;
+
+            if (!fits(target)) {
+                failure = "its path is too long for this system";
+            }
+            else {
+                std::filesystem::create_directories(target.parent_path(), ec);
+                errno = 0;
+                std::ofstream file(target, std::ios::binary | std::ios::trunc);
+
+                if (!file) {
+                    if (ec == std::errc::permission_denied || errno == EACCES) {
+                        access_denied = true;
+                    }
+
+                    failure = ec ? ec.message() : std::string("the file could not be created");
+                }
+                else if (!mz_zip_reader_extract_to_callback(&zip, index, write_entry, &file, 0)) {
+                    failure = "it could not be decompressed";
+                }
+            }
+
+            if (failure.empty()) {
+                charts_written += is_chart;
+                continue;
+            }
+
+            std::cerr << std::format("Skipped {} from the pack: {}", name, failure) << std::endl;
+
+            if (first_failure.empty() || is_chart) {
+                first_failure = std::format("could not write {}: {}", name, failure);
+            }
+        }
+
+        mz_zip_reader_end(&zip);
+        std::fclose(handle);
+
+        if (cancelled) {
+            error = "the download was cancelled";
+            return false;
+        }
+
+        if (charts_written == 0) {
+            error = first_failure.empty() ? std::string("it has no charts") : first_failure;
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool install_pack(const std::filesystem::path& archive, const std::filesystem::path& destination, std::atomic<bool>& cancelled, std::string& error) {
+        std::error_code ec;
+
+        if (std::filesystem::exists(destination, ec)) {
+            return extract_pack(archive, destination, cancelled, error);
+        }
+
+        std::filesystem::path staging = destination;
+        staging += ".part";
+        std::filesystem::remove_all(staging, ec);
+
+        if (!extract_pack(archive, staging, cancelled, error)) {
+            std::filesystem::remove_all(staging, ec);
+            return false;
+        }
+
+        if (!move_into_place(staging, destination, ec)) {
+            if (ec == std::errc::permission_denied) {
+                access_denied = true;
+            }
+
+            error = std::format("could not move the pack into the songs folder: {}", ec.message());
+            std::filesystem::remove_all(staging, ec);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool BeatmapDownloads::archive_has_charts(const std::filesystem::path& file) {
+        std::error_code ec;
+        uint64_t archive_size = std::filesystem::file_size(file, ec);
+        FILE* handle = ec ? nullptr : open_for_reading(file);
+
+        if (handle == nullptr) {
+            return false;
+        }
+
+        mz_zip_archive zip = {};
+        bool found = false;
+
+        if (mz_zip_reader_init_cfile(&zip, handle, archive_size, 0)) {
+            mz_uint count = mz_zip_reader_get_num_files(&zip);
+
+            for (mz_uint index = 0; index < count && !found; index++) {
+                mz_zip_archive_file_stat stat;
+                found = mz_zip_reader_file_stat(&zip, index, &stat) && !mz_zip_reader_is_file_a_directory(&zip, index) && is_chart_name(utf8_path(std::string(stat.m_filename)));
+            }
+
+            mz_zip_reader_end(&zip);
+        }
+
+        std::fclose(handle);
+        return found;
+    }
+
+    BeatmapDownloads::ImportResult BeatmapDownloads::import_pack(const std::filesystem::path& file) {
+        ImportResult result;
+        result.name = folder_name(path_utf8(file.stem()));
+
+        if (result.name.empty()) {
+            result.name = "Imported pack";
+        }
+
+        std::atomic<bool> cancelled = false;
+
+        if (!install_pack(file, SettingsManager::song_directory() / utf8_path(result.name), cancelled, result.error)) {
+            return result;
+        }
+
+        library_changed = true;
+        result.ok = true;
+        return result;
+    }
+
+    std::shared_ptr<BeatmapDownloads::Download> BeatmapDownloads::start_etterna_pack(const EtternaPack& pack) {
+        std::lock_guard<std::mutex> lock(downloads_mutex);
+        std::string key = pack_key(pack.id);
+        auto existing = downloads.find(key);
+
+        if (existing != downloads.end() && existing->second->state != State::FAILED) {
+            return existing->second;
+        }
+
+        auto download = std::make_shared<Download>();
+        downloads[key] = download;
+        std::string name = folder_name(pack.name);
+        std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(name.empty() ? std::format("EtternaOnline pack {}", pack.id) : name);
+        std::filesystem::path archive = SettingsManager::song_directory() / std::format(".etterna-pack-{}.zip.part", pack.id);
+        download->destination = destination;
+
+        std::thread([download, pack, destination, archive] {
+            std::string error;
+            bool downloaded = false;
+            std::error_code ec;
+
+            for (int32_t attempt = 1; attempt <= DOWNLOAD_ATTEMPTS && !downloaded && !download->cancelled; attempt++) {
+                bool retryable = false;
+                download->progress = 0.0;
+                downloaded = ServerClient::download_to_file(pack.download_url, archive, MAX_PACK_BYTES, [&download](double progress) { download->progress = progress; }, error, retryable, &download->cancelled);
+
+                if (!downloaded && (!retryable || attempt == DOWNLOAD_ATTEMPTS)) {
+                    break;
+                }
+
+                if (!downloaded) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(RETRY_DELAY_MS));
+                }
+            }
+
+            if (download->cancelled) {
+                std::filesystem::remove(archive, ec);
+                return;
+            }
+
+            if (!downloaded) {
+                std::filesystem::remove(archive, ec);
+                std::cerr << std::format("EtternaOnline pack {} failed to download: {}", pack.id, error) << std::endl;
+                download->fail(std::format("{}: {}", host_of(pack.download_url), error));
+                return;
+            }
+
+            download->state = State::EXTRACTING;
+            bool installed = install_pack(archive, destination, download->cancelled, error);
+            std::filesystem::remove(archive, ec);
+
+            if (!installed) {
+                std::cerr << std::format("EtternaOnline pack {} failed to install into {}: {}", pack.id, path_utf8(destination), error) << std::endl;
+                download->fail(error);
+                return;
+            }
+
+            download->progress = 1.0;
+            download->state = State::DONE;
+            library_changed = true;
+        }).detach();
+
+        return download;
     }
 
     void BeatmapDownloads::forget_missing() {

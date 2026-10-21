@@ -4,6 +4,8 @@
 #include "json.h"
 
 #include <atomic>
+#include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <future>
 #include <optional>
@@ -11,6 +13,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace nascent {
     struct ServerResponse {
@@ -32,6 +35,7 @@ namespace nascent {
         static ServerResponse request(const std::string& server, const std::string& method, const std::string& path, const nlohmann::json& body = nullptr, const std::string& access_token = "");
         static std::future<ServerResponse> request_async(const std::string& server, const std::string& method, const std::string& path, const nlohmann::json& body = nullptr, const std::string& access_token = "");
         static std::string url_encode(const std::string& text);
-        static std::optional<std::string> download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled = nullptr);
+        static std::optional<std::string> download(const std::string& url, size_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled = nullptr, const std::vector<std::string>& headers = {});
+        static bool download_to_file(const std::string& url, const std::filesystem::path& destination, uint64_t max_bytes, const std::function<void(double)>& progress, std::string& error, bool& retryable, const std::atomic<bool>* cancelled = nullptr);
     };
 }

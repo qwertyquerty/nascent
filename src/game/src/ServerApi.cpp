@@ -340,6 +340,10 @@ namespace nascent {
             path += "&source=" + ServerClient::url_encode(query.source);
         }
 
+        if (query.downloadable) {
+            path += "&downloadable=1";
+        }
+
         for (const auto& [name, value] : {
                  std::pair{"min_difficulty", query.min_difficulty},
                  std::pair{"max_difficulty", query.max_difficulty},
