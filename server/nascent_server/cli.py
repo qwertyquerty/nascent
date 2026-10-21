@@ -11,7 +11,7 @@ import flask_migrate
 import nascent_core as nc
 from flask import current_app
 from flask.cli import AppGroup
-from sqlalchemy import delete, func, inspect, select
+from sqlalchemy import delete, func, inspect, or_, select
 
 from . import tasks, timeutil
 from .errors import ApiError
@@ -269,7 +269,7 @@ def import_charts(path: Path, rank: bool, quiet: bool):
                 if source is not None:
                     add_chart_source(chart, **source)
 
-                changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank else False
+                changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank and _meets_ranked_minimums(chart) else False
             except (ApiError, ValueError) as error:
                 db.session.rollback()
                 message = str(getattr(error, "message", error))
@@ -326,6 +326,37 @@ def chart_status(chart_hash: str, status: str):
         return
 
     _report(tasks.enqueue(tasks.apply_chart_status, chart.id), f"{chart.title} is now {status}")
+
+
+def _meets_ranked_minimums(chart: Chart) -> bool:
+    return chart.note_count >= current_app.config["RANKED_MIN_NOTES"] and chart.duration_ms >= current_app.config["RANKED_MIN_DURATION_MS"]
+
+
+@nascent_cli.command("unrank-short-charts")
+@click.option("--dry-run", is_flag=True, help="List the charts without unranking them")
+def unrank_short_charts(dry_run: bool):
+    minimum_notes = current_app.config["RANKED_MIN_NOTES"]
+    minimum_ms = current_app.config["RANKED_MIN_DURATION_MS"]
+    query = select(Chart).where(Chart.status == ChartStatus.RANKED, or_(Chart.note_count < minimum_notes, Chart.duration_ms < minimum_ms)).order_by(Chart.id)
+    charts = db.session.scalars(query).all()
+
+    for chart in charts:
+        name = f"{chart.artist} - {chart.title} [{chart.difficulty_name}]"
+        click.echo(f"{'would unrank' if dry_run else 'unranking'} {chart.hash[:16]} {chart.note_count} notes {chart.duration_ms / 1000:.1f}s {name}")
+
+    if dry_run:
+        click.echo(f"{len(charts)} ranked charts have fewer than {minimum_notes} notes or are shorter than {minimum_ms / 1000:g} seconds")
+        return
+
+    for chart in charts:
+        set_chart_status(chart, ChartStatus.UNRANKED, None)
+
+    db.session.commit()
+
+    for chart in charts:
+        tasks.enqueue(tasks.apply_chart_status, chart.id)
+
+    click.echo(f"{len(charts)} charts unranked")
 
 
 @nascent_cli.command("review-play")

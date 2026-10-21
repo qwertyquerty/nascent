@@ -1,0 +1,12 @@
+- name: "{{ 'List' if dry_run | default(false) | bool else 'Unrank' }} the ranked charts that miss the ranked minimums"
+  ansible.builtin.command:
+    argv: "{{ ['docker', 'compose', 'exec', '-T', 'api', 'flask', '--app', 'wsgi', 'nascent', 'unrank-short-charts'] + (['--dry-run'] if dry_run | default(false) | bool else []) }}"
+    chdir: "{{ nascent_compose_dir }}"
+  async: 7200
+  poll: 15
+  register: unranked
+  changed_when: "not (dry_run | default(false) | bool) and unranked.stdout_lines | select('match', '^[1-9][0-9]* charts unranked') | list | length > 0"
+
+- name: Report the result
+  ansible.builtin.debug:
+    msg: "{{ unranked.stdout_lines[:25] + (['... ' ~ (unranked.stdout_lines | length - 26) ~ ' more'] if unranked.stdout_lines | length > 26 else []) + ([unranked.stdout_lines | last] if unranked.stdout_lines | length > 25 else []) + (['the worker refreshes the affected plays and profiles in the background'] if not (dry_run | default(false) | bool) else []) }}"

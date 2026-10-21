@@ -1,0 +1,9 @@
+- name: Unrank every ranked chart that misses the ranked minimum notes or length
+  hosts: nascent
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Unrank the charts
+      ansible.builtin.import_role:
+        name: nascent
+        tasks_from: unrank_short_charts

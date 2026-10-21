@@ -141,7 +141,7 @@ def test_import_stepmania_charts(api, app, tmp_path):
     with app.app_context():
         charts = db.session.scalars(select(Chart).order_by(Chart.title, Chart.difficulty_name)).all()
         assert [(chart.title, chart.difficulty_name) for chart in charts] == [("Dwi", "Hard"), ("Imported", "Easy"), ("Imported", "Hard"), ("Tiny", "Easy")]
-        assert all(chart.status == ChartStatus.RANKED for chart in charts)
+        assert [chart.status for chart in charts] == [ChartStatus.RANKED, ChartStatus.RANKED, ChartStatus.RANKED, ChartStatus.UNRANKED]
         sources = db.session.scalars(select(ChartSource)).all()
         assert len(sources) == 4
         assert all(source.source == "etterna" and source.checksum.startswith("X") and len(source.checksum) == 41 for source in sources)
@@ -161,3 +161,32 @@ def test_import_stepmania_charts(api, app, tmp_path):
 
     again = run(app, "import-charts", str(tmp_path / "packs"), "--rank", "--quiet")
     assert "0 new charts, 4 already on the server, 1 skipped, from 3 files" in again.output
+
+
+def test_unrank_short_charts(api, app):
+    from nascent_server.extensions import db
+    from nascent_server.models import Chart, ChartStatus
+
+    token = api.token("alice")
+    short = api.post("/api/v1/charts", make_chart(title="Short", note_count=10), token).get_json()["chart"]["hash"]
+    long = api.post("/api/v1/charts", make_chart(title="Long", note_count=200), token).get_json()["chart"]["hash"]
+
+    with app.app_context():
+        for chart in db.session.scalars(select(Chart)).all():
+            chart.status = ChartStatus.RANKED
+
+        db.session.commit()
+
+    preview = run(app, "unrank-short-charts", "--dry-run")
+    assert preview.exit_code == 0, preview.output
+    assert "would unrank" in preview.output and "Short" in preview.output and "Long" not in preview.output
+    assert "1 ranked charts have fewer than 15 notes" in preview.output
+
+    result = run(app, "unrank-short-charts")
+    assert result.exit_code == 0, result.output
+    assert "1 charts unranked" in result.output
+
+    with app.app_context():
+        statuses = {chart.hash: chart.status for chart in db.session.scalars(select(Chart)).all()}
+        assert statuses[short] == ChartStatus.UNRANKED
+        assert statuses[long] == ChartStatus.RANKED
