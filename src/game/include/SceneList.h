@@ -162,6 +162,8 @@ namespace nascent {
         Hotspots row_spots;
         Hotspots ui_spots;
         ScrollBar list_scrollbar;
+        ScrollBar preview_seek;
+        double preview_seek_target = -1;
         bool show_leaderboards = false;
         bool recommended_started = false;
 
@@ -204,6 +206,8 @@ namespace nascent {
         void draw_recommended(olc::PixelGameEngine* window);
         bool update_controls(float elapsed_time);
         bool update_mouse(Input& input);
+        bool update_preview_seek(Input& input);
+        void draw_preview_seek(olc::PixelGameEngine* window);
         float list_position() const;
         size_t selected_library_index() const;
         void draw_list_scrollbar(olc::PixelGameEngine* window, int32_t charts_per_screen);

@@ -65,7 +65,10 @@
             "hit_log_error_x": 80,
             "replay_seek_height": 6,
             "replay_seek_gap": 14,
-            "replay_seek_step_ms": 40
+            "replay_seek_step_ms": 40,
+            "judgement_counter_gap": 12,
+            "judgement_counter_spacing": 28,
+            "judgement_counter_value_x": 120
         },
         "pause_menu": {
             "title_top": 0.26,
@@ -85,7 +88,10 @@
         },
         "timing_bar": {
             "hit_width_fraction": 0.0025,
-            "window_alpha": 24
+            "window_alpha": 24,
+            "average_hits": 20,
+            "average_size_fraction": 0.01,
+            "average_width_ratio": 1.2
         },
         "results": {
             "margin_fraction": 0.041666666666666664,
@@ -189,7 +195,11 @@
             "background_work_bar_height": 3,
             "background_work_delay": 0.5,
             "background_work_fade_speed": 4,
-            "background_work_bar_speed": 8
+            "background_work_bar_speed": 8,
+            "preview_seek_height": 6,
+            "preview_seek_gap": 14,
+            "preview_seek_margin": 20,
+            "preview_seek_step_ms": 40
         },
         "leaderboard": {
             "padding": 24,

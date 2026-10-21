@@ -6,6 +6,7 @@
 #include "Account.h"
 #include "Attempt.h"
 #include "Chart.h"
+#include "ChartSearch.h"
 #include "ChangelogOverlay.h"
 #include "ChartFolders.h"
 #include "EtternaSkin.h"
@@ -14,6 +15,7 @@
 #include "gse/Platform.h"
 #include "gse/ui/RowField.h"
 #include "KeyBindField.h"
+#include "ServerClient.h"
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "gse/render/TextCache.h"
@@ -52,6 +54,8 @@ namespace nascent {
     static constexpr int32_t PREVIEW_TAP_MS = 60;
     static constexpr const char* DELETE_SKIN_LABEL = "Delete skin";
     static constexpr const char* SKIN_EXPORT_FOLDER = "exports";
+    static constexpr const char* BUG_REPORT_URL = "https://github.com/qwertyquerty/nascent/issues/new";
+    static constexpr const char* DISCORD_URL = "https://discord.gg/f538azJwXT";
     static constexpr std::array<uint16_t, 9> FRAME_RATE_OPTIONS = {0, 60, 120, 144, 165, 240, 360, 480, 1000};
     static constexpr float SERVER_CHECK_DELAY = 0.6f;
     static constexpr std::array<std::pair<const char*, float>, 4> TRANSITION_OPTIONS = {{{"Off", 0.0f}, {"Fast", 0.1f}, {"Normal", 0.2f}, {"Slow", 0.35f}}};
@@ -181,7 +185,9 @@ namespace nascent {
         average_error_field = &form.add<ChoiceField>("Average error", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_average_error ? 1 : 0);
         error_deviation_field = &form.add<ChoiceField>("Error deviation", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_error_deviation ? 1 : 0);
         performance_field = &form.add<ChoiceField>("Performance prediction", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_performance ? 1 : 0);
+        judgement_counter_field = &form.add<ChoiceField>("Judgement counter", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement_counter ? 1 : 0);
         timing_bar_field = &form.add<ChoiceField>("Hit timing bar", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_bar ? 1 : 0);
+        timing_average_field = &form.add<ChoiceField>("Hit timing average", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_average ? 1 : 0);
         timing_bar_height_field = &form.add<SliderField>("Hit timing bar height", settings.field_timing_bar_height, 0, 100, PERCENT_STEP, "%");
         timing_bar_length_field = &form.add<SliderField>("Hit timing bar length", settings.field_timing_bar_length, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH, PERCENT_STEP, "%");
         timing_bar_width_field = &form.add<SliderField>("Hit timing bar width", settings.field_timing_bar_width, TIMING_BAR_WIDTH_MIN, TIMING_BAR_WIDTH_MAX, PERCENT_STEP, "%");
@@ -219,6 +225,8 @@ namespace nascent {
         form.add<SectionField>("About");
         credits_button = &form.add<ButtonField>("Credits");
         changelog_button = &form.add<ButtonField>(std::format("Changelog (version {})", NASCENT_VERSION_STRING));
+        report_bug_button = &form.add<ButtonField>("Report a bug");
+        discord_button = &form.add<ButtonField>("Join the Discord");
 
         form.spacing = Ui::layout("options.field_spacing");
         form.focus_field(0);
@@ -275,7 +283,9 @@ namespace nascent {
         settings.field_show_error_deviation = error_deviation_field->selected == 1;
         settings.field_show_performance = performance_field->selected == 1;
         settings.field_combo_height = (uint8_t)combo_height_field->value;
+        settings.field_show_judgement_counter = judgement_counter_field->selected == 1;
         settings.field_show_timing_bar = timing_bar_field->selected == 1;
+        settings.field_show_timing_average = timing_average_field->selected == 1;
         settings.field_timing_bar_height = (uint8_t)timing_bar_height_field->value;
         settings.field_timing_bar_length = (uint8_t)timing_bar_length_field->value;
         settings.field_timing_bar_width = (uint8_t)timing_bar_width_field->value;
@@ -335,6 +345,126 @@ namespace nascent {
         }
 
         return false;
+    }
+
+    bool SceneOptions::searching_blocked() const {
+        const UiField* focused = form.focused_field();
+        const KeyBindField* key_field = dynamic_cast<const KeyBindField*>(focused);
+
+        if (key_field != nullptr && key_field->is_capturing()) {
+            return true;
+        }
+
+        if (dynamic_cast<const TextField*>(focused) == nullptr) {
+            return false;
+        }
+
+        for (size_t index = 0; index < form.size(); index++) {
+            if (form.field(index) == focused) {
+                return !form.is_hidden(index);
+            }
+        }
+
+        return false;
+    }
+
+    void SceneOptions::update_search(Input& input) {
+        std::string before = search;
+
+        if (search_spots.take_click(input) == SEARCH_CLEAR) {
+            search.clear();
+        }
+
+        if (!searching_blocked()) {
+            search += input.text();
+
+            for (olc::Key key : input.pressed_keys()) {
+                if (key == olc::Key::BACK && !search.empty()) {
+                    search.pop_back();
+
+                    while (!search.empty() && ((unsigned char)search.back() & 0xc0) == 0x80) {
+                        search.pop_back();
+                    }
+                }
+            }
+
+            if (!search.empty() && input.take(actions::BACK)) {
+                search.clear();
+            }
+        }
+
+        if (search != before) {
+            apply_search();
+        }
+    }
+
+    void SceneOptions::apply_search() {
+        std::vector<std::string> words = parse_search(search).words;
+        std::vector<bool> hidden(form.size(), false);
+        std::optional<size_t> section;
+        std::string section_title;
+        search_matches = 0;
+        search_total = 0;
+
+        for (size_t index = 0; index < form.size(); index++) {
+            const UiField* field = form.field(index);
+
+            if (const SectionField* heading = dynamic_cast<const SectionField*>(field)) {
+                section = index;
+                section_title = ascii_lowercase(heading->title);
+                hidden[index] = !words.empty();
+                continue;
+            }
+
+            std::string label;
+
+            if (const RowField* row = dynamic_cast<const RowField*>(field)) {
+                label = row->label;
+            }
+            else if (const TextField* text = dynamic_cast<const TextField*>(field)) {
+                label = text->label;
+            }
+
+            std::string haystack = section_title + " " + ascii_lowercase(label);
+            bool match = std::all_of(words.begin(), words.end(), [&](const std::string& word) {
+                return haystack.find(word) != std::string::npos;
+            });
+
+            search_total++;
+            hidden[index] = !match;
+
+            if (match) {
+                search_matches++;
+
+                if (section) {
+                    hidden[*section] = false;
+                }
+            }
+        }
+
+        form.set_hidden(std::move(hidden));
+        scroll = scroll_target = 0;
+    }
+
+    void SceneOptions::draw_search(olc::PixelGameEngine* window, olc::vi2d position) {
+        olc::Font& font = skin->display_font_small;
+        float hint_gap = Ui::layout_pxf("options.footer_hint_gap");
+        search_spots.clear();
+
+        if (search.empty()) {
+            std::string subtitle = "Changes apply right away and are saved when you leave.";
+            draw_text(font, subtitle, position, skin->color(SkinColor::TEXT_MUTED));
+            draw_text(font, "Type to search", {position.x + text_bounds(font, subtitle).size.x + (int32_t)hint_gap, position.y}, skin->color(SkinColor::TEXT_FAINT));
+            return;
+        }
+
+        draw_text(font, search, position, skin->color(SkinColor::TEXT));
+        float x = (float)position.x + text_bounds(font, search).size.x + hint_gap;
+        std::vector<Hint> hints = {{"Esc  clear", SEARCH_CLEAR}};
+        draw_hints(window, font, hints, {x, (float)position.y}, hint_gap, skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), search_spots);
+        x += hints_width(font, hints, hint_gap) + hint_gap;
+        std::string count = search_matches == 0 ? std::string("No settings match") : std::format("{} / {}", search_matches, search_total);
+        draw_text(font, count, {(int32_t)x, position.y}, skin->color(search_matches == 0 ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
     }
 
     void SceneOptions::report_skin_problems() {
@@ -419,6 +549,13 @@ namespace nascent {
         open_folder(user_config_directory(SettingsManager::APP_NAME) / SKIN_EXPORT_FOLDER);
     }
 
+    void SceneOptions::report_bug() {
+        std::string body = std::format("**What happened?**\n\n\n**What did you expect to happen?**\n\n\n**Steps to reproduce**\n\n\nVersion: {}\n\nPlease attach {} from the folder Nascent opened.", NASCENT_VERSION_STRING, SettingsManager::LOG_FILE);
+        bool opened = open_url(std::format("{}?body={}", BUG_REPORT_URL, ServerClient::url_encode(body)));
+        open_folder(user_config_directory(SettingsManager::APP_NAME));
+        status = opened ? std::format("Describe the bug on GitHub and attach {} from the folder that opened", SettingsManager::LOG_FILE) : std::format("Couldn't open a browser. Report bugs at {}", BUG_REPORT_URL);
+    }
+
     void SceneOptions::refresh_linked_folders() {
         const std::vector<std::string>& linked = SettingsManager::settings.list_linked_directories;
         linked_folders_field->options.clear();
@@ -491,6 +628,7 @@ namespace nascent {
         }
 
         bool reset = update_footer(game->input());
+        update_search(game->input());
 
         if (std::optional<float> position = scrollbar.update(game->input(), scroll_position())) {
             scroll_to(*position);
@@ -532,6 +670,12 @@ namespace nascent {
         }
         else if (changelog_button->take_pressed()) {
             overlays.open(std::make_unique<ChangelogOverlay>(skin, Changelog::load(), "Changelog", "Every update so far"));
+        }
+        else if (report_bug_button->take_pressed()) {
+            report_bug();
+        }
+        else if (discord_button->take_pressed()) {
+            status = open_url(DISCORD_URL) ? std::string("Opened the Nascent Discord in your browser") : std::format("Couldn't open a browser. Join the Discord at {}", DISCORD_URL);
         }
         else if (action == UiForm::Action::CHANGED) {
             apply();
@@ -771,7 +915,7 @@ namespace nascent {
             return {{"↑/↓:  choose"}, {"Enter:  link", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 
-        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button || form.focused_field() == credits_button || form.focused_field() == changelog_button)) {
+        if (form.focused_field() != nullptr && (form.focused_field() == data_folder_button || form.focused_field() == calibration_button || form.focused_field() == credits_button || form.focused_field() == changelog_button || form.focused_field() == report_bug_button || form.focused_field() == discord_button)) {
             return {{"↑/↓:  choose"}, {"Enter:  open", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
         }
 
@@ -833,13 +977,13 @@ namespace nascent {
 
             if (SettingsManager::settings.field_show_timing_bar && preview_attempt != nullptr) {
                 const Settings& settings = SettingsManager::settings;
-                draw_timing_bar(window, skin, *preview_attempt, (float)(screen.x * Ui::layout("options.preview_center")), screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
+                draw_timing_bar(window, skin, *preview_attempt, (float)(screen.x * Ui::layout("options.preview_center")), screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f, settings.field_show_timing_average);
             }
         }
 
         draw_text(skin->display_font_large, "Options", {x, y}, skin->color(SkinColor::TEXT));
         y += Ui::layout_px("options.subtitle_offset");
-        draw_text(skin->display_font_small, "Changes apply right away and are saved when you leave.", {x, y}, skin->color(SkinColor::TEXT_MUTED));
+        draw_search(window, {x, y});
 
         if (!status.empty()) {
             draw_text(skin->display_font_small, status, {x, viewport_bottom + Ui::layout_px("options.status_offset")}, skin->color(SkinColor::TEXT_MUTED));

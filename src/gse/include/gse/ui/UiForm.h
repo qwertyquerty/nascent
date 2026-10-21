@@ -28,9 +28,12 @@ namespace nascent {
         mutable std::vector<int32_t> field_tops;
         mutable std::vector<int32_t> field_bottoms;
         mutable olc::vi2d origin = {0, 0};
+        mutable int32_t content_height = 0;
         std::optional<std::pair<int32_t, int32_t>> clip;
         std::optional<size_t> dragging;
+        std::vector<bool> hidden;
 
+        bool selectable(size_t index) const;
         std::optional<size_t> step_focus(size_t from, bool forward, bool wrap) const;
         std::optional<size_t> field_at(olc::vf2d point) const;
         olc::vf2d field_origin(size_t index) const;
@@ -53,6 +56,10 @@ namespace nascent {
         void set_enabled(bool enabled);
         bool is_enabled() const;
         bool is_empty() const;
+        size_t size() const;
+        const UiField* field(size_t index) const;
+        void set_hidden(std::vector<bool> hidden);
+        bool is_hidden(size_t index) const;
         const UiField* first_unfilled() const;
         const UiField* focused_field() const;
         UiField* focused_field();

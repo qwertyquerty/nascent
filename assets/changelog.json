@@ -1,6 +1,22 @@
 {
     "releases": [
         {
+            "version": "0.3.0.beta10",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "A judgement counter that shows how many of each judgement you've hit while you play. Turn it on with Judgement counter in Options.",
+                        "The hit timing bar has a marker for the average of your last 20 hits, so you can see whether you're drifting early or late. Turn it off with Hit timing average in Options.",
+                        "The song preview has a progress bar along the bottom. Click or drag it to jump to any part of the song.",
+                        "Report a bug in Options opens a bug report on GitHub and the folder with your log file, so you can attach it.",
+                        "Type in Options to search your settings, like you can in the song list. Esc clears the search.",
+                        "Join the Discord in Options opens the Nascent Discord server."
+                    ]
+                }
+            ]
+        },
+        {
             "version": "0.3.0.beta9",
             "sections": [
                 {

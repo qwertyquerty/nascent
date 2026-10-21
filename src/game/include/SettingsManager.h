@@ -33,8 +33,10 @@ namespace nascent {
         bool field_show_average_error = true;
         bool field_show_error_deviation = true;
         bool field_show_performance = false;
+        bool field_show_judgement_counter = false;
         uint8_t field_combo_height = 41; // % of the field above the judgement line's end
         bool field_show_timing_bar = true;
+        bool field_show_timing_average = true;
         uint8_t field_timing_bar_height = 0; // % of the screen above its bottom edge
         uint8_t field_timing_bar_length = 33; // % of the screen width
         uint8_t field_timing_bar_width = 5; // % of the screen height

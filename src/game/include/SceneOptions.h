@@ -47,6 +47,8 @@ namespace nascent {
         ButtonField* link_folder_button = nullptr;
         ButtonField* credits_button = nullptr;
         ButtonField* changelog_button = nullptr;
+        ButtonField* report_bug_button = nullptr;
+        ButtonField* discord_button = nullptr;
         ButtonField* export_skin_button = nullptr;
         ButtonField* delete_skin_button = nullptr;
         bool delete_confirming = false;
@@ -76,7 +78,9 @@ namespace nascent {
         ChoiceField* average_error_field = nullptr;
         ChoiceField* error_deviation_field = nullptr;
         ChoiceField* performance_field = nullptr;
+        ChoiceField* judgement_counter_field = nullptr;
         ChoiceField* timing_bar_field = nullptr;
+        ChoiceField* timing_average_field = nullptr;
         SliderField* timing_bar_height_field = nullptr;
         SliderField* timing_bar_length_field = nullptr;
         SliderField* timing_bar_width_field = nullptr;
@@ -91,6 +95,10 @@ namespace nascent {
         SliderField* scroll_speed_field = nullptr;
         ButtonField* calibration_button = nullptr;
         std::string status;
+        std::string search;
+        size_t search_matches = 0;
+        size_t search_total = 0;
+        Hotspots search_spots;
 
         std::string server_typed;
         std::string server_checked;
@@ -125,6 +133,7 @@ namespace nascent {
         void build_preview_chart();
         void rebuild_preview();
         void refresh_skins();
+        void report_bug();
         void refresh_linked_folders();
         void link_folder(const std::filesystem::path& folder);
         void update_linked_folders();
@@ -135,11 +144,16 @@ namespace nascent {
         void update_preview(float elapsed_time);
         std::vector<Hint> footer_hints() const;
         bool update_footer(Input& input);
+        bool searching_blocked() const;
+        void update_search(Input& input);
+        void apply_search();
+        void draw_search(olc::PixelGameEngine* window, olc::vi2d position);
         void draw_scrollbar(olc::PixelGameEngine* window, int32_t x);
 
         static constexpr int32_t FOOTER_BACK = 0;
         static constexpr int32_t FOOTER_CONFIRM = 1;
         static constexpr int32_t FOOTER_RESET = 2;
+        static constexpr int32_t SEARCH_CLEAR = 3;
 
         public:
         SceneOptions(Skin* skin);

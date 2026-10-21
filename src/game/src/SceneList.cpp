@@ -400,6 +400,10 @@ namespace nascent {
             return false;
         }
 
+        if (update_preview_seek(input)) {
+            return false;
+        }
+
         if (std::optional<float> position = list_scrollbar.update(input, list_position())) {
             int32_t index = (int32_t)std::lround(*position * (float)(visible.size() - 1));
 
@@ -435,6 +439,52 @@ namespace nascent {
         }
 
         return false;
+    }
+
+    bool SceneList::update_preview_seek(Input& input) {
+        if (selected_chart == nullptr || selected_chart_audio_id == -1 || preview_audio_chart != selected_chart) {
+            preview_seek.hide();
+            preview_seek_target = -1;
+            return false;
+        }
+
+        double end = std::max(1, selected_chart->get_chart_end_ms());
+        std::optional<float> fraction = preview_seek.update(input, (float)std::clamp(preview_position / end, 0.0, 1.0));
+
+        if (!fraction) {
+            preview_seek_target = -1;
+            return false;
+        }
+
+        double target = *fraction * end;
+
+        if (preview_seek_target >= 0 && std::abs(target - preview_seek_target) < Ui::layout("song_list.preview_seek_step_ms")) {
+            return true;
+        }
+
+        preview_seek_target = target;
+        game->audio().engine().Seek(selected_chart_audio_id, (uint64_t)std::max(0.0, target * selected_chart->pitch));
+        preview_clock.reset(target, now_ms());
+        preview_position = target;
+        field->set_position(preview_position);
+        return true;
+    }
+
+    void SceneList::draw_preview_seek(olc::PixelGameEngine* window) {
+        if (selected_chart == nullptr || selected_chart_audio_id == -1 || preview_audio_chart != selected_chart || field->opacity <= 0.0f) {
+            preview_seek.hide();
+            return;
+        }
+
+        olc::vi2d screen = window->GetScreenSize();
+        olc::vi2d position = side_panel_position(screen);
+        olc::vi2d size = side_panel_size(screen);
+        float margin = Ui::layout_pxf("song_list.preview_seek_margin");
+        float height = std::max(1.0f, Ui::layout_pxf("song_list.preview_seek_height"));
+        float top = (float)(position.y + size.y) - Ui::layout_pxf("song_list.preview_seek_gap") - height;
+        double end = std::max(1, selected_chart->get_chart_end_ms());
+        preview_seek.layout({{(float)position.x + margin, top}, {std::max(1.0f, (float)size.x - margin * 2.0f), height}}, 0.0f, ScrollAxis::HORIZONTAL);
+        preview_seek.draw(window, (float)std::clamp(preview_position / end, 0.0, 1.0), fade(skin->color(SkinColor::SCROLLBAR_TRACK), field->opacity), fade(skin->color(SkinColor::SCROLLBAR_THUMB), field->opacity));
     }
 
     bool SceneList::update_controls(float elapsed_time) {
@@ -1477,9 +1527,11 @@ namespace nascent {
 
         if (show_leaderboards) {
             leaderboards.draw(window, skin, selected_hash(), pitch, side_panel_position(screensize), side_panel_size(screensize));
+            preview_seek.hide();
         }
         else {
             field->draw(window);
+            draw_preview_seek(window);
         }
 
         for (int32_t index = selected_chart_index - (charts_per_screen / 2 + 5); index < selected_chart_index + (charts_per_screen / 2 + 5); index++) {

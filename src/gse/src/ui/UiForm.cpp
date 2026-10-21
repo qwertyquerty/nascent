@@ -14,8 +14,13 @@ namespace nascent {
         }
 
         fields.clear();
+        hidden.clear();
         focus = 0;
         enabled = true;
+    }
+
+    bool UiForm::selectable(size_t index) const {
+        return index < fields.size() && fields[index]->focusable() && !is_hidden(index);
     }
 
     std::optional<size_t> UiForm::step_focus(size_t from, bool forward, bool wrap) const {
@@ -30,7 +35,7 @@ namespace nascent {
                 return std::nullopt;
             }
 
-            if (fields[index]->focusable()) {
+            if (selectable(index)) {
                 return index;
             }
         }
@@ -45,7 +50,7 @@ namespace nascent {
 
         index = std::min(index, fields.size() - 1);
 
-        if (!fields[index]->focusable()) {
+        if (!selectable(index)) {
             std::optional<size_t> nearest = step_focus(index, true, false);
 
             if (!nearest) {
@@ -72,7 +77,7 @@ namespace nascent {
         int32_t best = 0;
 
         for (size_t index = 0; index < field_tops.size() && index < fields.size(); index++) {
-            if (!fields[index]->focusable()) {
+            if (!selectable(index)) {
                 continue;
             }
 
@@ -112,6 +117,34 @@ namespace nascent {
         return fields.empty();
     }
 
+    size_t UiForm::size() const {
+        return fields.size();
+    }
+
+    const UiField* UiForm::field(size_t index) const {
+        return index < fields.size() ? fields[index].get() : nullptr;
+    }
+
+    void UiForm::set_hidden(std::vector<bool> hidden) {
+        this->hidden = std::move(hidden);
+        dragging.reset();
+
+        if (fields.empty() || selectable(focus)) {
+            return;
+        }
+
+        if (std::optional<size_t> first = step_focus(fields.size() - 1, true, true)) {
+            focus_field(*first);
+        }
+        else if (selectable(fields.size() - 1)) {
+            focus_field(fields.size() - 1);
+        }
+    }
+
+    bool UiForm::is_hidden(size_t index) const {
+        return index < hidden.size() && hidden[index];
+    }
+
     const UiField* UiForm::first_unfilled() const {
         for (const auto& field : fields) {
             if (!field->is_filled()) {
@@ -136,7 +169,7 @@ namespace nascent {
         for (size_t index = 0; index < field_tops.size() && index < fields.size(); index++) {
             Rect area = {{(float)origin.x, (float)(origin.y + field_tops[index])}, {width, (float)(field_bottoms[index] - field_tops[index])}};
 
-            if (fields[index]->focusable() && area.contains(point)) {
+            if (selectable(index) && area.contains(point)) {
                 return index;
             }
         }
@@ -201,6 +234,10 @@ namespace nascent {
             return *clicked;
         }
 
+        if (!selectable(focus)) {
+            return Action::NONE;
+        }
+
         bool changed = fields[focus]->update(input, elapsed_time);
 
         if (fields[focus]->consumes_navigation()) {
@@ -261,11 +298,19 @@ namespace nascent {
         origin = position;
         field_tops.assign(fields.size(), 0);
         field_bottoms.assign(fields.size(), 0);
+        content_height = 0;
 
         for (size_t i = 0; i < fields.size(); i++) {
             field_tops[i] = y - position.y;
+
+            if (is_hidden(i)) {
+                field_bottoms[i] = field_tops[i];
+                continue;
+            }
+
             y += fields[i]->draw(window, theme, {position.x, y}, enabled && i == focus);
             field_bottoms[i] = y - position.y;
+            content_height = field_bottoms[i];
             y += Ui::px(spacing.value_or(Ui::layout("form.field_spacing")));
         }
 
@@ -289,6 +334,6 @@ namespace nascent {
     }
 
     int32_t UiForm::height() const {
-        return field_bottoms.empty() ? 0 : field_bottoms.back();
+        return content_height;
     }
 }

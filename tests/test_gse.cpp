@@ -11,6 +11,7 @@
 #include "gse/render/ShapeSprite.h"
 #include "gse/ui/KeyRepeat.h"
 #include "gse/ui/Layout.h"
+#include "gse/ui/UiForm.h"
 #include "gse/util/Math.h"
 
 #include <atomic>
@@ -24,6 +25,21 @@ using namespace nascent;
 using namespace nascent::test;
 
 namespace {
+    class StubField : public UiField {
+        public:
+        bool can_focus;
+
+        explicit StubField(bool can_focus = true) : can_focus(can_focus) {}
+
+        int32_t draw(olc::PixelGameEngine*, UiTheme&, olc::vi2d, bool) const override {
+            return 0;
+        }
+
+        bool focusable() const override {
+            return can_focus;
+        }
+    };
+
     class RecordingScene : public Scene {
         public:
         std::string name;
@@ -272,6 +288,31 @@ NASCENT_TEST(gse_polygon_rasterizing) {
     CHECK(star->GetPixel(16, 16).a == 255);
     CHECK(star->GetPixel(1, 30).a == 0);
     CHECK(star->GetPixel(16, 1).a > 0);
+}
+
+NASCENT_TEST(gse_form_hidden_fields) {
+    UiForm form;
+    StubField& heading = form.add<StubField>(false);
+    StubField& first = form.add<StubField>();
+    StubField& second = form.add<StubField>();
+    StubField& third = form.add<StubField>();
+    form.focus_field(1);
+    CHECK(form.focused_field() == &first);
+
+    form.set_hidden({false, true, false, false});
+    CHECK(form.is_hidden(1) && !form.is_hidden(2) && !form.is_hidden(9));
+    CHECK(form.focused_field() == &second);
+
+    form.focus_field(1);
+    CHECK(form.focused_field() == &second);
+
+    form.set_hidden({true, true, true, false});
+    CHECK(form.focused_field() == &third);
+
+    form.set_hidden({});
+    form.focus_field(1);
+    CHECK(form.focused_field() == &first);
+    CHECK(form.size() == 4 && form.field(0) == &heading && form.field(4) == nullptr);
 }
 
 NASCENT_TEST(gse_mip_downsampling) {

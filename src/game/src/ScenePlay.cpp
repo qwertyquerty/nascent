@@ -914,6 +914,10 @@ namespace nascent {
             }
         }
 
+        if (settings.field_show_judgement_counter) {
+            draw_judgement_counter(attempt, stat_x, stat_y + Ui::layout_px("play.judgement_counter_gap"));
+        }
+
         std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
         float title_offset = (float)(screensize.x * Ui::layout("play.title_offset_fraction"));
@@ -992,7 +996,7 @@ namespace nascent {
         }
 
         if (settings.field_show_timing_bar) {
-            draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f);
+            draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f, settings.field_show_timing_average);
         }
 
         if (replay) {
@@ -1000,6 +1004,34 @@ namespace nascent {
             draw_replay_bar(window, position);
         }
     };
+
+    void ScenePlay::draw_judgement_counter(const Attempt& attempt, int32_t x, int32_t y) const {
+        std::array<uint32_t, HIT_SCORE_COUNT> counts = {};
+
+        for (const JudgedHit& jhit : attempt.judged_hits) {
+            if (jhit.hit) {
+                counts[(size_t)jhit.hit_score]++;
+            }
+
+            if (jhit.released) {
+                counts[(size_t)jhit.release_score]++;
+            }
+        }
+
+        olc::Font& font = skin->display_font_small;
+        int32_t value_x = x + Ui::layout_px("play.judgement_counter_value_x");
+        int32_t spacing = Ui::layout_px("play.judgement_counter_spacing");
+
+        for (HitScore score : ALL_HIT_SCORES) {
+            if (score == HitScore::NONE) {
+                continue;
+            }
+
+            skin->draw_judgement(score, font, olc::vf2d{(float)x, (float)y});
+            draw_text(font, std::format("{}", counts[(size_t)score]), {value_x, y}, skin->color(SkinColor::TEXT));
+            y += spacing;
+        }
+    }
 
     void ScenePlay::update_replay_seek(Input& input, double now) {
         double end = std::max(1, chart->get_chart_end_ms());

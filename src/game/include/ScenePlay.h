@@ -17,6 +17,7 @@
 #include <vector>
 
 namespace nascent {
+    class Attempt;
     class Chart;
     class EntityField;
     class PlaySession;
@@ -87,6 +88,7 @@ namespace nascent {
         void toggle_replay_pause(double now);
         void feed_replay(double position, bool sounds);
         void seek_replay(double target, double now);
+        void draw_judgement_counter(const Attempt& attempt, int32_t x, int32_t y) const;
         void update_replay_seek(Input& input, double now);
         void draw_replay_seek(olc::PixelGameEngine* window, double position) const;
         void finish();
