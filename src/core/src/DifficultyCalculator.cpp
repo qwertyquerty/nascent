@@ -61,7 +61,8 @@ namespace nascent {
 
             if (key_count == 4) {
                 mode = difficulty_model::MODE_4_FACTORS;
-            } else if (key_count == 7) {
+            }
+            else if (key_count == 7) {
                 mode = difficulty_model::MODE_7_FACTORS;
             }
 
@@ -92,7 +93,8 @@ namespace nascent {
             static const Model four = build_model(4);
             static const Model seven = build_model(7);
             static const Model other = build_model(0);
-            return key_count == 4 ? four : key_count == 7 ? seven : other;
+            return key_count == 4 ? four : key_count == 7 ? seven
+                                                          : other;
         }
 
         double log_sigmoid(double x) {
@@ -140,8 +142,8 @@ namespace nascent {
             });
             double length = active_time_ms(sorted_hits);
             double shift = difficulty_model::SLOPE_NOTES * std::log(std::clamp(presses, MIN_COVARIATE_NOTES, MAX_COVARIATE_NOTES) / 1000.0) +
-                           difficulty_model::SLOPE_LENGTH * std::log(std::clamp(length, MIN_COVARIATE_LENGTH_MS, MAX_COVARIATE_LENGTH_MS) / 120000.0) +
-                           difficulty_model::SLOPE_HOLDS * holds / std::max(presses, 1.0);
+                difficulty_model::SLOPE_LENGTH * std::log(std::clamp(length, MIN_COVARIATE_LENGTH_MS, MAX_COVARIATE_LENGTH_MS) / 120000.0) +
+                difficulty_model::SLOPE_HOLDS * holds / std::max(presses, 1.0);
             double target = std::log(1.0 - difficulty_model::TARGET_ACCURACY);
 
             auto grid = [](size_t point) {
@@ -197,7 +199,8 @@ namespace nascent {
 
                 if (low <= target) {
                     below = (size_t)std::clamp(std::floor(estimate), 0.0, (double)below - 1.0);
-                } else {
+                }
+                else {
                     below = (size_t)std::clamp(std::floor(estimate), (double)below + 1.0, (double)(GRID_SIZE - 2));
                 }
             }

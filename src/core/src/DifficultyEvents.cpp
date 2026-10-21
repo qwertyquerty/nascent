@@ -278,7 +278,8 @@ namespace nascent {
                 presses[group_start].weight = std::max(presses[group_start].weight, press.weight);
                 press.time = group_time;
                 group_columns |= bit;
-            } else {
+            }
+            else {
                 group_start = index;
                 group_time = press.time;
                 group_columns = bit;
@@ -627,7 +628,8 @@ namespace nascent {
 
             if ((base - best) / (double)count >= ALIGN_MIN_GAIN) {
                 aligned[index].time = (int32_t)std::lround((double)point.time + best_shift);
-            } else {
+            }
+            else {
                 best = base;
             }
 

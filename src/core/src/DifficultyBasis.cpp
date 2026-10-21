@@ -112,7 +112,8 @@ namespace nascent {
                 if (BASIS_JACK_CURVES[curve].kind == JackCurveKind::CAP) {
                     double excess = BASIS_JACK_CAP_SHARPNESS * (log_jack - knots.log_speed[curve]);
                     values[curve] = excess < NEGLIGIBLE_EXPONENT ? jack : jack * std::exp(-softplus(excess) / BASIS_JACK_CAP_SHARPNESS);
-                } else {
+                }
+                else {
                     double width = BASIS_JACK_KNEE_WIDTH * knot;
                     double excess = (jack - knot) / width;
                     values[curve] = width * (excess < NEGLIGIBLE_EXPONENT ? std::exp(excess) : softplus(excess));
