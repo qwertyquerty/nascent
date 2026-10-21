@@ -1,5 +1,7 @@
 import json
 
+from sqlalchemy import select
+
 from nascent_server.cli import nascent_cli
 
 from .helpers import CHART, make_chart, make_replay, rank_chart
@@ -100,3 +102,52 @@ def test_calculator_version_follows_the_difficulty_code(monkeypatch, app):
         calculator._calculator_version.cache_clear()
 
     assert changed != original
+
+
+def stepmania_text(rows):
+    measures = "\n,\n".join("\n".join(rows[index : index + 4]) for index in range(0, len(rows), 4))
+    hard = "\n,\n".join("1000\n0100\n0010\n0001" for _ in range(len(rows) // 4))
+    return (
+        "#TITLE:Imported;\n#ARTIST:Someone;\n#MUSIC:song.ogg;\n#OFFSET:-0.5;\n#BPMS:0=120;\n"
+        f"#NOTES:\n     dance-single:\n     Mapper:\n     Easy:\n     3:\n     0,0,0,0,0:\n{measures}\n;\n"
+        f"#NOTES:\n     dance-single:\n     Mapper:\n     Hard:\n     9:\n     0,0,0,0,0:\n{hard}\n;\n"
+        "#NOTES:\n     lights-cabinet:\n     :\n     Easy:\n     1:\n     0,0,0,0,0:\n00000000\n;\n"
+    )
+
+
+def test_import_stepmania_charts(api, app, tmp_path):
+    from nascent_server.extensions import db
+    from nascent_server.models import Chart, ChartSource, ChartStatus
+
+    pack = tmp_path / "packs" / "42 Some Pack"
+    song = pack / "Song"
+    song.mkdir(parents=True)
+    (pack / "pack.json").write_text(json.dumps({"id": 42, "site": "etternaonline"}))
+    rows = ["1000", "0000", "0100", "0000"] * 16
+    (song / "song.sm").write_text(stepmania_text(rows))
+    (song / "song.ssc").write_text(stepmania_text(rows))
+    other = pack / "Other"
+    other.mkdir()
+    (other / "other.dwi").write_text("#TITLE:Dwi;\n#ARTIST:Someone;\n#FILE:song.mp3;\n#BPM:150;\n#GAP:100;\n#SINGLE:MANIAC:8:" + "2468" * 32 + ";\n")
+
+    result = run(app, "import-charts", str(tmp_path / "packs"), "--rank", "--quiet")
+    assert result.exit_code == 0, result.output
+    assert "3 new charts, 0 already on the server, 1 skipped, from 2 files" in result.output
+    assert "skipped 1: steps type 'lights-cabinet' is not supported" in result.output
+
+    with app.app_context():
+        charts = db.session.scalars(select(Chart).order_by(Chart.title, Chart.difficulty_name)).all()
+        assert [(chart.title, chart.difficulty_name) for chart in charts] == [("Dwi", "Hard"), ("Imported", "Easy"), ("Imported", "Hard")]
+        assert all(chart.status == ChartStatus.RANKED for chart in charts)
+        sources = db.session.scalars(select(ChartSource)).all()
+        assert len(sources) == 3
+        assert all(source.source == "etterna" and source.checksum.startswith("X") and len(source.checksum) == 41 for source in sources)
+        assert sorted(source.source_set_id for source in sources) == [42, 42, 42]
+        first_hash = charts[0].hash
+
+    detail = api.get(f"/api/v1/charts/{first_hash}").get_json()["chart"]
+    assert detail["sources"][0]["url"] == "https://etternaonline.com/packs/42"
+    assert detail["sources"][0]["downloads"] == []
+
+    again = run(app, "import-charts", str(tmp_path / "packs"), "--rank", "--quiet")
+    assert "0 new charts, 3 already on the server, 1 skipped, from 2 files" in again.output

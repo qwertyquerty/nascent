@@ -17,7 +17,7 @@ namespace nascent {
             uint64_t size = 0;
             int64_t modified = 0;
             int64_t added = 0;
-            bool chart = false;
+            uint8_t charts = 0;
             std::string audio_file;
             size_t offset = 0;
             size_t length = 0;
@@ -34,13 +34,14 @@ namespace nascent {
             uint64_t size = 0;
             int64_t modified = 0;
             int64_t added = 0;
-            const Chart* chart = nullptr;
+            std::vector<const Chart*> charts;
             bool keep = false;
         };
 
         static constexpr const char* FILE_NAME = "library_cache.bin";
         static constexpr uint32_t FORMAT = 1;
         static constexpr std::string_view MAGIC = "NSLC";
+        static constexpr size_t MAX_CHARTS_PER_FILE = 255;
 
         explicit LibraryCache(std::filesystem::path path);
 

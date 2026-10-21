@@ -18,6 +18,7 @@ namespace nascent {
         WATCH_REPLAY,
         TOGGLE_FAVORITE,
         OPEN_WEBSITE,
+        OPEN_FOLDER,
         DELETE_CHART,
         DELETE_PACK
     };
@@ -27,6 +28,8 @@ namespace nascent {
         Skin* skin;
         std::string title;
         std::string subtitle;
+        bool linked;
+        std::string details;
         size_t pack_count;
         bool favorite;
         std::function<void(ChartAction)> on_action;
@@ -37,11 +40,13 @@ namespace nascent {
         olc::vi2d last_mouse = {-1, -1};
 
         void activate();
+        bool enabled(ChartAction action) const;
+        void step_selection(bool down);
 
         std::string label(ChartAction action, bool confirming_action) const;
 
         public:
-        static constexpr std::array<ChartAction, 5> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
+        static constexpr std::array<ChartAction, 6> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::OPEN_FOLDER, ChartAction::DELETE_CHART, ChartAction::DELETE_PACK};
 
         static bool is_destructive(ChartAction action);
 

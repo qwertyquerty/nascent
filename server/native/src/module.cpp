@@ -568,6 +568,7 @@ NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
                 entry["difficulty"] = chart.difficulty;
                 entry["description"] = chart.description;
                 entry["meter"] = chart.meter;
+                entry["chart_key"] = chart.chart_key.empty() ? py::object(py::none()) : py::object(py::str(chart.chart_key));
                 entry["chart"] = chart.chart.is_null() ? py::object(py::none()) : py::object(py::str(chart.chart.dump()));
                 entry["error"] = chart.error.empty() ? py::object(py::none()) : py::object(py::str(chart.error));
                 result.append(entry);

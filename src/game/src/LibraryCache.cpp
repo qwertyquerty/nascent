@@ -200,13 +200,18 @@ namespace nascent {
             record.size = entry.value<uint64_t>();
             record.modified = entry.value<int64_t>();
             record.added = entry.value<int64_t>();
-            record.chart = entry.value<uint8_t>() != 0;
+            record.charts = entry.value<uint8_t>();
 
-            if (record.chart) {
-                std::unique_ptr<Chart> chart = read_chart(entry, key, restored != nullptr ? pitch : 0.0f, record.audio_file);
+            for (uint8_t chart_index = 0; chart_index < record.charts; chart_index++) {
+                std::string audio_file;
+                std::unique_ptr<Chart> chart = read_chart(entry, key, restored != nullptr ? pitch : 0.0f, audio_file);
 
                 if (!entry.ok) {
                     return false;
+                }
+
+                if (chart_index == 0) {
+                    record.audio_file = std::move(audio_file);
                 }
 
                 if (chart != nullptr && restored != nullptr) {
@@ -246,7 +251,7 @@ namespace nascent {
         size_t count = 0;
 
         for (const auto& [key, record] : records) {
-            count += record.chart ? 1 : 0;
+            count += record.charts > 0 ? 1 : 0;
         }
 
         return count;
@@ -297,10 +302,11 @@ namespace nascent {
             item.value(entry.size);
             item.value(entry.modified);
             item.value(entry.added);
-            item.value((uint8_t)(entry.chart != nullptr ? 1 : 0));
+            size_t chart_count = std::min(entry.charts.size(), MAX_CHARTS_PER_FILE);
+            item.value((uint8_t)chart_count);
 
-            if (entry.chart != nullptr) {
-                write_chart(item, *entry.chart);
+            for (size_t chart_index = 0; chart_index < chart_count; chart_index++) {
+                write_chart(item, *entry.charts[chart_index]);
             }
 
             writer.value((uint32_t)body.size());

@@ -1,0 +1,108 @@
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - charts is defined and charts | length > 0
+    fail_msg: pass a local chart folder or .tar.gz archive with -e charts=/path/to/charts, and add -e rank=true to rank every imported chart
+
+- name: Look for the charts on this machine
+  delegate_to: localhost
+  become: false
+  run_once: true
+  ansible.builtin.stat:
+    path: "{{ charts }}"
+  register: chart_folder
+
+- name: Decide whether the charts are already packed
+  ansible.builtin.set_fact:
+    chart_archive_given: "{{ (chart_folder.stat.isreg | default(false)) and (charts.endswith('.tar.gz') or charts.endswith('.tgz')) }}"
+
+- name: Check the charts exist
+  ansible.builtin.assert:
+    that: (chart_folder.stat.isdir | default(false)) or chart_archive_given
+    fail_msg: "{{ charts }} isn't a folder or a .tar.gz archive on this machine. In WSL, check the drive is mounted (for example sudo mount -t drvfs R: /mnt/r)"
+
+- name: Count the chart files on this machine
+  delegate_to: localhost
+  become: false
+  run_once: true
+  ansible.builtin.shell: find {{ charts | quote }} -type f \( -iname '*.osu' -o -iname '*.sm' -o -iname '*.ssc' -o -iname '*.dwi' -o -iname '*.json' \) ! -name pack.json | wc -l
+  register: local_charts
+  changed_when: false
+  when: not chart_archive_given
+
+- name: Check there are charts to import
+  ansible.builtin.assert:
+    that: local_charts.stdout | int > 0
+    fail_msg: no .osu, .sm, .ssc, .dwi or .json chart files in {{ charts }}
+  when: not chart_archive_given
+
+- name: Upload and import the charts
+  block:
+    - name: Create a local archive name
+      delegate_to: localhost
+      become: false
+      run_once: true
+      ansible.builtin.tempfile:
+        state: file
+        suffix: -nascent-charts.tar.gz
+      register: archive
+      when: not chart_archive_given
+
+    - name: Pack {{ local_charts.stdout | default('the') | trim }} chart files
+      delegate_to: localhost
+      become: false
+      run_once: true
+      ansible.builtin.command:
+        argv: [tar, -czf, "{{ archive.path }}", -C, "{{ charts }}", .]
+      changed_when: false
+      when: not chart_archive_given
+
+    - name: Clear the upload directory
+      ansible.builtin.file:
+        path: "{{ nascent_chart_import_dir }}"
+        state: absent
+
+    - name: Create the upload directory
+      ansible.builtin.file:
+        path: "{{ nascent_chart_import_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Upload the charts
+      ansible.builtin.unarchive:
+        src: "{{ charts if chart_archive_given else archive.path }}"
+        dest: "{{ nascent_chart_import_dir }}"
+        mode: u=rwX,g=rX,o=rX
+
+    - name: Build the import command
+      ansible.builtin.set_fact:
+        chart_import_command: >-
+          {{ ['docker', 'compose', 'run', '--rm', '-T', '-v', nascent_chart_import_dir ~ ':/import:ro', 'api', 'flask', '--app', 'wsgi', 'nascent', 'import-charts', '/import', '--quiet']
+             + (['--rank'] if rank | default(false) | bool else []) }}
+
+    - name: Import the charts{{ ' as ranked' if rank | default(false) | bool else '' }}
+      ansible.builtin.command:
+        argv: "{{ chart_import_command }}"
+        chdir: "{{ nascent_compose_dir }}"
+      async: "{{ nascent_chart_import_timeout }}"
+      poll: 60
+      register: imported
+      changed_when: "imported.stdout_lines | select('search', '^[1-9][0-9]* new charts') | list | length > 0"
+
+    - name: Show what was imported
+      ansible.builtin.debug:
+        msg: "{{ imported.stdout_lines | reject('match', '^[0-9]+/[0-9]+ files:') | list }}"
+  always:
+    - name: Remove the local archive
+      delegate_to: localhost
+      become: false
+      run_once: true
+      ansible.builtin.file:
+        path: "{{ archive.path }}"
+        state: absent
+      when: not chart_archive_given and archive.path is defined
+
+    - name: Remove the uploaded charts
+      ansible.builtin.file:
+        path: "{{ nascent_chart_import_dir }}"
+        state: absent

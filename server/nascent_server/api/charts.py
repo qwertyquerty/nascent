@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, send_file
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -13,7 +13,8 @@ from ..serializers import chart_detail, chart_summary, play_out
 from ..services.calculator import DEFAULT_RATE_KEY, require_rate_key
 from ..services.charts import get_chart_or_404, parse_chart, register_chart
 from ..services.plays import chart_performance_rank, chart_rank
-from ..storage import json_gz_response
+from ..services.previews import density_preview
+from ..storage import json_gz_response, storage
 
 blueprint = Blueprint("charts", __name__, url_prefix="/charts")
 
@@ -106,6 +107,14 @@ def get_chart(chart_hash: str):
 def chart_data(chart_hash: str):
     chart = get_chart_or_404(chart_hash)
     return json_gz_response(chart.data_key, f"{chart.hash}.json")
+
+
+@blueprint.get("/<chart_hash>/density.png")
+def density_image(chart_hash: str):
+    chart = get_chart_or_404(chart_hash)
+    response = send_file(storage().path(density_preview(chart)), mimetype="image/png", conditional=True, max_age=31536000)
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @blueprint.get("/<chart_hash>/leaderboard")

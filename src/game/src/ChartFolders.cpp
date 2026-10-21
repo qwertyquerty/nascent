@@ -1,5 +1,6 @@
 #include "ChartFolders.h"
 
+#include "ChartLibrary.h"
 #include "Const.h"
 #include "SettingsManager.h"
 #include "Utf8Path.h"
@@ -27,15 +28,11 @@ namespace nascent {
             return end == folder.end();
         }
 
-        bool is_chart_file(const std::filesystem::path& path) {
-            return std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), path.extension().string()) != CHART_FILE_EXTENSIONS.end();
-        }
-
         bool has_chart_files(const std::filesystem::path& folder) {
             std::error_code ec;
 
             for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
-                if (is_chart_file(entry.path())) {
+                if (is_library_chart_file(entry.path())) {
                     return true;
                 }
             }
@@ -43,7 +40,7 @@ namespace nascent {
             return false;
         }
 
-        bool holds_song_folders(const std::filesystem::path& folder) {
+        bool holds_song_folders(const std::filesystem::path& folder, bool or_packs) {
             std::error_code ec;
             size_t scanned = 0;
 
@@ -52,7 +49,7 @@ namespace nascent {
                     continue;
                 }
 
-                if (has_chart_files(entry.path())) {
+                if (has_chart_files(entry.path()) || (or_packs && holds_song_folders(entry.path(), false))) {
                     return true;
                 }
 
@@ -173,7 +170,7 @@ namespace nascent {
             return {false, "That folder holds a single song. Link the folder that contains your song folders instead"};
         }
 
-        if (!holds_song_folders(target)) {
+        if (!holds_song_folders(target, true)) {
             return {false, std::format("No charts were found in {}", name)};
         }
 
@@ -210,6 +207,32 @@ namespace nascent {
         for (std::optional<std::filesystem::path> candidate : {configured_osu_songs(osu), std::optional<std::filesystem::path>(osu / OSU_DEFAULT_SONGS)}) {
             if (candidate && std::filesystem::is_directory(*candidate, ec)) {
                 return normalized(*candidate);
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<std::filesystem::path> ChartFolders::etterna_songs_folder() {
+        std::vector<std::filesystem::path> installs;
+#ifdef _WIN32
+        installs.push_back(std::filesystem::path(L"C:\\Games") / ETTERNA_FOLDER_NAME);
+
+        for (const wchar_t* variable : {L"ProgramFiles", L"ProgramFiles(x86)"}) {
+            const wchar_t* value = _wgetenv(variable);
+
+            if (value != nullptr && *value != L'\0') {
+                installs.push_back(std::filesystem::path(value) / ETTERNA_FOLDER_NAME);
+            }
+        }
+#endif
+        std::error_code ec;
+
+        for (const std::filesystem::path& install : installs) {
+            std::filesystem::path songs = install / ETTERNA_SONGS;
+
+            if (std::filesystem::is_directory(songs, ec)) {
+                return normalized(songs);
             }
         }
 

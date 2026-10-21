@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 import flask_migrate
+import nascent_core as nc
 from flask import current_app
 from flask.cli import AppGroup
 from sqlalchemy import delete, func, inspect, select
@@ -24,7 +25,10 @@ from .services.plays import review_play, submit_play
 
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
 
-CHART_SUFFIXES = (".osu", ".json")
+CHART_SUFFIXES = (".osu", ".json", ".ssc", ".sm", ".dwi")
+STEPMANIA_PREFERENCE = {".ssc": 3, ".sm": 2, ".dwi": 1}
+ETTERNA_SOURCE = "etterna"
+PACK_INFO = "pack.json"
 BASELINE_REVISION = "0001"
 
 
@@ -178,51 +182,127 @@ def import_replays(path: Path, username: str):
     click.echo(f"{counts['added']} added, {counts['exists']} already on the server, {counts['skipped']} skipped, {len(files) - len(replays)} not replays")
 
 
-def _read_chart_file(file: Path) -> tuple[dict, dict | None]:
-    if file.suffix.lower() == ".osu":
-        return read_osu_file(file.read_bytes())
+def _chart_files(path: Path) -> list[Path]:
+    if path.is_file():
+        return [path]
 
-    return json.loads(file.read_text(encoding="utf-8")), None
+    files = sorted(file for file in path.rglob("*") if file.suffix.lower() in CHART_SUFFIXES and file.name != PACK_INFO and file.is_file())
+    best: dict[Path, int] = {}
+
+    for file in files:
+        best[file.parent] = max(best.get(file.parent, 0), STEPMANIA_PREFERENCE.get(file.suffix.lower(), 0))
+
+    return [file for file in files if STEPMANIA_PREFERENCE.get(file.suffix.lower(), best[file.parent]) >= best[file.parent]]
+
+
+def _etterna_pack(file: Path, root: Path, cache: dict[Path, int | None]) -> int | None:
+    for folder in file.parents:
+        if folder not in cache:
+            info = folder / PACK_INFO
+            pack = None
+
+            if info.is_file():
+                try:
+                    data = json.loads(info.read_text(encoding="utf-8"))
+                    pack = int(data["id"]) if data.get("site") == "etternaonline" else None
+                except (ValueError, KeyError, TypeError):
+                    pack = None
+
+            cache[folder] = pack
+
+        if cache[folder] is not None or folder == root or folder == folder.parent:
+            return cache[folder]
+
+    return None
+
+
+def _read_chart_file(file: Path, pack: int | None) -> list[tuple[dict | None, dict | None, str | None]]:
+    suffix = file.suffix.lower()
+
+    if suffix == ".osu":
+        data, source = read_osu_file(file.read_bytes())
+        return [(data, source, None)]
+
+    if suffix in STEPMANIA_PREFERENCE:
+        charts = []
+
+        for entry in nc.convert_stepmania(file.read_bytes()):
+            if entry["chart"] is None:
+                charts.append((None, None, entry["error"]))
+                continue
+
+            source = {"source": ETTERNA_SOURCE, "checksum": entry["chart_key"], "source_set_id": pack} if entry["chart_key"] else None
+            charts.append((json.loads(entry["chart"]), source, None))
+
+        return charts
+
+    return [(json.loads(file.read_text(encoding="utf-8")), None, None)]
 
 
 @nascent_cli.command("import-charts")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--rank", is_flag=True, help="Rank every imported chart")
-def import_charts(path: Path, rank: bool):
-    files = [path] if path.is_file() else sorted(file for file in path.rglob("*") if file.suffix.lower() in CHART_SUFFIXES)
-    imported = 0
+@click.option("--quiet", is_flag=True, help="Print progress every 1000 files and a summary instead of a line per chart")
+def import_charts(path: Path, rank: bool, quiet: bool):
+    files = _chart_files(path)
+    packs: dict[Path, int | None] = {}
+    counts = Counter()
+    reasons = Counter()
 
     if not files:
-        raise click.ClickException(f"no .osu or .json chart files in {path} that this user can read")
+        raise click.ClickException(f"no {', '.join(CHART_SUFFIXES)} chart files in {path} that this user can read")
 
-    for file in files:
+    for position, file in enumerate(files, 1):
         try:
-            data, source = _read_chart_file(file)
-            native = parse_chart(data)
-            chart, created = register_chart(native, None)
+            entries = _read_chart_file(file, _etterna_pack(file, path, packs))
+        except (OSError, ValueError) as error:
+            entries = [(None, None, str(error))]
 
-            if source is not None:
-                add_chart_source(chart, **source)
+        for data, source, problem in entries:
+            try:
+                if data is None:
+                    raise ValueError(problem)
 
-            changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank else False
-        except (ApiError, ValueError) as error:
-            db.session.rollback()
-            click.echo(f"skipped {file}: {getattr(error, 'message', error)}")
-            continue
+                native = parse_chart(data)
+                chart, created = register_chart(native, None)
 
-        db.session.commit()
+                if source is not None:
+                    add_chart_source(chart, **source)
 
-        if created:
-            tasks.enqueue(tasks.fill_chart_difficulties, chart.id)
+                changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank else False
+            except (ApiError, ValueError) as error:
+                db.session.rollback()
+                message = str(getattr(error, "message", error))
+                counts["skipped"] += 1
+                reasons[message] += 1
 
-        if changed:
-            tasks.enqueue(tasks.apply_chart_status, chart.id)
+                if not quiet:
+                    click.echo(f"skipped {file}: {message}")
 
-        imported += created
-        name = f"{chart.artist} - {chart.title} [{chart.difficulty_name}]"
-        click.echo(f"{'added' if created else 'exists'} {chart.hash[:16]} {chart.key_count:2}K {chart.status:8} {chart.difficulty:7.2f} {name}")
+                continue
 
-    click.echo(f"{imported} new charts")
+            db.session.commit()
+
+            if created:
+                tasks.enqueue(tasks.fill_chart_difficulties, chart.id)
+
+            if changed:
+                tasks.enqueue(tasks.apply_chart_status, chart.id)
+
+            counts["added" if created else "exists"] += 1
+
+            if not quiet:
+                name = f"{chart.artist} - {chart.title} [{chart.difficulty_name}]"
+                click.echo(f"{'added' if created else 'exists'} {chart.hash[:16]} {chart.key_count:2}K {chart.status:8} {chart.difficulty:7.2f} {name}")
+
+        if quiet and position % 1000 == 0:
+            click.echo(f"{position}/{len(files)} files: {counts['added']} added, {counts['exists']} already on the server, {counts['skipped']} skipped")
+
+    if quiet and reasons:
+        for message, count in reasons.most_common(15):
+            click.echo(f"skipped {count}: {message}")
+
+    click.echo(f"{counts['added']} new charts, {counts['exists']} already on the server, {counts['skipped']} skipped, from {len(files)} files")
 
 
 @nascent_cli.command("set-chart-status")

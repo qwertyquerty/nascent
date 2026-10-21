@@ -31,6 +31,7 @@ const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases?per
 const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases";
 const INSTALLER_SUFFIXES = {win: ["-setup.exe", ".zip"], mac: [".dmg", ".zip"], linux: [".AppImage", ".zip"]};
 const OS_LABELS = {win: "Windows", mac: "macOS", linux: "Linux"};
+const SOURCE_NAMES = {osu: "osu!", etterna: "EtternaOnline"};
 const PACKAGE_KINDS = {"-setup.exe": "Installer", ".dmg": "Disk image", ".AppImage": "AppImage", ".zip": "Portable zip"};
 const PACKAGE_PATTERN = /-(win|mac|linux)-([a-z0-9_]+?)(-setup\.exe|\.dmg|\.AppImage|\.zip)$/;
 const PAGE_SIZE = 50;
@@ -628,7 +629,7 @@ const loaders = {
         const difficulty = chart.difficulties.find((entry) => entry.rate === rate)?.difficulty ?? chart.difficulty;
         const https = (entry) => entry.url?.startsWith("https://");
         const downloads = uniqueBy(chart.sources.flatMap((source) => source.downloads ?? []).filter(https), "url");
-        const pages = uniqueBy(chart.sources.map((source) => ({name: source.source, url: source.url})).filter(https), "url");
+        const pages = uniqueBy(chart.sources.map((source) => ({name: SOURCE_NAMES[source.source] ?? source.source, url: source.url})).filter(https), "url");
         return {title: chartName(chart), chart, board: entries, performance, rate, players, difficulty, downloads, pages, titles: chartTitles(chart)};
     },
 };

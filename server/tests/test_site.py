@@ -1,3 +1,8 @@
+import struct
+
+from nascent_server.services import previews
+from nascent_server.storage import sharded_key, storage
+
 from .helpers import CHART, HASH, make_replay, rank_chart, submit
 
 
@@ -83,3 +88,39 @@ def test_page_shell_meta(api, clock):
     unknown_api = api.get("/api/v1/nothing-here")
     assert unknown_api.status_code == 404
     assert unknown_api.get_json()["error"]["code"] == "not_found"
+
+
+def test_chart_density_preview(api, app):
+    rank_chart(api)
+    path = f"/api/v1/charts/{HASH}/density.png"
+    image = api.get(path)
+
+    assert image.status_code == 200
+    assert image.mimetype == "image/png"
+    assert "immutable" in image.headers["Cache-Control"]
+    data = image.get_data()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert struct.unpack(">II", data[16:24]) == (previews.WIDTH, previews.HEIGHT)
+    assert len(data) < 20_000
+
+    with app.app_context():
+        assert storage().exists(sharded_key("previews", HASH, f"-density-{previews.VERSION}.png"))
+
+    assert api.get(path).get_data() == data
+    assert api.get("/api/v1/charts/missing/density.png").status_code == 404
+
+    page = api.get(f"/charts/{HASH}").get_data(as_text=True)
+    assert f'<meta property="og:image" content="{app.config["SITE_URL"]}{previews.preview_path(HASH)}">' in page
+    assert f'<meta property="og:image:height" content="{previews.HEIGHT}">' in page
+
+    home = api.get("/").get_data(as_text=True)
+    assert "/og.png" in home
+    assert '<meta property="og:image:height" content="630">' in home
+
+
+def test_density_buckets_match_the_website():
+    bars = previews.density([0, 500, 1000, 1000])
+    assert len(bars) == previews.BUCKETS
+    assert abs(sum(bars) * (1000 / previews.BUCKETS) / 1000 - 4) < 1e-9
+    assert bars[0] > 0 and bars[-1] == bars[0] * 2
+    assert previews.render_density([]).startswith(b"\x89PNG")

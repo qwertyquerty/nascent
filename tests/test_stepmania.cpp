@@ -127,3 +127,27 @@ NASCENT_TEST(stepmania_recovery_and_errors) {
     CHECK(rejected.size() == 1 && rejected[0].chart.is_null());
     CHECK(rejected[0].error == "negative or zero BPMs are not supported");
 }
+
+NASCENT_TEST(stepmania_dwi_conversion) {
+    std::string text =
+        "#TITLE:Dwi;\n#BPM:120;\n#GAP:100;\n#FILE:song.mp3;\n#CHANGEBPM:16=60;\n#FREEZE:8=500;\n"
+        "#SINGLE:MANIAC:9:2468(2468)<48>8!8000 8;\n#DOUBLE:ANOTHER:5:2:8;\n#COUPLE:BASIC:2:2:2;\n";
+    std::string error;
+    std::vector<StepManiaChart> charts = stepmania_to_chart_jsons(text, error);
+    CHECK(charts.size() == 3);
+
+    if (charts.size() != 3) {
+        return;
+    }
+
+    const nlohmann::json& single = charts[0].chart;
+    CHECK(charts[0].steps_type == "dance-single" && charts[0].difficulty == "Hard" && charts[0].meter == 9);
+    CHECK(single["info"]["audio_file"] == "song.mp3");
+    CHECK((hit_times(single) == std::vector<int32_t>{100, 350, 600, 850, 1100, 1725, 1850, 1975, 2100, 2100, 2350}));
+    CHECK(single["hit_objects"][0]["key"] == 1 && single["hit_objects"][1]["key"] == 0 && single["hit_objects"][2]["key"] == 3);
+    CHECK(single["hit_objects"][10]["key"] == 2 && single["hit_objects"][10]["hit_type"] == 1 && single["hit_objects"][10]["end_time"] == 4100);
+
+    CHECK(charts[1].difficulty == "Medium" && charts[1].chart["info"]["key_count"] == 8);
+    CHECK(charts[1].chart["hit_objects"][1]["key"] == 6);
+    CHECK(charts[2].chart.is_null() && charts[2].error == "steps type 'dance-couple' is not supported");
+}

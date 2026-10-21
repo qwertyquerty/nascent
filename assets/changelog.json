@@ -1,7 +1,32 @@
 {
     "releases": [
         {
-            "version": "0.2.0.beta8",
+            "version": "0.3.0.beta9",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "Play StepMania and Etterna charts (.sm, .ssc and .dwi). Link your Etterna Songs folder in Options, or any folder of song packs.",
+                        "The chart menu (F7) shows the chart's file format and whether it's from a linked folder or your Nascent songs folder, and has an Open chart folder button. Charts in linked folders can't be deleted from the menu.",
+                        "The song list shows a progress bar at the top while it loads charts or calculates difficulties in the background."
+                    ]
+                },
+                {
+                    "title": "Improved",
+                    "notes": [
+                        "Linked folders in Options show their full path instead of only the last two folders."
+                    ]
+                },
+                {
+                    "title": "Fixed",
+                    "notes": [
+                        "Plays on some charts with extreme scroll speed gimmicks couldn't be submitted."
+                    ]
+                }
+            ]
+        },
+        {
+            "version": "0.3.0.beta8",
             "sections": [
                 {
                     "title": "New",

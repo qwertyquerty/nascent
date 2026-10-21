@@ -7,7 +7,7 @@ from urllib.parse import quote, urlencode
 from flask import current_app, render_template, request
 
 from ..ids import parse_id
-from ..services import ranking
+from ..services import previews, ranking
 
 SITE_NAME = "Nascent"
 TAGLINE = "A vertical scrolling rhythm game passion project"
@@ -33,6 +33,8 @@ class Page:
     structured: list[dict[str, Any]] = field(default_factory=list)
     html: str = ""
     image: bool = True
+    image_path: str = "/og.png"
+    image_size: tuple[int, int] = (1200, 630)
 
 
 def site_url(path: str) -> str:
@@ -201,7 +203,16 @@ def chart(chart_hash: str) -> Page:
     )
     sources = [(source["url"], f"View on {source['source']}", "") for source in found.get("sources", []) if (source.get("url") or "").startswith("https://")]
     scores = [(f"/plays/{entry['play']['id']}", f"#{entry['rank']} {entry['play']['user']['username']}", result(entry["play"])) for entry in board.get("entries", [])]
-    return Page(f"{name} · {found['key_count']}K chart · {SITE_NAME}", name, description, chart_path(found["hash"]), intro=[description], sections=[("Links", sources), ("Leaderboard", scores)])
+    return Page(
+        f"{name} · {found['key_count']}K chart · {SITE_NAME}",
+        name,
+        description,
+        chart_path(found["hash"]),
+        intro=[description],
+        sections=[("Links", sources), ("Leaderboard", scores)],
+        image_path=previews.preview_path(found["hash"]),
+        image_size=(previews.WIDTH, previews.HEIGHT),
+    )
 
 
 def play(reference: str) -> Page:

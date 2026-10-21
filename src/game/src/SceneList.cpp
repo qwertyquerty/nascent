@@ -162,7 +162,7 @@ namespace nascent {
     void SceneList::on_create() {
         if (!pending_selection_path.empty()) {
             std::string error;
-            std::unique_ptr<Chart> chart = Chart::load(pending_selection_path, pitch, error);
+            std::unique_ptr<Chart> chart = load_chart_file(pending_selection_path, pitch, error, pending_selection.value_or(std::string()));
 
             if (chart != nullptr) {
                 apply_library(single_chart_library(std::move(chart), pitch, *difficulty_cache));
@@ -245,6 +245,7 @@ namespace nascent {
         status_bar.update(elapsed_time);
         poll_library_load();
         collect_difficulties();
+        update_background_work(elapsed_time);
         leaderboards.update(elapsed_time, show_leaderboards && selected_chart != nullptr && !visible.empty(), selected_hash(), pitch);
 
         if (!update_controls(elapsed_time)) {
@@ -1037,19 +1038,32 @@ namespace nascent {
 
         window->FillRectDecal({0.0f, 0.0f}, {(float)screensize.x, (float)bar_height}, skin->color(SkinColor::STATUS_BAR_BACKGROUND));
         window->FillRectDecal({0.0f, (float)(bar_height - 1)}, {(float)screensize.x, 1.0f}, skin->color(SkinColor::STATUS_BAR_EDGE));
+        int32_t right = screensize.x - padding - GameNascent::fps_counter_width();
+        float hint_gap = Ui::layout_pxf("song_list.hint_gap");
 
         if (search.empty()) {
             draw_text(font, "Type to search", {padding, baseline}, skin->color(SkinColor::TEXT_FAINT));
+        }
+        else {
+            std::string count = std::format("{} / {}", visible.size(), library.size());
+            int32_t count_width = text_bounds(font, count).size.x;
+            draw_text(font, search, {padding, baseline}, skin->color(SkinColor::TEXT));
+            float clear_x = (float)padding + text_bounds(font, search).size.x + hint_gap;
+            draw_hints(window, font, {{"Esc  clear", SPOT_SEARCH_CLEAR}}, {clear_x, (float)baseline}, hint_gap, skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), ui_spots);
+            right -= count_width;
+            draw_text(font, count, {right, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
+            right -= (int32_t)hint_gap;
+        }
+
+        if (background_work_opacity <= 0) {
             return;
         }
 
-        std::string count = std::format("{} / {}", visible.size(), library.size());
-        int32_t count_width = text_bounds(font, count).size.x;
-        draw_text(font, search, {padding, baseline}, skin->color(SkinColor::TEXT));
-        float hint_gap = Ui::layout_pxf("song_list.hint_gap");
-        float clear_x = (float)padding + text_bounds(font, search).size.x + hint_gap;
-        draw_hints(window, font, {{"Esc  clear", SPOT_SEARCH_CLEAR}}, {clear_x, (float)baseline}, hint_gap, skin->color(SkinColor::TEXT_FAINT), skin->color(SkinColor::TEXT), ui_spots);
-        draw_text(font, count, {screensize.x - padding - GameNascent::fps_counter_width() - count_width, baseline}, skin->color(visible.empty() ? SkinColor::TEXT_ERROR : SkinColor::TEXT_MUTED));
+        std::string label = std::format("{}  {:.0f}%", background_work_label, background_work_fraction * 100.0f);
+        draw_text(font, label, {right - text_bounds(font, label).size.x, baseline}, fade(skin->color(SkinColor::TEXT_FAINT), background_work_opacity));
+        float work_height = std::max(1.0f, Ui::layout_pxf("song_list.background_work_bar_height"));
+        ProgressBar work_bar({(float)screensize.x, work_height}, fade(skin->color(SkinColor::PROGRESS_TRACK), background_work_opacity));
+        work_bar.draw(window, {0.0f, (float)bar_height - work_height}, background_work_fraction, fade(skin->accent(0.5), background_work_opacity));
     }
 
     void SceneList::download_recommended() {
@@ -1181,6 +1195,12 @@ namespace nascent {
             case ChartAction::OPEN_WEBSITE:
                 open_chart_website();
                 break;
+            case ChartAction::OPEN_FOLDER:
+                if (!open_folder(selected_chart->file_path.parent_path())) {
+                    game->notify("Could not open the chart's folder", true);
+                }
+
+                break;
             default:
                 delete_charts(action == ChartAction::DELETE_PACK);
                 break;
@@ -1234,6 +1254,11 @@ namespace nascent {
             return;
         }
 
+        if (!whole_pack && holds_several_charts(chart_path)) {
+            game->notify("That chart shares its file with the song's other difficulties, so delete the whole song instead", true);
+            return;
+        }
+
         std::filesystem::path folder = std::filesystem::weakly_canonical(chart_path.parent_path(), ec);
         std::filesystem::path songs = std::filesystem::weakly_canonical(SettingsManager::song_directory(), ec);
 
@@ -1269,8 +1294,7 @@ namespace nascent {
             bool charts_left = false;
 
             for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
-                std::string extension = entry.path().extension().string();
-                charts_left = charts_left || std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), extension) != CHART_FILE_EXTENSIONS.end();
+                charts_left = charts_left || is_library_chart_file(entry.path());
             }
 
             if (!ec && !charts_left) {
@@ -1623,6 +1647,50 @@ namespace nascent {
                 library.difficulties[result.index] = result.difficulty;
             }
         }
+    }
+
+    std::optional<SceneList::BackgroundWork> SceneList::background_work() {
+        if (library_loading) {
+            static constexpr std::array<std::string_view, (size_t)LibraryLoadStage::DONE + 1> STAGE_LABELS = {
+                "Finding charts",
+                "Reading charts",
+                "Calculating difficulties",
+                "Saving the library",
+                "Sorting charts",
+                "Finishing up",
+                "Finishing up",
+            };
+
+            size_t stage = std::min<size_t>(library_load_progress.stage, STAGE_LABELS.size() - 1);
+            size_t total = library_load_progress.total;
+            float fraction = total == 0 ? 0.0f : std::min(1.0f, (float)library_load_progress.done / (float)total);
+            return BackgroundWork{std::string(STAGE_LABELS[stage]), fraction};
+        }
+
+        std::lock_guard<std::mutex> lock(difficulty_mutex);
+        size_t total = rate_charts.size() * rate_pitches.size();
+        size_t finished = rate_next - rate_busy;
+
+        if (total == 0 || finished >= total) {
+            return std::nullopt;
+        }
+
+        return BackgroundWork{"Calculating difficulties for every rate", (float)finished / (float)total};
+    }
+
+    void SceneList::update_background_work(float elapsed_time) {
+        std::optional<BackgroundWork> work = background_work();
+        background_work_time = work ? background_work_time + elapsed_time : 0.0f;
+
+        if (work) {
+            bool restarted = work->label != background_work_label || work->fraction < background_work_fraction;
+            background_work_fraction = restarted ? work->fraction : background_work_fraction + (work->fraction - background_work_fraction) * std::min(1.0f, elapsed_time * (float)Ui::layout("song_list.background_work_bar_speed"));
+            background_work_label = std::move(work->label);
+        }
+
+        float target = work && background_work_time >= (float)Ui::layout("song_list.background_work_delay") ? 1.0f : 0.0f;
+        float step = elapsed_time * (float)Ui::layout("song_list.background_work_fade_speed");
+        background_work_opacity = target > background_work_opacity ? std::min(target, background_work_opacity + step) : std::max(target, background_work_opacity - step);
     }
 
     void SceneList::set_pitch(float pitch) {

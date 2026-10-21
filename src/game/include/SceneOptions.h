@@ -54,6 +54,8 @@ namespace nascent {
         std::string exported_skin;
         ButtonField* link_osu_button = nullptr;
         std::optional<std::filesystem::path> osu_songs;
+        ButtonField* link_etterna_button = nullptr;
+        std::optional<std::filesystem::path> etterna_songs;
         std::future<std::optional<std::filesystem::path>> folder_pick;
         bool unlink_requested = false;
         SliderField* lane_cover_field = nullptr;

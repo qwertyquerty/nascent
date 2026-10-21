@@ -8,14 +8,18 @@
 #include "OsuFormat.h"
 #include "Replay.h"
 #include "Sha256.h"
+#include "StepManiaFormat.h"
 #include "Utf8Path.h"
 
+#include <algorithm>
+#include <cctype>
 #include <format>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -30,7 +34,7 @@ namespace nascent {
         };
 
         std::u8string folder_key(const std::filesystem::path& folder_path) {
-            std::u8string folder = folder_path.filename().u8string();
+            std::u8string folder = folder_path.lexically_normal().u8string();
 
             for (char8_t& c : folder) {
                 if (c >= u8'A' && c <= u8'Z') {
@@ -39,6 +43,37 @@ namespace nascent {
             }
 
             return folder;
+        }
+
+        std::string lowercase_extension(const std::filesystem::path& path) {
+            std::string extension = path_utf8(path.extension());
+
+            for (char& c : extension) {
+                c = (char)std::tolower((unsigned char)c);
+            }
+
+            return extension;
+        }
+
+        bool is_stepmania_file(const std::filesystem::path& path) {
+            std::string extension = lowercase_extension(path);
+            return extension == SM_FILE_EXTENSION || extension == SSC_FILE_EXTENSION || extension == DWI_FILE_EXTENSION;
+        }
+
+        int32_t stepmania_preference(const std::filesystem::path& path) {
+            std::string extension = lowercase_extension(path);
+            return extension == SSC_FILE_EXTENSION ? 3 : (extension == SM_FILE_EXTENSION ? 2 : (extension == DWI_FILE_EXTENSION ? 1 : 0));
+        }
+
+        size_t extension_rank(const std::filesystem::path& path) {
+            std::string extension = path_utf8(path.extension());
+            auto found = std::find(LIBRARY_CHART_EXTENSIONS.begin(), LIBRARY_CHART_EXTENSIONS.end(), extension);
+
+            if (found == LIBRARY_CHART_EXTENSIONS.end() && is_stepmania_file(path)) {
+                found = std::find(LIBRARY_CHART_EXTENSIONS.begin(), LIBRARY_CHART_EXTENSIONS.end(), lowercase_extension(path));
+            }
+
+            return (size_t)(found - LIBRARY_CHART_EXTENSIONS.begin());
         }
 
         constexpr int32_t OSU_HEADER_LINES = 64;
@@ -250,6 +285,74 @@ namespace nascent {
         return library;
     }
 
+    bool is_library_chart_file(const std::filesystem::path& path) {
+        return extension_rank(path) < LIBRARY_CHART_EXTENSIONS.size();
+    }
+
+    bool holds_several_charts(const std::filesystem::path& path) {
+        return is_stepmania_file(path);
+    }
+
+    std::vector<std::unique_ptr<Chart>> load_chart_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error) {
+        std::vector<std::unique_ptr<Chart>> charts;
+
+        if (!is_stepmania_file(path)) {
+            std::unique_ptr<Chart> chart = Chart::load_text(text, path, pitch, error);
+
+            if (chart != nullptr) {
+                charts.push_back(std::move(chart));
+            }
+
+            return charts;
+        }
+
+        std::vector<std::string> skipped;
+
+        for (const StepManiaChart& converted : stepmania_to_chart_jsons(text, error)) {
+            std::string chart_error = converted.error;
+            std::unique_ptr<Chart> chart = converted.chart.is_null() ? nullptr : Chart::load_text(converted.chart.dump(), path, pitch, chart_error);
+
+            if (chart != nullptr) {
+                charts.push_back(std::move(chart));
+            }
+            else if (std::find(skipped.begin(), skipped.end(), chart_error) == skipped.end()) {
+                skipped.push_back(std::move(chart_error));
+            }
+        }
+
+        if (charts.empty() && error.empty()) {
+            error = "no playable charts";
+
+            for (size_t index = 0; index < skipped.size(); index++) {
+                error += (index == 0 ? ": " : "; ") + skipped[index];
+            }
+        }
+
+        return charts;
+    }
+
+    std::unique_ptr<Chart> load_chart_file(const std::filesystem::path& path, float pitch, std::string& error, std::string_view gameplay_hash) {
+        std::ifstream file(path, std::ios::binary);
+
+        if (!file) {
+            error = "could not open file";
+            return nullptr;
+        }
+
+        std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        std::vector<std::unique_ptr<Chart>> charts = load_chart_text(text, path, pitch, error);
+
+        if (charts.empty()) {
+            return nullptr;
+        }
+
+        auto found = std::find_if(charts.begin(), charts.end(), [&](const std::unique_ptr<Chart>& chart) {
+            return chart->gameplay_hash() == gameplay_hash;
+        });
+
+        return std::move(found != charts.end() ? *found : charts.front());
+    }
+
     std::string chart_key(const std::filesystem::path& path) {
         return path_utf8(path);
     }
@@ -304,28 +407,23 @@ namespace nascent {
         struct Scanned {
             Outcome outcome = Outcome::NEW_OTHER;
             bool playable = false;
-            std::unique_ptr<Chart> chart;
+            std::vector<std::unique_ptr<Chart>> charts;
         };
 
         std::error_code ec;
         std::vector<ChartFile> chart_files;
 
-        auto extension_rank = [](const std::filesystem::path& path) {
-            auto found = std::find(CHART_FILE_EXTENSIONS.begin(), CHART_FILE_EXTENSIONS.end(), path.extension().string());
-            return (size_t)(found - CHART_FILE_EXTENSIONS.begin());
-        };
-
         auto ticks = [](std::filesystem::file_time_type time) {
             return (int64_t)time.time_since_epoch().count();
         };
 
-        std::vector<std::pair<std::filesystem::path, int64_t>> chart_folders;
+        std::vector<std::tuple<std::filesystem::path, int64_t, bool>> chart_folders;
 
         for (const std::filesystem::path& song_directory : song_directories) {
             for (const auto& chart_folder : std::filesystem::directory_iterator(song_directory, ec)) {
                 if (chart_folder.is_directory(ec) && chart_folder.path().extension() != ".part") {
                     std::filesystem::file_time_type time = chart_folder.last_write_time(ec);
-                    chart_folders.emplace_back(chart_folder.path(), ec ? 0 : ticks(time));
+                    chart_folders.emplace_back(chart_folder.path(), ec ? 0 : ticks(time), true);
                 }
             }
         }
@@ -334,27 +432,59 @@ namespace nascent {
             progress->begin(LibraryLoadStage::LISTING, chart_folders.size());
         }
 
-        for (const auto& [chart_folder, added] : chart_folders) {
+        for (size_t folder_index = 0; folder_index < chart_folders.size(); folder_index++) {
+            auto [chart_folder, added, may_hold_songs] = chart_folders[folder_index];
+
             if (progress != nullptr) {
                 progress->step();
             }
 
             auto files = std::make_shared<std::unordered_set<std::u8string>>();
             std::vector<ChartFile> found;
+            std::vector<std::filesystem::path> subfolders;
+            int32_t best_stepmania = 0;
 
             for (const auto& chart_file : std::filesystem::directory_iterator(chart_folder, ec)) {
                 files->insert(file_key(chart_file.path().filename()));
+                std::error_code type_ec;
 
-                if (extension_rank(chart_file.path()) >= CHART_FILE_EXTENSIONS.size()) {
+                if (may_hold_songs && chart_file.is_directory(type_ec)) {
+                    subfolders.push_back(chart_file.path());
                     continue;
                 }
 
+                if (!is_library_chart_file(chart_file.path())) {
+                    continue;
+                }
+
+                best_stepmania = std::max(best_stepmania, stepmania_preference(chart_file.path()));
                 std::error_code stat_ec;
                 ChartFile file{chart_file.path(), chart_key(chart_file.path()), nullptr, 0, 0, added};
                 file.size = chart_file.file_size(stat_ec);
                 std::filesystem::file_time_type time = chart_file.last_write_time(stat_ec);
                 file.modified = stat_ec ? 0 : ticks(time);
                 found.push_back(std::move(file));
+            }
+
+            std::erase_if(found, [&](const ChartFile& file) {
+                int32_t preference = stepmania_preference(file.path);
+                return preference > 0 && preference < best_stepmania;
+            });
+
+            if (found.empty() && may_hold_songs) {
+                for (const std::filesystem::path& subfolder : subfolders) {
+                    if (subfolder.extension() != ".part") {
+                        std::error_code time_ec;
+                        std::filesystem::file_time_type time = std::filesystem::last_write_time(subfolder, time_ec);
+                        chart_folders.emplace_back(subfolder, time_ec ? 0 : ticks(time), false);
+                    }
+                }
+
+                if (progress != nullptr) {
+                    progress->total += subfolders.size();
+                }
+
+                continue;
             }
 
             std::sort(found.begin(), found.end(), [&](const ChartFile& a, const ChartFile& b) {
@@ -384,8 +514,8 @@ namespace nascent {
             }
 
             if (record != nullptr && record->size == source.size && record->modified == source.modified && record->added == source.added) {
-                result.outcome = record->chart ? Outcome::KEPT_CHART : Outcome::KEPT_OTHER;
-                result.playable = record->chart && audio_listed(record->audio_file, source.path, *source.folder_files);
+                result.outcome = record->charts > 0 ? Outcome::KEPT_CHART : Outcome::KEPT_OTHER;
+                result.playable = record->charts > 0 && audio_listed(record->audio_file, source.path, *source.folder_files);
                 return;
             }
 
@@ -401,15 +531,16 @@ namespace nascent {
                 error = "could not open file";
             }
             else {
-                result.chart = Chart::load_text(contents, source.path, pitch, error);
+                result.charts = load_chart_text(contents, source.path, pitch, error);
             }
 
-            if (result.chart != nullptr) {
+            if (!result.charts.empty()) {
+                const Chart& first = *result.charts.front();
                 result.outcome = Outcome::NEW_CHART;
-                result.playable = audio_listed(result.chart->info.audio_file, source.path, *source.folder_files);
+                result.playable = audio_listed(first.info.audio_file, source.path, *source.folder_files);
 
                 if (!result.playable) {
-                    error = std::format("audio file {} is missing", path_utf8(result.chart->audio_path));
+                    error = std::format("audio file {} is missing", path_utf8(first.audio_path));
                 }
             }
 
@@ -426,7 +557,12 @@ namespace nascent {
         for (size_t index = 0; index < chart_files.size(); index++) {
             const ChartFile& source = chart_files[index];
             Scanned& result = scanned[index];
-            LibraryCache::Entry entry{source.key, source.size, source.modified, source.added, result.chart.get(), false};
+            LibraryCache::Entry entry{source.key, source.size, source.modified, source.added, {}, false};
+
+            for (const std::unique_ptr<Chart>& chart : result.charts) {
+                entry.charts.push_back(chart.get());
+            }
+
             entry.keep = result.outcome == Outcome::KEPT_CHART || result.outcome == Outcome::KEPT_OTHER;
             rewrite = rewrite || !entry.keep;
             entries.push_back(entry);
@@ -442,7 +578,9 @@ namespace nascent {
 
         for (Scanned& result : scanned) {
             if (result.outcome == Outcome::NEW_CHART && result.playable) {
-                fresh.push_back(result.chart.get());
+                for (const std::unique_ptr<Chart>& chart : result.charts) {
+                    fresh.push_back(chart.get());
+                }
             }
         }
 
@@ -472,8 +610,10 @@ namespace nascent {
 
         for (size_t index = 0; index < scanned.size(); index++) {
             if (scanned[index].outcome == Outcome::NEW_CHART && scanned[index].playable) {
-                update.added.push_back(std::move(scanned[index].chart));
-                update.added_times.push_back(chart_files[index].added);
+                for (std::unique_ptr<Chart>& chart : scanned[index].charts) {
+                    update.added.push_back(std::move(chart));
+                    update.added_times.push_back(chart_files[index].added);
+                }
             }
         }
 

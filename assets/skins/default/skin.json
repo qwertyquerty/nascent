@@ -185,7 +185,11 @@
             "curve_softness": 50,
             "favorite_radius": 9,
             "favorite_gap": 14,
-            "favorite_inner_ratio": 0.45
+            "favorite_inner_ratio": 0.45,
+            "background_work_bar_height": 3,
+            "background_work_delay": 0.5,
+            "background_work_fade_speed": 4,
+            "background_work_bar_speed": 8
         },
         "leaderboard": {
             "padding": 24,

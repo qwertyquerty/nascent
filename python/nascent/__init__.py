@@ -75,9 +75,10 @@ Source = Union[str, os.PathLike, bytes, bytearray]
 FORMATS = ("osu", "stepmania", "nascent", "zip")
 RATES = tuple(round(RATE_MIN + step * RATE_STEP, 4) for step in range(round((RATE_MAX - RATE_MIN) / RATE_STEP) + 1))
 
-_EXTENSIONS = {".osu": "osu", ".sm": "stepmania", ".ssc": "stepmania", ".json": "nascent", ".osz": "zip", ".zip": "zip"}
-_ARCHIVE_CHARTS = (".osu", ".sm", ".ssc")
-_STEPMANIA_TAG = re.compile(rb"#(NOTES|NOTEDATA)\s*:", re.IGNORECASE)
+_EXTENSIONS = {".osu": "osu", ".sm": "stepmania", ".ssc": "stepmania", ".dwi": "stepmania", ".json": "nascent", ".osz": "zip", ".zip": "zip"}
+_ARCHIVE_CHARTS = (".osu", ".sm", ".ssc", ".dwi")
+_STEPMANIA_PREFERENCE = {".ssc": 3, ".sm": 2, ".dwi": 1}
+_STEPMANIA_TAG = re.compile(rb"#(NOTES|NOTEDATA|SINGLE|DOUBLE|SOLO)\s*:", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -131,8 +132,13 @@ def _stepmania_charts(data: bytes) -> list[Chart]:
 def _archive_charts(data: bytes) -> list[Chart]:
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         names = [name for name in archive.namelist() if PurePosixPath(name).suffix.lower() in _ARCHIVE_CHARTS]
-        ssc = {PurePosixPath(name).with_suffix("") for name in names if PurePosixPath(name).suffix.lower() == ".ssc"}
-        names = sorted(name for name in names if not (PurePosixPath(name).suffix.lower() == ".sm" and PurePosixPath(name).with_suffix("") in ssc))
+        best = {}
+
+        for name in names:
+            folder = PurePosixPath(name).parent
+            best[folder] = max(best.get(folder, 0), _STEPMANIA_PREFERENCE.get(PurePosixPath(name).suffix.lower(), 0))
+
+        names = sorted(name for name in names if _STEPMANIA_PREFERENCE.get(PurePosixPath(name).suffix.lower(), best[PurePosixPath(name).parent]) >= best[PurePosixPath(name).parent])
         charts = []
         errors = []
 

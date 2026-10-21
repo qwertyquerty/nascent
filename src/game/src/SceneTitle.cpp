@@ -50,7 +50,7 @@ namespace nascent {
         for (int32_t attempt = 0; attempt < RANDOM_CHART_ATTEMPTS && !candidates.empty(); attempt++) {
             size_t index = (size_t)std::rand() % candidates.size();
             std::string error;
-            std::unique_ptr<Chart> chart = Chart::load(candidates[index], 1.0, error);
+            std::unique_ptr<Chart> chart = load_chart_file(candidates[index], 1.0, error);
 
             if (chart != nullptr && std::filesystem::exists(chart->audio_path, ec)) {
                 return chart;
@@ -102,7 +102,7 @@ namespace nascent {
 
     bool SceneTitle::adopt_track(const TitleTrack& track) {
         std::string error;
-        std::unique_ptr<Chart> chart = SettingsManager::settings.title_songs == TitleSongs::NONE ? nullptr : Chart::load(track.chart_path, 1.0, error);
+        std::unique_ptr<Chart> chart = SettingsManager::settings.title_songs == TitleSongs::NONE ? nullptr : load_chart_file(track.chart_path, 1.0, error);
 
         if (chart == nullptr || track.audio_id == -1) {
             if (track.audio_id != -1) {

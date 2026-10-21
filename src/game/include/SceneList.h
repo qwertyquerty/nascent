@@ -57,6 +57,11 @@ namespace nascent {
             float difficulty = 0;
         };
 
+        struct BackgroundWork {
+            std::string label;
+            float fraction = 0;
+        };
+
         struct BackgroundLoadResult {
             uint64_t generation = 0;
             std::string image_path;
@@ -146,6 +151,11 @@ namespace nascent {
 
         float widest_grade = -1.0f;
 
+        float background_work_time = 0;
+        float background_work_opacity = 0;
+        float background_work_fraction = 0;
+        std::string background_work_label;
+
         StarSprite favorite_star;
         float favorite_star_ratio = -1.0f;
         LeaderboardPanel leaderboards;
@@ -178,6 +188,8 @@ namespace nascent {
         void queue_all_rates();
         void pause_rates(bool paused);
         void collect_difficulties();
+        std::optional<BackgroundWork> background_work();
+        void update_background_work(float elapsed_time);
 
         void request_background_load();
         void apply_background_load(BackgroundLoadResult result);

@@ -207,6 +207,12 @@ namespace nascent {
             link_osu_button = &form.add<ButtonField>("Link your osu! songs folder");
         }
 
+        etterna_songs = ChartFolders::etterna_songs_folder();
+
+        if (etterna_songs) {
+            link_etterna_button = &form.add<ButtonField>("Link your Etterna songs folder");
+        }
+
         linked_folders_field = &form.add<ChoiceField>("Linked folders", std::vector<std::string>{"None"}, 0);
         refresh_linked_folders();
 
@@ -418,7 +424,7 @@ namespace nascent {
         linked_folders_field->options.clear();
 
         for (const std::string& folder : linked) {
-            linked_folders_field->options.push_back(ChartFolders::display_name(folder));
+            linked_folders_field->options.push_back(folder);
         }
 
         if (linked.empty()) {
@@ -502,12 +508,15 @@ namespace nascent {
         else if (link_folder_button->take_pressed()) {
             if (!folder_pick.valid()) {
                 folder_pick = run_detached([] {
-                    return choose_folder("Choose a folder of charts, like your osu! Songs folder");
+                    return choose_folder("Choose a folder of charts, like your osu! or Etterna Songs folder");
                 });
             }
         }
         else if (link_osu_button != nullptr && link_osu_button->take_pressed()) {
             link_folder(*osu_songs);
+        }
+        else if (link_etterna_button != nullptr && link_etterna_button->take_pressed()) {
+            link_folder(*etterna_songs);
         }
         else if (calibration_button->take_pressed()) {
             game->scenes().push(std::make_unique<SceneCalibration>(skin));

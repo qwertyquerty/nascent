@@ -18,6 +18,8 @@ namespace nascent {
         static constexpr const char* OSU_FOLDER_NAME = "osu!";
         static constexpr const char* OSU_DEFAULT_SONGS = "Songs";
         static constexpr const char* OSU_BEATMAP_SETTING = "BeatmapDirectory";
+        static constexpr const char* ETTERNA_FOLDER_NAME = "Etterna";
+        static constexpr const char* ETTERNA_SONGS = "Songs";
 
         static std::vector<std::filesystem::path> all();
         static FolderLinkResult link(const std::filesystem::path& folder);
@@ -25,6 +27,7 @@ namespace nascent {
         static bool is_linked(const std::filesystem::path& folder);
         static bool in_linked_folder(const std::filesystem::path& file);
         static std::optional<std::filesystem::path> osu_songs_folder();
+        static std::optional<std::filesystem::path> etterna_songs_folder();
         static std::string display_name(const std::string& folder);
         static bool take_changed();
     };

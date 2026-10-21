@@ -92,6 +92,8 @@ def chart_source_out(source: ChartSource) -> dict[str, Any]:
     if source.source == "osu" and source.source_set_id is not None:
         body["url"] = f"https://osu.ppy.sh/beatmapsets/{source.source_set_id}" + (f"#mania/{source.source_id}" if source.source_id is not None else "")
         body["downloads"] = [{"name": name, "url": template.format(set_id=source.source_set_id)} for name, template in current_app.config["BEATMAP_MIRRORS"]]
+    elif source.source == "etterna" and source.source_set_id is not None:
+        body["url"] = f"https://etternaonline.com/packs/{source.source_set_id}"
 
     return body
 

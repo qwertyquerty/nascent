@@ -12,10 +12,42 @@
 #include <locale>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 namespace nascent {
     static int32_t text_width(olc::Font& font, const std::string& text) {
         return text.empty() ? 0 : text_bounds(font, text).size.x;
+    }
+
+    static std::string elide_left(olc::Font& font, const std::string& text, float room) {
+        if ((float)text_width(font, text) <= room) {
+            return text;
+        }
+
+        const std::string ellipsis = "…";
+        std::vector<size_t> starts;
+
+        for (size_t index = 1; index < text.size(); index++) {
+            if (((unsigned char)text[index] & 0xC0) != 0x80) {
+                starts.push_back(index);
+            }
+        }
+
+        size_t low = 0;
+        size_t high = starts.size();
+
+        while (low < high) {
+            size_t middle = (low + high) / 2;
+
+            if ((float)text_width(font, ellipsis + text.substr(starts[middle])) <= room) {
+                high = middle;
+            }
+            else {
+                low = middle + 1;
+            }
+        }
+
+        return low < starts.size() ? ellipsis + text.substr(starts[low]) : ellipsis;
     }
 
     static std::string format_number(double value) {
@@ -124,8 +156,11 @@ namespace nascent {
             widest = std::max(widest, (float)text_width(font, option));
         }
 
-        float right_x = (float)(width() - Ui::layout_px("form.row_padding")) - right_width;
+        float padding = Ui::layout_pxf("form.row_padding");
+        float right_x = (float)width() - padding - right_width;
         float slot_right = right_x - gap;
+        float room = slot_right - left_width - gap - (padding + (float)text_width(font, label) + gap * 2.0f);
+        widest = std::max(0.0f, std::min(widest, room));
         float slot_left = slot_right - widest;
         float left_x = slot_left - gap - left_width;
         previous_left = left_x;
@@ -133,7 +168,7 @@ namespace nascent {
         value_left = (int32_t)slot_left;
         value_right = (int32_t)slot_right;
 
-        const std::string& value = current();
+        std::string value = elide_left(font, current(), widest);
         float value_x = slot_left + (widest - (float)text_width(font, value)) / 2.0f;
         draw_text(font, value, olc::vf2d{(float)position.x + value_x, (float)baseline}, value_color(theme, focused), 1.0f);
 

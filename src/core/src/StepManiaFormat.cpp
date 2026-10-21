@@ -4,12 +4,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <format>
 #include <limits>
 #include <locale>
 #include <map>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
@@ -727,6 +729,254 @@ namespace nascent {
             return Timing(number_or(offset, 0.0), pairs(bpms), pairs(stops), pairs(tag_or(source, "DELAYS")), pairs(tag_or(source, "WARPS")), pairs(tag_or(source, "FAKES")));
         }
 
+        std::string sha1_hex(std::string_view data) {
+            uint32_t h[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u};
+            std::string message(data);
+            uint64_t bits = (uint64_t)data.size() * 8;
+            message.push_back((char)0x80);
+
+            while (message.size() % 64 != 56) {
+                message.push_back('\0');
+            }
+
+            for (int shift = 56; shift >= 0; shift -= 8) {
+                message.push_back((char)((bits >> shift) & 0xFF));
+            }
+
+            auto rotate = [](uint32_t value, int count) {
+                return (value << count) | (value >> (32 - count));
+            };
+
+            for (size_t block = 0; block < message.size(); block += 64) {
+                uint32_t w[80];
+
+                for (int i = 0; i < 16; i++) {
+                    w[i] = ((uint32_t)(uint8_t)message[block + i * 4] << 24) | ((uint32_t)(uint8_t)message[block + i * 4 + 1] << 16) | ((uint32_t)(uint8_t)message[block + i * 4 + 2] << 8) | (uint32_t)(uint8_t)message[block + i * 4 + 3];
+                }
+
+                for (int i = 16; i < 80; i++) {
+                    w[i] = rotate(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+                }
+
+                uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4];
+
+                for (int i = 0; i < 80; i++) {
+                    uint32_t f = 0, k = 0;
+
+                    if (i < 20) {
+                        f = (b & c) | (~b & d);
+                        k = 0x5A827999u;
+                    }
+                    else if (i < 40) {
+                        f = b ^ c ^ d;
+                        k = 0x6ED9EBA1u;
+                    }
+                    else if (i < 60) {
+                        f = (b & c) | (b & d) | (c & d);
+                        k = 0x8F1BBCDCu;
+                    }
+                    else {
+                        f = b ^ c ^ d;
+                        k = 0xCA62C1D6u;
+                    }
+
+                    uint32_t next = rotate(a, 5) + f + e + k + w[i];
+                    e = d;
+                    d = c;
+                    c = rotate(b, 30);
+                    b = a;
+                    a = next;
+                }
+
+                h[0] += a;
+                h[1] += b;
+                h[2] += c;
+                h[3] += d;
+                h[4] += e;
+            }
+
+            return std::format("{:08x}{:08x}{:08x}{:08x}{:08x}", h[0], h[1], h[2], h[3], h[4]);
+        }
+
+        constexpr float KEY_ROWS_PER_BEAT = 48.0f;
+        constexpr float KEY_BPM_ROUNDING = 0.374643f;
+
+        int64_t key_row(float beat) {
+            return (int64_t)std::lrint(beat * KEY_ROWS_PER_BEAT);
+        }
+
+        struct KeyTiming {
+            std::vector<std::pair<int64_t, float>> bpm_rows;
+            std::vector<std::pair<float, float>> warps;
+            std::vector<std::pair<float, float>> fakes;
+            std::set<int64_t> stop_rows;
+            bool pauses = false;
+
+            static std::vector<std::pair<double, double>> sorted_pairs(std::string_view text) {
+                std::vector<std::pair<double, double>> result;
+
+                for (const Pair& pair : pairs(text)) {
+                    result.emplace_back(pair.beat, pair.value);
+                }
+
+                std::sort(result.begin(), result.end());
+                return result;
+            }
+
+            KeyTiming(const std::vector<std::pair<double, double>>& bpms, const std::vector<std::pair<double, double>>& stops, const std::vector<std::pair<double, double>>& warp_pairs, const std::vector<std::pair<double, double>>& fake_pairs) {
+                for (const auto& [beat, bpm] : bpms) {
+                    bpm_rows.emplace_back(key_row((float)beat), (float)bpm);
+                }
+
+                for (const auto& [beat, length] : warp_pairs) {
+                    warps.emplace_back((float)beat, (float)length);
+                }
+
+                for (const auto& [beat, length] : fake_pairs) {
+                    fakes.emplace_back((float)beat, (float)length);
+                }
+
+                for (const auto& [beat, length] : stops) {
+                    if (length != 0) {
+                        stop_rows.insert(key_row((float)beat));
+                    }
+                }
+
+                pauses = !stops.empty();
+            }
+
+            static const std::pair<float, float>* segment(const std::vector<std::pair<float, float>>& segments, int64_t row) {
+                const std::pair<float, float>* chosen = nullptr;
+
+                for (const auto& item : segments) {
+                    if (key_row(item.first) <= row) {
+                        chosen = &item;
+                    }
+                }
+
+                return chosen;
+            }
+
+            bool judgable(int64_t row) const {
+                float beat = (float)row / KEY_ROWS_PER_BEAT;
+                const std::pair<float, float>* warp = segment(warps, row);
+
+                if (warp != nullptr && warp->first <= beat && beat < warp->first + warp->second && (!pauses || !stop_rows.contains(row))) {
+                    return false;
+                }
+
+                const std::pair<float, float>* fake = segment(fakes, row);
+                return !(fake != nullptr && fake->first <= beat && beat < fake->first + fake->second);
+            }
+
+            float bpm_at(int64_t row) const {
+                float bpm = bpm_rows.front().second;
+
+                for (const auto& [start, value] : bpm_rows) {
+                    if (start <= row) {
+                        bpm = value;
+                    }
+                }
+
+                return bpm;
+            }
+        };
+
+        std::string chart_key_from_rows(const std::map<int64_t, std::vector<uint8_t>>& rows, const KeyTiming& timing) {
+            std::string text;
+
+            for (const auto& [row, kinds] : rows) {
+                if (!timing.judgable(row)) {
+                    continue;
+                }
+
+                for (uint8_t kind : kinds) {
+                    text.push_back((char)('0' + kind));
+                }
+
+                text += std::to_string((int64_t)(timing.bpm_at(row) + KEY_BPM_ROUNDING));
+            }
+
+            return "X" + sha1_hex(text);
+        }
+
+        uint8_t key_kind(char symbol) {
+            switch (symbol) {
+                case '1': return 1;
+                case '2':
+                case '4': return 2;
+                case 'M': return 4;
+                case 'L': return 5;
+                case 'K': return 6;
+                case 'F': return 7;
+                default: return 0;
+            }
+        }
+
+        std::string stepmania_chart_key(std::string_view data, uint8_t key_count, const Tags& song, const Tags& chart) {
+            const Tags& source = has_own_timing(chart) ? chart : song;
+            std::vector<std::pair<double, double>> bpms = KeyTiming::sorted_pairs(tag_or(source, "BPMS", tag_or(song, "BPMS")));
+
+            if (bpms.empty() || std::any_of(bpms.begin(), bpms.end(), [](const auto& pair) { return !(pair.second > 0); })) {
+                return {};
+            }
+
+            std::vector<std::pair<double, double>> stops = KeyTiming::sorted_pairs(tag_or(source, "STOPS", tag_or(source, "FREEZES")));
+            std::vector<std::pair<double, double>> delays = KeyTiming::sorted_pairs(tag_or(source, "DELAYS"));
+            stops.insert(stops.end(), delays.begin(), delays.end());
+            KeyTiming timing(bpms, stops, KeyTiming::sorted_pairs(tag_or(source, "WARPS")), KeyTiming::sorted_pairs(tag_or(source, "FAKES")));
+            std::map<int64_t, std::vector<uint8_t>> rows;
+            int64_t measure = 0;
+
+            while (true) {
+                size_t comma = data.find(',');
+                std::string_view block = data.substr(0, comma);
+                std::vector<std::string_view> lines;
+
+                while (!block.empty()) {
+                    size_t newline = block.find('\n');
+                    std::string_view line = trim(block.substr(0, newline));
+                    block = newline == std::string_view::npos ? std::string_view() : block.substr(newline + 1);
+
+                    if (!line.empty()) {
+                        lines.push_back(line);
+                    }
+                }
+
+                for (size_t position = 0; position < lines.size(); position++) {
+                    std::string_view line = lines[position];
+                    float beat = ((float)measure + (float)position / (float)lines.size()) * 4.0f;
+                    int64_t row = key_row(beat);
+                    size_t index = 0;
+
+                    for (uint8_t track = 0; track < key_count && index < line.size(); track++) {
+                        char symbol = line[index++];
+
+                        if (index < line.size() && line[index] == '[') {
+                            size_t end = line.find(']', index);
+                            index = end == std::string_view::npos ? line.size() : end + 1;
+                        }
+
+                        uint8_t kind = key_kind(symbol);
+
+                        if (kind != 0) {
+                            auto [entry, inserted] = rows.try_emplace(row, key_count, (uint8_t)0);
+                            entry->second[track] = kind;
+                        }
+                    }
+                }
+
+                if (comma == std::string_view::npos) {
+                    break;
+                }
+
+                data = data.substr(comma + 1);
+                measure++;
+            }
+
+            return chart_key_from_rows(rows, timing);
+        }
+
         std::string with_subtitle(const std::string& title, const std::string& subtitle) {
             if (subtitle.empty()) {
                 return title;
@@ -831,6 +1081,312 @@ namespace nascent {
                 }
             }
         }
+
+        enum class Panel : uint8_t {
+            LEFT,
+            DOWN,
+            UP,
+            RIGHT,
+            UP_LEFT,
+            UP_RIGHT,
+            NONE
+        };
+
+        struct DwiStyle {
+            std::string_view tag;
+            std::string_view steps_type;
+            size_t pads;
+            bool solo;
+        };
+
+        constexpr std::array DWI_STYLES = {
+            DwiStyle{"SINGLE", "dance-single", 1, false},
+            DwiStyle{"DOUBLE", "dance-double", 2, false},
+            DwiStyle{"SOLO", "dance-solo", 1, true},
+            DwiStyle{"COUPLE", "dance-couple", 2, false},
+        };
+
+        constexpr double DWI_EIGHTH = 0.5;
+        constexpr double DWI_BEATS_PER_POSITION = 0.25;
+        constexpr size_t DWI_PANELS_PER_PAD = 4;
+
+        std::pair<Panel, Panel> dwi_panels(char symbol) {
+            switch (std::toupper((unsigned char)symbol)) {
+                case '1': return {Panel::LEFT, Panel::DOWN};
+                case '2': return {Panel::DOWN, Panel::NONE};
+                case '3': return {Panel::DOWN, Panel::RIGHT};
+                case '4': return {Panel::LEFT, Panel::NONE};
+                case '6': return {Panel::RIGHT, Panel::NONE};
+                case '7': return {Panel::LEFT, Panel::UP};
+                case '8': return {Panel::UP, Panel::NONE};
+                case '9': return {Panel::UP, Panel::RIGHT};
+                case 'A': return {Panel::UP, Panel::DOWN};
+                case 'B': return {Panel::LEFT, Panel::RIGHT};
+                case 'C': return {Panel::UP_LEFT, Panel::NONE};
+                case 'D': return {Panel::UP_RIGHT, Panel::NONE};
+                case 'E': return {Panel::LEFT, Panel::UP_LEFT};
+                case 'F': return {Panel::UP_LEFT, Panel::DOWN};
+                case 'G': return {Panel::UP_LEFT, Panel::UP};
+                case 'H': return {Panel::UP_LEFT, Panel::RIGHT};
+                case 'I': return {Panel::LEFT, Panel::UP_RIGHT};
+                case 'J': return {Panel::DOWN, Panel::UP_RIGHT};
+                case 'K': return {Panel::UP, Panel::UP_RIGHT};
+                case 'L': return {Panel::UP_RIGHT, Panel::RIGHT};
+                case 'M': return {Panel::UP_LEFT, Panel::UP_RIGHT};
+                default: return {Panel::NONE, Panel::NONE};
+            }
+        }
+
+        int32_t dwi_column(Panel panel, bool solo) {
+            constexpr std::array<int32_t, 6> SINGLE = {0, 1, 2, 3, -1, -1};
+            constexpr std::array<int32_t, 6> SOLO = {0, 2, 3, 5, 1, 4};
+            return panel == Panel::NONE ? -1 : (solo ? SOLO : SINGLE)[(size_t)panel];
+        }
+
+        void read_dwi_steps(std::string_view steps, size_t column_offset, bool solo, std::vector<std::map<int64_t, bool>>& columns) {
+            std::string data;
+
+            for (char c : steps) {
+                if (!std::isspace((unsigned char)c)) {
+                    data.push_back(c);
+                }
+            }
+
+            auto place = [&](char symbol, int64_t row, bool head) {
+                auto [first, second] = dwi_panels(symbol);
+
+                for (Panel panel : {first, second}) {
+                    int32_t column = dwi_column(panel, solo);
+
+                    if (column >= 0 && column_offset + (size_t)column < columns.size()) {
+                        columns[column_offset + (size_t)column][row] = head;
+                    }
+                }
+            };
+
+            double beat = 0;
+            double step = DWI_EIGHTH;
+            size_t index = 0;
+
+            while (index < data.size()) {
+                char c = data[index++];
+
+                switch (c) {
+                    case '(': step = 4.0 / 16.0; continue;
+                    case '[': step = 4.0 / 24.0; continue;
+                    case '{': step = 4.0 / 64.0; continue;
+                    case '`': step = 4.0 / 192.0; continue;
+                    case ')':
+                    case ']':
+                    case '}':
+                    case '\'':
+                    case '>': step = DWI_EIGHTH; continue;
+                    case '!': continue;
+                    default: break;
+                }
+
+                bool jump = c == '<';
+
+                if (jump) {
+                    if (index < data.size() && data[index] == '`') {
+                        step = 4.0 / 192.0;
+                        continue;
+                    }
+
+                    if (index >= data.size()) {
+                        break;
+                    }
+
+                    c = data[index++];
+                }
+
+                int64_t row = beat_to_row(beat);
+
+                while (!(jump && c == '>')) {
+                    place(c, row, false);
+
+                    if (index < data.size() && data[index] == '!') {
+                        index++;
+
+                        if (index < data.size()) {
+                            place(data[index++], row, true);
+                        }
+                    }
+
+                    if (!jump || index >= data.size()) {
+                        break;
+                    }
+
+                    c = data[index++];
+                }
+
+                beat += step;
+            }
+        }
+
+        std::vector<Pair> dwi_positions(std::string_view text, double value_scale) {
+            std::vector<Pair> result = pairs(text);
+
+            for (Pair& pair : result) {
+                pair.beat *= DWI_BEATS_PER_POSITION;
+                pair.value *= value_scale;
+            }
+
+            return result;
+        }
+
+        std::string dwi_seconds(std::string_view text) {
+            double total = 0;
+            double part = 0;
+
+            while (true) {
+                size_t colon = text.find(':');
+
+                if (!parse_number(text.substr(0, colon), part)) {
+                    return "0";
+                }
+
+                total = total * 60.0 + part;
+
+                if (colon == std::string_view::npos) {
+                    return std::format("{}", total);
+                }
+
+                text = text.substr(colon + 1);
+            }
+        }
+
+        bool is_dwi(const std::vector<Tag>& tags) {
+            bool stepmania = std::any_of(tags.begin(), tags.end(), [](const Tag& tag) {
+                return tag.name == "NOTES" || tag.name == "NOTES2" || tag.name == "NOTEDATA";
+            });
+
+            return !stepmania && std::any_of(tags.begin(), tags.end(), [](const Tag& tag) {
+                return std::any_of(DWI_STYLES.begin(), DWI_STYLES.end(), [&](const DwiStyle& style) {
+                    return style.tag == tag.name;
+                });
+            });
+        }
+
+        std::vector<StepManiaChart> dwi_charts(const std::vector<Tag>& tags) {
+            Tags song;
+
+            for (const Tag& tag : tags) {
+                song.insert_or_assign(tag.name, joined(tag.params));
+            }
+
+            song.insert_or_assign("MUSIC", tag_or(song, "FILE"));
+            song.insert_or_assign("SAMPLESTART", dwi_seconds(tag_or(song, "SAMPLESTART", "0")));
+            std::vector<StepManiaChart> charts;
+
+            for (const Tag& tag : tags) {
+                auto style = std::find_if(DWI_STYLES.begin(), DWI_STYLES.end(), [&](const DwiStyle& candidate) {
+                    return candidate.tag == tag.name;
+                });
+
+                if (style == DWI_STYLES.end()) {
+                    continue;
+                }
+
+                StepManiaChart chart;
+                chart.index = charts.size();
+                chart.steps_type = std::string(style->steps_type);
+                chart.difficulty = canonical_difficulty(tag.params.empty() ? std::string_view() : std::string_view(tag.params[0]));
+                chart.meter = (int32_t)std::lround(std::clamp(number_or(tag.params.size() > 1 ? tag.params[1] : std::string(), 0.0), -1e6, 1e6));
+
+                try {
+                    std::optional<uint8_t> key_count = key_count_for(chart.steps_type);
+
+                    if (!key_count) {
+                        throw std::runtime_error(std::format("steps type '{}' is not supported", chart.steps_type));
+                    }
+
+                    if (tag.params.size() < 2 + style->pads) {
+                        throw std::runtime_error("chart has no notes");
+                    }
+
+                    std::vector<Pair> bpms = {{0.0, number_or(tag_or(song, "BPM"), 0.0)}};
+                    std::vector<Pair> changes = dwi_positions(tag_or(song, "CHANGEBPM", tag_or(song, "BPMCHANGE")), 1.0);
+                    bpms.insert(bpms.end(), changes.begin(), changes.end());
+                    Timing timing(-number_or(tag_or(song, "GAP"), 0.0) / 1000.0, bpms, dwi_positions(tag_or(song, "FREEZE"), 0.001), {}, {}, {});
+                    std::vector<std::map<int64_t, bool>> columns(*key_count);
+
+                    for (size_t pad = 0; pad < style->pads; pad++) {
+                        read_dwi_steps(tag.params[2 + pad], pad * DWI_PANELS_PER_PAD, style->solo, columns);
+                    }
+
+                    std::vector<Hit> hits;
+                    std::map<int64_t, std::vector<uint8_t>> key_rows;
+
+                    for (size_t column = 0; column < columns.size(); column++) {
+                        std::map<int64_t, bool>& notes = columns[column];
+
+                        for (auto it = notes.begin(); it != notes.end(); ++it) {
+                            Hit hit;
+                            hit.key = (uint8_t)column;
+                            hit.time = milliseconds(timing.seconds_at(it->first));
+                            hit.end_time = hit.time;
+                            hit.hit_type = HitType::HIT;
+
+                            if (it->second) {
+                                auto tail = std::next(it);
+
+                                if (tail == notes.end()) {
+                                    continue;
+                                }
+
+                                hit.end_time = milliseconds(timing.seconds_at(tail->first));
+                                hit.hit_type = hit.end_time > hit.time ? HitType::HOLD : HitType::HIT;
+                                hit.end_time = hit.hit_type == HitType::HOLD ? hit.end_time : hit.time;
+                                it = notes.erase(tail);
+                                --it;
+                            }
+
+                            key_rows.try_emplace(it->first, *key_count, (uint8_t)0).first->second[column] = it->second ? 2 : 1;
+
+                            if (timing.judged(it->first)) {
+                                hits.push_back(hit);
+                            }
+                        }
+                    }
+
+                    std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
+                        return std::tie(a.time, a.key) < std::tie(b.time, b.key);
+                    });
+
+                    if (hits.empty()) {
+                        throw std::runtime_error("chart has no notes");
+                    }
+
+                    std::vector<std::pair<double, double>> key_bpms;
+
+                    for (const Pair& pair : bpms) {
+                        key_bpms.emplace_back(pair.beat, pair.value);
+                    }
+
+                    std::sort(key_bpms.begin(), key_bpms.end());
+                    std::vector<std::pair<double, double>> key_stops;
+
+                    for (const Pair& pair : dwi_positions(tag_or(song, "FREEZE"), 0.001)) {
+                        key_stops.emplace_back(pair.beat, pair.value);
+                    }
+
+                    chart.chart_key = chart_key_from_rows(key_rows, KeyTiming(key_bpms, key_stops, {}, {}));
+                    Source source;
+                    source.steps_type = chart.steps_type;
+                    source.difficulty = tag.params[0];
+                    chart.chart = chart_json(song, source, *key_count, std::move(hits), timing.timing_points());
+                }
+                catch (const std::exception& e) {
+                    chart.chart = nullptr;
+                    chart.error = e.what();
+                }
+
+                charts.push_back(std::move(chart));
+            }
+
+            return charts;
+        }
     }
 
     std::vector<StepManiaChart> stepmania_to_chart_jsons(std::string_view text, std::string& error) {
@@ -838,9 +1394,15 @@ namespace nascent {
             text.remove_prefix(UTF8_BOM.size());
         }
 
+        std::vector<Tag> tags = read_tags(text);
+
+        if (is_dwi(tags)) {
+            return dwi_charts(tags);
+        }
+
         Tags song;
         std::vector<Source> sources;
-        read_sources(read_tags(text), song, sources);
+        read_sources(tags, song, sources);
 
         if (sources.empty()) {
             error = song.empty() ? "not a StepMania file" : "the file has no charts";
@@ -872,6 +1434,7 @@ namespace nascent {
                     throw std::runtime_error("chart has no notes");
                 }
 
+                chart.chart_key = stepmania_chart_key(source.notes, *key_count, song, source.tags);
                 chart.chart = chart_json(song, source, *key_count, std::move(hits), timing.timing_points());
             }
             catch (const std::exception& e) {
