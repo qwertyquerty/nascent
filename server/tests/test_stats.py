@@ -14,6 +14,10 @@ def test_global_stats(api, clock):
     rank_chart(api)
     ranked = submit(api, clock, alice, make_replay(CHART, seed=2)).get_json()
 
+    grades = api.get("/api/v1/stats/activity").get_json()["grades"]
+    assert sum(grades.values()) == 1
+    assert grades == {ranked["play"]["grade"]: 1}
+
     stats = api.get("/api/v1/stats").get_json()
     assert stats["players"] == 2
     assert stats["ranked_players"] == 1

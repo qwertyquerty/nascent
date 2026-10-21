@@ -315,7 +315,7 @@
                             </li>
                         </ul>
                         <h2 class="title is-4">Grades</h2>
-                        <ul class="grade-counts" aria-label="Grades across every play">
+                        <ul class="grade-counts" aria-label="Grades across every ranked play">
                             <li v-for="grade in 'XSABCDEF'" :key="grade" :title="view.gradeTotal ? ((view.activity.grades[grade] || 0) / view.gradeTotal * 100).toFixed(1) + '%' : null">
                                 <span class="grade" :class="'grade-' + grade">{{ grade }}</span>{{ $f.number(view.activity.grades[grade]) }}
                             </li>

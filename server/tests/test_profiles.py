@@ -133,7 +133,7 @@ def test_global_activity_stats(api, clock):
     assert activity["week"] == {"plays": 3, "active_players": 2, "new_players": 2}
     assert [(entry["chart"]["title"], entry["plays"], entry["players"]) for entry in activity["popular_charts"]] == [("Test Song", 2, 1), ("Second Song", 1, 1)]
     assert activity["key_modes"] == [{"key_count": 4, "plays": 3}]
-    assert sum(activity["grades"].values()) == 3
+    assert sum(activity["grades"].values()) == 0
 
 
 def test_charts_sort_by_mapper_and_keys(api):

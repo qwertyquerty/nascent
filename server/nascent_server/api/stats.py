@@ -95,7 +95,7 @@ def _compute_activity() -> dict:
             {"key_count": key_count, "plays": count}
             for key_count, count in db.session.execute(select(counted.c.key_count, func.count()).group_by(counted.c.key_count).order_by(counted.c.key_count))
         ],
-        "grades": dict(db.session.execute(select(counted.c.grade, func.count()).group_by(counted.c.grade)).all()),
+        "grades": dict(db.session.execute(select(counted.c.grade, func.count()).where(counted.c.ranked.is_(True)).group_by(counted.c.grade)).all()),
     }
 
 
