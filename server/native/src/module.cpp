@@ -4,6 +4,7 @@
 #include "Const.h"
 #include "DifficultyCache.h"
 #include "DifficultyCalculator.h"
+#include "DifficultyModel.h"
 #include "OsuFormat.h"
 #include "Replay.h"
 #include "Results.h"
@@ -12,6 +13,11 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <format>
 #include <map>
 #include <memory>
 #include <optional>
@@ -106,16 +112,7 @@ namespace {
         return score == HitScore::NONE ? std::string() : std::string(hit_score_name(score));
     }
 
-    Simulation simulate(const LoadedChart& loaded, const LoadedReplay& loaded_replay) {
-        const Replay& replay = loaded_replay.replay;
-        check_rate(replay.rate);
-
-        if (replay.chart.key_count != loaded.chart->info.key_count) {
-            throw py::value_error("replay key_count does not match the chart");
-        }
-
-        Chart pitched = loaded.at_rate(replay.rate);
-        Attempt attempt = simulate_replay(pitched, replay);
+    Simulation simulation_from(const Attempt& attempt) {
         AttemptSummary summary = summarize_attempt(attempt, 0.0);
         ReplayResult result = replay_result_from(summary);
 
@@ -143,6 +140,153 @@ namespace {
         }
 
         return simulation;
+    }
+
+    Simulation simulate(const LoadedChart& loaded, const LoadedReplay& loaded_replay) {
+        const Replay& replay = loaded_replay.replay;
+        check_rate(replay.rate);
+
+        if (replay.chart.key_count != loaded.chart->info.key_count) {
+            throw py::value_error("replay key_count does not match the chart");
+        }
+
+        Chart pitched = loaded.at_rate(replay.rate);
+        Attempt attempt = simulate_replay(pitched, replay);
+        return simulation_from(attempt);
+    }
+
+    struct LiveAttempt {
+        std::unique_ptr<Chart> chart;
+        std::unique_ptr<Attempt> attempt;
+        std::string hash;
+        float rate = 1.0f;
+    };
+
+    std::unique_ptr<LiveAttempt> attempt_for(const LoadedChart& loaded, float rate) {
+        check_rate(rate);
+        auto live = std::make_unique<LiveAttempt>();
+        live->chart = std::make_unique<Chart>(loaded.at_rate(rate));
+        live->attempt = std::make_unique<Attempt>(live->chart.get());
+        live->hash = loaded.hash;
+        live->rate = rate;
+        return live;
+    }
+
+    void check_input(const LiveAttempt& live, uint8_t lane, int32_t time) {
+        if (lane >= live.chart->info.key_count) {
+            throw py::value_error("lane is outside the chart's key count");
+        }
+
+        if (live.attempt->latest_time && time < *live.attempt->latest_time) {
+            throw py::value_error("inputs must be given in time order");
+        }
+    }
+
+    std::unique_ptr<LoadedReplay> attempt_replay(const LiveAttempt& live, const std::string& played_at) {
+        double difficulty = DifficultyCalculator::calculate(*live.chart);
+        AttemptSummary summary = summarize_attempt(*live.attempt, difficulty);
+        ReplayChart chart;
+        chart.gameplay_hash = live.hash;
+        chart.title = live.chart->info.title;
+        chart.artist = live.chart->info.artist;
+        chart.difficulty_name = live.chart->info.difficulty_name;
+        chart.key_count = live.chart->info.key_count;
+        auto loaded = std::make_unique<LoadedReplay>();
+        loaded->replay = make_replay(*live.attempt, summary, chart, live.rate, ReplaySettings{}, played_at.empty() ? current_utc_timestamp() : played_at);
+        return loaded;
+    }
+
+    Hit make_note(uint8_t lane, int32_t time, std::optional<int32_t> end_time) {
+        Hit hit;
+        hit.key = lane;
+        hit.time = time;
+        bool hold = end_time.has_value() && *end_time > time;
+        hit.hit_type = hold ? HitType::HOLD : HitType::HIT;
+        hit.end_time = hold ? *end_time : time;
+        return hit;
+    }
+
+    int32_t note_end(const Hit& hit) {
+        return hit.hit_type == HitType::HOLD ? hit.end_time : hit.time;
+    }
+
+    std::string note_repr(const Hit& hit) {
+        if (hit.hit_type == HitType::HOLD) {
+            return std::format("Note(lane={}, time={}, end_time={})", hit.key, hit.time, hit.end_time);
+        }
+
+        return std::format("Note(lane={}, time={})", hit.key, hit.time);
+    }
+
+    ChartTimingPoint make_timing_point(int32_t time, double bpm, uint8_t meter) {
+        if (!(bpm > 0) || !std::isfinite(bpm)) {
+            throw py::value_error("bpm must be positive");
+        }
+
+        if (meter == 0) {
+            throw py::value_error("meter must be positive");
+        }
+
+        ChartTimingPoint point;
+        point.time = time;
+        point.beat_length = (float)(60000.0 / bpm);
+        point.meter = meter;
+        return point;
+    }
+
+    std::unique_ptr<LoadedChart> chart_create(std::vector<Hit> notes, uint8_t key_count, std::vector<ChartTimingPoint> timing_points, const std::string& title, const std::string& artist, const std::string& mapper, const std::string& difficulty_name, const std::string& audio_file, const std::string& image_file, int32_t preview_time, uint8_t hit_accuracy, uint8_t damage) {
+        ChartInfo info;
+        info.title = title;
+        info.title_unicode = title;
+        info.artist = artist;
+        info.artist_unicode = artist;
+        info.mapper = mapper;
+        info.difficulty_name = difficulty_name;
+        info.audio_file = audio_file;
+        info.image_file = image_file;
+        info.preview_time = preview_time;
+        info.hit_accuracy = hit_accuracy;
+        info.key_count = key_count;
+        info.damage = damage;
+        std::string error;
+        std::unique_ptr<Chart> chart = Chart::create(info, std::move(notes), std::move(timing_points), error);
+
+        if (chart == nullptr) {
+            throw py::value_error(error);
+        }
+
+        auto loaded = std::make_unique<LoadedChart>();
+        loaded->hash = chart->gameplay_hash();
+        loaded->chart = std::move(chart);
+        return loaded;
+    }
+
+    void check_hit_accuracy(uint8_t hit_accuracy) {
+        if (hit_accuracy > MAX_HIT_ACC_DIFFICULTY) {
+            throw py::value_error(std::format("hit_accuracy must be between {} and {}", MIN_HIT_ACC_DIFFICULTY, MAX_HIT_ACC_DIFFICULTY));
+        }
+    }
+
+    std::optional<std::string> judge(int32_t error, bool release, uint8_t hit_accuracy) {
+        check_hit_accuracy(hit_accuracy);
+        HitScore score = get_score_from_hit_err((uint32_t)std::min<int64_t>(std::llabs((int64_t)error), UINT32_MAX), hit_accuracy, release);
+
+        if (score == HitScore::NONE) {
+            return std::nullopt;
+        }
+
+        return std::string(hit_score_name(score));
+    }
+
+    py::dict judgement_windows(uint8_t hit_accuracy, bool release) {
+        check_hit_accuracy(hit_accuracy);
+        py::dict windows;
+
+        for (HitScore score : TIMED_HIT_SCORES) {
+            windows[py::str(std::string(hit_score_name(score)))] = get_window_from_hit_acc_diff(score, hit_accuracy, release);
+        }
+
+        return windows;
     }
 
     py::dict claimed_result(const Replay& replay) {
@@ -201,8 +345,16 @@ namespace {
     }
 }
 
-PYBIND11_MODULE(nascent_core, m) {
+#ifndef NASCENT_PYTHON_MODULE
+#define NASCENT_PYTHON_MODULE nascent_core
+#endif
+
+#define NASCENT_DEFINE_MODULE(name, variable) PYBIND11_MODULE(name, variable)
+
+NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
     m.doc() = "Nascent chart, judge and difficulty code";
+
+    m.attr("CALCULATOR_NAME") = std::string(difficulty_model::NAME);
 
     m.attr("RATE_MIN") = PITCH_MINIMUM;
     m.attr("RATE_MAX") = PITCH_MAXIMUM;
@@ -223,8 +375,65 @@ PYBIND11_MODULE(nascent_core, m) {
 
     m.attr("HIT_SCORES") = hit_scores;
 
+    py::dict hit_score_accuracy;
+
+    for (HitScore score : ALL_HIT_SCORES) {
+        if (score != HitScore::NONE) {
+            hit_score_accuracy[py::str(std::string(hit_score_name(score)))] = hit_score_acc(score) / 100.0;
+        }
+    }
+
+    m.attr("HIT_SCORE_ACCURACY") = hit_score_accuracy;
+    m.attr("RANKED_HIT_ACCURACY") = RANKED_HIT_ACC_DIFFICULTY;
+    m.attr("MAX_HIT_ACCURACY") = MAX_HIT_ACC_DIFFICULTY;
+
+    py::class_<Hit>(m, "Note")
+        .def(py::init(&make_note), py::arg("lane"), py::arg("time"), py::arg("end_time") = py::none())
+        .def_property_readonly("lane", [](const Hit& hit) { return hit.key; })
+        .def_property_readonly("time", [](const Hit& hit) { return hit.time; })
+        .def_property_readonly("end_time", &note_end)
+        .def_property_readonly("is_hold", [](const Hit& hit) { return hit.hit_type == HitType::HOLD; })
+        .def("__eq__", [](const Hit& a, const Hit& b) { return a.key == b.key && a.time == b.time && a.hit_type == b.hit_type && note_end(a) == note_end(b); })
+        .def("__repr__", &note_repr);
+
+    py::class_<ChartTimingPoint>(m, "TimingPoint")
+        .def(py::init(&make_timing_point), py::arg("time"), py::arg("bpm"), py::arg("meter") = (uint8_t)4)
+        .def_property_readonly("time", [](const ChartTimingPoint& point) { return point.time; })
+        .def_property_readonly("bpm", [](const ChartTimingPoint& point) { return 60000.0 / point.beat_length; })
+        .def_property_readonly("beat_length", [](const ChartTimingPoint& point) { return point.beat_length; })
+        .def_property_readonly("meter", [](const ChartTimingPoint& point) { return point.meter; })
+        .def("__repr__", [](const ChartTimingPoint& point) { return std::format("TimingPoint(time={}, bpm={:g}, meter={})", point.time, 60000.0 / point.beat_length, point.meter); });
+
     py::class_<LoadedChart>(m, "Chart")
         .def_static("from_json", &chart_from_json, py::arg("text"))
+        .def_static(
+            "create",
+            &chart_create,
+            py::arg("notes"),
+            py::arg("key_count"),
+            py::arg("timing_points") = std::vector<ChartTimingPoint>{},
+            py::arg("title") = "",
+            py::arg("artist") = "",
+            py::arg("mapper") = "",
+            py::arg("difficulty_name") = "",
+            py::arg("audio_file") = "",
+            py::arg("image_file") = "",
+            py::arg("preview_time") = 0,
+            py::arg("hit_accuracy") = RANKED_HIT_ACC_DIFFICULTY,
+            py::arg("damage") = (uint8_t)5
+        )
+        .def_property_readonly("notes", [](const LoadedChart& c) { return c.chart->unpitched_hit_objects(); })
+        .def("notes_at", [](const LoadedChart& c, float rate) { check_rate(rate); return c.at_rate(rate).hits; }, py::arg("rate"))
+        .def_property_readonly("timing_points", [](const LoadedChart& c) { return c.chart->unpitched_timing(); })
+        .def("timing_points_at", [](const LoadedChart& c, float rate) { check_rate(rate); return c.at_rate(rate).timing_points; }, py::arg("rate"))
+        .def_property_readonly("bpm", [](const LoadedChart& c) { return c.chart->bpm_range().main; })
+        .def_property_readonly("bpm_min", [](const LoadedChart& c) { return c.chart->bpm_range().min; })
+        .def_property_readonly("bpm_max", [](const LoadedChart& c) { return c.chart->bpm_range().max; })
+        .def_property_readonly("audio_file", [](const LoadedChart& c) { return c.chart->info.audio_file; })
+        .def_property_readonly("image_file", [](const LoadedChart& c) { return c.chart->info.image_file; })
+        .def_property_readonly("preview_time", [](const LoadedChart& c) { return c.chart->info.preview_time; })
+        .def_property_readonly("audio_lead_in", [](const LoadedChart& c) { return c.chart->info.audio_lead_in; })
+        .def("__repr__", [](const LoadedChart& c) { return std::format("Chart({} - {} [{}], {}K)", c.chart->info.artist, c.chart->info.title, c.chart->info.difficulty_name, c.chart->info.key_count); })
         .def_property_readonly("hash", [](const LoadedChart& c) { return c.hash; })
         .def_property_readonly("key_count", [](const LoadedChart& c) { return c.chart->info.key_count; })
         .def_property_readonly("hit_accuracy", [](const LoadedChart& c) { return c.chart->info.hit_accuracy; })
@@ -283,7 +492,46 @@ PYBIND11_MODULE(nascent_core, m) {
         .def_readonly("average_error", &Simulation::average_error)
         .def_readonly("notes", &Simulation::notes);
 
+    py::class_<LiveAttempt>(m, "Attempt")
+        .def(py::init(&attempt_for), py::arg("chart"), py::arg("rate") = 1.0f)
+        .def(
+            "press",
+            [](LiveAttempt& live, uint8_t lane, int32_t time) {
+                check_input(live, lane, time);
+                live.attempt->press(lane, time);
+            },
+            py::arg("lane"),
+            py::arg("time")
+        )
+        .def(
+            "release",
+            [](LiveAttempt& live, uint8_t lane, int32_t time) {
+                check_input(live, lane, time);
+                live.attempt->release(lane, time);
+            },
+            py::arg("lane"),
+            py::arg("time")
+        )
+        .def(
+            "update",
+            [](LiveAttempt& live, int32_t time) {
+                check_input(live, 0, time);
+                live.attempt->update(time);
+            },
+            py::arg("time")
+        )
+        .def_property_readonly("rate", [](const LiveAttempt& live) { return live.rate; })
+        .def_property_readonly("accuracy", [](const LiveAttempt& live) { return live.attempt->get_accuracy(); })
+        .def_property_readonly("combo", [](const LiveAttempt& live) { return live.attempt->get_combo(); })
+        .def_property_readonly("max_combo", [](const LiveAttempt& live) { return live.attempt->max_combo; })
+        .def_property_readonly("average_error", [](const LiveAttempt& live) { return live.attempt->get_avg_err(); })
+        .def_property_readonly("error_deviation", [](const LiveAttempt& live) { return live.attempt->get_err_deviation(); })
+        .def("result", [](const LiveAttempt& live) { return simulation_from(*live.attempt); })
+        .def("replay", &attempt_replay, py::arg("played_at") = "");
+
     m.def("simulate", &simulate, py::arg("chart"), py::arg("replay"));
+    m.def("judge", &judge, py::arg("error"), py::arg("release") = false, py::arg("hit_accuracy") = RANKED_HIT_ACC_DIFFICULTY);
+    m.def("judgement_windows", &judgement_windows, py::arg("hit_accuracy") = RANKED_HIT_ACC_DIFFICULTY, py::arg("release") = false);
     m.def("performance", &performance_for, py::arg("difficulty"), py::arg("accuracy"));
     m.def("grade", [](double accuracy) { return std::string(grade_name(grade_for_accuracy(accuracy))); }, py::arg("accuracy"));
     m.def("difficulty_fingerprint", []() { return DifficultyCache::fingerprint(); });

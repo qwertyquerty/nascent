@@ -29,9 +29,14 @@ add_subdirectory(${NASCENT_ROOT}/src/core ${CMAKE_CURRENT_BINARY_DIR}/core)
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)
 
+set(NASCENT_PYTHON_MODULE "nascent_core" CACHE STRING "Name of the compiled Python module")
+set(NASCENT_PYTHON_DESTINATION "." CACHE STRING "Wheel folder the compiled Python module is installed into")
+
 pybind11_add_module(nascent_core MODULE src/module.cpp)
+set_target_properties(nascent_core PROPERTIES OUTPUT_NAME ${NASCENT_PYTHON_MODULE})
+target_compile_definitions(nascent_core PRIVATE NASCENT_PYTHON_MODULE=${NASCENT_PYTHON_MODULE})
 target_link_libraries(nascent_core PRIVATE core)
 nascent_target_warnings(nascent_core)
 
-install(TARGETS nascent_core LIBRARY DESTINATION .)
-install(FILES nascent_core.pyi DESTINATION .)
+install(TARGETS nascent_core LIBRARY DESTINATION ${NASCENT_PYTHON_DESTINATION})
+install(FILES nascent_core.pyi DESTINATION ${NASCENT_PYTHON_DESTINATION} RENAME ${NASCENT_PYTHON_MODULE}.pyi)

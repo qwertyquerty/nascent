@@ -1,0 +1,64 @@
+[build-system]
+requires = ["scikit-build-core>=0.11", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "nascent"
+version = "0.1.0"
+description = "Bindings for the Nascent difficulty calculator, chart loader, and core judgement logic"
+readme = "python/README.md"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "qwertyquerty" }]
+keywords = ["rhythm game", "osu!mania", "stepmania", "etterna", "difficulty", "vsrg"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Games/Entertainment",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/qwertyquerty/nascent"
+Source = "https://github.com/qwertyquerty/nascent"
+Issues = "https://github.com/qwertyquerty/nascent/issues"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.version = ">=3.22"
+cmake.build-type = "Release"
+cmake.source-dir = "server/native"
+cmake.define = { NASCENT_PYTHON_MODULE = "_core", NASCENT_PYTHON_DESTINATION = "nascent" }
+wheel.packages = ["python/nascent"]
+sdist.exclude = ["*"]
+sdist.include = [
+    "/pyproject.toml",
+    "/LICENSE",
+    "/python/README.md",
+    "/python/nascent/*.py",
+    "/python/nascent/py.typed",
+    "/python/tests/*.py",
+    "/server/native/CMakeLists.txt",
+    "/server/native/nascent_core.pyi",
+    "/server/native/src/**",
+    "/src/core/**",
+    "/src/libs/json/**",
+    "/src/libs/picosha2/**",
+]
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = "*-win32 *-manylinux_i686 *-musllinux_*"
+test-requires = ["pytest"]
+test-command = "pytest {project}/python/tests"
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+
+[tool.cibuildwheel.macos.environment]
+MACOSX_DEPLOYMENT_TARGET = "13.3"
