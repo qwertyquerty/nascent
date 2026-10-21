@@ -902,14 +902,21 @@ namespace nascent {
 
         uint8_t key_kind(char symbol) {
             switch (symbol) {
-                case '1': return 1;
+                case '1':
+                    return 1;
                 case '2':
-                case '4': return 2;
-                case 'M': return 4;
-                case 'L': return 5;
-                case 'K': return 6;
-                case 'F': return 7;
-                default: return 0;
+                case '4':
+                    return 2;
+                case 'M':
+                    return 4;
+                case 'L':
+                    return 5;
+                case 'K':
+                    return 6;
+                case 'F':
+                    return 7;
+                default:
+                    return 0;
             }
         }
 
@@ -1112,28 +1119,50 @@ namespace nascent {
 
         std::pair<Panel, Panel> dwi_panels(char symbol) {
             switch (std::toupper((unsigned char)symbol)) {
-                case '1': return {Panel::LEFT, Panel::DOWN};
-                case '2': return {Panel::DOWN, Panel::NONE};
-                case '3': return {Panel::DOWN, Panel::RIGHT};
-                case '4': return {Panel::LEFT, Panel::NONE};
-                case '6': return {Panel::RIGHT, Panel::NONE};
-                case '7': return {Panel::LEFT, Panel::UP};
-                case '8': return {Panel::UP, Panel::NONE};
-                case '9': return {Panel::UP, Panel::RIGHT};
-                case 'A': return {Panel::UP, Panel::DOWN};
-                case 'B': return {Panel::LEFT, Panel::RIGHT};
-                case 'C': return {Panel::UP_LEFT, Panel::NONE};
-                case 'D': return {Panel::UP_RIGHT, Panel::NONE};
-                case 'E': return {Panel::LEFT, Panel::UP_LEFT};
-                case 'F': return {Panel::UP_LEFT, Panel::DOWN};
-                case 'G': return {Panel::UP_LEFT, Panel::UP};
-                case 'H': return {Panel::UP_LEFT, Panel::RIGHT};
-                case 'I': return {Panel::LEFT, Panel::UP_RIGHT};
-                case 'J': return {Panel::DOWN, Panel::UP_RIGHT};
-                case 'K': return {Panel::UP, Panel::UP_RIGHT};
-                case 'L': return {Panel::UP_RIGHT, Panel::RIGHT};
-                case 'M': return {Panel::UP_LEFT, Panel::UP_RIGHT};
-                default: return {Panel::NONE, Panel::NONE};
+                case '1':
+                    return {Panel::LEFT, Panel::DOWN};
+                case '2':
+                    return {Panel::DOWN, Panel::NONE};
+                case '3':
+                    return {Panel::DOWN, Panel::RIGHT};
+                case '4':
+                    return {Panel::LEFT, Panel::NONE};
+                case '6':
+                    return {Panel::RIGHT, Panel::NONE};
+                case '7':
+                    return {Panel::LEFT, Panel::UP};
+                case '8':
+                    return {Panel::UP, Panel::NONE};
+                case '9':
+                    return {Panel::UP, Panel::RIGHT};
+                case 'A':
+                    return {Panel::UP, Panel::DOWN};
+                case 'B':
+                    return {Panel::LEFT, Panel::RIGHT};
+                case 'C':
+                    return {Panel::UP_LEFT, Panel::NONE};
+                case 'D':
+                    return {Panel::UP_RIGHT, Panel::NONE};
+                case 'E':
+                    return {Panel::LEFT, Panel::UP_LEFT};
+                case 'F':
+                    return {Panel::UP_LEFT, Panel::DOWN};
+                case 'G':
+                    return {Panel::UP_LEFT, Panel::UP};
+                case 'H':
+                    return {Panel::UP_LEFT, Panel::RIGHT};
+                case 'I':
+                    return {Panel::LEFT, Panel::UP_RIGHT};
+                case 'J':
+                    return {Panel::DOWN, Panel::UP_RIGHT};
+                case 'K':
+                    return {Panel::UP, Panel::UP_RIGHT};
+                case 'L':
+                    return {Panel::UP_RIGHT, Panel::RIGHT};
+                case 'M':
+                    return {Panel::UP_LEFT, Panel::UP_RIGHT};
+                default:
+                    return {Panel::NONE, Panel::NONE};
             }
         }
 
@@ -1172,17 +1201,29 @@ namespace nascent {
                 char c = data[index++];
 
                 switch (c) {
-                    case '(': step = 4.0 / 16.0; continue;
-                    case '[': step = 4.0 / 24.0; continue;
-                    case '{': step = 4.0 / 64.0; continue;
-                    case '`': step = 4.0 / 192.0; continue;
+                    case '(':
+                        step = 4.0 / 16.0;
+                        continue;
+                    case '[':
+                        step = 4.0 / 24.0;
+                        continue;
+                    case '{':
+                        step = 4.0 / 64.0;
+                        continue;
+                    case '`':
+                        step = 4.0 / 192.0;
+                        continue;
                     case ')':
                     case ']':
                     case '}':
                     case '\'':
-                    case '>': step = DWI_EIGHTH; continue;
-                    case '!': continue;
-                    default: break;
+                    case '>':
+                        step = DWI_EIGHTH;
+                        continue;
+                    case '!':
+                        continue;
+                    default:
+                        break;
                 }
 
                 bool jump = c == '<';

@@ -437,7 +437,8 @@ namespace nascent {
             subtitle = std::format("{} charts on {}", total, SettingsManager::settings.server_url);
         }
 
-        draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(!error.empty() ? SkinColor::TEXT_ERROR : !notice.empty() ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
+        draw_text(skin->display_font_small, subtitle, {x, y}, skin->color(!error.empty() ? SkinColor::TEXT_ERROR : !notice.empty() ? SkinColor::TEXT
+                                                                                                                                   : SkinColor::TEXT_MUTED));
         y += Ui::layout_px("browser.subtitle_gap");
 
         form.draw(window, *skin, {x, y});
