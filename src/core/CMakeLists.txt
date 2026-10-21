@@ -19,6 +19,7 @@ add_library(core
     src/Sha256.cpp
     src/Mp3Padding.cpp
     src/SongClock.cpp
+    src/StepManiaFormat.cpp
 )
 
 set(NASCENT_DIFFICULTY_SOURCES

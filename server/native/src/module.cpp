@@ -7,6 +7,7 @@
 #include "OsuFormat.h"
 #include "Replay.h"
 #include "Results.h"
+#include "StepManiaFormat.h"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -297,6 +298,34 @@ PYBIND11_MODULE(nascent_core, m) {
             }
 
             return chart->dump();
+        },
+        py::arg("text")
+    );
+    m.def(
+        "convert_stepmania",
+        [](const std::string& text) {
+            std::string error;
+            std::vector<StepManiaChart> charts = stepmania_to_chart_jsons(text, error);
+
+            if (charts.empty()) {
+                throw py::value_error(error);
+            }
+
+            py::list result;
+
+            for (const StepManiaChart& chart : charts) {
+                py::dict entry;
+                entry["index"] = chart.index;
+                entry["steps_type"] = chart.steps_type;
+                entry["difficulty"] = chart.difficulty;
+                entry["description"] = chart.description;
+                entry["meter"] = chart.meter;
+                entry["chart"] = chart.chart.is_null() ? py::object(py::none()) : py::object(py::str(chart.chart.dump()));
+                entry["error"] = chart.error.empty() ? py::object(py::none()) : py::object(py::str(chart.error));
+                result.append(entry);
+            }
+
+            return result;
         },
         py::arg("text")
     );

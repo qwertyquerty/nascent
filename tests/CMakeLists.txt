@@ -9,6 +9,7 @@ add_executable(core_tests
     test_results.cpp
     test_search.cpp
     test_settings.cpp
+    test_stepmania.cpp
     test_updates.cpp
 )
 target_link_libraries(core_tests PRIVATE core gse)
