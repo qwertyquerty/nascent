@@ -68,6 +68,25 @@ NASCENT_TEST(stepmania_sm_conversion) {
     CHECK(charts[2].error == "steps type 'lights-cabinet' is not supported");
 }
 
+NASCENT_TEST(stepmania_special_notes) {
+    std::string text =
+        "#OFFSET:0;\n#BPMS:0=60;\n"
+        "#NOTES:dance-single::Hard:10::\n1000\n0L00\n00M0\n000F\n,\n2K00\nL400\n0000\n3300\n;\n";
+    std::string error;
+    std::vector<StepManiaChart> charts = stepmania_to_chart_jsons(text, error);
+    CHECK(charts.size() == 1);
+
+    if (charts.size() != 1) {
+        return;
+    }
+
+    const nlohmann::json& chart = charts[0].chart;
+    CHECK((hit_times(chart) == std::vector<int32_t>{0, 4000, 5000}));
+    CHECK(chart["hit_objects"][0]["hit_type"] == 0);
+    CHECK(chart["hit_objects"][1]["hit_type"] == 1 && chart["hit_objects"][1]["key"] == 0 && chart["hit_objects"][1]["end_time"] == 7000);
+    CHECK(chart["hit_objects"][2]["hit_type"] == 1 && chart["hit_objects"][2]["key"] == 1 && chart["hit_objects"][2]["end_time"] == 7000);
+}
+
 NASCENT_TEST(stepmania_stops_delays_warps_fakes) {
     std::string text =
         "#OFFSET:0;\n#BPMS:0=60;\n#STOPS:1=0.5;\n#DELAYS:3=0.25;\n#WARPS:5=1;\n#FAKES:7=0.5;\n"

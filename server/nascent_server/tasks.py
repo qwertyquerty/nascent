@@ -134,6 +134,19 @@ def enqueue_user_refresh(user_ids: Iterable[int], chart_ids: list[int]) -> list[
     return [job for job in jobs if job is not None]
 
 
+def enqueue_chart_replacement(chart_id: int, user_ids: list[int]) -> list[str]:
+    recalculation = enqueue(recalculate_chart, chart_id, True)
+    jobs = [recalculation] if recalculation else []
+
+    for batch in _batches(sorted(set(user_ids)), current_app.config["TASK_BATCH_SIZE"]):
+        job = enqueue(refresh_users, batch, [chart_id], depends_on=[recalculation] if recalculation else None)
+
+        if job is not None:
+            jobs.append(job)
+
+    return jobs
+
+
 @task
 def refresh_users(user_ids: list[int], chart_ids: list[int]) -> None:
     from .services import ranking

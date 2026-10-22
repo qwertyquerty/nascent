@@ -17,6 +17,12 @@
                         "Report cheaters, offensive names and broken charts with the Report button on play, player and chart pages on the website.",
                         "Join the Discord in Options opens the Nascent Discord server."
                     ]
+                },
+                {
+                    "title": "Fixes",
+                    "notes": [
+                        "StepMania and Etterna charts no longer turn lift notes into extra presses, which made some charts harder and rated higher than they should be. Your song library rescans once after updating to pick up the fix."
+                    ]
                 }
             ]
         },

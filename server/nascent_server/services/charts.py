@@ -3,18 +3,21 @@ import json
 import re
 from collections import OrderedDict
 from collections.abc import Iterable
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from threading import Lock
 
 import nascent_core as nc
 from flask import current_app
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import timeutil
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Chart, ChartDifficulty, ChartSource, ChartStatus, User
+from ..models import Chart, ChartDifficulty, ChartSource, ChartStatus, Play, Report, RetiredChart, User
 from ..storage import get_json_gz, put_json_gz, sharded_key
+from . import previews
 from .calculator import DEFAULT_RATE_KEY, calculator_version, rate_for_key
 
 MAX_NOTES = 200_000
@@ -28,6 +31,14 @@ OSU_ID_PATTERNS = {
     "source_id": re.compile(r"^\s*BeatmapID\s*:\s*(\d+)\s*$", re.MULTILINE),
     "source_set_id": re.compile(r"^\s*BeatmapSetID\s*:\s*(\d+)\s*$", re.MULTILINE),
 }
+
+@dataclass
+class Replacement:
+    old_hash: str
+    chart_id: int
+    user_ids: list[int] = dataclass_field(default_factory=list)
+    files: list[str] = dataclass_field(default_factory=list)
+
 
 _native_cache: OrderedDict[str, nc.Chart] = OrderedDict()
 _native_lock = Lock()
@@ -99,6 +110,21 @@ def get_chart_or_404(chart_hash: str) -> Chart:
     return chart
 
 
+def retired_chart(chart_hash: str) -> RetiredChart | None:
+    if not HASH_PATTERN.fullmatch(chart_hash):
+        return None
+
+    return db.session.get(RetiredChart, chart_hash.lower())
+
+
+def require_not_retired(chart_hash: str) -> None:
+    retired = retired_chart(chart_hash)
+
+    if retired is not None:
+        replacement = retired.replaced_by.hash if retired.replaced_by is not None else None
+        raise ApiError(410, "chart_replaced", "This chart was replaced by a corrected version. Update Nascent to play and submit it", {"chart_hash": chart_hash.lower(), "replacement": replacement})
+
+
 def _text(value: str) -> str:
     return value.replace("\x00", "")[:255]
 
@@ -108,6 +134,8 @@ def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[
 
     if existing is not None:
         return existing, False
+
+    require_not_retired(native.hash)
 
     data_key = sharded_key("charts", native.hash, ".json.gz")
     put_json_gz(data_key, native.to_json())
@@ -173,6 +201,38 @@ def add_chart_source(chart: Chart, source: str, checksum: str, source_id: int | 
     existing.source_id = source_id if source_id is not None else existing.source_id
     existing.source_set_id = source_set_id if source_set_id is not None else existing.source_set_id
     return existing
+
+
+def replace_chart(old: Chart, new: Chart) -> Replacement:
+    if old.id == new.id:
+        raise ValueError("a chart can't replace itself")
+
+    if old.key_count != new.key_count:
+        raise ValueError(f"the new version has {new.key_count} keys instead of {old.key_count}, so its plays can't be re-judged")
+
+    db.session.flush()
+    replacement = Replacement(old_hash=old.hash, chart_id=new.id, files=[old.data_key, previews.preview_key(old)])
+    replacement.user_ids = sorted(set(db.session.scalars(select(Play.user_id).where(Play.chart_id == old.id))))
+
+    if old.status == ChartStatus.RANKED and new.status != ChartStatus.RANKED:
+        new.status = ChartStatus.RANKED
+        new.ranked_at = old.ranked_at
+        new.ranked_by_id = old.ranked_by_id
+
+    new.play_count += old.play_count
+    db.session.execute(update(ChartSource).where(ChartSource.chart_id == old.id).values(chart_id=new.id))
+    db.session.execute(update(Play).where(Play.chart_id == old.id).values(chart_id=new.id))
+    db.session.execute(update(Report).where(Report.chart_id == old.id).values(chart_id=new.id))
+    db.session.execute(update(RetiredChart).where(RetiredChart.replaced_by_id == old.id).values(replaced_by_id=new.id))
+    db.session.add(RetiredChart(hash=old.hash, replaced_by_id=new.id))
+    db.session.expire(old)
+    db.session.expire(new)
+    db.session.delete(old)
+
+    with _native_lock:
+        _native_cache.pop(old.hash, None)
+
+    return replacement
 
 
 def chart_difficulty(chart: Chart, rate_key: int) -> float:

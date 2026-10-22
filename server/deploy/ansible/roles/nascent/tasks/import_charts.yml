@@ -2,7 +2,7 @@
   ansible.builtin.assert:
     that:
       - charts is defined and charts | length > 0
-    fail_msg: pass a local chart folder or .tar.gz archive with -e charts=/path/to/charts, and add -e rank=true to rank every imported chart
+    fail_msg: pass a local chart folder or .tar.gz archive with -e charts=/path/to/charts. Add -e rank=true to rank every imported chart, -e replace=true to replace charts that import differently now, and -e dry_run=true to only report what would change
 
 - name: Look for the charts on this machine
   delegate_to: localhost
@@ -78,16 +78,18 @@
       ansible.builtin.set_fact:
         chart_import_command: >-
           {{ ['docker', 'compose', 'run', '--rm', '-T', '-v', nascent_chart_import_dir ~ ':/import:ro', 'api', 'flask', '--app', 'wsgi', 'nascent', 'import-charts', '/import', '--quiet']
-             + (['--rank'] if rank | default(false) | bool else []) }}
+             + (['--rank'] if rank | default(false) | bool else [])
+             + (['--replace'] if replace | default(false) | bool else [])
+             + (['--dry-run'] if dry_run | default(false) | bool else []) }}
 
-    - name: Import the charts{{ ' as ranked' if rank | default(false) | bool else '' }}
+    - name: Import the charts{{ ' as ranked' if rank | default(false) | bool else '' }}{{ ', replacing older versions' if replace | default(false) | bool else '' }}{{ ' (dry run)' if dry_run | default(false) | bool else '' }}
       ansible.builtin.command:
         argv: "{{ chart_import_command }}"
         chdir: "{{ nascent_compose_dir }}"
       async: "{{ nascent_chart_import_timeout }}"
       poll: 60
       register: imported
-      changed_when: "imported.stdout_lines | select('search', '^[1-9][0-9]* new charts') | list | length > 0"
+      changed_when: "imported.stdout_lines | select('search', '^[1-9][0-9]* new charts|replaced [1-9][0-9]* older versions') | list | length > 0"
 
     - name: Show what was imported
       ansible.builtin.debug:

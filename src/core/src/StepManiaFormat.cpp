@@ -616,7 +616,7 @@ namespace nascent {
                             }
                         }
 
-                        bool tap = symbol == '1' || symbol == 'L' || symbol == 'l';
+                        bool tap = symbol == '1';
                         bool head = symbol == '2' || symbol == '4';
                         bool tail = symbol == '3';
 

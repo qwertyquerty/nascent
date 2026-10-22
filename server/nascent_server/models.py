@@ -233,6 +233,16 @@ class Chart(db.Model):
     )
 
 
+class RetiredChart(db.Model):
+    __tablename__ = "retired_charts"
+
+    hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    replaced_by_id: Mapped[int | None] = mapped_column(ForeignKey("charts.id", ondelete="SET NULL"), nullable=True, index=True)
+    retired_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
+
+    replaced_by: Mapped[Chart | None] = relationship()
+
+
 class ChartDifficulty(db.Model):
     __tablename__ = "chart_difficulties"
 

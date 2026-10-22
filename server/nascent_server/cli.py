@@ -16,12 +16,13 @@ from sqlalchemy import delete, func, inspect, or_, select
 from . import tasks, timeutil
 from .errors import ApiError
 from .extensions import db
-from .models import AuthSession, Chart, ChartDifficulty, ChartStatus, PasswordReset, Play, PlayTicket, Role, User
+from .models import AuthSession, Chart, ChartDifficulty, ChartSource, ChartStatus, PasswordReset, Play, PlayTicket, Role, User
 from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
-from .services.charts import add_chart_source, get_chart, parse_chart, read_osu_file, register_chart, set_chart_status
+from .services.charts import add_chart_source, get_chart, parse_chart, read_osu_file, register_chart, replace_chart, set_chart_status
 from .services.plays import review_play, submit_play
+from .storage import storage
 
 nascent_cli = AppGroup("nascent", help="Nascent server administration")
 
@@ -243,7 +244,9 @@ def _read_chart_file(file: Path, pack: int | None) -> list[tuple[dict | None, di
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--rank", is_flag=True, help="Rank every imported chart")
 @click.option("--quiet", is_flag=True, help="Print progress every 1000 files and a summary instead of a line per chart")
-def import_charts(path: Path, rank: bool, quiet: bool):
+@click.option("--replace", is_flag=True, help="Replace charts from the same file and pack that import differently now: move their plays onto the new version, re-judge them and delete the old version")
+@click.option("--dry-run", is_flag=True, help="Report what would be added and replaced without changing anything")
+def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: bool):
     files = _chart_files(path)
     packs: dict[Path, int | None] = {}
     counts = Counter()
@@ -259,15 +262,33 @@ def import_charts(path: Path, rank: bool, quiet: bool):
             entries = [(None, None, str(error))]
 
         for data, source, problem in entries:
+            replaced = None
+
             try:
                 if data is None:
                     raise ValueError(problem)
 
                 native = parse_chart(data)
+                previous = _previous_version(source, native) if replace else None
+
+                if dry_run:
+                    created = get_chart(native.hash) is None
+                    db.session.rollback()
+
+                    if previous is not None:
+                        counts["replaced"] += 1
+                        click.echo(f"would replace {previous.hash[:16]} with {native.hash[:16]} {native.key_count:2}K {native.artist} - {native.title} [{native.difficulty_name}]")
+
+                    counts["added" if created else "exists"] += 1
+                    continue
+
                 chart, created = register_chart(native, None)
 
                 if source is not None:
                     add_chart_source(chart, **source)
+
+                if previous is not None and previous.id != chart.id:
+                    replaced = replace_chart(previous, chart)
 
                 changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank and _meets_ranked_minimums(chart) else False
             except (ApiError, ValueError) as error:
@@ -286,7 +307,18 @@ def import_charts(path: Path, rank: bool, quiet: bool):
             if created:
                 tasks.enqueue(tasks.fill_chart_difficulties, chart.id)
 
-            if changed:
+            if replaced is not None:
+                counts["replaced"] += 1
+
+                for key in replaced.files:
+                    try:
+                        storage().delete(key)
+                    except OSError:
+                        current_app.logger.warning("could not delete %s for replaced chart %s", key, replaced.old_hash)
+
+                tasks.enqueue_chart_replacement(chart.id, replaced.user_ids)
+                click.echo(f"replaced {replaced.old_hash[:16]} with {chart.hash[:16]}, moved {len(replaced.user_ids)} players' plays: {chart.artist} - {chart.title} [{chart.difficulty_name}]")
+            elif changed:
                 tasks.enqueue(tasks.apply_chart_status, chart.id)
 
             counts["added" if created else "exists"] += 1
@@ -302,7 +334,28 @@ def import_charts(path: Path, rank: bool, quiet: bool):
         for message, count in reasons.most_common(15):
             click.echo(f"skipped {count}: {message}")
 
-    click.echo(f"{counts['added']} new charts, {counts['exists']} already on the server, {counts['skipped']} skipped, from {len(files)} files")
+    summary = f"{counts['added']} new charts, {counts['exists']} already on the server, {counts['skipped']} skipped, from {len(files)} files"
+
+    if replace:
+        summary += f", {'would replace' if dry_run else 'replaced'} {counts['replaced']} older versions"
+
+    click.echo(("Dry run, nothing changed: " if dry_run else "") + summary)
+
+
+def _previous_version(source: dict | None, native: nc.Chart) -> Chart | None:
+    if source is None:
+        return None
+
+    existing = db.session.scalar(select(ChartSource).where(ChartSource.source == source["source"], ChartSource.checksum == source["checksum"]))
+
+    if existing is None or existing.chart.hash == native.hash or existing.source_set_id != source.get("source_set_id"):
+        return None
+
+    if existing.chart.key_count != native.key_count:
+        click.echo(f"not replacing {existing.chart.hash[:16]}: the new version has {native.key_count} keys instead of {existing.chart.key_count}")
+        return None
+
+    return existing.chart
 
 
 @nascent_cli.command("set-chart-status")

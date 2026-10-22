@@ -20,7 +20,7 @@ from ..storage import put_json_gz, sharded_key
 from ..versions import parse_release_version
 from . import anticheat, email_verification, ranking
 from .calculator import calculator_version, performance, require_rate_key
-from .charts import MAX_DURATION_MS, chart_difficulty, get_chart, native_chart, parse_chart, register_chart
+from .charts import MAX_DURATION_MS, chart_difficulty, get_chart, native_chart, parse_chart, register_chart, require_not_retired
 
 INT32_MIN = -(2**31)
 INT32_MAX = 2**31 - 1
@@ -377,6 +377,8 @@ def submit_play(
     chart = get_chart(chart_hash)
 
     if chart is None:
+        require_not_retired(chart_hash)
+
         if raw_chart is None:
             raise ApiError(409, "chart_required", "The server does not have this chart yet, submit it with the play", {"chart_hash": chart_hash})
 
