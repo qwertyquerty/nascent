@@ -38,29 +38,11 @@
 
 - name: Upload and import the charts
   block:
-    - name: Create a local archive name
-      delegate_to: localhost
-      become: false
-      run_once: true
-      ansible.builtin.tempfile:
-        state: file
-        suffix: -nascent-charts.tar.gz
-      register: archive
-      when: not chart_archive_given
-
-    - name: Pack {{ local_charts.stdout | default('the') | trim }} chart files
-      delegate_to: localhost
-      become: false
-      run_once: true
-      ansible.builtin.command:
-        argv: [tar, -czf, "{{ archive.path }}", -C, "{{ charts }}", .]
-      changed_when: false
-      when: not chart_archive_given
-
-    - name: Clear the upload directory
+    - name: Clear the upload directory for the archive
       ansible.builtin.file:
         path: "{{ nascent_chart_import_dir }}"
         state: absent
+      when: chart_archive_given
 
     - name: Create the upload directory
       ansible.builtin.file:
@@ -68,11 +50,39 @@
         state: directory
         mode: "0755"
 
-    - name: Upload the charts
+    - name: Unpack the chart archive on the server
       ansible.builtin.unarchive:
-        src: "{{ charts if chart_archive_given else archive.path }}"
+        src: "{{ charts }}"
         dest: "{{ nascent_chart_import_dir }}"
         mode: u=rwX,g=rX,o=rX
+      when: chart_archive_given
+
+    - name: Install rsync on the server
+      ansible.builtin.package:
+        name: rsync
+        state: present
+      when: not chart_archive_given
+
+    - name: Sync {{ local_charts.stdout | default('the') | trim }} chart files to the server, sending only what changed
+      ansible.posix.synchronize:
+        src: "{{ charts | regex_replace('/+$', '') }}/"
+        dest: "{{ nascent_chart_import_dir }}/"
+        delete: true
+        compress: true
+        owner: false
+        group: false
+        rsync_opts:
+          - "--include=*/"
+          - "--include=*.[oO][sS][uU]"
+          - "--include=*.[sS][mM]"
+          - "--include=*.[sS][sS][cC]"
+          - "--include=*.[dD][wW][iI]"
+          - "--include=*.[jJ][sS][oO][nN]"
+          - "--exclude=*"
+          - "--prune-empty-dirs"
+          - "--delete-excluded"
+          - "--chmod=D755,F644"
+      when: not chart_archive_given
 
     - name: Build the import command
       ansible.builtin.set_fact:
@@ -95,16 +105,8 @@
       ansible.builtin.debug:
         msg: "{{ imported.stdout_lines | reject('match', '^[0-9]+/[0-9]+ files:') | list }}"
   always:
-    - name: Remove the local archive
-      delegate_to: localhost
-      become: false
-      run_once: true
-      ansible.builtin.file:
-        path: "{{ archive.path }}"
-        state: absent
-      when: not chart_archive_given and archive.path is defined
-
-    - name: Remove the uploaded charts
+    - name: Remove the unpacked archive
       ansible.builtin.file:
         path: "{{ nascent_chart_import_dir }}"
         state: absent
+      when: chart_archive_given
