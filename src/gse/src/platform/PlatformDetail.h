@@ -12,4 +12,5 @@ namespace nascent::platform_detail {
     std::vector<const char*> clipboard_commands();
     const char* url_opener();
     void install_crash_signals();
+    std::vector<std::filesystem::path> font_fallback_candidates();
 }

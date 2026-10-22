@@ -100,6 +100,20 @@ namespace nascent {
         return base / platform_detail::config_folder_name(app_name);
     }
 
+    std::vector<std::filesystem::path> system_fallback_fonts() {
+        std::vector<std::filesystem::path> fonts;
+
+        for (const std::filesystem::path& candidate : platform_detail::font_fallback_candidates()) {
+            std::error_code ec;
+
+            if (std::filesystem::is_regular_file(candidate, ec)) {
+                fonts.push_back(candidate);
+            }
+        }
+
+        return fonts;
+    }
+
     std::string platform_description() {
 #if defined(__x86_64__) || defined(_M_X64)
         const char* arch = "x86_64";

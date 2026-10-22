@@ -110,6 +110,7 @@ namespace olc {
                         if (fbChr != 0) {
                             chrIndex = fbChr;
                             toUse = &font;
+                            break;
                         }
                     }
                 }
@@ -192,6 +193,7 @@ namespace olc {
                         if (fbChr != 0) {
                             chrIndex = fbChr;
                             toUse = &font;
+                            break;
                         }
                     }
                 }
@@ -287,6 +289,7 @@ namespace olc {
                         if (fbChr != 0) {
                             chrIndex = fbChr;
                             toUse = &font;
+                            break;
                         }
                     }
                 }

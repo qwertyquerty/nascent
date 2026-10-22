@@ -189,6 +189,18 @@ namespace nascent::platform_detail {
         return "Windows";
     }
 
+    std::vector<std::filesystem::path> font_fallback_candidates() {
+        wchar_t windows[MAX_PATH] = {};
+        UINT length = GetWindowsDirectoryW(windows, MAX_PATH);
+
+        if (length == 0 || length >= MAX_PATH) {
+            return {};
+        }
+
+        std::filesystem::path fonts = std::filesystem::path(windows) / "Fonts";
+        return {fonts / "YuGothR.ttc", fonts / "meiryo.ttc", fonts / "malgun.ttf", fonts / "msyh.ttc", fonts / "msjh.ttc"};
+    }
+
     std::filesystem::path config_home() {
         std::filesystem::path base;
         PWSTR roaming = nullptr;

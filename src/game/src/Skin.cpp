@@ -848,7 +848,19 @@ namespace nascent {
 
     void Skin::load_fonts() {
         std::array<olc::Font*, SKIN_FONT_COUNT> targets = {&display_font_large, &display_font_medium, &display_font_small, &judgement_font, &combo_font};
-        bool symbols = std::filesystem::exists(SYMBOL_FONT_PATH);
+        std::vector<std::string> fallbacks;
+
+        if (std::filesystem::exists(SYMBOL_FONT_PATH)) {
+            fallbacks.emplace_back(SYMBOL_FONT_PATH);
+        }
+
+        if (std::filesystem::exists(CJK_FONT_PATH)) {
+            fallbacks.emplace_back(CJK_FONT_PATH);
+        }
+
+        for (const std::filesystem::path& font : system_fallback_fonts()) {
+            fallbacks.push_back(path_utf8(font));
+        }
 
         for (size_t role = 0; role < SKIN_FONT_COUNT; role++) {
             const SkinFontSpec& spec = skin_manifest.fonts[role];
@@ -856,8 +868,8 @@ namespace nascent {
             uint16_t size = (uint16_t)std::max<long>(1, std::lround(reference * font_scale));
             *targets[role] = {find(spec.file.empty() ? std::string(DISPLAY_FONT_FILE) : spec.file).string(), size};
 
-            if (symbols) {
-                targets[role]->AddFallbackFont(SYMBOL_FONT_PATH);
+            for (const std::string& fallback : fallbacks) {
+                targets[role]->AddFallbackFont(fallback);
             }
         }
 

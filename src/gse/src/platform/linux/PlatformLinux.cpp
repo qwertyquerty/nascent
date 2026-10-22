@@ -84,6 +84,16 @@ namespace nascent::platform_detail {
         return "Linux";
     }
 
+    std::vector<std::filesystem::path> font_fallback_candidates() {
+        return {
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/OTF/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        };
+    }
+
     std::filesystem::path config_home() {
         if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg != nullptr && *xdg != '\0') {
             return xdg;

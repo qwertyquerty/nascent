@@ -29,6 +29,11 @@ namespace nascent::platform_detail {
         return "macOS";
     }
 
+    std::vector<std::filesystem::path> font_fallback_candidates() {
+        std::filesystem::path fonts = "/System/Library/Fonts";
+        return {fonts / "ヒラギノ角ゴシック W3.ttc", fonts / "AppleSDGothicNeo.ttc", fonts / "PingFang.ttc", fonts / "Hiragino Sans GB.ttc"};
+    }
+
     std::filesystem::path config_home() {
         const char* home = std::getenv("HOME");
         return home != nullptr ? std::filesystem::path(home) / "Library" / "Application Support" : std::filesystem::path();

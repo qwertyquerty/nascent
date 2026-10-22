@@ -305,6 +305,7 @@ namespace nascent {
         static constexpr const char* DISPLAY_FONT_FILE = "display_font.ttf";
         static constexpr const char* GRADIENT_FILE = "title_gradient.png";
         static constexpr const char* SYMBOL_FONT_PATH = "assets/fonts/OpenArrow-Regular.ttf";
+        static constexpr const char* CJK_FONT_PATH = "assets/fonts/MPLUS1-Regular.ttf";
         static constexpr size_t MAX_INHERITANCE_DEPTH = 8;
         static constexpr size_t MAX_MENU_PLUCKS = 10;
         static constexpr size_t MAX_ANIMATION_FRAMES = 256;

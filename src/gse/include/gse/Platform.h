@@ -49,4 +49,5 @@ namespace nascent {
     std::optional<bool> application_focused();
     bool alt_held();
     std::optional<std::filesystem::path> choose_folder(const std::string& title);
+    std::vector<std::filesystem::path> system_fallback_fonts();
 }
