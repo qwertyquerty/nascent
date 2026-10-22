@@ -28,6 +28,7 @@ namespace nascent {
         std::vector<std::string> details;
         std::vector<double> lengths_ms;
         std::vector<BpmRange> bpms;
+        std::vector<float> long_note_shares;
         std::vector<int64_t> added;
         float pitch = 1.0f;
 
@@ -67,6 +68,7 @@ namespace nascent {
 
     inline constexpr std::array<std::string_view, 5> LIBRARY_CHART_EXTENSIONS = {".osu", ".json", ".ssc", ".sm", ".dwi"};
 
+    float long_note_share(const Chart& chart);
     bool is_library_chart_file(const std::filesystem::path& path);
     bool holds_several_charts(const std::filesystem::path& path);
     std::vector<std::unique_ptr<Chart>> load_chart_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error);

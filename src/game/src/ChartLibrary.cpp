@@ -189,6 +189,7 @@ namespace nascent {
                 library.details.push_back(std::format("[{}] - {} // {}", info.difficulty_name, info.artist, info.mapper));
                 library.lengths_ms.push_back((double)entry.chart->get_duration_ms() * entry.chart->pitch);
                 library.bpms.push_back(entry.chart->bpm_range());
+                library.long_note_shares.push_back(long_note_share(*entry.chart));
                 library.added.push_back(entry.added);
                 library.charts.push_back(std::move(entry.chart));
             }
@@ -259,6 +260,17 @@ namespace nascent {
         return sum > 0 ? std::min(1.0f, reached / sum) : 1.0f;
     }
 
+    float long_note_share(const Chart& chart) {
+        if (chart.hits.empty()) {
+            return 0.0f;
+        }
+
+        size_t holds = (size_t)std::count_if(chart.hits.begin(), chart.hits.end(), [](const Hit& hit) {
+            return hit.hit_type == HitType::HOLD;
+        });
+        return (float)holds / (float)chart.hits.size();
+    }
+
     size_t ChartLibrary::size() const {
         return charts.size();
     }
@@ -279,6 +291,7 @@ namespace nascent {
             library.details.push_back(details[index]);
             library.lengths_ms.push_back(lengths_ms[index]);
             library.bpms.push_back(bpms[index]);
+            library.long_note_shares.push_back(index < long_note_shares.size() ? long_note_shares[index] : 0.0f);
             library.added.push_back(index < added.size() ? added[index] : 0);
         }
 

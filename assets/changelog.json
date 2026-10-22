@@ -11,6 +11,7 @@
                         "The song preview has a progress bar along the bottom. Click or drag it to jump to any part of the song.",
                         "Report a bug in Options opens a bug report on GitHub and the folder with your log file, so you can attach it.",
                         "Type in Options to search your settings, like you can in the song list. Esc clears the search.",
+                        "Sort the song list by Long notes density (F8).",
                         "Report cheaters, offensive names and broken charts with the Report button on play, player and chart pages on the website.",
                         "Join the Discord in Options opens the Nascent Discord server."
                     ]

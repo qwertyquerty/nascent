@@ -1009,6 +1009,10 @@ namespace nascent {
             return index < library.bpms.size() ? library.bpms[index].main : 0.0;
         };
 
+        auto long_notes = [&](size_t index) {
+            return index < library.long_note_shares.size() ? library.long_note_shares[index] : 0.0f;
+        };
+
         auto added = [&](size_t index) {
             return index < library.added.size() ? library.added[index] : (int64_t)0;
         };
@@ -1030,6 +1034,8 @@ namespace nascent {
                     return added(a) > added(b);
                 case ListSort::KEY_COUNT:
                     return library.charts[a]->info.key_count < library.charts[b]->info.key_count;
+                case ListSort::LONG_NOTES:
+                    return long_notes(a) < long_notes(b);
                 default:
                     return false;
             }
