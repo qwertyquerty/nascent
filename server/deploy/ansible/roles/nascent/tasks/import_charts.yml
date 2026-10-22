@@ -2,7 +2,7 @@
   ansible.builtin.assert:
     that:
       - charts is defined and charts | length > 0
-    fail_msg: pass a local chart folder or .tar.gz archive with -e charts=/path/to/charts. Add -e rank=true to rank every imported chart, -e replace=true to replace charts that import differently now, and -e dry_run=true to only report what would change
+    fail_msg: pass a local chart folder or .tar.gz archive with -e charts=/path/to/charts. Add -e rank=true to rank every imported chart, -e replace=true to replace charts that import differently now and remove ones that are no longer valid, and -e dry_run=true to only report what would change
 
 - name: Look for the charts on this machine
   delegate_to: localhost
@@ -89,7 +89,7 @@
       async: "{{ nascent_chart_import_timeout }}"
       poll: 60
       register: imported
-      changed_when: "imported.stdout_lines | select('search', '^[1-9][0-9]* new charts|replaced [1-9][0-9]* older versions') | list | length > 0"
+      changed_when: "imported.stdout_lines | select('search', '^[1-9][0-9]* new charts|replaced [1-9][0-9]* older versions|removed [1-9][0-9]* invalid charts') | list | length > 0"
 
     - name: Show what was imported
       ansible.builtin.debug:

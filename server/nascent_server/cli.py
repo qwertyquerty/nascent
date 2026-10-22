@@ -20,7 +20,7 @@ from .models import AuthSession, Chart, ChartDifficulty, ChartSource, ChartStatu
 from .security import hash_password, revoke_user_sessions
 from .services import ranking
 from .services.calculator import calculator_version
-from .services.charts import add_chart_source, get_chart, parse_chart, read_osu_file, register_chart, replace_chart, set_chart_status
+from .services.charts import add_chart_source, get_chart, osu_source, parse_chart, read_osu_file, register_chart, remove_chart, replace_chart, set_chart_status
 from .services.plays import review_play, submit_play
 from .storage import storage
 
@@ -217,34 +217,45 @@ def _etterna_pack(file: Path, root: Path, cache: dict[Path, int | None]) -> int 
     return None
 
 
-def _read_chart_file(file: Path, pack: int | None) -> list[tuple[dict | None, dict | None, str | None]]:
+def _read_chart_file(file: Path, pack: int | None) -> list[tuple[dict | None, dict | None, str | None, bool]]:
     suffix = file.suffix.lower()
 
     if suffix == ".osu":
-        data, source = read_osu_file(file.read_bytes())
-        return [(data, source, None)]
+        raw = file.read_bytes()
+
+        try:
+            data, source, modified = read_osu_file(raw)
+        except ValueError as error:
+            return [(None, osu_source(raw), str(error), False)]
+
+        return [(data, source, None, modified)]
 
     if suffix in STEPMANIA_PREFERENCE:
         charts = []
 
         for entry in nc.convert_stepmania(file.read_bytes()):
+            source = {"source": ETTERNA_SOURCE, "checksum": entry["chart_key"], "source_set_id": pack} if entry["chart_key"] else None
+
             if entry["chart"] is None:
-                charts.append((None, None, entry["error"]))
+                charts.append((None, source, entry["error"], False))
                 continue
 
-            source = {"source": ETTERNA_SOURCE, "checksum": entry["chart_key"], "source_set_id": pack} if entry["chart_key"] else None
-            charts.append((json.loads(entry["chart"]), source, None))
+            charts.append((json.loads(entry["chart"]), source, None, bool(entry.get("modified"))))
 
         return charts
 
-    return [(json.loads(file.read_text(encoding="utf-8")), None, None)]
+    return [(json.loads(file.read_text(encoding="utf-8")), None, None, False)]
 
 
 @nascent_cli.command("import-charts")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--rank", is_flag=True, help="Rank every imported chart")
 @click.option("--quiet", is_flag=True, help="Print progress every 1000 files and a summary instead of a line per chart")
-@click.option("--replace", is_flag=True, help="Replace charts from the same file and pack that import differently now: move their plays onto the new version, re-judge them and delete the old version")
+@click.option(
+    "--replace",
+    is_flag=True,
+    help="Replace charts from the same file and pack that import differently now, moving their plays onto the new version and re-judging them, and remove charts that are no longer valid",
+)
 @click.option("--dry-run", is_flag=True, help="Report what would be added and replaced without changing anything")
 def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: bool):
     files = _chart_files(path)
@@ -259,10 +270,17 @@ def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: b
         try:
             entries = _read_chart_file(file, _etterna_pack(file, path, packs))
         except (OSError, ValueError) as error:
-            entries = [(None, None, str(error))]
+            entries = [(None, None, str(error), False)]
 
-        for data, source, problem in entries:
+        for data, source, problem, modified in entries:
             replaced = None
+
+            if data is None and replace:
+                stale = _imported_version(source)
+
+                if stale is not None:
+                    _remove_invalid(stale, problem, dry_run)
+                    counts["removed"] += 1
 
             try:
                 if data is None:
@@ -282,7 +300,7 @@ def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: b
                     counts["added" if created else "exists"] += 1
                     continue
 
-                chart, created = register_chart(native, None)
+                chart, created = register_chart(native, None, modified=modified)
 
                 if source is not None:
                     add_chart_source(chart, **source)
@@ -338,24 +356,55 @@ def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: b
 
     if replace:
         summary += f", {'would replace' if dry_run else 'replaced'} {counts['replaced']} older versions"
+        summary += f", {'would remove' if dry_run else 'removed'} {counts['removed']} invalid charts"
 
     click.echo(("Dry run, nothing changed: " if dry_run else "") + summary)
 
 
-def _previous_version(source: dict | None, native: nc.Chart) -> Chart | None:
+def _imported_version(source: dict | None) -> Chart | None:
     if source is None:
         return None
 
     existing = db.session.scalar(select(ChartSource).where(ChartSource.source == source["source"], ChartSource.checksum == source["checksum"]))
 
-    if existing is None or existing.chart.hash == native.hash or existing.source_set_id != source.get("source_set_id"):
-        return None
-
-    if existing.chart.key_count != native.key_count:
-        click.echo(f"not replacing {existing.chart.hash[:16]}: the new version has {native.key_count} keys instead of {existing.chart.key_count}")
+    if existing is None or existing.source_set_id != source.get("source_set_id"):
         return None
 
     return existing.chart
+
+
+def _previous_version(source: dict | None, native: nc.Chart) -> Chart | None:
+    existing = _imported_version(source)
+
+    if existing is None or existing.hash == native.hash:
+        return None
+
+    if existing.key_count != native.key_count:
+        click.echo(f"not replacing {existing.hash[:16]}: the new version has {native.key_count} keys instead of {existing.key_count}")
+        return None
+
+    return existing
+
+
+def _remove_invalid(chart: Chart, problem: str | None, dry_run: bool) -> None:
+    name = f"{chart.artist} - {chart.title} [{chart.difficulty_name}]"
+
+    if dry_run:
+        click.echo(f"would remove {chart.hash[:16]} ({chart.play_count} plays), it's no longer valid: {problem}: {name}")
+        db.session.rollback()
+        return
+
+    removal = remove_chart(chart)
+    db.session.commit()
+
+    for key in removal.files:
+        try:
+            storage().delete(key)
+        except OSError:
+            current_app.logger.warning("could not delete %s for removed chart %s", key, removal.old_hash)
+
+    tasks.enqueue_user_refresh(removal.user_ids, [])
+    click.echo(f"removed {removal.old_hash[:16]} and its plays from {len(removal.user_ids)} players, it's no longer valid: {problem}: {name}")
 
 
 @nascent_cli.command("set-chart-status")

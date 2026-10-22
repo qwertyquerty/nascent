@@ -48,6 +48,7 @@ NASCENT_TEST(stepmania_sm_conversion) {
 
     const nlohmann::json& single = charts[0].chart;
     CHECK(charts[0].error.empty());
+    CHECK(charts[0].modified && !charts[1].modified);
     CHECK(charts[0].steps_type == "dance-single" && charts[0].difficulty == "Hard" && charts[0].meter == 12);
     CHECK(single["info"]["title"] == "Re:Start (Remix)");
     CHECK(single["info"]["mapper"] == "Author");
@@ -81,6 +82,7 @@ NASCENT_TEST(stepmania_special_notes) {
     }
 
     const nlohmann::json& chart = charts[0].chart;
+    CHECK(charts[0].modified);
     CHECK((hit_times(chart) == std::vector<int32_t>{0, 4000, 5000}));
     CHECK(chart["hit_objects"][0]["hit_type"] == 0);
     CHECK(chart["hit_objects"][1]["hit_type"] == 1 && chart["hit_objects"][1]["key"] == 0 && chart["hit_objects"][1]["end_time"] == 7000);
@@ -144,7 +146,28 @@ NASCENT_TEST(stepmania_recovery_and_errors) {
     std::string negative;
     std::vector<StepManiaChart> rejected = stepmania_to_chart_jsons("#BPMS:0=120,4=-120;\n#NOTES:dance-single::Hard:3::1000\n;\n", negative);
     CHECK(rejected.size() == 1 && rejected[0].chart.is_null());
-    CHECK(rejected[0].error == "negative or zero BPMs are not supported");
+    CHECK(rejected[0].error == "BPMs must be above 0 and at most 9,999,999");
+    CHECK(!charts.empty() && !charts[0].modified);
+}
+
+NASCENT_TEST(stepmania_invalid_charts) {
+    auto error_for = [](const std::string& timing, const std::string& rows) {
+        std::string error;
+        std::vector<StepManiaChart> charts = stepmania_to_chart_jsons(timing + "#NOTES:dance-single::Hard:3::" + rows + ";\n", error);
+        return charts.size() == 1 && charts[0].chart.is_null() ? charts[0].error : std::string("imported");
+    };
+
+    std::string slow = "#OFFSET:0;\n#BPMS:0=60;\n";
+    std::string during_hold = "a note starts during a hold in the same column";
+    CHECK(error_for(slow, "2000\n1000\n3000\n0000\n") == during_hold);
+    CHECK(error_for(slow, "2000\n2000\n3000\n0000\n") == during_hold);
+    CHECK(error_for(slow, "2000\n4000\n3000\n0000\n") == during_hold);
+    CHECK(error_for(slow, "0000\n0M00\n0L00\n0000\n") == "chart has no notes");
+    CHECK(error_for("#OFFSET:0.5;\n#BPMS:0=60;\n", "1000\n0000\n0000\n0000\n") == "chart has notes before the song starts");
+    CHECK(error_for("#OFFSET:0;\n#BPMS:0=12000;\n", "1000\n1000\n0000\n0000\n") == "two notes in the same column are 5 ms or less apart");
+    CHECK(error_for("#OFFSET:0;\n#BPMS:0=6000;\n", "1000\n1000\n0000\n0000\n") == "imported");
+    CHECK(error_for("#OFFSET:0;\n#BPMS:0=10000000;\n", "1000\n0000\n0000\n0000\n") == "BPMs must be above 0 and at most 9,999,999");
+    CHECK(error_for("#OFFSET:0;\n#BPMS:0=9999999;\n", "1000\n0000\n0000\n0000\n") == "imported");
 }
 
 NASCENT_TEST(stepmania_dwi_conversion) {

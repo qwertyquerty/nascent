@@ -39,7 +39,7 @@ namespace nascent {
         };
 
         static constexpr const char* FILE_NAME = "library_cache.bin";
-        static constexpr uint32_t FORMAT = 2;
+        static constexpr uint32_t FORMAT = 3;
         static constexpr std::string_view MAGIC = "NSLC";
         static constexpr size_t MAX_CHARTS_PER_FILE = 255;
 

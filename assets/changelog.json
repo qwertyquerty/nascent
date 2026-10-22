@@ -21,7 +21,8 @@
                 {
                     "title": "Fixes",
                     "notes": [
-                        "StepMania and Etterna charts no longer turn lift notes into extra presses, which made some charts harder and rated higher than they should be. Your song library rescans once after updating to pick up the fix."
+                        "StepMania and Etterna charts no longer turn lift notes into extra presses, which made some charts harder and rated higher than they should be. Your song library rescans once after updating to pick up the fix.",
+                        "StepMania, Etterna and osu! charts that can't be played correctly are no longer loaded: ones with negative or impossibly high BPMs, notes before the song starts, notes that start during a hold in the same column, or notes in the same column 5 ms or less apart. Rolls play as long notes and mines are left out."
                     ]
                 }
             ]

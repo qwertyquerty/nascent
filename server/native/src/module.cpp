@@ -550,6 +550,24 @@ NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
         py::arg("text")
     );
     m.def(
+        "convert_osu_entry",
+        [](const std::string& text) {
+            std::string error;
+            bool modified = false;
+            std::optional<nlohmann::json> chart = osu_to_chart_json(text, error, modified);
+
+            if (!chart) {
+                throw py::value_error(error);
+            }
+
+            py::dict entry;
+            entry["chart"] = chart->dump();
+            entry["modified"] = modified;
+            return entry;
+        },
+        py::arg("text")
+    );
+    m.def(
         "convert_stepmania",
         [](const std::string& text) {
             std::string error;
@@ -569,6 +587,7 @@ NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
                 entry["description"] = chart.description;
                 entry["meter"] = chart.meter;
                 entry["chart_key"] = chart.chart_key.empty() ? py::object(py::none()) : py::object(py::str(chart.chart_key));
+                entry["modified"] = chart.modified;
                 entry["chart"] = chart.chart.is_null() ? py::object(py::none()) : py::object(py::str(chart.chart.dump()));
                 entry["error"] = chart.error.empty() ? py::object(py::none()) : py::object(py::str(chart.error));
                 result.append(entry);

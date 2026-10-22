@@ -1,4 +1,5 @@
 #include "StepManiaFormat.h"
+#include "ChartRules.h"
 
 #include "Hit.h"
 
@@ -365,8 +366,8 @@ namespace nascent {
                 std::map<int64_t, double> bpm_rows;
 
                 for (const Pair& pair : bpm_pairs) {
-                    if (!(pair.value > 0)) {
-                        throw std::runtime_error("negative or zero BPMs are not supported");
+                    if (!valid_chart_bpm(pair.value)) {
+                        throw std::runtime_error(std::string(CHART_INVALID_BPM));
                     }
 
                     bpm_rows[std::max<int64_t>(0, beat_to_row(pair.beat))] = pair.value;
@@ -566,7 +567,7 @@ namespace nascent {
             return (int32_t)std::lround(ms);
         }
 
-        std::vector<Hit> parse_notes(std::string_view data, uint8_t key_count, const Timing& timing) {
+        std::vector<Hit> parse_notes(std::string_view data, uint8_t key_count, const Timing& timing, bool& modified) {
             struct OpenHold {
                 Hit hit;
                 bool open = false;
@@ -582,6 +583,7 @@ namespace nascent {
                     hold.hit.end_time = hold.hit.time;
                     hits.push_back(hold.hit);
                     hold.open = false;
+                    modified = true;
                 }
             };
 
@@ -621,8 +623,11 @@ namespace nascent {
                         bool tail = symbol == '3';
 
                         if (!tap && !head && !tail) {
+                            modified = modified || symbol != '0';
                             continue;
                         }
+
+                        modified = modified || symbol == '4';
 
                         if (!time) {
                             time = milliseconds(timing.seconds_at(row));
@@ -638,20 +643,25 @@ namespace nascent {
                                 if (length <= 0 || length > MAX_HOLD_MS) {
                                     hold.hit.hit_type = HitType::HIT;
                                     hold.hit.end_time = hold.hit.time;
+                                    modified = true;
                                 }
 
                                 hits.push_back(hold.hit);
                                 hold.open = false;
                             }
+                            else {
+                                modified = true;
+                            }
 
                             continue;
                         }
 
-                        if (head) {
-                            close_as_tap(hold);
+                        if (hold.open) {
+                            throw std::runtime_error("a note starts during a hold in the same column");
                         }
 
                         if (!timing.judged(row)) {
+                            modified = true;
                             continue;
                         }
 
@@ -1373,12 +1383,14 @@ namespace nascent {
                                 auto tail = std::next(it);
 
                                 if (tail == notes.end()) {
+                                    chart.modified = true;
                                     continue;
                                 }
 
                                 hit.end_time = milliseconds(timing.seconds_at(tail->first));
                                 hit.hit_type = hit.end_time > hit.time ? HitType::HOLD : HitType::HIT;
                                 hit.end_time = hit.hit_type == HitType::HOLD ? hit.end_time : hit.time;
+                                chart.modified = chart.modified || hit.hit_type != HitType::HOLD;
                                 it = notes.erase(tail);
                                 --it;
                             }
@@ -1388,16 +1400,15 @@ namespace nascent {
                             if (timing.judged(it->first)) {
                                 hits.push_back(hit);
                             }
+                            else {
+                                chart.modified = true;
+                            }
                         }
                     }
 
                     std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
                         return std::tie(a.time, a.key) < std::tie(b.time, b.key);
                     });
-
-                    if (hits.empty()) {
-                        throw std::runtime_error("chart has no notes");
-                    }
 
                     std::vector<std::pair<double, double>> key_bpms;
 
@@ -1413,6 +1424,7 @@ namespace nascent {
                     }
 
                     chart.chart_key = chart_key_from_rows(key_rows, KeyTiming(key_bpms, key_stops, {}, {}));
+                    validate_chart_hits(hits);
                     Source source;
                     source.steps_type = chart.steps_type;
                     source.difficulty = tag.params[0];
@@ -1468,14 +1480,10 @@ namespace nascent {
                     throw std::runtime_error(std::format("steps type '{}' is not supported", clean_text(chart.steps_type)));
                 }
 
-                Timing timing = timing_for(song, source.tags);
-                std::vector<Hit> hits = parse_notes(source.notes, *key_count, timing);
-
-                if (hits.empty()) {
-                    throw std::runtime_error("chart has no notes");
-                }
-
                 chart.chart_key = stepmania_chart_key(source.notes, *key_count, song, source.tags);
+                Timing timing = timing_for(song, source.tags);
+                std::vector<Hit> hits = parse_notes(source.notes, *key_count, timing, chart.modified);
+                validate_chart_hits(hits);
                 chart.chart = chart_json(song, source, *key_count, std::move(hits), timing.timing_points());
             }
             catch (const std::exception& e) {

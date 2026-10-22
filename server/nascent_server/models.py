@@ -219,6 +219,7 @@ class Chart(db.Model):
     calculator_version: Mapped[str] = mapped_column(String(16))
     data_key: Mapped[str] = mapped_column(String(128))
     play_count: Mapped[int] = mapped_column(Integer, default=0)
+    modified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
     ranked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

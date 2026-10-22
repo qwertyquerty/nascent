@@ -1,4 +1,5 @@
 #include "OsuFormat.h"
+#include "ChartRules.h"
 
 #include "Hit.h"
 
@@ -121,6 +122,13 @@ namespace nascent {
     }
 
     std::optional<nlohmann::json> osu_to_chart_json(std::string_view text, std::string& error) {
+        bool modified = false;
+        return osu_to_chart_json(text, error, modified);
+    }
+
+    std::optional<nlohmann::json> osu_to_chart_json(std::string_view text, std::string& error, bool& modified) {
+        modified = false;
+
         if (text.starts_with(UTF8_BOM)) {
             text.remove_prefix(UTF8_BOM.size());
         }
@@ -170,6 +178,7 @@ namespace nascent {
 
                 bool hold = ((int32_t)number(row[3], "hit object type") & OSU_HOLD_TYPE) != 0;
                 int32_t lane = (int32_t)number(row[0], "hit object x") * key_count / OSU_PLAYFIELD_WIDTH;
+                modified = modified || lane < 0 || lane >= key_count;
                 Hit hit;
                 hit.key = (uint8_t)std::clamp(lane, 0, key_count - 1);
                 hit.time = (int32_t)number(row[2], "hit object time");
@@ -181,6 +190,12 @@ namespace nascent {
                     }
 
                     hit.end_time = (int32_t)number(std::string_view(row[5]).substr(0, row[5].find(':')), "hold end time");
+
+                    if (hit.end_time <= hit.time) {
+                        hit.hit_type = HitType::HIT;
+                        hit.end_time = hit.time;
+                        modified = true;
+                    }
                 }
 
                 hits.push_back(hit);
@@ -190,18 +205,30 @@ namespace nascent {
                 return std::tie(a.time, a.key) < std::tie(b.time, b.key);
             });
 
+            validate_chart_hits(hits);
             nlohmann::json timing_points = nlohmann::json::array();
 
             for (std::string_view line : sections["TimingPoints"]) {
                 std::vector<std::string> row = split_row(line);
 
-                if (row.size() < 3 || (row.size() > 6 && (int32_t)number(row[6], "timing point uninherited") == 0)) {
+                if (row.size() < 3) {
                     continue;
+                }
+
+                double beat_length = number(row[1], "beat length");
+                bool uninherited = row.size() > 6 ? (int32_t)number(row[6], "timing point uninherited") != 0 : beat_length > 0;
+
+                if (!uninherited) {
+                    continue;
+                }
+
+                if (!valid_chart_bpm(60000.0 / beat_length)) {
+                    throw std::runtime_error(std::string(CHART_INVALID_BPM));
                 }
 
                 timing_points.push_back({
                     {"time", (int32_t)number(row[0], "timing point time")},
-                    {"beat_length", number(row[1], "beat length")},
+                    {"beat_length", beat_length},
                     {"meter", (int32_t)number(row[2], "meter")},
                 });
             }

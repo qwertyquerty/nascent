@@ -9,7 +9,7 @@ from threading import Lock
 
 import nascent_core as nc
 from flask import current_app
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import timeutil
@@ -36,6 +36,13 @@ OSU_ID_PATTERNS = {
 class Replacement:
     old_hash: str
     chart_id: int
+    user_ids: list[int] = dataclass_field(default_factory=list)
+    files: list[str] = dataclass_field(default_factory=list)
+
+
+@dataclass
+class Removal:
+    old_hash: str
     user_ids: list[int] = dataclass_field(default_factory=list)
     files: list[str] = dataclass_field(default_factory=list)
 
@@ -129,10 +136,11 @@ def _text(value: str) -> str:
     return value.replace("\x00", "")[:255]
 
 
-def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[int] = ()) -> tuple[Chart, bool]:
+def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[int] = (), modified: bool = False) -> tuple[Chart, bool]:
     existing = get_chart(native.hash)
 
     if existing is not None:
+        existing.modified = existing.modified or modified
         return existing, False
 
     require_not_retired(native.hash)
@@ -161,6 +169,7 @@ def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[
         difficulty=difficulties[DEFAULT_RATE_KEY],
         calculator_version=version,
         data_key=data_key,
+        modified=modified,
         uploaded_by_id=uploader.id if uploader else None,
         difficulties=[ChartDifficulty(rate_key=key, difficulty=value, calculator_version=version) for key, value in difficulties.items()],
     )
@@ -179,7 +188,7 @@ def register_chart(native: nc.Chart, uploader: User | None, rate_keys: Iterable[
     return chart, True
 
 
-def read_osu_file(raw: bytes) -> tuple[dict, dict]:
+def osu_source(raw: bytes) -> dict:
     text = raw.decode("utf-8", errors="replace")
     source = {"source": OSU_SOURCE, "checksum": hashlib.md5(raw).hexdigest()}
 
@@ -187,7 +196,12 @@ def read_osu_file(raw: bytes) -> tuple[dict, dict]:
         match = pattern.search(text)
         source[field] = int(match.group(1)) if match and int(match.group(1)) > 0 else None
 
-    return json.loads(nc.convert_osu(text)), source
+    return source
+
+
+def read_osu_file(raw: bytes) -> tuple[dict, dict, bool]:
+    entry = nc.convert_osu_entry(raw.decode("utf-8", errors="replace"))
+    return json.loads(entry["chart"]), osu_source(raw), bool(entry["modified"])
 
 
 def add_chart_source(chart: Chart, source: str, checksum: str, source_id: int | None = None, source_set_id: int | None = None) -> ChartSource:
@@ -233,6 +247,29 @@ def replace_chart(old: Chart, new: Chart) -> Replacement:
         _native_cache.pop(old.hash, None)
 
     return replacement
+
+
+def remove_chart(chart: Chart) -> Removal:
+    revision = current_app.config["JUDGE_REVISION"]
+    plays = db.session.execute(select(Play.id, Play.user_id, Play.replay_key, Play.replay_hash).where(Play.chart_id == chart.id)).all()
+    removal = Removal(old_hash=chart.hash, user_ids=sorted({row.user_id for row in plays}))
+    removal.files = [chart.data_key, previews.preview_key(chart)]
+    removal.files += [row.replay_key for row in plays] + [sharded_key("timelines", row.replay_hash, f".j{revision}.json.gz") for row in plays]
+    play_ids = [row.id for row in plays]
+
+    if play_ids:
+        db.session.execute(delete(Report).where(Report.play_id.in_(play_ids)))
+
+    db.session.execute(delete(Report).where(Report.chart_id == chart.id))
+    db.session.execute(delete(Play).where(Play.chart_id == chart.id))
+    db.session.execute(update(RetiredChart).where(RetiredChart.replaced_by_id == chart.id).values(replaced_by_id=None))
+    db.session.add(RetiredChart(hash=chart.hash, replaced_by_id=None))
+    db.session.delete(chart)
+
+    with _native_lock:
+        _native_cache.pop(chart.hash, None)
+
+    return removal
 
 
 def chart_difficulty(chart: Chart, rate_key: int) -> float:

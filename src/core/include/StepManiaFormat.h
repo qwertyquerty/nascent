@@ -19,6 +19,7 @@ namespace nascent {
         std::string description;
         int32_t meter = 0;
         std::string chart_key;
+        bool modified = false;
         nlohmann::json chart;
         std::string error;
     };

@@ -102,6 +102,29 @@ NASCENT_TEST(osu_conversion) {
     CHECK(mode_error == "not an osu!mania beatmap");
 }
 
+NASCENT_TEST(osu_import_rules) {
+    auto convert = [](const std::string& timing, const std::string& objects, bool& modified) {
+        std::string error;
+        std::string text = std::string("osu file format v14\n[General]\nMode: 3\n[Difficulty]\nCircleSize:4\n[TimingPoints]\n") + timing + "\n[HitObjects]\n" + objects;
+        return osu_to_chart_json(text, error, modified).has_value() ? std::string("imported") : error;
+    };
+
+    bool modified = true;
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,1000,1,0\n64,192,1500,1,0\n", modified) == "imported" && !modified);
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,1000,128,0,900:0\n", modified) == "imported" && modified);
+    CHECK(convert("0,500,4,1,0,100,1,0", "600,192,1000,1,0\n", modified) == "imported" && modified);
+    CHECK(convert("0,500,4,1,0,100", "64,192,1000,1,0\n", modified) == "imported");
+    CHECK(convert("0,500,4,1,0,100\n1000,-50,4,1,0,100", "64,192,1000,1,0\n", modified) == "imported");
+    CHECK(convert("0,-500,4,1,0,100,1,0", "64,192,1000,1,0\n", modified) == "BPMs must be above 0 and at most 9,999,999");
+    CHECK(convert("0,0.001,4,1,0,100,1,0", "64,192,1000,1,0\n", modified) == "BPMs must be above 0 and at most 9,999,999");
+    CHECK(convert("0,500,4,1,0,100,1,0", "", modified) == "chart has no notes");
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,-10,1,0\n", modified) == "chart has notes before the song starts");
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,1000,128,0,2000:0\n64,192,1500,1,0\n", modified) == "a note starts during a hold in the same column");
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,1000,128,0,2000:0\n64,192,2000,1,0\n", modified) == "a note starts during a hold in the same column");
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,1000,1,0\n64,192,1005,1,0\n", modified) == "two notes in the same column are 5 ms or less apart");
+    CHECK(convert("0,500,4,1,0,100,1,0", "64,192,1000,1,0\n64,192,1006,1,0\n", modified) == "imported");
+}
+
 NASCENT_TEST(bpm_range) {
     ChartInfo info;
     info.key_count = 4;
