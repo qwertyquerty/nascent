@@ -65,6 +65,7 @@
                         <div class="hero-actions">
                             <download-button :release="release" size="is-medium"></download-button>
                             <a class="button is-medium is-link is-outlined" href="/leaderboard">Leaderboards</a>
+                            <a class="button is-medium is-link is-outlined" href="https://discord.gg/f538azJwXT" target="_blank" rel="noopener">Join the Discord</a>
                         </div>
                     </div>
                 </section>
@@ -123,7 +124,9 @@
             </template>
 
             <template v-else-if="route.name === 'play'">
-                <p class="is-size-6 mb-2"><a :href="$link.user(view.play.user.username)">{{ view.play.user.username }}</a> &middot; <rel-time :value="view.play.submitted_at"></rel-time></p>
+                <p class="is-size-6 mb-2"><a :href="$link.user(view.play.user.username)">{{ view.play.user.username }}</a> &middot; <rel-time :value="view.play.submitted_at"></rel-time>
+                    <button v-if="user?.id !== view.play.user.id" type="button" class="button is-ghost is-small report-link" @click="openReport('play', view.play.id, 'Play by ' + view.play.user.username)">Report play</button>
+                </p>
                 <h1 class="title is-3 mb-1"><a :href="$link.chart(view.play.chart.hash, view.play.rate)">{{ view.titles.main }}</a></h1>
                 <p class="subtitle is-6 mb-4"><span v-if="view.titles.sub" class="has-text-grey">{{ view.titles.sub }} &middot; </span>[{{ view.play.chart.difficulty_name }}] by {{ view.play.chart.mapper }}</p>
 
@@ -166,6 +169,19 @@
                     </div>
                 </div>
 
+                <div v-if="staff && view.play.status !== 'pending_review'" class="box staff-tools">
+                    <p class="has-text-weight-semibold mb-2">Staff <span v-if="view.play.status === 'rejected'" class="has-text-grey has-text-weight-normal">&middot; this play was rejected</span></p>
+                    <p v-if="view.play.review_note" class="has-text-grey mb-2">Note: {{ view.play.review_note }}</p>
+                    <p v-if="staffError" class="help is-danger mb-2" role="alert">{{ staffError }}</p>
+                    <div class="field has-addons review-actions">
+                        <div class="control is-expanded"><input class="input is-small" v-model="reviewNotes[view.play.id]" placeholder="Note (optional)" aria-label="Moderation note"></div>
+                        <div class="control">
+                            <button v-if="view.play.status === 'rejected'" type="button" class="button is-small is-success" :disabled="reviewBusy === view.play.id" @click="review(view.play, 'approve')">Restore play</button>
+                            <button v-else type="button" class="button is-small is-danger" :disabled="reviewBusy === view.play.id" @click="review(view.play, 'reject')">Reject play</button>
+                        </div>
+                    </div>
+                </div>
+
                 <template v-if="view.timeline">
                     <h2 class="title is-4">Replay</h2>
                     <replay-viewer :key="route.path + ':' + view.startAt" :timeline="view.timeline" :start-at="view.startAt" :share-url="$link.play(view.play.id)" :download-url="'/api/v1/plays/' + view.play.id + '/replay'"></replay-viewer>
@@ -188,7 +204,26 @@
                         <template v-if="view.strongest.peak_rank">peak <span :title="$f.day(view.strongest.peak_rank_day)">{{ $f.rank(view.strongest.peak_rank) }}</span> &middot;</template>
                     </span>
                     Joined <rel-time :value="view.user.created_at"></rel-time> &middot; last played <rel-time :value="view.user.last_played_at"></rel-time>
+                    <button v-if="user?.id !== view.user.id" type="button" class="button is-ghost is-small report-link" @click="openReport('player', view.user.id, view.user.username)">Report player</button>
                 </p>
+                <div v-if="staff && user?.id !== view.user.id" class="box staff-tools">
+                    <p class="has-text-weight-semibold mb-2">Staff</p>
+                    <p v-if="staffError" class="help is-danger mb-2" role="alert">{{ staffError }}</p>
+                    <div class="field is-grouped is-grouped-multiline">
+                        <div class="control">
+                            <button v-if="view.user.is_restricted" type="button" class="button is-small is-success is-light" :disabled="reviewBusy === 'user-' + view.user.id" @click="restrictUser(view.user, false)">Lift restriction</button>
+                            <button v-else type="button" class="button is-small is-danger is-light" :disabled="reviewBusy === 'user-' + view.user.id" @click="restrictUser(view.user, true)">Restrict player</button>
+                        </div>
+                        <div v-if="admin" class="control">
+                            <div class="select is-small">
+                                <select :value="view.user.role" aria-label="Role" :disabled="reviewBusy === 'user-' + view.user.id" @change="setRole(view.user, $event.target.value)">
+                                    <option v-for="role in roles" :key="role" :value="role">{{ role }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="help">Restricted players disappear from every leaderboard and can't submit plays or reports.</p>
+                </div>
                 <div class="columns is-multiline is-mobile">
                     <div v-for="[label, value] in [
                         ['Plays', $f.number(view.user.stats.play_count)],
@@ -499,9 +534,16 @@
                     <span class="tag is-light" :class="{'is-success': view.chart.status === 'ranked'}">{{ view.chart.status }}</span>
                     <span class="tag is-light">{{ $f.source(view.chart) }}</span>
                 </p>
-                <div v-if="view.downloads.length || view.pages.length" class="buttons chart-links">
+                <div class="buttons chart-links">
                     <a v-for="download in view.downloads" :key="download.url" class="button is-small is-primary" :href="download.url" rel="noopener noreferrer">Download from {{ download.name }}</a>
                     <a v-for="page in view.pages" :key="page.url" class="button is-small" :href="page.url" target="_blank" rel="noopener noreferrer">{{ page.name }} page</a>
+                    <button type="button" class="button is-small is-ghost report-link" @click="openReport('chart', view.chart.hash, view.titles.main + ' [' + view.chart.difficulty_name + ']')">Report chart</button>
+                </div>
+                <div v-if="admin" class="box staff-tools">
+                    <p class="has-text-weight-semibold mb-2">Staff</p>
+                    <p v-if="staffError" class="help is-danger mb-2" role="alert">{{ staffError }}</p>
+                    <button v-if="view.chart.status === 'ranked'" type="button" class="button is-small is-danger is-light" :disabled="reviewBusy === 'chart-' + view.chart.hash" @click="setChartStatus(view.chart, 'unranked')">Unrank chart</button>
+                    <button v-else type="button" class="button is-small is-success is-light" :disabled="reviewBusy === 'chart-' + view.chart.hash" @click="setChartStatus(view.chart, 'ranked')">Rank chart</button>
                 </div>
 
                 <div class="chart-headline box">
@@ -718,33 +760,121 @@
                     </div>
                     <div class="tabs">
                         <ul>
-                            <li :class="{'is-active': view.status === 'pending_review'}"><a href="/staff">Waiting</a></li>
-                            <li :class="{'is-active': view.status === 'rejected'}"><a :href="$link.to('/staff', {status: 'rejected'})">Rejected</a></li>
+                            <li :class="{'is-active': view.status === 'pending_review'}"><a href="/staff">Flagged plays</a></li>
+                            <li :class="{'is-active': view.status === 'rejected'}"><a :href="$link.to('/staff', {status: 'rejected'})">Rejected plays</a></li>
+                            <li :class="{'is-active': view.status === 'reports'}"><a :href="$link.to('/staff', {status: 'reports'})">Reports<span v-if="view.openReports" class="tag is-warning is-rounded ml-2">{{ view.openReports }}</span></a></li>
+                            <li :class="{'is-active': view.status === 'closed'}"><a :href="$link.to('/staff', {status: 'closed'})">Closed reports</a></li>
                         </ul>
                     </div>
                     <p v-if="staffError" class="notification is-danger is-light" role="alert">{{ staffError }}</p>
-                    <p v-if="!view.plays.length" class="has-text-grey">Nothing here.</p>
-                    <div v-for="play in view.plays" :key="play.id" class="box review-item">
-                        <p class="mb-1"><a :href="$link.user(play.user.username)">{{ play.user.username }}</a> &middot; <rel-time :value="play.submitted_at"></rel-time></p>
-                        <p class="title is-5 mb-2"><a :href="$link.play(play.id)">{{ play.chart.artist }} - {{ play.chart.title }} [{{ play.chart.difficulty_name }}]</a></p>
-                        <p class="mb-2">{{ $f.accuracy(play.accuracy) }} &middot; {{ $f.rate(play.rate) }} &middot; {{ play.ranked ? $f.performance(play.performance) + ' performance' : 'Unranked' }}</p>
-                        <ul class="review-flags mb-3">
-                            <li v-for="(flag, index) in play.flags" :key="index"><strong>{{ flag.message }}</strong> <span class="has-text-grey">{{ $f.flag(flag) }}</span></li>
-                        </ul>
-                        <p v-if="play.review_note" class="has-text-grey mb-2">Note: {{ play.review_note }}</p>
-                        <div class="field has-addons review-actions">
-                        <div class="control is-expanded"><input class="input is-small" v-model="reviewNotes[play.id]" placeholder="Note (optional)" :aria-label="'Note for play ' + play.id"></div>
-                        <div class="control"><button type="button" class="button is-small is-success" :disabled="reviewBusy === play.id" @click="review(play, 'approve')">Approve</button></div>
-                        <div class="control"><button type="button" class="button is-small is-danger" :disabled="reviewBusy === play.id" @click="review(play, 'reject')">Reject</button></div>
-                    </div>
-                    </div>
+
+                    <template v-if="view.status === 'reports' || view.status === 'closed'">
+                        <p v-if="!view.reports.length" class="has-text-grey">{{ view.status === 'reports' ? 'No open reports.' : 'No closed reports yet.' }}</p>
+                        <div v-for="report in view.reports" :key="report.id" class="box review-item">
+                            <p class="mb-1">
+                                <span class="tag is-light mr-1">{{ report.kind }}</span>
+                                <strong>{{ $f.reportReason(report.kind, report.reason) }}</strong>
+                                &middot; reported by <a v-if="report.reporter" :href="$link.user(report.reporter.username)">{{ report.reporter.username }}</a><span v-else class="has-text-grey">a deleted account</span>
+                                &middot; <rel-time :value="report.created_at"></rel-time>
+                            </p>
+                            <p v-if="report.play" class="title is-5 mb-2">
+                                <a :href="$link.play(report.play.id)">{{ report.play.user.username }} &middot; {{ $f.accuracy(report.play.accuracy) }} on {{ report.play.chart.artist }} - {{ report.play.chart.title }} [{{ report.play.chart.difficulty_name }}]</a>
+                                <span v-if="report.play.status === 'rejected'" class="tag is-warning is-light ml-1">rejected</span>
+                            </p>
+                            <p v-else-if="report.user" class="title is-5 mb-2">
+                                <a :href="$link.user(report.user.username)">{{ report.user.username }}</a>
+                                <span v-if="report.user.is_restricted" class="tag is-danger is-light ml-1">restricted</span>
+                            </p>
+                            <p v-else-if="report.chart" class="title is-5 mb-2">
+                                <a :href="$link.chart(report.chart.hash, 1)">{{ report.chart.artist }} - {{ report.chart.title }} [{{ report.chart.difficulty_name }}]</a>
+                                <span class="tag is-light ml-1" :class="{'is-success': report.chart.status === 'ranked'}">{{ report.chart.status }}</span>
+                            </p>
+                            <p v-else class="has-text-grey mb-2">The reported item was deleted.</p>
+                            <p v-if="report.details" class="report-details mb-3">{{ report.details }}</p>
+                            <template v-if="report.status === 'open'">
+                                <div class="buttons mb-2">
+                                    <button v-if="report.play && report.play.status !== 'rejected'" type="button" class="button is-small is-danger is-light" :disabled="reviewBusy === 'report-' + report.id" @click="rejectReported(report)">Reject play</button>
+                                    <button v-if="report.user && !report.user.is_restricted" type="button" class="button is-small is-danger is-light" :disabled="reviewBusy === 'user-' + report.user.id" @click="restrictUser(report.user, true, ({user}) => (report.user.is_restricted = user.is_restricted))">Restrict {{ report.user.username }}</button>
+                                    <button v-if="admin && report.chart && report.chart.status === 'ranked'" type="button" class="button is-small is-danger is-light" :disabled="reviewBusy === 'chart-' + report.chart.hash" @click="setChartStatus(report.chart, 'unranked', ({chart}) => (report.chart.status = chart.status))">Unrank chart</button>
+                                </div>
+                                <div class="field has-addons review-actions">
+                                    <div class="control is-expanded"><input class="input is-small" v-model="reviewNotes['report-' + report.id]" placeholder="Note (optional)" :aria-label="'Note for report ' + report.id"></div>
+                                    <div class="control"><button type="button" class="button is-small is-success" :disabled="reviewBusy === 'report-' + report.id" @click="resolveReport(report, 'resolved')">Resolve</button></div>
+                                    <div class="control"><button type="button" class="button is-small" :disabled="reviewBusy === 'report-' + report.id" @click="resolveReport(report, 'dismissed')">Dismiss</button></div>
+                                </div>
+                                <p class="help">Resolving or dismissing also closes the other open reports about the same {{ report.kind }}.</p>
+                            </template>
+                            <p v-else class="has-text-grey">
+                                {{ report.status === 'resolved' ? 'Resolved' : 'Dismissed' }} by {{ report.resolved_by?.username ?? 'a deleted account' }} <rel-time :value="report.resolved_at"></rel-time><template v-if="report.resolution_note">: {{ report.resolution_note }}</template>
+                            </p>
+                        </div>
+                    </template>
+
+                    <template v-else>
+                        <p v-if="!view.plays.length" class="has-text-grey">Nothing here.</p>
+                        <div v-for="play in view.plays" :key="play.id" class="box review-item">
+                            <p class="mb-1"><a :href="$link.user(play.user.username)">{{ play.user.username }}</a> &middot; <rel-time :value="play.submitted_at"></rel-time></p>
+                            <p class="title is-5 mb-2"><a :href="$link.play(play.id)">{{ play.chart.artist }} - {{ play.chart.title }} [{{ play.chart.difficulty_name }}]</a></p>
+                            <p class="mb-2">{{ $f.accuracy(play.accuracy) }} &middot; {{ $f.rate(play.rate) }} &middot; {{ play.ranked ? $f.performance(play.performance) + ' performance' : 'Unranked' }}</p>
+                            <ul class="review-flags mb-3">
+                                <li v-for="(flag, index) in play.flags" :key="index"><strong>{{ flag.message }}</strong> <span class="has-text-grey">{{ $f.flag(flag) }}</span></li>
+                            </ul>
+                            <p v-if="play.review_note" class="has-text-grey mb-2">Note: {{ play.review_note }}</p>
+                            <div class="field has-addons review-actions">
+                                <div class="control is-expanded"><input class="input is-small" v-model="reviewNotes[play.id]" placeholder="Note (optional)" :aria-label="'Note for play ' + play.id"></div>
+                                <div class="control"><button type="button" class="button is-small is-success" :disabled="reviewBusy === play.id" @click="review(play, 'approve')">Approve</button></div>
+                                <div class="control"><button type="button" class="button is-small is-danger" :disabled="reviewBusy === play.id" @click="review(play, 'reject')">Reject</button></div>
+                            </div>
+                        </div>
+                    </template>
                 </template>
             </template>
         </div>
     </main>
 
+    <div v-if="reporting" class="modal is-active" role="dialog" aria-modal="true" aria-labelledby="report-title" @keydown.esc="closeReport">
+        <div class="modal-background" @click="closeReport"></div>
+        <div class="modal-card report-dialog">
+            <header class="modal-card-head">
+                <p id="report-title" class="modal-card-title">{{ reporting.title }}</p>
+                <button type="button" class="delete" aria-label="Close" @click="closeReport"></button>
+            </header>
+            <section class="modal-card-body">
+                <template v-if="reportSent">
+                    <p class="mb-2"><strong>Thanks, your report was sent.</strong></p>
+                    <p class="has-text-grey">A moderator will look at it. You won't get a reply about each report.</p>
+                </template>
+                <form v-else id="report-form" @submit.prevent="sendReport">
+                    <p class="mb-4 has-text-grey">{{ reporting.label }}</p>
+                    <fieldset class="field">
+                        <legend class="label">What's wrong?</legend>
+                        <div class="control report-reasons">
+                            <label v-for="[value, label] in reporting.reasons" :key="value" class="radio">
+                                <input type="radio" name="reason" :value="value" v-model="reportForm.reason"> {{ label }}
+                            </label>
+                        </div>
+                    </fieldset>
+                    <div class="field">
+                        <label class="label" for="report-details">Details <span class="has-text-grey has-text-weight-normal">(optional)</span></label>
+                        <div class="control"><textarea id="report-details" class="textarea" rows="4" maxlength="1000" v-model="reportForm.details" placeholder="Anything that helps a moderator, like where in the replay to look"></textarea></div>
+                    </div>
+                    <p v-if="reportError" class="help is-danger" role="alert">{{ reportError }}</p>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <div class="buttons">
+                    <button v-if="reportSent" type="button" class="button" @click="closeReport">Close</button>
+                    <template v-else>
+                        <button type="submit" form="report-form" class="button is-danger" :class="{'is-loading': reportBusy}" :disabled="reportBusy">Send report</button>
+                        <button type="button" class="button" @click="closeReport">Cancel</button>
+                    </template>
+                </div>
+            </footer>
+        </div>
+    </div>
+
     <footer v-if="route.name !== 'difficulty'" class="footer has-text-centered is-size-7 has-text-grey">
-        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/staff">Staff</a>
+        Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="https://discord.gg/f538azJwXT" target="_blank" rel="noopener">Discord</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/staff">Staff</a>
     </footer>
 </template>
 <div id="app" v-cloak></div>

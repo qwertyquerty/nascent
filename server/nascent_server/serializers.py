@@ -3,7 +3,7 @@ from typing import Any
 
 from flask import current_app
 
-from .models import Chart, ChartSource, Play, PlayStatus, User, UserKeyStats
+from .models import Chart, ChartSource, Play, PlayStatus, Report, User, UserKeyStats
 from .timeutil import isoformat
 
 
@@ -151,3 +151,21 @@ def play_out(play: Play, include_user: bool = True, include_chart: bool = True, 
         body["review_note"] = play.review_note if play.status == PlayStatus.REJECTED else ""
 
     return body
+
+
+def report_out(report: Report) -> dict[str, Any]:
+    return {
+        "id": report.id,
+        "kind": report.kind,
+        "reason": report.reason,
+        "details": report.details,
+        "status": report.status,
+        "created_at": isoformat(report.created_at),
+        "reporter": user_summary(report.reporter) if report.reporter is not None else None,
+        "user": {**user_summary(report.user), "role": report.user.role, "is_restricted": report.user.is_banned} if report.user is not None else None,
+        "play": play_out(report.play, include_review=True) if report.play is not None else None,
+        "chart": chart_summary(report.chart) if report.chart is not None else None,
+        "resolved_by": user_summary(report.resolved_by) if report.resolved_by is not None else None,
+        "resolved_at": isoformat(report.resolved_at) if report.resolved_at else None,
+        "resolution_note": report.resolution_note,
+    }

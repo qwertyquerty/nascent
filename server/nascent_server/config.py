@@ -89,6 +89,7 @@ class Config:
         "submit_burst": (6, 60),
         "submit": (120, 3600),
         "chart_upload": (30, 3600),
+        "report": (20, 3600),
     }
 
     MAX_REPLAY_INPUTS_PER_NOTE = 6

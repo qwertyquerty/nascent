@@ -287,6 +287,46 @@ th:has(.reveal-button) {
     max-width: 40rem;
 }
 
+.report-link {
+    vertical-align: baseline;
+    height: auto;
+    padding: 0 0 0 0.5rem;
+    color: var(--bulma-text-weak);
+}
+
+.report-link:hover,
+.report-link:focus-visible {
+    color: var(--bulma-danger);
+}
+
+.chart-links .report-link {
+    padding: 0 0.5rem;
+    align-self: center;
+}
+
+.staff-tools {
+    max-width: 40rem;
+}
+
+.report-details {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.report-reasons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.report-reasons .radio + .radio {
+    margin-inline-start: 0;
+}
+
+.report-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+}
+
 .logo-loader {
     display: flex;
     justify-content: center;

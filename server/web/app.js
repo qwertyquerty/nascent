@@ -27,7 +27,7 @@ function difficultyColor(value) {
 
     return stops[stops.length - 1][1];
 }
-const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases?per_page=10";
+const RELEASES = "https://api.github.com/repos/qwertyquerty/nascent/releases?per_page=100";
 const RELEASES_PAGE = "https://github.com/qwertyquerty/nascent/releases";
 const INSTALLER_SUFFIXES = {win: ["-setup.exe", ".zip"], mac: [".dmg", ".zip"], linux: [".AppImage", ".zip"]};
 const OS_LABELS = {win: "Windows", mac: "macOS", linux: "Linux"};
@@ -62,6 +62,13 @@ const paged = (params) => ({limit: PAGE_SIZE, offset: (pageOf(params) - 1) * PAG
 const SESSION_KEY = "nascent-session";
 const SIGNED_OUT = "nascent-signed-out";
 const STAFF_ROLES = ["moderator", "admin"];
+const ROLES = ["user", "moderator", "admin"];
+const REPORT_KINDS = {
+    play: {title: "Report this play", reasons: [["cheating", "Cheating or a modified game"], ["other", "Something else"]]},
+    player: {title: "Report this player", reasons: [["cheating", "Cheating"], ["offensive_name", "Offensive username"], ["harassment", "Harassment"], ["other", "Something else"]]},
+    chart: {title: "Report this chart", reasons: [["broken_timing", "Broken timing or notes"], ["wrong_audio", "Wrong or missing audio"], ["offensive", "Offensive content"], ["other", "Something else"]]},
+};
+const REPORT_TABS = {reports: ["open"], closed: ["resolved", "dismissed"]};
 const DEFAULT_INFO = {ranked_key_counts: [4, 5, 6, 7, 8, 9, 10], password_reset: false, email_verification: false};
 
 let memorySession = null;
@@ -245,6 +252,9 @@ const relative = new Intl.RelativeTimeFormat(undefined, {numeric: "auto"});
 const UNIT_SECONDS = [["second", 1, 60], ["minute", 60, 3600], ["hour", 3600, 86400], ["day", 86400, 86400 * 7]];
 
 const format = {
+    reportReason(kind, reason) {
+        return REPORT_KINDS[kind]?.reasons.find(([value]) => value === reason)?.[1] ?? reason;
+    },
     flag(flag) {
         const data = flag.data || {};
 
@@ -411,6 +421,48 @@ function releasePackages(assets) {
         .map(([asset, [, os, arch, suffix]]) => ({url: asset.browser_download_url, label: `${OS_LABELS[os]} ${arch}`, kind: PACKAGE_KINDS[suffix], size: `${Math.max(1, Math.round(asset.size / 1048576))} MB`}));
 }
 
+function releaseVersion(tag) {
+    const parts = String(tag || "").split(".");
+
+    if (parts.length < 3 || parts.length > 4) {
+        return null;
+    }
+
+    const numbers = parts.slice(0, 3).map((part) => (/^(0|[1-9]\d*)$/.test(part) ? Number(part) : NaN));
+    const label = parts[3] ?? "";
+
+    if (numbers.some(Number.isNaN) || (parts.length === 4 && !/^[A-Za-z0-9]+$/.test(label))) {
+        return null;
+    }
+
+    const [, name, number] = /^(.*?)(\d*)$/.exec(label);
+    return [...numbers, label ? 0 : 1, name.toLowerCase(), Number(number || 0)];
+}
+
+function compareVersions(a, b) {
+    for (let index = 0; index < a.length; index++) {
+        if (a[index] !== b[index]) {
+            return a[index] < b[index] ? -1 : 1;
+        }
+    }
+
+    return 0;
+}
+
+function newestRelease(releases) {
+    let newest = null;
+
+    for (const release of releases) {
+        const version = release.draft ? null : releaseVersion(release.tag_name);
+
+        if (version && (!newest || compareVersions(version, newest.version) > 0)) {
+            newest = {release, version};
+        }
+    }
+
+    return newest?.release ?? releases.find((entry) => !entry.draft);
+}
+
 async function latestRelease() {
     const platform = detectPlatform();
 
@@ -421,7 +473,7 @@ async function latestRelease() {
             throw new Error(`GitHub answered ${response.status}`);
         }
 
-        const release = (await response.json()).find((entry) => !entry.draft);
+        const release = newestRelease(await response.json());
 
         if (!release) {
             throw new Error("No releases yet");
@@ -530,7 +582,7 @@ const loaders = {
     },
 
     async staff({params}) {
-        const status = params.status === "rejected" ? "rejected" : "pending_review";
+        const status = ["rejected", "reports", "closed"].includes(params.status) ? params.status : "pending_review";
         const signIn = {redirect: link.to("/login", {next: link.to("/staff", {status: params.status})})};
 
         if (!savedSession.get()) {
@@ -538,8 +590,19 @@ const loaders = {
         }
 
         try {
-            const [{user}, {plays}] = await Promise.all([api("/me"), api("/moderation/plays", {status, limit: 100})]);
-            return {title: "Review queue", allowed: true, user, status, plays};
+            const reportTab = REPORT_TABS[status];
+            const [{user}, queue, ...pages] = await Promise.all([
+                api("/me"),
+                reportTab ? null : api("/moderation/plays", {status, limit: 100}),
+                ...(reportTab ?? ["open"]).map((state) => api("/moderation/reports", {status: state, limit: reportTab ? 100 : 1})),
+            ]);
+            const reports = reportTab ? pages.flatMap((page) => page.reports) : [];
+
+            if (status === "closed") {
+                reports.sort((a, b) => b.id - a.id);
+            }
+
+            return {title: "Review queue", allowed: true, user, status, plays: queue?.plays ?? [], reports, openReports: pages[0].open};
         }
         catch (error) {
             if (error.status === 403) {
@@ -644,7 +707,7 @@ const loaders = {
 const app = Vue.createApp({
     template: "#app-template",
 
-    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, user: null, busy: null, formError: null, formNotice: null, flash: null, staffError: null, reviewNotes: {}, reviewBusy: null, showAddresses: false, showEmail: false}),
+    data: () => ({route: parseRoute(), view: null, error: null, loading: true, keyCounts: [], menuOpen: false, release: null, user: null, busy: null, formError: null, formNotice: null, flash: null, staffError: null, reviewNotes: {}, reviewBusy: null, reporting: null, reportForm: {reason: "", details: ""}, reportBusy: false, reportError: null, reportSent: false, showAddresses: false, showEmail: false}),
 
     async created() {
         if (location.hash.startsWith("#/")) {
@@ -666,6 +729,10 @@ const app = Vue.createApp({
         staff() {
             return STAFF_ROLES.includes(this.user?.role);
         },
+        admin() {
+            return this.user?.role === "admin";
+        },
+        roles: () => ROLES,
     },
 
     methods: {
@@ -877,6 +944,86 @@ const app = Vue.createApp({
             await api(everywhere ? "/auth/logout-all" : "/auth/logout", null, {method: "POST"}).catch(() => null);
             savedSession.clear();
             this.go("/");
+        },
+
+        openReport(kind, target, label) {
+            if (!this.user) {
+                this.go(link.to("/login", {next: location.pathname + location.search}));
+                return;
+            }
+
+            this.reporting = {kind, target: String(target), label, ...REPORT_KINDS[kind]};
+            this.reportForm = {reason: REPORT_KINDS[kind].reasons[0][0], details: ""};
+            this.reportError = null;
+            this.reportSent = false;
+        },
+
+        closeReport() {
+            this.reporting = null;
+        },
+
+        async sendReport() {
+            this.reportBusy = true;
+            this.reportError = null;
+
+            try {
+                await api("/reports", null, {method: "POST", body: {kind: this.reporting.kind, target: this.reporting.target, reason: this.reportForm.reason, details: this.reportForm.details}});
+                this.reportSent = true;
+            }
+            catch (error) {
+                this.reportError = error.message;
+            }
+            finally {
+                this.reportBusy = false;
+            }
+        },
+
+        async staffAction(key, path, method, body, apply) {
+            this.reviewBusy = key;
+            this.staffError = null;
+
+            try {
+                const result = await api(path, null, {method, body});
+
+                if (apply) {
+                    apply(result);
+                }
+                else {
+                    this.load();
+                }
+            }
+            catch (error) {
+                this.staffError = error.message;
+            }
+            finally {
+                this.reviewBusy = null;
+            }
+        },
+
+        restrictUser(user, restricted, apply) {
+            return this.staffAction(`user-${user.id}`, `/moderation/users/${user.id}/restriction`, "PUT", {restricted}, apply);
+        },
+
+        setRole(user, role) {
+            return this.staffAction(`user-${user.id}`, `/moderation/users/${user.id}/role`, "PUT", {role});
+        },
+
+        setChartStatus(chart, status, apply) {
+            return this.staffAction(`chart-${chart.hash}`, `/moderation/charts/${encodeURIComponent(chart.hash)}/status`, "PUT", {status}, apply);
+        },
+
+        rejectReported(report) {
+            return this.staffAction(`report-${report.id}`, `/moderation/plays/${report.play.id}/review`, "POST", {decision: "reject", note: this.reviewNotes[`report-${report.id}`] || ""}, ({play}) => (report.play = play));
+        },
+
+        async resolveReport(report, decision) {
+            const key = `report-${report.id}`;
+            const sameTarget = (entry) => entry.kind === report.kind && entry.play?.id === report.play?.id && entry.user?.id === report.user?.id && entry.chart?.hash === report.chart?.hash;
+
+            await this.staffAction(key, `/moderation/reports/${report.id}/resolve`, "POST", {decision, note: this.reviewNotes[key] || ""}, ({closed}) => {
+                this.view.reports = this.view.reports.filter((entry) => !sameTarget(entry));
+                this.view.openReports = Math.max(0, this.view.openReports - closed);
+            });
         },
 
         async review(play, decision) {

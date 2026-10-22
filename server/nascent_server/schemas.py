@@ -8,7 +8,7 @@ from flask import current_app, request
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from .errors import ApiError
-from .models import ChartStatus, Role
+from .models import ChartStatus, ReportKind, Role
 
 USERNAME_PATTERN = r"^[A-Za-z0-9_\-]{3,20}$"
 HASH_PATTERN = r"^[0-9a-fA-F]{64}$"
@@ -132,6 +132,21 @@ class RestrictIn(Body):
 
 class RoleIn(Body):
     role: Role
+
+
+REPORT_DETAILS_MAX_LENGTH = 1000
+
+
+class ReportIn(Body):
+    kind: ReportKind
+    target: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=1, max_length=32)
+    details: str = Field(default="", max_length=REPORT_DETAILS_MAX_LENGTH)
+
+
+class ReportResolveIn(Body):
+    decision: Literal["resolved", "dismissed"]
+    note: str = Field(default="", max_length=500)
 
 
 def _too_large() -> ApiError:

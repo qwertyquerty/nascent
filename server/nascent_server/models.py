@@ -73,6 +73,25 @@ class PlayStatus(StrEnum):
 COUNTED_PLAY_STATUSES = (PlayStatus.VERIFIED, PlayStatus.PENDING_REVIEW)
 
 
+class ReportKind(StrEnum):
+    PLAY = "play"
+    PLAYER = "player"
+    CHART = "chart"
+
+
+class ReportStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+REPORT_REASONS = {
+    ReportKind.PLAY: ("cheating", "other"),
+    ReportKind.PLAYER: ("cheating", "offensive_name", "harassment", "other"),
+    ReportKind.CHART: ("broken_timing", "wrong_audio", "offensive", "other"),
+}
+
+
 class User(db.Model):
     __tablename__ = "users"
 
@@ -358,3 +377,29 @@ Index("ix_plays_user_chart", Play.user_id, Play.chart_id, Play.rate_key)
 Index("ix_plays_chart_user", Play.chart_id, Play.user_id)
 Index("ix_plays_status", Play.status, Play.id)
 Index("ix_plays_submitted_at", Play.submitted_at)
+
+
+class Report(db.Model):
+    __tablename__ = "reports"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(String(32))
+    details: Mapped[str] = mapped_column(String(1000), default="")
+    status: Mapped[str] = mapped_column(String(16), default=ReportStatus.OPEN)
+    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    play_id: Mapped[int | None] = mapped_column(ForeignKey("plays.id", ondelete="CASCADE"), nullable=True, index=True)
+    chart_id: Mapped[int | None] = mapped_column(ForeignKey("charts.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
+    resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    resolution_note: Mapped[str] = mapped_column(String(500), default="")
+
+    reporter: Mapped[User | None] = relationship(foreign_keys=[reporter_id])
+    user: Mapped[User | None] = relationship(foreign_keys=[user_id])
+    play: Mapped[Play | None] = relationship()
+    chart: Mapped[Chart | None] = relationship()
+    resolved_by: Mapped[User | None] = relationship(foreign_keys=[resolved_by_id])
+
+    __table_args__ = (Index("ix_reports_status", "status", "id"),)

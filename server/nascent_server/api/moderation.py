@@ -1,14 +1,14 @@
 from flask import Blueprint, request
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import joinedload
 
-from .. import tasks
+from .. import tasks, timeutil
 from ..errors import ApiError
 from ..extensions import db
-from ..models import Play, PlayStatus, Role
-from ..schemas import ChartStatusIn, RestrictIn, ReviewIn, RoleIn, pagination, parse_body
+from ..models import Play, PlayStatus, Report, ReportStatus, Role
+from ..schemas import ChartStatusIn, ReportResolveIn, RestrictIn, ReviewIn, RoleIn, pagination, parse_body
 from ..security import current_user, role_required
-from ..serializers import chart_detail, play_out, private_user
+from ..serializers import chart_detail, play_out, private_user, report_out
 from ..services import ranking
 from ..services.charts import get_chart_or_404, set_chart_status
 from ..services.plays import review_play
@@ -81,3 +81,61 @@ def set_role(reference: str):
     user.role = body.role
     db.session.commit()
     return {"user": private_user(user)}
+
+
+@blueprint.get("/reports")
+@role_required(Role.MODERATOR)
+def report_queue():
+    limit, offset = pagination()
+    status = request.args.get("status", ReportStatus.OPEN)
+
+    if status not in {item.value for item in ReportStatus}:
+        raise ApiError(400, "invalid_query", "Unknown report status")
+
+    order = Report.id.asc() if status == ReportStatus.OPEN else Report.id.desc()
+    reports = db.session.scalars(
+        select(Report)
+        .options(
+            joinedload(Report.reporter),
+            joinedload(Report.user),
+            joinedload(Report.play).joinedload(Play.user),
+            joinedload(Report.play).joinedload(Play.chart),
+            joinedload(Report.chart),
+            joinedload(Report.resolved_by),
+        )
+        .where(Report.status == status)
+        .order_by(order)
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    waiting = db.session.scalar(select(func.count()).select_from(Report).where(Report.status == ReportStatus.OPEN)) or 0
+    return {"reports": [report_out(report) for report in reports], "open": waiting}
+
+
+@blueprint.post("/reports/<id:report_id>/resolve")
+@role_required(Role.MODERATOR)
+def resolve_report(report_id: int):
+    body = parse_body(ReportResolveIn)
+    report = db.session.get(Report, report_id)
+
+    if report is None:
+        raise ApiError(404, "report_not_found", "No such report")
+
+    if report.status != ReportStatus.OPEN:
+        raise ApiError(409, "report_closed", "This report was already closed")
+
+    same_target = [Report.kind == report.kind, Report.status == ReportStatus.OPEN]
+
+    for column in ("play_id", "user_id", "chart_id"):
+        value = getattr(report, column)
+        same_target.append(getattr(Report, column) == value if value is not None else getattr(Report, column).is_(None))
+
+    closed = db.session.execute(
+        update(Report)
+        .where(*same_target)
+        .values(status=body.decision, resolved_by_id=current_user().id, resolved_at=timeutil.utcnow(), resolution_note=body.note)
+        .execution_options(synchronize_session="fetch")
+    ).rowcount
+    db.session.commit()
+    db.session.refresh(report)
+    return {"report": report_out(report), "closed": closed}
