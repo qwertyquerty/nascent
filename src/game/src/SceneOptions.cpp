@@ -133,13 +133,60 @@ namespace nascent {
         rich_presence_field = &form.add<ChoiceField>("Discord rich presence", std::vector<std::string>{"Off", "On"}, settings.discord_rich_presence ? 1 : 0);
         transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
         title_music_field = &form.add<ChoiceField>("Title screen songs", std::vector<std::string>{"All", "Favorites", "None"}, std::min<size_t>((size_t)settings.title_songs, 2));
-        fullscreen_field = &form.add<ChoiceField>("Fullscreen (applies on restart)", std::vector<std::string>{"Off", "On"}, settings.display_fullscreen ? 1 : 0);
+        if (window_placement_supported()) {
+            fullscreen_field = &form.add<ChoiceField>("Display mode", std::vector<std::string>{"Windowed", "Fullscreen", "Borderless window"}, (size_t)SettingsManager::window_mode());
+            monitors.clear();
+            std::vector<std::string> monitor_labels;
+            size_t primary = 0;
+
+            for (const DisplayInfo& display : list_displays()) {
+                size_t digits = display.id.find_last_not_of("0123456789") + 1;
+                std::string number = digits < display.id.size() ? display.id.substr(digits) : std::to_string(monitors.size() + 1);
+                std::string name = display.name.empty() ? std::string("Monitor") : display.name;
+                primary = display.primary ? monitors.size() : primary;
+                monitor_labels.push_back(std::format("{}: {} ({}x{}){}", number, name, display.width, display.height, display.primary ? ", main" : ""));
+                monitors.push_back(display.id);
+            }
+
+            auto saved_monitor = std::find(monitors.begin(), monitors.end(), settings.display_monitor);
+
+            if (saved_monitor == monitors.end() && !settings.display_monitor.empty()) {
+                monitor_labels.push_back("Saved monitor (not connected)");
+                monitors.push_back(settings.display_monitor);
+                saved_monitor = monitors.end() - 1;
+            }
+
+            if (!monitors.empty()) {
+                monitor_shown = saved_monitor != monitors.end() ? (size_t)(saved_monitor - monitors.begin()) : primary;
+                monitor_field = &form.add<ChoiceField>("Fullscreen monitor", monitor_labels, monitor_shown);
+            }
+        }
+        else {
+            fullscreen_field = &form.add<ChoiceField>("Fullscreen (applies on restart)", std::vector<std::string>{"Off", "On"}, settings.display_fullscreen ? 1 : 0);
+        }
 
         form.add<SectionField>("Audio");
         master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, PERCENT_STEP, "%");
         music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, PERCENT_STEP, "%");
         effects_volume_field = &form.add<SliderField>("Effects volume", settings.effects_volume, 0, 100, PERCENT_STEP, "%");
         hitsounds_field = &form.add<ChoiceField>("Hitsounds", std::vector<std::string>{"Off", "On"}, settings.field_hitsounds ? 1 : 0);
+        output_devices = {std::string()};
+        std::vector<std::string> device_labels = {"System default"};
+
+        for (std::string& name : game->audio().engine().GetPlaybackDeviceNames()) {
+            device_labels.push_back(name);
+            output_devices.push_back(std::move(name));
+        }
+
+        auto saved_device = std::find(output_devices.begin(), output_devices.end(), settings.audio_output_device);
+
+        if (saved_device == output_devices.end()) {
+            device_labels.push_back(std::format("{} (not connected)", settings.audio_output_device));
+            output_devices.push_back(settings.audio_output_device);
+            saved_device = output_devices.end() - 1;
+        }
+
+        output_device_field = &form.add<ChoiceField>("Output device", device_labels, (size_t)(saved_device - output_devices.begin()));
 
         form.add<SectionField>("Calibration");
         visual_offset_field = &form.add<SliderField>("Visual offset", settings.field_audio_visual_offset, -SceneCalibration::OFFSET_LIMIT_MS, SceneCalibration::OFFSET_LIMIT_MS, 1, " ms");
@@ -247,6 +294,16 @@ namespace nascent {
         settings.music_volume = (uint8_t)music_volume_field->value;
         settings.effects_volume = (uint8_t)effects_volume_field->value;
         game->audio().set_volumes(SettingsManager::volume_gain(settings.master_volume), SettingsManager::volume_gain(settings.music_volume), SettingsManager::volume_gain(settings.effects_volume));
+        std::string device_status;
+
+        if (const std::string& device = output_devices[output_device_field->selected]; device != settings.audio_output_device) {
+            settings.audio_output_device = device;
+
+            if (!game->audio().engine().SetPlaybackDevice(device)) {
+                device_status = std::format("Couldn't open {}, so sound is playing on the system default", device);
+            }
+        }
+
         settings.frame_rate_limit = frame_rates[frame_rate_field->selected];
         settings.show_fps = fps_counter_field->selected == 1;
         settings.discord_rich_presence = rich_presence_field->selected == 1;
@@ -257,7 +314,19 @@ namespace nascent {
             settings.scene_transition_time = transition_time;
             game->set_transition(std::make_unique<FadeTransition>(transition_time));
         }
-        settings.display_fullscreen = fullscreen_field->selected == 1;
+        WindowMode previous_mode = SettingsManager::window_mode();
+        std::string previous_monitor = settings.display_monitor;
+        settings.display_fullscreen = fullscreen_field->selected != 0;
+        settings.display_borderless = fullscreen_field->selected == 2;
+
+        if (monitor_field != nullptr && monitor_field->selected != monitor_shown) {
+            monitor_shown = monitor_field->selected;
+            settings.display_monitor = monitors[monitor_shown];
+        }
+
+        if ((SettingsManager::window_mode() != previous_mode || settings.display_monitor != previous_monitor) && window_placement_supported() && !SettingsManager::apply_window_mode()) {
+            device_status = "Couldn't change the display mode now, it will apply when you restart the game";
+        }
         settings.field_hitsounds = hitsounds_field->selected == 1;
         settings.field_mirror = mirror_field->selected == 1;
         settings.field_instant_restart = instant_restart_field->selected == 1;
@@ -290,7 +359,7 @@ namespace nascent {
         settings.field_timing_bar_length = (uint8_t)timing_bar_length_field->value;
         settings.field_timing_bar_width = (uint8_t)timing_bar_width_field->value;
         rebuild_preview();
-        status.clear();
+        status = device_status;
 
         for (KeyBindField* field : key_fields) {
             if (std::optional<KeyBinding> swapped = std::exchange(field->swapped, std::nullopt)) {

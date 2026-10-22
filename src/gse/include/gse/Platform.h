@@ -8,6 +8,22 @@
 #include <vector>
 
 namespace nascent {
+    enum class WindowMode : uint8_t {
+        WINDOWED,
+        FULLSCREEN,
+        BORDERLESS,
+    };
+
+    struct DisplayInfo {
+        std::string id;
+        std::string name;
+        int32_t x = 0;
+        int32_t y = 0;
+        int32_t width = 0;
+        int32_t height = 0;
+        bool primary = false;
+    };
+
     std::filesystem::path executable_path();
     std::filesystem::path executable_directory();
     bool spawn_detached(const std::filesystem::path& program, const std::vector<std::string>& arguments);
@@ -27,6 +43,9 @@ namespace nascent {
     void set_cursor_hidden(bool hidden);
     bool fit_window_to_screen(int32_t& width, int32_t& height);
     void allow_app_switching_in_fullscreen();
+    bool window_placement_supported();
+    std::vector<DisplayInfo> list_displays();
+    bool place_window(WindowMode mode, const std::string& display_id, int32_t width, int32_t height);
     std::optional<bool> application_focused();
     bool alt_held();
     std::optional<std::filesystem::path> choose_folder(const std::string& title);

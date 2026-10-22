@@ -14,4 +14,16 @@ namespace nascent {
 
     void set_cursor_hidden(bool) {
     }
+
+    bool window_placement_supported() {
+        return false;
+    }
+
+    std::vector<DisplayInfo> list_displays() {
+        return {};
+    }
+
+    bool place_window(WindowMode, const std::string&, int32_t, int32_t) {
+        return false;
+    }
 }

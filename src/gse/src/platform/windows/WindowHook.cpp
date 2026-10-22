@@ -2,6 +2,7 @@
 #include "gse/Platform.h"
 #include "gse/input/KeySource.h"
 
+#include <algorithm>
 #include <atomic>
 #include <future>
 #include <string>
@@ -311,6 +312,148 @@ namespace nascent {
     }
 
     void allow_app_switching_in_fullscreen() {
+    }
+
+    static constexpr DWORD WINDOWED_STYLE = WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_THICKFRAME;
+    static constexpr DWORD WINDOWED_EX_STYLE = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+    static constexpr DWORD COVERING_STYLE = WS_VISIBLE | WS_POPUP;
+    static constexpr int32_t BORDERLESS_OVERHANG = 1;
+
+    static std::wstring monitor_friendly_name(const std::wstring& device) {
+        UINT32 path_count = 0;
+        UINT32 mode_count = 0;
+
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS) {
+            return {};
+        }
+
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_count);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_count);
+
+        if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(), &mode_count, modes.data(), nullptr) != ERROR_SUCCESS) {
+            return {};
+        }
+
+        for (UINT32 index = 0; index < path_count; index++) {
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source = {};
+            source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = sizeof(source);
+            source.header.adapterId = paths[index].sourceInfo.adapterId;
+            source.header.id = paths[index].sourceInfo.id;
+
+            if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS || device != source.viewGdiDeviceName) {
+                continue;
+            }
+
+            DISPLAYCONFIG_TARGET_DEVICE_NAME target = {};
+            target.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+            target.header.size = sizeof(target);
+            target.header.adapterId = paths[index].targetInfo.adapterId;
+            target.header.id = paths[index].targetInfo.id;
+
+            if (DisplayConfigGetDeviceInfo(&target.header) == ERROR_SUCCESS) {
+                return target.monitorFriendlyDeviceName;
+            }
+        }
+
+        return {};
+    }
+
+    static BOOL CALLBACK collect_display(HMONITOR monitor, HDC, LPRECT, LPARAM data) {
+        MONITORINFOEXW info = {};
+        info.cbSize = sizeof(info);
+
+        if (!GetMonitorInfoW(monitor, &info)) {
+            return TRUE;
+        }
+
+        std::wstring device = info.szDevice;
+        std::wstring name = monitor_friendly_name(device);
+        DisplayInfo display;
+        display.id = wide_to_utf8(device);
+        display.name = wide_to_utf8(name);
+        display.x = info.rcMonitor.left;
+        display.y = info.rcMonitor.top;
+        display.width = info.rcMonitor.right - info.rcMonitor.left;
+        display.height = info.rcMonitor.bottom - info.rcMonitor.top;
+        display.primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        ((std::vector<DisplayInfo>*)data)->push_back(std::move(display));
+        return TRUE;
+    }
+
+    static HWND game_window() {
+        if (hooked_window != nullptr) {
+            return hooked_window;
+        }
+
+        HWND window = nullptr;
+        EnumWindows(find_olc_window, (LPARAM)&window);
+        return window;
+    }
+
+    bool window_placement_supported() {
+        return true;
+    }
+
+    std::vector<DisplayInfo> list_displays() {
+        std::vector<DisplayInfo> displays;
+        EnumDisplayMonitors(nullptr, nullptr, collect_display, (LPARAM)&displays);
+        return displays;
+    }
+
+    bool place_window(WindowMode mode, const std::string& display_id, int32_t width, int32_t height) {
+        HWND window = game_window();
+
+        if (window == nullptr) {
+            return false;
+        }
+
+        std::vector<DisplayInfo> displays = list_displays();
+        const DisplayInfo* target = nullptr;
+
+        for (const DisplayInfo& display : displays) {
+            if ((!display_id.empty() && display.id == display_id) || (target == nullptr && display.primary)) {
+                target = &display;
+            }
+        }
+
+        if (target == nullptr && !displays.empty()) {
+            target = &displays.front();
+        }
+
+        if (target == nullptr) {
+            return false;
+        }
+
+        RECT area = {target->x, target->y, target->x + target->width, target->y + target->height};
+        DWORD style = COVERING_STYLE;
+        DWORD ex_style = 0;
+
+        if (mode == WindowMode::WINDOWED) {
+            MONITORINFO info = {};
+            info.cbSize = sizeof(info);
+
+            if (GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info)) {
+                area = info.rcWork;
+            }
+
+            style = WINDOWED_STYLE;
+            ex_style = WINDOWED_EX_STYLE;
+            RECT frame = {0, 0, width, height};
+            AdjustWindowRectEx(&frame, style, FALSE, ex_style);
+            int32_t outer_width = std::min<int32_t>(frame.right - frame.left, area.right - area.left);
+            int32_t outer_height = std::min<int32_t>(frame.bottom - frame.top, area.bottom - area.top);
+            int32_t left = area.left + (area.right - area.left - outer_width) / 2;
+            int32_t top = area.top + (area.bottom - area.top - outer_height) / 2;
+            area = {left, top, left + outer_width, top + outer_height};
+        }
+        else if (mode == WindowMode::BORDERLESS) {
+            area.bottom += BORDERLESS_OVERHANG;
+        }
+
+        SetWindowLongPtrW(window, GWL_STYLE, (LONG_PTR)style);
+        SetWindowLongPtrW(window, GWL_EXSTYLE, (LONG_PTR)ex_style);
+        return SetWindowPos(window, HWND_TOP, area.left, area.top, area.right - area.left, area.bottom - area.top, SWP_FRAMECHANGED | SWP_SHOWWINDOW) != 0;
     }
 
     std::optional<std::filesystem::path> choose_folder(const std::string& title) {

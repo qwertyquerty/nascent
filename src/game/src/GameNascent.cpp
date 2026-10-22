@@ -67,11 +67,20 @@ namespace nascent {
         LocalBests::load();
         Favorites::load();
         set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
+
+        if (const std::string& device = SettingsManager::settings.audio_output_device; !device.empty() && !audio().engine().SetPlaybackDevice(device)) {
+            std::cerr << "Audio: output device \"" << device << "\" isn't available, using the system default" << std::endl;
+        }
+
         apply_volumes();
 
         olc::Font::init();
 
         input().start();
+
+        if (SettingsManager::window_mode() != WindowMode::WINDOWED && window_placement_supported()) {
+            SettingsManager::apply_window_mode();
+        }
         bind_actions();
         use_blank_canvas();
 

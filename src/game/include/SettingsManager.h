@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SettingsStore.h"
+#include "gse/Platform.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -61,12 +62,15 @@ namespace nascent {
 
         std::string skin = "arrows_filled";
         bool display_fullscreen = true;
+        bool display_borderless = false;
+        std::string display_monitor;
         uint16_t display_window_width = 1600;
         uint16_t display_window_height = 900;
         uint16_t frame_rate_limit = 1000;
         uint8_t master_volume = 50;
         uint8_t music_volume = 75;
         uint8_t effects_volume = 75;
+        std::string audio_output_device;
         bool show_fps = true;
         bool account_screen_seen = false;
         std::string last_run_version;
@@ -107,5 +111,7 @@ namespace nascent {
         static SettingsLoadStatus load(const std::filesystem::path& path);
         static bool save();
         static float volume_gain(uint8_t percent);
+        static WindowMode window_mode();
+        static bool apply_window_mode();
     };
 }

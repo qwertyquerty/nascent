@@ -55,12 +55,15 @@ namespace nascent {
         list_preview_fade_in_time,
         skin,
         display_fullscreen,
+        display_borderless,
+        display_monitor,
         display_window_width,
         display_window_height,
         frame_rate_limit,
         master_volume,
         music_volume,
         effects_volume,
+        audio_output_device,
         show_fps,
         account_screen_seen,
         last_run_version,
@@ -133,6 +136,20 @@ namespace nascent {
         settings.server_url = server_host(settings.server_url);
         settings.list_song_directory = path_utf8(resolve_song_directory(settings.list_song_directory));
         return status;
+    }
+
+    WindowMode SettingsManager::window_mode() {
+        if (!settings.display_fullscreen) {
+            return WindowMode::WINDOWED;
+        }
+
+        return settings.display_borderless ? WindowMode::BORDERLESS : WindowMode::FULLSCREEN;
+    }
+
+    bool SettingsManager::apply_window_mode() {
+        int32_t width = settings.display_window_width;
+        int32_t height = settings.display_window_height;
+        return place_window(window_mode(), settings.display_monitor, width, height);
     }
 
     float SettingsManager::volume_gain(uint8_t percent) {

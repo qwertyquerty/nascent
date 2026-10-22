@@ -184,6 +184,8 @@ namespace olc
         std::string GetBackendName() const;
         std::string GetDeviceName() const;
         ma_uint32 GetDeviceSampleRate() const;
+        std::vector<std::string> GetPlaybackDeviceNames();
+        bool SetPlaybackDevice(const std::string& name);
         // gets the current position in the sound, in frames
         ma_uint64 GetCursorFrames(const int id);
         // gets the current position in the sound, as a float between 0.0f and 1.0f
@@ -205,7 +207,8 @@ namespace olc
     private:
         ma_device m_device;
         ma_device_config m_device_config;
-        
+        ma_device_id m_playback_device_id;
+
         ma_resource_manager m_resource_manager;
         ma_resource_manager_config m_resource_manager_config;
 
@@ -868,6 +871,66 @@ namespace olc
     ma_uint32 MiniAudio::GetDeviceSampleRate() const
     {
         return m_device.playback.internalSampleRate;
+    }
+
+    std::vector<std::string> MiniAudio::GetPlaybackDeviceNames()
+    {
+        std::vector<std::string> names;
+        ma_device_info* infos = nullptr;
+        ma_uint32 count = 0;
+
+        if(m_device.pContext == nullptr || ma_context_get_devices(m_device.pContext, &infos, &count, nullptr, nullptr) != MA_SUCCESS)
+            return names;
+
+        for(ma_uint32 i = 0; i < count; i++)
+            names.emplace_back(infos[i].name);
+
+        return names;
+    }
+
+    bool MiniAudio::SetPlaybackDevice(const std::string& name)
+    {
+        bool found = false;
+
+        if(!name.empty() && m_device.pContext != nullptr)
+        {
+            ma_device_info* infos = nullptr;
+            ma_uint32 count = 0;
+
+            if(ma_context_get_devices(m_device.pContext, &infos, &count, nullptr, nullptr) == MA_SUCCESS)
+            {
+                for(ma_uint32 i = 0; i < count && !found; i++)
+                {
+                    if(name == infos[i].name)
+                    {
+                        m_playback_device_id = infos[i].id;
+                        found = true;
+                    }
+                }
+            }
+        }
+
+        if(!name.empty() && !found)
+            return false;
+
+        ma_device_stop(&m_device);
+        ma_device_uninit(&m_device);
+        m_callback_time_ms.store(0.0);
+        m_callback_period_ms.store(0.0);
+        m_device_config.playback.pDeviceID = found ? &m_playback_device_id : nullptr;
+
+        bool opened = ma_device_init(nullptr, &m_device_config, &m_device) == MA_SUCCESS;
+
+        if(!opened)
+        {
+            m_device_config.playback.pDeviceID = nullptr;
+
+            if(ma_device_init(nullptr, &m_device_config, &m_device) != MA_SUCCESS)
+                throw std::runtime_error{"PGEX_MiniAudio: failed to reopen the default device"};
+        }
+
+        ma_device_start(&m_device);
+        return opened;
     }
 
     ma_uint64 MiniAudio::GetCursorFrames(const int id)

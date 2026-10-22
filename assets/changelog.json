@@ -11,7 +11,9 @@
                         "The song preview has a progress bar along the bottom. Click or drag it to jump to any part of the song.",
                         "Report a bug in Options opens a bug report on GitHub and the folder with your log file, so you can attach it.",
                         "Type in Options to search your settings, like you can in the song list. Esc clears the search.",
+                        "Choose which speakers or headphones the game plays through with Output device in Options. If that device isn't plugged in, the game uses the system default.",
                         "Sort the song list by Long notes density (F8).",
+                        "On Windows, Display mode in Options has Windowed, Fullscreen and Borderless window, and changes right away. Borderless window covers the screen without taking it over the way fullscreen can, which should help with alt-tab and screen sharing. Fullscreen monitor picks which screen fullscreen and borderless use.",
                         "Report cheaters, offensive names and broken charts with the Report button on play, player and chart pages on the website.",
                         "Join the Discord in Options opens the Nascent Discord server."
                     ]

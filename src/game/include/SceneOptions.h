@@ -41,6 +41,9 @@ namespace nascent {
         ChoiceField* transition_field = nullptr;
         ChoiceField* title_music_field = nullptr;
         ChoiceField* fullscreen_field = nullptr;
+        ChoiceField* monitor_field = nullptr;
+        std::vector<std::string> monitors;
+        size_t monitor_shown = 0;
         ChoiceField* mirror_field = nullptr;
         ChoiceField* instant_restart_field = nullptr;
         ChoiceField* linked_folders_field = nullptr;
@@ -62,6 +65,8 @@ namespace nascent {
         bool unlink_requested = false;
         SliderField* lane_cover_field = nullptr;
         ChoiceField* hitsounds_field = nullptr;
+        ChoiceField* output_device_field = nullptr;
+        std::vector<std::string> output_devices;
         SliderField* lane_width_field = nullptr;
         SliderField* background_brightness_field = nullptr;
         SliderField* note_opacity_field = nullptr;
