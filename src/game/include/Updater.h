@@ -37,7 +37,7 @@ namespace nascent {
         static constexpr size_t MAX_RELEASE_LIST_BYTES = 8 * 1024 * 1024;
         static constexpr size_t MAX_CHECKSUMS_BYTES = 64 * 1024;
         static constexpr size_t MAX_PACKAGE_BYTES = 1024 * 1024 * 1024;
-        static constexpr int RELEASES_PER_PAGE = 30;
+        static constexpr int RELEASES_PER_PAGE = 100;
 
         static void recover();
         static void check();
