@@ -1,10 +1,15 @@
+import itertools
 import json
+import multiprocessing
 import os
 import sys
 import time
-from collections import Counter
+from collections import Counter, defaultdict, deque
+from collections.abc import Iterator
+from concurrent.futures import ProcessPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 import click
 import flask_migrate
@@ -30,6 +35,9 @@ CHART_SUFFIXES = (".osu", ".json", ".ssc", ".sm", ".dwi")
 STEPMANIA_PREFERENCE = {".ssc": 3, ".sm": 2, ".dwi": 1}
 ETTERNA_SOURCE = "etterna"
 PACK_INFO = "pack.json"
+PARALLEL_MIN_FILES = 64
+PARALLEL_MAX_WORKERS = 16
+PARALLEL_QUEUE_PER_WORKER = 4
 BASELINE_REVISION = "0001"
 
 
@@ -247,6 +255,63 @@ def _read_chart_file(file: Path, pack: int | None) -> list[tuple[dict | None, di
     return [(json.loads(file.read_text(encoding="utf-8")), None, None, False)]
 
 
+class _Converted(NamedTuple):
+    index: int
+    chart_hash: str | None
+    key_count: int | None
+    source: dict | None
+    problem: str | None
+    modified: bool
+
+
+def _convert_file(job: tuple[str, int | None]) -> list[_Converted]:
+    try:
+        entries = _read_chart_file(Path(job[0]), job[1])
+    except (OSError, ValueError) as error:
+        return [_Converted(0, None, None, None, str(error), False)]
+
+    converted = []
+
+    for index, (data, source, problem, modified) in enumerate(entries):
+        if data is not None:
+            try:
+                native = parse_chart(data)
+            except (ApiError, ValueError) as error:
+                problem = str(getattr(error, "message", error))
+            else:
+                converted.append(_Converted(index, native.hash, native.key_count, source, None, modified))
+                continue
+
+        converted.append(_Converted(index, None, None, source, problem, False))
+
+    return converted
+
+
+def _converted_files(jobs: list[tuple[str, int | None]], workers: int) -> Iterator[tuple[tuple[str, int | None], list[_Converted]]]:
+    if workers <= 1 or len(jobs) < PARALLEL_MIN_FILES:
+        for job in jobs:
+            yield job, _convert_file(job)
+
+        return
+
+    with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn")) as pool:
+        remaining = iter(jobs)
+        pending = deque((job, pool.submit(_convert_file, job)) for job in itertools.islice(remaining, workers * PARALLEL_QUEUE_PER_WORKER))
+
+        while pending:
+            job, future = pending.popleft()
+            following = next(remaining, None)
+
+            if following is not None:
+                pending.append((following, pool.submit(_convert_file, following)))
+
+            yield job, future.result()
+
+
+def _source_key(source: dict | None) -> tuple | None:
+    return (source["source"], source["checksum"], source.get("source_set_id")) if source is not None else None
+
+
 @nascent_cli.command("import-charts")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--rank", is_flag=True, help="Rank every imported chart")
@@ -257,56 +322,63 @@ def _read_chart_file(file: Path, pack: int | None) -> list[tuple[dict | None, di
     help="Replace charts from the same file and pack that import differently now, moving their plays onto the new version and re-judging them, and remove charts that are no longer valid",
 )
 @click.option("--dry-run", is_flag=True, help="Report what would be added and replaced without changing anything")
-def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: bool):
+@click.option("--workers", type=int, default=0, help="Processes that read and convert chart files at once, 0 for one per CPU")
+def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: bool, workers: int):
     files = _chart_files(path)
     packs: dict[Path, int | None] = {}
     counts = Counter()
     reasons = Counter()
+    produced: dict[tuple, dict[str, int]] = defaultdict(dict)
+    invalid: dict[tuple, str] = {}
+    previous: dict[tuple, tuple[int, str]] = {}
+    hashes: set[str] = set()
 
     if not files:
         raise click.ClickException(f"no {', '.join(CHART_SUFFIXES)} chart files in {path} that this user can read")
 
-    for position, file in enumerate(files, 1):
-        try:
-            entries = _read_chart_file(file, _etterna_pack(file, path, packs))
-        except (OSError, ValueError) as error:
-            entries = [(None, None, str(error), False)]
+    jobs = [(str(file), _etterna_pack(file, path, packs)) for file in files]
+    workers = workers if workers > 0 else min(os.cpu_count() or 1, PARALLEL_MAX_WORKERS)
 
-        for data, source, problem, modified in entries:
-            replaced = None
+    for position, ((file, pack), converted) in enumerate(_converted_files(jobs, workers), 1):
+        loaded = None
 
-            if data is None and replace:
-                stale = _imported_version(source)
+        for entry in converted:
+            key = _source_key(entry.source)
 
-                if stale is not None:
-                    _remove_invalid(stale, problem, dry_run)
-                    counts["removed"] += 1
+            if replace and key is not None and key not in previous:
+                prior = _imported_version(entry.source)
+
+                if prior is not None:
+                    previous[key] = (prior.id, prior.hash)
 
             try:
-                if data is None:
-                    raise ValueError(problem)
+                if entry.problem is not None:
+                    if key is not None:
+                        invalid.setdefault(key, entry.problem)
 
-                native = parse_chart(data)
-                previous = _previous_version(source, native) if replace else None
+                    raise ValueError(entry.problem)
+
+                hashes.add(entry.chart_hash)
+
+                if key is not None:
+                    produced[key][entry.chart_hash] = entry.key_count
+
+                chart = get_chart(entry.chart_hash)
+                created = chart is None
 
                 if dry_run:
-                    created = get_chart(native.hash) is None
                     db.session.rollback()
-
-                    if previous is not None:
-                        counts["replaced"] += 1
-                        click.echo(f"would replace {previous.hash[:16]} with {native.hash[:16]} {native.key_count:2}K {native.artist} - {native.title} [{native.difficulty_name}]")
-
                     counts["added" if created else "exists"] += 1
                     continue
 
-                chart, created = register_chart(native, None, modified=modified)
+                if created:
+                    loaded = loaded if loaded is not None else _read_chart_file(Path(file), pack)
+                    chart, created = register_chart(parse_chart(loaded[entry.index][0]), None, modified=entry.modified)
+                else:
+                    chart.modified = chart.modified or entry.modified
 
-                if source is not None:
-                    add_chart_source(chart, **source)
-
-                if previous is not None and previous.id != chart.id:
-                    replaced = replace_chart(previous, chart)
+                if entry.source is not None:
+                    add_chart_source(chart, **entry.source)
 
                 changed = set_chart_status(chart, ChartStatus.RANKED, None) if rank and _meets_ranked_minimums(chart) else False
             except (ApiError, ValueError) as error:
@@ -325,18 +397,7 @@ def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: b
             if created:
                 tasks.enqueue(tasks.fill_chart_difficulties, chart.id)
 
-            if replaced is not None:
-                counts["replaced"] += 1
-
-                for key in replaced.files:
-                    try:
-                        storage().delete(key)
-                    except OSError:
-                        current_app.logger.warning("could not delete %s for replaced chart %s", key, replaced.old_hash)
-
-                tasks.enqueue_chart_replacement(chart.id, replaced.user_ids)
-                click.echo(f"replaced {replaced.old_hash[:16]} with {chart.hash[:16]}, moved {len(replaced.user_ids)} players' plays: {chart.artist} - {chart.title} [{chart.difficulty_name}]")
-            elif changed:
+            if changed:
                 tasks.enqueue(tasks.apply_chart_status, chart.id)
 
             counts["added" if created else "exists"] += 1
@@ -347,6 +408,9 @@ def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: b
 
         if quiet and position % 1000 == 0:
             click.echo(f"{position}/{len(files)} files: {counts['added']} added, {counts['exists']} already on the server, {counts['skipped']} skipped")
+
+    if replace:
+        _apply_replacements(previous, produced, invalid, hashes, dry_run, counts)
 
     if quiet and reasons:
         for message, count in reasons.most_common(15):
@@ -361,6 +425,57 @@ def import_charts(path: Path, rank: bool, quiet: bool, replace: bool, dry_run: b
     click.echo(("Dry run, nothing changed: " if dry_run else "") + summary)
 
 
+def _apply_replacements(previous: dict[tuple, tuple[int, str]], produced: dict[tuple, dict[str, int]], invalid: dict[tuple, str], hashes: set[str], dry_run: bool, counts: Counter) -> None:
+    for key, (chart_id, chart_hash) in previous.items():
+        if chart_hash in hashes:
+            continue
+
+        old = db.session.get(Chart, chart_id)
+
+        if old is None:
+            continue
+
+        name = f"{old.artist} - {old.title} [{old.difficulty_name}]"
+        versions = produced.get(key, {})
+
+        if len(versions) > 1:
+            click.echo(f"not replacing {chart_hash[:16]}: {len(versions)} different charts in this import share its source, so it's unclear which one replaces it: {name}")
+            continue
+
+        if not versions:
+            if key in invalid:
+                _remove_invalid(old, invalid[key], dry_run)
+                counts["removed"] += 1
+
+            continue
+
+        new_hash, key_count = next(iter(versions.items()))
+
+        if key_count != old.key_count:
+            click.echo(f"not replacing {chart_hash[:16]}: the new version has {key_count} keys instead of {old.key_count}: {name}")
+            continue
+
+        counts["replaced"] += 1
+
+        if dry_run:
+            click.echo(f"would replace {chart_hash[:16]} ({old.play_count} plays) with {new_hash[:16]}: {name}")
+            db.session.rollback()
+            continue
+
+        new = get_chart(new_hash)
+        replaced = replace_chart(old, new)
+        db.session.commit()
+
+        for file in replaced.files:
+            try:
+                storage().delete(file)
+            except OSError:
+                current_app.logger.warning("could not delete %s for replaced chart %s", file, replaced.old_hash)
+
+        tasks.enqueue_chart_replacement(new.id, replaced.user_ids)
+        click.echo(f"replaced {replaced.old_hash[:16]} with {new.hash[:16]}, moved {len(replaced.user_ids)} players' plays: {name}")
+
+
 def _imported_version(source: dict | None) -> Chart | None:
     if source is None:
         return None
@@ -371,19 +486,6 @@ def _imported_version(source: dict | None) -> Chart | None:
         return None
 
     return existing.chart
-
-
-def _previous_version(source: dict | None, native: nc.Chart) -> Chart | None:
-    existing = _imported_version(source)
-
-    if existing is None or existing.hash == native.hash:
-        return None
-
-    if existing.key_count != native.key_count:
-        click.echo(f"not replacing {existing.hash[:16]}: the new version has {native.key_count} keys instead of {existing.key_count}")
-        return None
-
-    return existing
 
 
 def _remove_invalid(chart: Chart, problem: str | None, dry_run: bool) -> None:
