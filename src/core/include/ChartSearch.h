@@ -14,6 +14,9 @@ namespace nascent {
         std::string field;
         std::string op;
         std::string value;
+        std::optional<double> number;
+        std::optional<bool> flag;
+        std::optional<int32_t> grade;
     };
 
     struct SearchQuery {
@@ -32,9 +35,14 @@ namespace nascent {
         std::optional<double> best_accuracy;
         std::optional<double> bpm;
         bool favorite = false;
+        const std::string* artist_text = nullptr;
+        const std::string* title_text = nullptr;
+        const std::string* mapper_text = nullptr;
     };
 
     std::string ascii_lowercase(std::string text);
+    std::string search_field_text(const ChartInfo& info, const std::string& field);
     SearchQuery parse_search(const std::string& search);
     bool matches_search(const SearchQuery& query, const SearchSubject& subject);
+    bool query_narrows(const SearchQuery& before, const SearchQuery& after);
 }

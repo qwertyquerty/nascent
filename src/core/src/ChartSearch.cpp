@@ -109,16 +109,17 @@ namespace nascent {
             }
 
             if (filter.field == "artist" || filter.field == "title" || filter.field == "mapper") {
-                const ChartInfo& info = subject.info;
-                std::string text = ascii_lowercase(filter.field == "artist" ? info.artist + " " + info.artist_unicode : filter.field == "title" ? info.title + " " + info.title_unicode
-                                                                                                                                                : info.mapper);
+                const std::string* precomputed = filter.field == "artist" ? subject.artist_text : filter.field == "title" ? subject.title_text
+                                                                                                                          : subject.mapper_text;
+                std::string computed = precomputed == nullptr ? search_field_text(subject.info, filter.field) : std::string();
+                const std::string& text = precomputed != nullptr ? *precomputed : computed;
                 bool contains = text.find(filter.value) != std::string::npos;
                 return filter.op == "!=" ? !contains : filter.op == "=" ? contains
                                                                         : true;
             }
 
             if (filter.field == "played" || filter.field == "favorite") {
-                std::optional<bool> wanted = parse_bool(filter.value);
+                const std::optional<bool>& wanted = filter.flag;
 
                 if (!wanted || (filter.op != "=" && filter.op != "!=")) {
                     return true;
@@ -129,7 +130,7 @@ namespace nascent {
             }
 
             if (filter.field == "grade") {
-                std::optional<int32_t> wanted = parse_grade(filter.value);
+                const std::optional<int32_t>& wanted = filter.grade;
 
                 if (!wanted) {
                     return true;
@@ -138,7 +139,7 @@ namespace nascent {
                 return subject.best_accuracy && compare(-(double)grade_for_accuracy(*subject.best_accuracy), filter.op, *wanted, 0.0);
             }
 
-            std::optional<double> wanted = parse_number(filter.value);
+            const std::optional<double>& wanted = filter.number;
 
             if (!wanted) {
                 return true;
@@ -176,6 +177,18 @@ namespace nascent {
         return text;
     }
 
+    std::string search_field_text(const ChartInfo& info, const std::string& field) {
+        if (field == "artist") {
+            return ascii_lowercase(info.artist + " " + info.artist_unicode);
+        }
+
+        if (field == "title") {
+            return ascii_lowercase(info.title + " " + info.title_unicode);
+        }
+
+        return ascii_lowercase(info.mapper);
+    }
+
     SearchQuery parse_search(const std::string& search) {
         SearchQuery query;
         std::string token;
@@ -199,7 +212,19 @@ namespace nascent {
                 std::string op = lowered.substr(op_start, op_end - op_start);
 
                 if (is_search_field(field) && op != "!") {
-                    query.filters.push_back({field, op, lowered.substr(op_end)});
+                    SearchFilter filter{field, op, lowered.substr(op_end)};
+
+                    if (field == "played" || field == "favorite") {
+                        filter.flag = parse_bool(filter.value);
+                    }
+                    else if (field == "grade") {
+                        filter.grade = parse_grade(filter.value);
+                    }
+                    else if (field != "artist" && field != "title" && field != "mapper") {
+                        filter.number = parse_number(filter.value);
+                    }
+
+                    query.filters.push_back(std::move(filter));
                     token.clear();
                     return;
                 }
@@ -220,6 +245,29 @@ namespace nascent {
 
         finish();
         return query;
+    }
+
+    bool query_narrows(const SearchQuery& before, const SearchQuery& after) {
+        if (before.filters.size() != after.filters.size() || after.words.size() < before.words.size()) {
+            return false;
+        }
+
+        for (size_t index = 0; index < before.filters.size(); index++) {
+            const SearchFilter& a = before.filters[index];
+            const SearchFilter& b = after.filters[index];
+
+            if (a.field != b.field || a.op != b.op || a.value != b.value) {
+                return false;
+            }
+        }
+
+        for (size_t index = 0; index < before.words.size(); index++) {
+            if (after.words[index].find(before.words[index]) == std::string::npos) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     bool matches_search(const SearchQuery& query, const SearchSubject& subject) {

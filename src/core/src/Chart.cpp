@@ -294,6 +294,22 @@ namespace nascent {
         pitched_timing(pitch, hits, timing_points);
     }
 
+    void Chart::release_notes() {
+        unpitched_hits = {};
+        hits = {};
+        notes_loaded = false;
+    }
+
+    void Chart::restore_notes(std::vector<Hit> notes) {
+        unpitched_hits = std::move(notes);
+        notes_loaded = true;
+        set_pitch(pitch);
+    }
+
+    bool Chart::has_notes() const {
+        return notes_loaded;
+    }
+
     void Chart::pitched_timing(float pitch, std::vector<Hit>& out_hits, std::vector<ChartTimingPoint>& out_timing_points) const {
         out_hits = unpitched_hits;
         out_timing_points = unpitched_timing_points;

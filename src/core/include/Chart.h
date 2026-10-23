@@ -56,6 +56,7 @@ namespace nascent {
 
         std::string cached_gameplay_hash;
         std::string cached_difficulty_key;
+        bool notes_loaded = true;
 
         bool validate_and_prepare(std::string& error);
         bool assign_paths(const std::filesystem::path& path, std::string& error);
@@ -86,6 +87,9 @@ namespace nascent {
          * Set the pitch of the chart and recaculate the time of all the notes
          */
         void set_pitch(float);
+        void release_notes();
+        void restore_notes(std::vector<Hit> notes);
+        bool has_notes() const;
         void pitched_timing(float pitch, std::vector<Hit>& out_hits, std::vector<ChartTimingPoint>& out_timing_points) const;
         uint8_t unpitched_key_count() const;
         const ChartInfo& unpitched_chart_info() const;

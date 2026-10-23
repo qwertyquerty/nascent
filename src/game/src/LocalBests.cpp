@@ -7,25 +7,53 @@
 #include "SettingsStore.h"
 #include "Utf8Path.h"
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <format>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 namespace nascent {
     struct LocalBestsFile {
-        std::map<std::string, std::map<std::string, LocalBest>> charts;
+        std::unordered_map<std::string, std::map<std::string, LocalBest>> charts;
+        std::unordered_map<std::string, std::string> last_played;
         bool backfilled = false;
+        bool last_played_backfilled = false;
     };
 
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LocalBest, accuracy, grade, max_combo, performance, played_at)
-    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LocalBestsFile, charts, backfilled)
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LocalBestsFile, charts, last_played, backfilled, last_played_backfilled)
 
     static std::unique_ptr<SettingsStore<LocalBestsFile>> store;
+    static std::mutex save_mutex;
+    static std::atomic<uint64_t> latest_save = 0;
+    static std::atomic<int32_t> pending_saves = 0;
 
     static std::string rate_key(float rate) {
         return std::to_string(std::lround(rate * 100.0f));
+    }
+
+    static std::string compact_time(const std::string& played_at) {
+        std::string compact;
+
+        for (char c : played_at) {
+            if (c != '-' && c != ':') {
+                compact.push_back(c);
+            }
+        }
+
+        return compact;
+    }
+
+    static void note_played(const std::string& chart_hash, const std::string& compact) {
+        std::string& last = store->value.last_played[chart_hash];
+        last = std::max(last, compact);
     }
 
     static bool is_better(const LocalBest& candidate, const LocalBest& current) {
@@ -45,10 +73,28 @@ namespace nascent {
     }
 
     static void save() {
-        std::string error;
+        nlohmann::json snapshot = store->value;
+        VersionedJsonFile file = store->get_file();
+        uint64_t generation = ++latest_save;
+        pending_saves++;
 
-        if (!store->save(error)) {
-            std::cerr << "Best plays: " << error << std::endl;
+        std::thread([snapshot = std::move(snapshot), file = std::move(file), generation]() mutable {
+            {
+                std::lock_guard<std::mutex> lock(save_mutex);
+                std::string error;
+
+                if (generation == latest_save && !file.save(snapshot, error)) {
+                    std::cerr << "Best plays: " << error << std::endl;
+                }
+            }
+
+            pending_saves--;
+        }).detach();
+    }
+
+    void LocalBests::flush() {
+        while (pending_saves > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
@@ -63,7 +109,7 @@ namespace nascent {
     }
 
     bool LocalBests::is_backfilled() {
-        return store == nullptr || store->value.backfilled;
+        return store == nullptr || (store->value.backfilled && store->value.last_played_backfilled);
     }
 
     void LocalBests::backfill(const std::unordered_map<std::string, std::string>& chart_hash_by_folder, const std::filesystem::path& replay_directory) {
@@ -81,6 +127,15 @@ namespace nascent {
             }
 
             for (const auto& file : std::filesystem::directory_iterator(folder.path(), ec)) {
+                if (!store->value.last_played_backfilled) {
+                    std::string stem = path_utf8(file.path().stem());
+                    note_played(chart_hash->second, stem.substr(0, stem.find('-')));
+                }
+
+                if (store->value.backfilled) {
+                    continue;
+                }
+
                 std::string error;
                 std::optional<Replay> replay = load_replay(file.path(), error);
 
@@ -91,6 +146,7 @@ namespace nascent {
         }
 
         store->value.backfilled = true;
+        store->value.last_played_backfilled = true;
         save();
     }
 
@@ -99,9 +155,18 @@ namespace nascent {
             return;
         }
 
-        if (offer(chart_hash, rate, {summary.accuracy, std::string(grade_name(summary.grade)), summary.max_combo, summary.performance, played_at})) {
-            save();
+        offer(chart_hash, rate, {summary.accuracy, std::string(grade_name(summary.grade)), summary.max_combo, summary.performance, played_at});
+        note_played(chart_hash, compact_time(played_at));
+        save();
+    }
+
+    std::string LocalBests::last_played(const std::string& chart_hash) {
+        if (store == nullptr) {
+            return std::string();
         }
+
+        auto found = store->value.last_played.find(chart_hash);
+        return found != store->value.last_played.end() ? found->second : std::string();
     }
 
     const LocalBest* LocalBests::lookup(const std::string& chart_hash, float rate) {

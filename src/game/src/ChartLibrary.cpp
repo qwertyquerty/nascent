@@ -3,6 +3,7 @@
 #include "ChartSearch.h"
 #include "Const.h"
 #include "DifficultyCache.h"
+#include "DifficultyCalculator.h"
 #include "LibraryCache.h"
 #include "LocalReplays.h"
 #include "OsuFormat.h"
@@ -31,18 +32,29 @@ namespace nascent {
             std::u8string folder;
             float difficulty = 0;
             int64_t added = 0;
+            ChartSummary summary;
         };
 
-        std::u8string folder_key(const std::filesystem::path& folder_path) {
-            std::u8string folder = folder_path.lexically_normal().u8string();
+        double pitched_length_ms(const ChartSummary& summary, float pitch) {
+            int32_t start = summary.notes == 0 ? 0 : (int32_t)std::lround(summary.start_ms / pitch);
+            int32_t end = (int32_t)std::lround(std::max(0, summary.end_ms) / pitch);
+            return (double)(end - start) * pitch;
+        }
 
-            for (char8_t& c : folder) {
-                if (c >= u8'A' && c <= u8'Z') {
-                    c = (char8_t)(c - u8'A' + u8'a');
-                }
+        bool library_order(const std::string& a_title, const std::u8string& a_folder, float a_difficulty, const std::string& a_name, const std::string& b_title, const std::u8string& b_folder, float b_difficulty, const std::string& b_name) {
+            if (a_title != b_title) {
+                return a_title < b_title;
             }
 
-            return folder;
+            if (a_folder != b_folder) {
+                return a_folder < b_folder;
+            }
+
+            if (a_difficulty != b_difficulty) {
+                return a_difficulty < b_difficulty;
+            }
+
+            return a_name < b_name;
         }
 
         std::string lowercase_extension(const std::filesystem::path& path) {
@@ -140,13 +152,13 @@ namespace nascent {
             return folder_files.contains(file_key(relative));
         }
 
-        ChartLibrary build_library(std::vector<LoadedChart> loaded, float pitch, DifficultyCache& cache, LibraryLoadProgress* progress = nullptr) {
+        ChartLibrary build_library(std::vector<LoadedChart> loaded, float pitch, DifficultyCache& cache, const LibraryCache* library_cache, LibraryLoadProgress* progress = nullptr) {
             if (progress != nullptr) {
                 progress->begin(LibraryLoadStage::BUILDING, loaded.size());
             }
 
             parallel_for(loaded.size(), [&](size_t index) {
-                loaded[index].difficulty = (float)cache.difficulty(*loaded[index].chart, pitch);
+                loaded[index].difficulty = (float)library_difficulty(cache, library_cache, *loaded[index].chart, pitch, true).value_or(0.0);
 
                 if (progress != nullptr) {
                     progress->step();
@@ -159,38 +171,41 @@ namespace nascent {
                 folder_titles.emplace(entry.folder, ascii_lowercase(entry.chart->info.title));
             }
 
-            std::stable_sort(loaded.begin(), loaded.end(), [&](const LoadedChart& a, const LoadedChart& b) {
-                const std::string& a_title = folder_titles.at(a.folder);
-                const std::string& b_title = folder_titles.at(b.folder);
+            std::vector<const std::string*> titles(loaded.size());
 
-                if (a_title != b_title) {
-                    return a_title < b_title;
-                }
+            for (size_t index = 0; index < loaded.size(); index++) {
+                titles[index] = &folder_titles.at(loaded[index].folder);
+            }
 
-                if (a.folder != b.folder) {
-                    return a.folder < b.folder;
-                }
+            std::vector<size_t> order(loaded.size());
 
-                if (a.difficulty != b.difficulty) {
-                    return a.difficulty < b.difficulty;
-                }
+            for (size_t index = 0; index < order.size(); index++) {
+                order[index] = index;
+            }
 
-                return a.chart->info.difficulty_name < b.chart->info.difficulty_name;
+            std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                return library_order(*titles[a], loaded[a].folder, loaded[a].difficulty, loaded[a].chart->info.difficulty_name, *titles[b], loaded[b].folder, loaded[b].difficulty, loaded[b].chart->info.difficulty_name);
             });
 
             ChartLibrary library;
             library.pitch = pitch;
 
-            for (LoadedChart& entry : loaded) {
+            for (size_t index : order) {
+                LoadedChart& entry = loaded[index];
                 const ChartInfo& info = entry.chart->info;
                 library.hashes.push_back(entry.chart->gameplay_hash());
+                library.keys.push_back(chart_key(entry.chart->file_path));
+                library.sort_titles.push_back(*titles[index]);
+                library.sort_difficulties.push_back(entry.difficulty);
                 library.difficulties.push_back(entry.difficulty);
                 library.search_texts.push_back(ascii_lowercase(std::format("{} {} {} {} {} {}", info.title, info.title_unicode, info.artist, info.artist_unicode, info.mapper, info.difficulty_name)));
                 library.details.push_back(std::format("[{}] - {} // {}", info.difficulty_name, info.artist, info.mapper));
-                library.lengths_ms.push_back((double)entry.chart->get_duration_ms() * entry.chart->pitch);
-                library.bpms.push_back(entry.chart->bpm_range());
-                library.long_note_shares.push_back(long_note_share(*entry.chart));
+                library.lengths_ms.push_back(pitched_length_ms(entry.summary, entry.chart->pitch));
+                library.bpms.push_back(entry.summary.bpm);
+                library.long_note_shares.push_back(entry.summary.notes == 0 ? 0.0f : (float)entry.summary.holds / (float)entry.summary.notes);
+                library.note_counts.push_back(entry.summary.notes);
                 library.added.push_back(entry.added);
+                library.folders.push_back(std::move(entry.folder));
                 library.charts.push_back(std::move(entry.chart));
             }
 
@@ -260,6 +275,50 @@ namespace nascent {
         return sum > 0 ? std::min(1.0f, reached / sum) : 1.0f;
     }
 
+    std::u8string folder_key(const std::filesystem::path& folder_path) {
+        std::u8string folder = folder_path.lexically_normal().u8string();
+
+        for (char8_t& c : folder) {
+            if (c >= u8'A' && c <= u8'Z') {
+                c = (char8_t)(c - u8'A' + u8'a');
+            }
+        }
+
+        return folder;
+    }
+
+    std::unique_ptr<Chart> load_chart_notes(const LibraryCache* library_cache, const Chart& chart) {
+        if (library_cache != nullptr) {
+            if (std::optional<std::vector<Hit>> notes = library_cache->load_notes(chart)) {
+                return Chart::restore(chart.file_path, chart.unpitched_chart_info(), std::move(*notes), chart.unpitched_timing(), chart.gameplay_hash(), chart.difficulty_key(), 1.0f);
+            }
+        }
+
+        std::string error;
+        std::unique_ptr<Chart> loaded = load_chart_file(chart.file_path, 1.0f, error, chart.gameplay_hash());
+        return loaded != nullptr && loaded->gameplay_hash() == chart.gameplay_hash() ? std::move(loaded) : nullptr;
+    }
+
+    std::optional<double> library_difficulty(DifficultyCache& cache, const LibraryCache* library_cache, const Chart& chart, float pitch, bool use_resident) {
+        if (std::optional<double> cached = cache.lookup(chart, pitch)) {
+            return cached;
+        }
+
+        if (use_resident && chart.has_notes()) {
+            return cache.difficulty(chart, pitch);
+        }
+
+        std::unique_ptr<Chart> loaded = load_chart_notes(library_cache, chart);
+
+        if (loaded == nullptr) {
+            return std::nullopt;
+        }
+
+        double value = DifficultyCalculator::calculate_at_pitch(*loaded, pitch);
+        cache.store(chart, pitch, value);
+        return value;
+    }
+
     float long_note_share(const Chart& chart) {
         if (chart.hits.empty()) {
             return 0.0f;
@@ -275,24 +334,34 @@ namespace nascent {
         return charts.size();
     }
 
-    ChartLibrary ChartLibrary::without(const std::vector<bool>& removed) {
+    void ChartLibrary::append(ChartLibrary& from, size_t index) {
+        charts.push_back(std::move(from.charts[index]));
+        hashes.push_back(std::move(from.hashes[index]));
+        keys.push_back(std::move(from.keys[index]));
+        folders.push_back(std::move(from.folders[index]));
+        sort_titles.push_back(std::move(from.sort_titles[index]));
+        sort_difficulties.push_back(from.sort_difficulties[index]);
+        difficulties.push_back(index < from.difficulties.size() ? from.difficulties[index] : std::nullopt);
+        search_texts.push_back(std::move(from.search_texts[index]));
+        details.push_back(std::move(from.details[index]));
+        lengths_ms.push_back(from.lengths_ms[index]);
+        bpms.push_back(from.bpms[index]);
+        long_note_shares.push_back(from.long_note_shares[index]);
+        note_counts.push_back(from.note_counts[index]);
+        added.push_back(from.added[index]);
+    }
+
+    ChartLibrary ChartLibrary::without(const std::vector<bool>& removed, std::vector<std::unique_ptr<Chart>>& dropped) {
         ChartLibrary library;
         library.pitch = pitch;
 
         for (size_t index = 0; index < charts.size(); index++) {
             if (index < removed.size() && removed[index]) {
+                dropped.push_back(std::move(charts[index]));
                 continue;
             }
 
-            library.charts.push_back(std::move(charts[index]));
-            library.hashes.push_back(hashes[index]);
-            library.difficulties.push_back(index < difficulties.size() ? difficulties[index] : std::nullopt);
-            library.search_texts.push_back(search_texts[index]);
-            library.details.push_back(details[index]);
-            library.lengths_ms.push_back(lengths_ms[index]);
-            library.bpms.push_back(bpms[index]);
-            library.long_note_shares.push_back(index < long_note_shares.size() ? long_note_shares[index] : 0.0f);
-            library.added.push_back(index < added.size() ? added[index] : 0);
+            library.append(*this, index);
         }
 
         return library;
@@ -393,11 +462,11 @@ namespace nascent {
 
             if (listed && hashes.insert(restored.chart->gameplay_hash()).second) {
                 std::u8string folder = folder_key(restored.chart->file_path.parent_path());
-                loaded.push_back({std::move(restored.chart), std::move(folder), 0, restored.added});
+                loaded.push_back({std::move(restored.chart), std::move(folder), 0, restored.added, restored.summary});
             }
         }
 
-        return build_library(std::move(loaded), pitch, cache);
+        return build_library(std::move(loaded), pitch, cache, &library_cache);
     }
 
     LibraryUpdate scan_chart_library(const std::vector<std::filesystem::path>& song_directories, float pitch, DifficultyCache& cache, LibraryCache& library_cache, LibraryLoadProgress* progress) {
@@ -643,21 +712,9 @@ namespace nascent {
         return update;
     }
 
-    ChartLibrary merge_chart_library(ChartLibrary current, LibraryUpdate update, float pitch, DifficultyCache& cache, std::vector<std::unique_ptr<Chart>>& removed, LibraryLoadProgress* progress) {
+    void prepare_library_update(LibraryUpdate& update, float pitch, DifficultyCache& cache, const LibraryCache& library_cache, LibraryLoadProgress* progress) {
         std::vector<LoadedChart> loaded;
         std::unordered_set<std::string> hashes;
-
-        for (size_t index = 0; index < current.charts.size(); index++) {
-            std::unique_ptr<Chart>& chart = current.charts[index];
-
-            if (update.kept.contains(chart_key(chart->file_path)) && hashes.insert(chart->gameplay_hash()).second) {
-                std::u8string folder = folder_key(chart->file_path.parent_path());
-                loaded.push_back({std::move(chart), std::move(folder), 0, index < current.added.size() ? current.added[index] : 0});
-            }
-            else {
-                removed.push_back(std::move(chart));
-            }
-        }
 
         for (size_t index = 0; index < update.added.size(); index++) {
             std::unique_ptr<Chart>& chart = update.added[index];
@@ -668,11 +725,107 @@ namespace nascent {
 
             if (hashes.insert(chart->gameplay_hash()).second) {
                 std::u8string folder = folder_key(chart->file_path.parent_path());
-                loaded.push_back({std::move(chart), std::move(folder), 0, update.added_times[index]});
+                ChartSummary summary = summarize_chart(*chart);
+                loaded.push_back({std::move(chart), std::move(folder), 0, update.added_times[index], summary});
             }
         }
 
-        return build_library(std::move(loaded), pitch, cache, progress);
+        update.added.clear();
+        update.added_times.clear();
+        update.library = build_library(std::move(loaded), pitch, cache, &library_cache, progress);
+
+        for (std::unique_ptr<Chart>& chart : update.library.charts) {
+            chart->release_notes();
+        }
+    }
+
+    ChartLibrary merge_chart_library(ChartLibrary current, LibraryUpdate update, float pitch, DifficultyCache& cache, std::vector<std::unique_ptr<Chart>>& removed) {
+        ChartLibrary& fresh = update.library;
+        std::vector<bool> kept(current.size(), false);
+        std::unordered_map<std::string, size_t> fresh_hashes;
+        std::unordered_map<std::u8string, std::vector<size_t>> fresh_folders;
+        std::vector<bool> dropped(fresh.size(), false);
+
+        for (size_t index = 0; index < fresh.size(); index++) {
+            fresh_hashes.emplace(fresh.hashes[index], index);
+            fresh_folders[fresh.folders[index]].push_back(index);
+        }
+
+        for (size_t index = 0; index < current.size(); index++) {
+            if (!update.kept.contains(current.keys[index])) {
+                continue;
+            }
+
+            kept[index] = true;
+
+            if (auto duplicate = fresh_hashes.find(current.hashes[index]); duplicate != fresh_hashes.end()) {
+                dropped[duplicate->second] = true;
+            }
+
+            if (auto folder = fresh_folders.find(current.folders[index]); folder != fresh_folders.end()) {
+                for (size_t fresh_index : folder->second) {
+                    fresh.sort_titles[fresh_index] = current.sort_titles[index];
+                }
+
+                fresh_folders.erase(folder);
+            }
+        }
+
+        std::vector<size_t> additions;
+
+        for (size_t index = 0; index < fresh.size(); index++) {
+            if (!dropped[index]) {
+                additions.push_back(index);
+            }
+            else {
+                removed.push_back(std::move(fresh.charts[index]));
+            }
+        }
+
+        std::stable_sort(additions.begin(), additions.end(), [&](size_t a, size_t b) {
+            return library_order(fresh.sort_titles[a], fresh.folders[a], fresh.sort_difficulties[a], fresh.charts[a]->info.difficulty_name, fresh.sort_titles[b], fresh.folders[b], fresh.sort_difficulties[b], fresh.charts[b]->info.difficulty_name);
+        });
+
+        if (fresh.pitch != pitch) {
+            for (size_t index : additions) {
+                std::optional<double> difficulty = cache.lookup(*fresh.charts[index], pitch);
+                fresh.difficulties[index] = difficulty ? std::optional<float>((float)*difficulty) : std::nullopt;
+            }
+        }
+
+        ChartLibrary merged;
+        merged.pitch = pitch;
+        size_t next_addition = 0;
+
+        auto take_additions_before = [&](size_t index) {
+            while (next_addition < additions.size()) {
+                size_t candidate = additions[next_addition];
+                bool before = library_order(fresh.sort_titles[candidate], fresh.folders[candidate], fresh.sort_difficulties[candidate], fresh.charts[candidate]->info.difficulty_name, current.sort_titles[index], current.folders[index], current.sort_difficulties[index], current.charts[index]->info.difficulty_name);
+
+                if (!before) {
+                    return;
+                }
+
+                merged.append(fresh, candidate);
+                next_addition++;
+            }
+        };
+
+        for (size_t index = 0; index < current.size(); index++) {
+            if (!kept[index]) {
+                removed.push_back(std::move(current.charts[index]));
+                continue;
+            }
+
+            take_additions_before(index);
+            merged.append(current, index);
+        }
+
+        while (next_addition < additions.size()) {
+            merged.append(fresh, additions[next_addition++]);
+        }
+
+        return merged;
     }
 
     void prepare_replay_folders(const ChartLibrary& library, LibraryLoadProgress* progress) {
@@ -681,8 +834,9 @@ namespace nascent {
 
     ChartLibrary single_chart_library(std::unique_ptr<Chart> chart, float pitch, DifficultyCache& cache) {
         std::u8string folder = folder_key(chart->file_path.parent_path());
+        ChartSummary summary = summarize_chart(*chart);
         std::vector<LoadedChart> loaded;
-        loaded.push_back({std::move(chart), std::move(folder)});
-        return build_library(std::move(loaded), pitch, cache);
+        loaded.push_back({std::move(chart), std::move(folder), 0, 0, summary});
+        return build_library(std::move(loaded), pitch, cache, nullptr);
     }
 }

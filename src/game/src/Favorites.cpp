@@ -6,11 +6,11 @@
 
 #include <iostream>
 #include <memory>
-#include <set>
+#include <unordered_set>
 
 namespace nascent {
     struct FavoritesFile {
-        std::set<std::string> charts;
+        std::unordered_set<std::string> charts;
     };
 
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(FavoritesFile, charts)

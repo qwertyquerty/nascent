@@ -7,7 +7,9 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace nascent {
     enum class SettingsLoadStatus {
@@ -36,6 +38,47 @@ namespace nascent {
         void back_up_invalid_file();
 
         std::filesystem::path get_backup_path() const;
+    };
+
+    std::optional<std::string> read_file_bytes(const std::filesystem::path& path);
+    bool replace_file(const std::filesystem::path& path, std::string_view bytes, std::string& error);
+
+    class BinaryJsonWriter {
+        public:
+        std::string& out;
+
+        void write(const nlohmann::json& value);
+        void write_raw(std::string_view record);
+    };
+
+    class BinaryJsonReader {
+        public:
+        std::string_view data;
+        size_t position = 0;
+        bool ok = true;
+
+        std::optional<std::string_view> next();
+        static bool decode(std::string_view record, nlohmann::json& value);
+    };
+
+    class BinaryJsonFile {
+        protected:
+        std::filesystem::path path;
+        uint32_t current_version;
+
+        public:
+        static constexpr std::string_view MAGIC = "NSBJ";
+
+        BinaryJsonFile(std::filesystem::path path, uint32_t current_version);
+
+        static std::string header(uint32_t version);
+        static size_t header_size();
+
+        std::optional<std::string> read() const;
+        bool load(nlohmann::json& data) const;
+        bool save(const nlohmann::json& data, std::string& error) const;
+        bool save_bytes(std::string_view bytes, std::string& error) const;
+        const std::filesystem::path& get_path() const;
     };
 
     template <typename T>

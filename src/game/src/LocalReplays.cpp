@@ -3,6 +3,7 @@
 #include "gse/Platform.h"
 #include "Replay.h"
 #include "SettingsManager.h"
+#include "SettingsStore.h"
 #include "Utf8Path.h"
 
 #include <algorithm>
@@ -10,8 +11,10 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <system_error>
+#include <unordered_map>
 
 namespace nascent {
     static std::filesystem::path unused_path(const std::filesystem::path& folder, const std::filesystem::path& name) {
@@ -90,23 +93,136 @@ namespace nascent {
         return folders;
     }
 
+    namespace {
+        struct IndexedScore {
+            uint64_t size = 0;
+            int64_t modified = 0;
+            bool valid = false;
+            std::string gameplay_hash;
+            LocalScore score;
+        };
+
+        std::mutex score_index_mutex;
+
+        std::unordered_map<std::string, IndexedScore> read_score_index(const std::filesystem::path& path) {
+            std::unordered_map<std::string, IndexedScore> index;
+            std::optional<std::string> bytes = BinaryJsonFile(path, LocalReplays::SCORE_INDEX_VERSION).read();
+
+            if (!bytes) {
+                return index;
+            }
+
+            BinaryJsonReader reader{*bytes, BinaryJsonFile::header_size()};
+
+            try {
+                while (reader.ok && reader.position < bytes->size()) {
+                    std::optional<std::string_view> record = reader.next();
+                    nlohmann::json entry;
+
+                    if (!record || !BinaryJsonReader::decode(*record, entry) || !entry.is_array() || entry.size() != 10) {
+                        return {};
+                    }
+
+                    IndexedScore score;
+                    score.size = entry[1].get<uint64_t>();
+                    score.modified = entry[2].get<int64_t>();
+                    score.valid = entry[3].get<bool>();
+                    score.gameplay_hash = entry[4].get<std::string>();
+                    score.score.accuracy = entry[5].get<double>();
+                    score.score.max_combo = entry[6].get<uint32_t>();
+                    score.score.played_at = entry[7].get<std::string>();
+                    score.score.rate = entry[8].get<float>();
+                    score.score.performance = entry[9].get<double>();
+                    index.emplace(entry[0].get<std::string>(), std::move(score));
+                }
+            }
+            catch (const nlohmann::json::exception&) {
+                return {};
+            }
+
+            return index;
+        }
+
+        void write_score_index(const std::filesystem::path& path, const std::unordered_map<std::string, IndexedScore>& index) {
+            std::string bytes = BinaryJsonFile::header(LocalReplays::SCORE_INDEX_VERSION);
+            BinaryJsonWriter writer{bytes};
+
+            for (const auto& [name, score] : index) {
+                writer.write(nlohmann::json::array({name, score.size, score.modified, score.valid, score.gameplay_hash, score.score.accuracy, score.score.max_combo, score.score.played_at, score.score.rate, score.score.performance}));
+            }
+
+            std::string error;
+
+            if (!BinaryJsonFile(path, LocalReplays::SCORE_INDEX_VERSION).save_bytes(bytes, error)) {
+                std::cerr << "Replays: " << error << std::endl;
+            }
+        }
+    }
+
     static std::vector<LocalScore> load_scores(const std::string& gameplay_hash, std::optional<long> rate) {
         std::vector<LocalScore> scores;
         std::error_code ec;
+        std::filesystem::path folder = replay_folder(LocalReplays::directory(), gameplay_hash);
 
-        for (const auto& file : std::filesystem::directory_iterator(replay_folder(LocalReplays::directory(), gameplay_hash), ec)) {
+        if (!std::filesystem::is_directory(folder, ec)) {
+            return scores;
+        }
+
+        std::lock_guard<std::mutex> lock(score_index_mutex);
+        std::filesystem::path index_path = folder / LocalReplays::SCORE_INDEX_FILE;
+        std::unordered_map<std::string, IndexedScore> previous = read_score_index(index_path);
+        std::unordered_map<std::string, IndexedScore> current;
+        bool changed = false;
+
+        for (const auto& file : std::filesystem::directory_iterator(folder, ec)) {
+            std::error_code file_ec;
+
+            if (!file.is_regular_file(file_ec) || file.path().extension() != ".json") {
+                continue;
+            }
+
+            std::string name = path_utf8(file.path().filename());
+            uint64_t size = file.file_size(file_ec);
+            int64_t modified = (int64_t)file.last_write_time(file_ec).time_since_epoch().count();
+            auto known = previous.find(name);
+
+            if (known != previous.end() && known->second.size == size && known->second.modified == modified) {
+                current.emplace(name, std::move(known->second));
+                continue;
+            }
+
+            IndexedScore indexed;
+            indexed.size = size;
+            indexed.modified = modified;
             std::string error;
             std::optional<Replay> replay = load_replay(file.path(), error);
 
-            if (!replay || (rate && std::lround(replay->rate * 100.0f) != *rate)) {
+            if (replay) {
+                indexed.valid = true;
+                indexed.gameplay_hash = replay->chart.gameplay_hash;
+                indexed.score = {replay->result.accuracy, replay->result.max_combo, replay->played_at, replay->rate, {}, replay->result.performance};
+            }
+
+            current.emplace(name, std::move(indexed));
+            changed = true;
+        }
+
+        if (changed || current.size() != previous.size()) {
+            write_score_index(index_path, current);
+        }
+
+        for (const auto& [name, indexed] : current) {
+            if (!indexed.valid || (rate && std::lround(indexed.score.rate * 100.0f) != *rate)) {
                 continue;
             }
 
-            if (!replay->chart.gameplay_hash.empty() && replay->chart.gameplay_hash != gameplay_hash) {
+            if (!indexed.gameplay_hash.empty() && indexed.gameplay_hash != gameplay_hash) {
                 continue;
             }
 
-            scores.push_back({replay->result.accuracy, replay->result.max_combo, replay->played_at, replay->rate, file.path()});
+            LocalScore score = indexed.score;
+            score.path = folder / utf8_path(name);
+            scores.push_back(std::move(score));
         }
 
         std::sort(scores.begin(), scores.end(), [](const LocalScore& a, const LocalScore& b) {

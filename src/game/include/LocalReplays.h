@@ -14,11 +14,14 @@ namespace nascent {
         std::string played_at;
         float rate = 1.0f;
         std::filesystem::path path;
+        double performance = 0;
     };
 
     class LocalReplays {
         public:
         static constexpr const char* MIGRATED_MARKER = ".gameplay-hash-folders";
+        static constexpr const char* SCORE_INDEX_FILE = "scores.bin";
+        static constexpr uint32_t SCORE_INDEX_VERSION = 1;
 
         static std::filesystem::path directory();
         static bool folders_migrated();
