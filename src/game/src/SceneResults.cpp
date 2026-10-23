@@ -1,4 +1,5 @@
 #include "SceneResults.h"
+#include "ScenePlay.h"
 #include "RichPresence.h"
 #include "Accuracy.h"
 #include "Chart.h"
@@ -30,6 +31,7 @@ namespace nascent {
     static constexpr std::string_view BACK_HINT = "Enter / Esc  back to the song list";
     static constexpr std::string_view BEST_LABEL = "Best";
     static constexpr std::string_view PLAY_PAGE_HINT = "F7  view on website";
+    static constexpr std::string_view WATCH_HINT = "F5  watch replay";
     static constexpr double MAX_PARTICLES = 2000.0;
 
     static size_t burst_size(Grade grade) {
@@ -68,6 +70,7 @@ namespace nascent {
     }
 
     void SceneResults::on_create() {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         RichPresence::viewing_results(*chart, summary.accuracy, grade_name(summary.grade));
         layout_error_graph();
 
@@ -85,22 +88,26 @@ namespace nascent {
         int32_t margin = (int32_t)(screen.x * Ui::layout("results.graph_margin_fraction"));
 
         error_graph_pos = {margin, (int32_t)(screen.y * Ui::layout("results.graph_top"))};
-        build_error_graph({std::max(1, screen.x - margin * 2), std::max(1, (int32_t)(screen.y * Ui::layout("results.graph_height")))});
+        olc::vi2d size = {std::max(1, screen.x - margin * 2), std::max(1, (int32_t)(screen.y * Ui::layout("results.graph_height")))};
+
+        if (error_graph && size == error_graph_size && Ui::scale() == error_graph_scale) {
+            return;
+        }
+
+        error_graph_size = size;
+        error_graph_scale = Ui::scale();
+        build_error_graph(size);
     }
 
     void SceneResults::on_resize() {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         layout_error_graph();
     }
 
     void SceneResults::build_error_graph(olc::vi2d size) {
         auto sprite = std::make_unique<olc::Sprite>(size.x, size.y);
-        olc::Pixel background = skin->color(SkinColor::GRAPH_BACKGROUND);
-
-        for (int32_t y = 0; y < size.y; y++) {
-            for (int32_t x = 0; x < size.x; x++) {
-                sprite->SetPixel(x, y, background);
-            }
-        }
+        olc::Pixel* pixels = sprite->GetData();
+        std::vector<olc::Pixel> rows((size_t)size.y, skin->color(SkinColor::GRAPH_BACKGROUND));
 
         double range = get_window_from_hit_acc_diff(HitScore::BAD, summary.hit_accuracy);
         double half = size.y / 2.0 - Ui::layout("results.graph_inset");
@@ -117,16 +124,21 @@ namespace nascent {
             olc::Pixel band = skin->judgement_color(*it);
             band.a = band_alpha;
 
-            for (int32_t y = error_to_y(-window); y <= error_to_y(window); y++) {
-                for (int32_t x = 0; x < size.x; x++) {
-                    sprite->SetPixel(x, y, blend(sprite->GetPixel(x, y), band));
-                }
+            for (int32_t y = std::max(0, error_to_y(-window)); y <= std::min(size.y - 1, error_to_y(window)); y++) {
+                rows[(size_t)y] = blend(rows[(size_t)y], band);
             }
         }
 
-        for (int32_t x = 0; x < size.x; x++) {
-            sprite->SetPixel(x, size.y / 2, blend(sprite->GetPixel(x, size.y / 2), skin->color(SkinColor::GRAPH_CENTER_LINE)));
+        rows[(size_t)(size.y / 2)] = blend(rows[(size_t)(size.y / 2)], skin->color(SkinColor::GRAPH_CENTER_LINE));
+
+        for (int32_t y = 0; y < size.y; y++) {
+            std::fill(pixels + (size_t)y * size.x, pixels + (size_t)(y + 1) * size.x, rows[(size_t)y]);
         }
+
+        auto blend_at = [&](int32_t x, int32_t y, olc::Pixel color) {
+            olc::Pixel& pixel = pixels[(size_t)y * size.x + x];
+            pixel = blend(pixel, color);
+        };
 
         double span = std::max(1, summary.chart_end - summary.chart_start);
 
@@ -141,8 +153,8 @@ namespace nascent {
             if (point.score == HitScore::MISS && !point.played) {
                 int32_t x = time_to_x(point.time);
 
-                for (int32_t y = 0; y < size.y; y++) {
-                    sprite->SetPixel(x, y, blend(sprite->GetPixel(x, y), miss_color));
+                for (int32_t y = 0; x >= 0 && x < size.x && y < size.y; y++) {
+                    blend_at(x, y, miss_color);
                 }
             }
         }
@@ -165,7 +177,7 @@ namespace nascent {
             for (int32_t dy = -radius; dy <= radius; dy++) {
                 for (int32_t dx = 0; dx < dot_width; dx++) {
                     if (x + dx >= 0 && x + dx < size.x && y + dy >= 0 && y + dy < size.y) {
-                        sprite->SetPixel(x + dx, y + dy, blend(sprite->GetPixel(x + dx, y + dy), color));
+                        blend_at(x + dx, y + dy, color);
                     }
                 }
             }
@@ -218,6 +230,7 @@ namespace nascent {
     }
 
     void SceneResults::update(float elapsed_time) {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         elapsed += elapsed_time;
         particles.gravity = Ui::layout_pxf("results.particle_gravity");
         particles.drag = (float)Ui::layout("results.particle_drag");
@@ -251,13 +264,66 @@ namespace nascent {
             open_play_page();
         }
 
+        if (replay && (clicked == SPOT_WATCH || game->input().key_pressed(InputManager::watch_replay_key))) {
+            watch_replay();
+            return;
+        }
+
+        if (replay_chart != nullptr && (clicked == SPOT_RETRY || game->input().key_pressed(InputManager::get_key(KeyBinding::RESTART)))) {
+            retry();
+            return;
+        }
+
         if (game->input().take(actions::CONFIRM)) {
             game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
             game->scenes().pop();
         }
     }
 
+    void SceneResults::enable_replay(Chart* chart, Replay replay, std::string label, const MipDecal* background) {
+        replay_chart = chart;
+        this->replay = std::move(replay);
+        watch_label = std::move(label);
+        replay_background = background;
+    }
+
+    void SceneResults::set_play_id(int64_t play_id) {
+        if (play_id > 0) {
+            server_play_id = play_id;
+        }
+    }
+
+    void SceneResults::watch_replay() {
+        if (replay_chart == nullptr || !replay) {
+            return;
+        }
+
+        replay_chart->set_pitch(replay->rate);
+        auto play = std::make_unique<ScenePlay>(replay_chart, skin, *replay, watch_label);
+        play->use_background(replay_background);
+
+        if (server_play_id) {
+            play->set_replay_play_id(*server_play_id);
+        }
+
+        game->scenes().replace(std::move(play));
+    }
+
+    void SceneResults::retry() {
+        if (replay) {
+            replay_chart->set_pitch(replay->rate);
+        }
+
+        auto play = std::make_unique<ScenePlay>(replay_chart, skin);
+        play->use_background(replay_background);
+        game->scenes().replace(std::move(play));
+    }
+
     std::optional<int64_t> SceneResults::submitted_play_id() const {
+        if (server_play_id) {
+            return server_play_id;
+        }
+
         if (!replay_label.empty() || !submitted || !submitted->ok() || submitted->value->play.id <= 0) {
             return std::nullopt;
         }
@@ -333,6 +399,14 @@ namespace nascent {
 
         if (submitted_play_id()) {
             hints.insert(hints.begin(), {std::string(PLAY_PAGE_HINT), SPOT_PLAY_PAGE});
+        }
+
+        if (replay) {
+            hints.insert(hints.begin(), {std::string(WATCH_HINT), SPOT_WATCH});
+        }
+
+        if (replay_chart != nullptr) {
+            hints.insert(hints.begin(), {std::format("{}  retry", InputManager::key_label(InputManager::get_key(KeyBinding::RESTART))), SPOT_RETRY});
         }
 
         int32_t right = screen.x - padding - (int32_t)std::ceil(hints_width(font, hints, (float)segment_gap));
@@ -444,6 +518,7 @@ namespace nascent {
     }
 
     void SceneResults::draw(olc::PixelGameEngine* window) {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d screen = window->GetScreenSize();
 
         if (background_image) {

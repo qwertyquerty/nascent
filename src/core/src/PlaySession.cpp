@@ -29,6 +29,10 @@ namespace nascent {
         clock.sync(song_position, now);
     }
 
+    void PlaySession::set_clock_speed(double speed, double now) {
+        clock.set_speed(speed, now);
+    }
+
     void PlaySession::press(uint8_t key, double event_time) {
         attempt.press(key, to_input_time(event_time));
         record_input_times(precise_input_time(event_time));

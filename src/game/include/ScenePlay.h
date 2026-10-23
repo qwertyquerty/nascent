@@ -34,6 +34,7 @@ namespace nascent {
         bool mirror = false;
 
         int chart_audio_id = -1;
+        int handed_audio_id = -1;
         std::shared_future<ApiResult<PlayTicket>> ticket;
         double ticket_requested_at = 0;
         bool waiting_for_ticket = false;
@@ -68,26 +69,37 @@ namespace nascent {
         bool chart_started = false;
         bool paused = false;
         bool replay_paused = false;
+        size_t replay_speed_index = REPLAY_NORMAL_SPEED;
         mutable Hotspots replay_spots;
         mutable ScrollBar replay_seek;
         double replay_seek_target = -1;
 
         MipDecal background_image;
         const MipDecal* borrowed_background = nullptr;
+        std::optional<int64_t> replay_play_id;
         std::future<std::vector<std::unique_ptr<olc::Sprite>>> background_load;
         float background_fade = 0;
         const JudgedHit* last_judged = nullptr;
         bool last_judged_release = false;
 
         static inline bool show_hit_log = false;
+        static constexpr double DIAGNOSTICS_REFRESH_MS = 250.0;
+        mutable std::vector<std::string> diagnostics_cache;
+        mutable std::optional<double> diagnostics_built_at;
+        mutable float diagnostics_fit_width = 0;
+        mutable float diagnostics_width = 0;
+        std::string now_playing_text;
         bool finished = false;
         bool audio_finished = false;
 
         void pause(double now);
         void resume(double now);
         void toggle_replay_pause(double now);
+        void set_replay_speed(size_t index, double now);
+        double replay_speed() const;
         void feed_replay(double position, bool sounds);
         void seek_replay(double target, double now);
+        olc::vf2d judgement_counter_size() const;
         void draw_judgement_counter(const Attempt& attempt, int32_t x, int32_t y) const;
         void update_replay_seek(Input& input, double now);
         void draw_replay_seek(olc::PixelGameEngine* window, double position) const;
@@ -127,6 +139,9 @@ namespace nascent {
         static constexpr int32_t REPLAY_RESTART = 3;
         static constexpr int32_t REPLAY_MENU = 4;
         static constexpr int32_t REPLAY_STOP = 5;
+        static constexpr int32_t REPLAY_SPEED = 6;
+        static constexpr std::array<double, 6> REPLAY_SPEEDS = {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
+        static constexpr size_t REPLAY_NORMAL_SPEED = 3;
         static constexpr double TICKET_WAIT_LIMIT_MS = 10000.0;
         static constexpr double CLOCK_SAMPLE_INTERVAL_MS = 1000.0;
         static constexpr double TICKET_HINT_DELAY_MS = 1000.0;
@@ -134,6 +149,8 @@ namespace nascent {
         ScenePlay(Chart* chart, Skin* skin);
         ScenePlay(Chart* chart, Skin* skin, Replay replay, std::string replay_label);
         void use_background(const MipDecal* background);
+        void use_audio(int audio_id);
+        void set_replay_play_id(int64_t play_id);
         ~ScenePlay();
         void on_create() override;
         void on_exit() override;

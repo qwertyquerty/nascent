@@ -254,6 +254,7 @@ namespace nascent {
         static std::future<ApiResult<ServerChart>> chart(const std::string& chart_hash);
         static std::future<ApiResult<ChartList>> charts(const ChartQuery& query);
         static std::future<ApiResult<ChartLeaderboard>> chart_leaderboard(const std::string& chart_hash, float rate = 1.0f, int32_t limit = 50, int32_t offset = 0);
+        static std::future<ApiResult<ChartLeaderboard>> chart_performance_leaderboard(const std::string& chart_hash, int32_t limit = 50, int32_t offset = 0);
         static std::future<ApiResult<ServerChart>> upload_chart(const Chart& chart);
 
         static std::future<ApiResult<Leaderboard>> leaderboard(std::optional<uint8_t> key_count = std::nullopt, int32_t limit = 50, int32_t offset = 0);

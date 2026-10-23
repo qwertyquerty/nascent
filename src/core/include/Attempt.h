@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -55,6 +56,7 @@ namespace nascent {
 
         uint32_t current_combo = 0;
         uint32_t max_combo = 0;
+        std::array<uint32_t, HIT_SCORE_COUNT> score_counts = {};
 
         uint32_t held_keys = 0;
 

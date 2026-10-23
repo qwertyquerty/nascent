@@ -18,8 +18,61 @@ namespace nascent {
         return request && is_ready(request->result);
     }
 
-    std::string LeaderboardPanel::key(const std::string& gameplay_hash, float pitch) {
+    int32_t LeaderboardSection::max_scroll() const {
+        return std::max(0, count - rows);
+    }
+
+    void LeaderboardSection::clamp() {
+        scroll = std::clamp(scroll, 0, max_scroll());
+    }
+
+    std::string LeaderboardPanel::key(const std::string& gameplay_hash, float pitch) const {
+        if (mode == LeaderboardMode::PERFORMANCE) {
+            return std::format("{}@performance", gameplay_hash);
+        }
+
         return std::format("{}@{}", gameplay_hash, std::lround(pitch * 100.0f));
+    }
+
+    void LeaderboardPanel::set_mode(LeaderboardMode mode) {
+        this->mode = mode;
+    }
+
+    LeaderboardMode LeaderboardPanel::get_mode() const {
+        return mode;
+    }
+
+    bool LeaderboardPanel::scroll(olc::vf2d point, int32_t wheel) {
+        for (LeaderboardSection* section : {&local_section, &online_section}) {
+            if (wheel == 0 || !section->area.contains(point)) {
+                continue;
+            }
+
+            section->scroll -= ((wheel > 0) - (wheel < 0)) * WHEEL_ROWS;
+            section->clamp();
+            return true;
+        }
+
+        return panel_area.contains(point);
+    }
+
+    bool LeaderboardPanel::update_scrollbars(Input& input) {
+        for (LeaderboardSection* section : {&local_section, &online_section}) {
+            int32_t limit = section->max_scroll();
+            float position = limit > 0 ? (float)section->scroll / (float)limit : 0.0f;
+
+            if (std::optional<float> moved = section->bar.update(input, position)) {
+                section->scroll = (int32_t)std::lround(*moved * (float)limit);
+                section->clamp();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool LeaderboardPanel::take_mode_click(Input& input) {
+        return spots.hovered(MODE_SPOT, input.mouse_position()) && spots.take_click(input) == MODE_SPOT;
     }
 
     void LeaderboardPanel::clear() {
@@ -65,19 +118,43 @@ namespace nascent {
 
         std::string board_key = key(gameplay_hash, pitch);
 
+        bool performance = mode == LeaderboardMode::PERFORMANCE;
+
         if (!local_request && !local_scores.contains(board_key)) {
             long rate = std::lround(pitch * 100.0f);
-            local_request = LeaderboardRequest<std::vector<LocalScore>>{board_key, generation, std::async(std::launch::async, [gameplay_hash, rate] {
-                                                                            return LocalReplays::scores(gameplay_hash, rate);
+            local_request = LeaderboardRequest<std::vector<LocalScore>>{board_key, generation, std::async(std::launch::async, [gameplay_hash, rate, performance] {
+                                                                            std::vector<LocalScore> scores = performance ? LocalReplays::all_scores(gameplay_hash) : LocalReplays::scores(gameplay_hash, rate);
+
+                                                                            if (performance) {
+                                                                                std::stable_sort(scores.begin(), scores.end(), [](const LocalScore& a, const LocalScore& b) {
+                                                                                    return a.performance > b.performance;
+                                                                                });
+                                                                            }
+
+                                                                            return scores;
                                                                         })};
         }
 
         if (!online_request && !online_scores.contains(board_key)) {
-            online_request = LeaderboardRequest<ApiResult<ChartLeaderboard>>{board_key, generation, ServerApi::chart_leaderboard(gameplay_hash, pitch, ONLINE_LIMIT)};
+            std::future<ApiResult<ChartLeaderboard>> board = performance ? ServerApi::chart_performance_leaderboard(gameplay_hash, ENTRY_LIMIT) : ServerApi::chart_leaderboard(gameplay_hash, pitch, ENTRY_LIMIT);
+            online_request = LeaderboardRequest<ApiResult<ChartLeaderboard>>{board_key, generation, std::move(board)};
         }
     }
 
+    std::optional<LeaderboardPick> LeaderboardPanel::take_click(Input& input) {
+        std::optional<int32_t> clicked = spots.take_click(input);
+
+        if (!clicked || *clicked < 0 || (size_t)*clicked >= picks.size() || spots.hovered(MODE_SPOT, input.mouse_position())) {
+            return std::nullopt;
+        }
+
+        return picks[(size_t)*clicked];
+    }
+
     void LeaderboardPanel::draw(olc::PixelGameEngine* window, Skin* skin, const std::string& gameplay_hash, float pitch, olc::vi2d position, olc::vi2d size) {
+        spots.clear();
+        picks.clear();
+
         int32_t padding = Ui::layout_px("leaderboard.padding");
         int32_t row_height = Ui::layout_px("leaderboard.row_height");
         int32_t header_height = Ui::layout_px("leaderboard.header_height");
@@ -90,6 +167,7 @@ namespace nascent {
         int32_t bottom = position.y + size.y;
 
         window->FillRectDecal({(float)left, (float)top}, {(float)width, (float)(bottom - top)}, skin->color(SkinColor::PANEL_BACKGROUND));
+        panel_area = {{(float)left, (float)top}, {(float)width, (float)(bottom - top)}};
 
         olc::Font& header_font = skin->display_font_medium;
         olc::Font& row_font = skin->display_font_small;
@@ -100,6 +178,21 @@ namespace nascent {
         int32_t y = top + padding;
         std::string board_key = key(gameplay_hash, pitch);
         std::string own_name = Account::signed_in() ? Account::username() : std::string();
+        bool performance = mode == LeaderboardMode::PERFORMANCE;
+        int32_t scrollbar_width = std::max(1, Ui::layout_px("leaderboard.scrollbar_width"));
+
+        if (board_key != scrolled_key) {
+            scrolled_key = board_key;
+            local_section.scroll = 0;
+            online_section.scroll = 0;
+        }
+
+        std::string mode_hint = performance ? "Shift+Tab  accuracy at this rate" : "Shift+Tab  performance at every rate";
+        int32_t hint_baseline = bottom - padding - row_height + (row_height - row_metrics.size.y) / 2 - row_metrics.offset.y;
+        Rect hint_area = text_rect(row_font, mode_hint, {(float)x, (float)hint_baseline}).inflated((float)padding / 4.0f);
+        spots.add(hint_area, MODE_SPOT);
+        draw_text(row_font, mode_hint, {x, hint_baseline}, skin->color(hint_area.contains(window->GetMousePos()) ? SkinColor::TEXT : SkinColor::TEXT_FAINT));
+        bottom -= row_height + padding / 2;
 
         auto header = [&](std::string_view title, std::string_view detail) {
             draw_text(header_font, title, {x, y - header_metrics.offset.y}, skin->color(SkinColor::TEXT));
@@ -117,13 +210,36 @@ namespace nascent {
             y += row_height;
         };
 
-        auto row = [&](int64_t rank, double accuracy, std::string name, uint32_t combo, bool highlight) {
+        auto section_bar = [&](LeaderboardSection& section, int32_t first_row_y) {
+            section.area = {{(float)left, (float)first_row_y}, {(float)width, (float)(section.rows * row_height)}};
+            section.clamp();
+
+            if (section.max_scroll() <= 0) {
+                section.bar.hide();
+                return;
+            }
+
+            Rect track = {{(float)(left + width - padding / 2 - scrollbar_width), (float)first_row_y}, {(float)scrollbar_width, (float)(section.rows * row_height)}};
+            section.bar.layout(track, (float)section.rows / (float)section.count);
+            section.bar.draw(window, (float)section.scroll / (float)section.max_scroll(), skin->color(SkinColor::SCROLLBAR_TRACK), skin->color(SkinColor::SCROLLBAR_THUMB));
+        };
+
+        auto row = [&](int64_t rank, double accuracy, double value, std::string name, std::string right_text, bool highlight, LeaderboardPick pick) {
             int32_t baseline = y + (row_height - row_metrics.size.y) / 2 - row_metrics.offset.y;
+            Rect area = {{(float)(left + padding / 2), (float)y}, {(float)(width - padding), (float)row_height}};
+            spots.add(area, (int32_t)picks.size());
+            picks.push_back(std::move(pick));
+
+            if (!highlight && area.contains(window->GetMousePos())) {
+                olc::Pixel hover = skin->color(SkinColor::SELECTION_HIGHLIGHT);
+                hover.a = (uint8_t)(hover.a / 2);
+                window->FillRectDecal(area.position, area.size, hover);
+            }
+
             Grade grade = grade_for_accuracy(accuracy);
-            std::string combo_text = std::format("{}x", combo);
-            int32_t combo_width = text_bounds(row_font, combo_text).size.x;
+            int32_t right_width = text_bounds(row_font, right_text).size.x;
             int32_t name_x = x + name_offset;
-            int32_t name_width = right - combo_width - padding / 2 - name_x;
+            int32_t name_width = right - right_width - padding / 2 - name_x;
 
             if (highlight) {
                 window->FillRectDecal({(float)(left + padding / 2), (float)y}, {(float)(width - padding), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));
@@ -143,33 +259,51 @@ namespace nascent {
 
             draw_text(row_font, std::format("#{}", rank), {x, baseline}, skin->rank_color(rank));
             skin->draw_grade(grade, row_font, {(float)(x + grade_offset), (float)baseline});
-            draw_text(row_font, std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0), {x + accuracy_offset, baseline}, skin->color(SkinColor::TEXT));
+            std::string value_text = performance ? std::format("{:.2f}", value) : std::format("{:.2f}%", std::floor(accuracy * 10000.0) / 100.0);
+            draw_text(row_font, value_text, {x + accuracy_offset, baseline}, skin->color(SkinColor::TEXT));
             draw_text(row_font, name, {name_x, baseline}, skin->color(highlight ? SkinColor::TEXT : SkinColor::TEXT_MUTED));
-            draw_text(row_font, combo_text, {right - combo_width, baseline}, skin->color(SkinColor::TEXT_MUTED));
+            draw_text(row_font, right_text, {right - right_width, baseline}, skin->color(SkinColor::TEXT_MUTED));
             y += row_height;
         };
 
+        auto right_text = [&](uint32_t combo, float rate) {
+            return performance ? std::format("{:.2f}x", rate) : std::format("{}x", combo);
+        };
+
+        std::string_view empty_text = performance ? "No plays yet" : "No plays at this rate yet";
         auto local = local_scores.find(board_key);
-        header("Local", local != local_scores.end() && !local->second.empty() ? std::format("{} plays", local->second.size()) : std::string());
+        header(performance ? "Local performance" : "Local", local != local_scores.end() && !local->second.empty() ? std::format("{} plays", local->second.size()) : std::string());
+        int32_t local_top = y;
+        local_section.rows = LOCAL_ROWS;
+        local_section.count = 0;
 
         if (local == local_scores.end()) {
             message("Loading...", skin->color(SkinColor::TEXT_MUTED));
         }
         else if (local->second.empty()) {
-            message("No plays at this rate yet", skin->color(SkinColor::TEXT_FAINT));
+            message(empty_text, skin->color(SkinColor::TEXT_FAINT));
         }
         else {
-            for (size_t index = 0; index < local->second.size() && (int32_t)index < LOCAL_ROWS; index++) {
-                const LocalScore& score = local->second[index];
-                row((int64_t)index + 1, score.accuracy, score.played_at.substr(0, 10), score.max_combo, false);
+            local_section.count = (int32_t)std::min(local->second.size(), (size_t)ENTRY_LIMIT);
+            local_section.clamp();
+
+            for (int32_t index = local_section.scroll; index < local_section.count && index < local_section.scroll + LOCAL_ROWS; index++) {
+                const LocalScore& score = local->second[(size_t)index];
+                std::string date = score.played_at.substr(0, 10);
+                row((int64_t)index + 1, score.accuracy, score.performance, date, right_text(score.max_combo, score.rate), false, {score.path, 0, std::format("your play from {}", date)});
             }
         }
 
+        section_bar(local_section, local_top);
         y = std::max(y, top + padding + header_height + row_height * LOCAL_ROWS) + Ui::layout_px("leaderboard.section_gap");
 
         auto online = online_scores.find(board_key);
         const ChartLeaderboard* board = online != online_scores.end() && online->second.ok() ? &*online->second.value : nullptr;
-        header("Online", board != nullptr && board->total > 0 ? std::format("{} players", board->total) : std::string());
+        header(performance ? "Online performance" : "Online", board != nullptr && board->total > 0 ? std::format("{} players", board->total) : std::string());
+        online_section.count = 0;
+        online_section.rows = 0;
+        online_section.bar.hide();
+        online_section.area = {};
 
         if (online == online_scores.end()) {
             message("Loading...", skin->color(SkinColor::TEXT_MUTED));
@@ -182,28 +316,38 @@ namespace nascent {
         }
 
         if (board->entries.empty()) {
-            message("No plays at this rate yet", skin->color(SkinColor::TEXT_FAINT));
+            message(empty_text, skin->color(SkinColor::TEXT_FAINT));
             return;
         }
 
-        bool viewer_listed = false;
-        int32_t rows = (bottom - padding - y) / row_height;
+        auto is_own = [&](const RankedPlay& entry) {
+            return entry.play.user && !own_name.empty() && entry.play.user->username == own_name;
+        };
 
-        for (const RankedPlay& entry : board->entries) {
-            bool own = entry.play.user && !own_name.empty() && entry.play.user->username == own_name;
-            bool reserve = board->viewer && !viewer_listed && !own;
+        bool pin_viewer = board->viewer && std::none_of(board->entries.begin(), board->entries.end(), is_own);
+        int32_t rows = (bottom - y) / row_height - (pin_viewer ? 1 : 0);
 
-            if (rows - (reserve ? 1 : 0) <= 0) {
-                break;
-            }
-
-            viewer_listed = viewer_listed || own;
-            row(entry.rank, entry.play.accuracy, entry.play.user ? entry.play.user->username : std::string(), (uint32_t)entry.play.max_combo, own);
-            rows--;
+        if (rows <= 0) {
+            return;
         }
 
-        if (board->viewer && !viewer_listed && rows > 0) {
-            row(board->viewer->rank, board->viewer->play.accuracy, own_name, (uint32_t)board->viewer->play.max_combo, true);
+        int32_t online_top = y;
+        online_section.rows = rows;
+        online_section.count = (int32_t)board->entries.size();
+        online_section.clamp();
+
+        for (int32_t index = online_section.scroll; index < online_section.count && index < online_section.scroll + rows; index++) {
+            const RankedPlay& entry = board->entries[(size_t)index];
+            std::string player = entry.play.user ? entry.play.user->username : std::string();
+            row(entry.rank, entry.play.accuracy, entry.play.performance, player, right_text((uint32_t)entry.play.max_combo, entry.play.rate), is_own(entry), {std::nullopt, entry.play.id, std::format("{} (#{})", player, entry.rank)});
+        }
+
+        section_bar(online_section, online_top);
+
+        if (pin_viewer) {
+            y = online_top + rows * row_height;
+            const RankedPlay& viewer = *board->viewer;
+            row(viewer.rank, viewer.play.accuracy, viewer.play.performance, own_name, right_text((uint32_t)viewer.play.max_combo, viewer.play.rate), true, {std::nullopt, viewer.play.id, std::format("{} (#{})", own_name, viewer.rank)});
         }
     }
 }

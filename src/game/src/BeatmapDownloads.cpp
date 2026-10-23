@@ -9,6 +9,7 @@
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include <miniz.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cerrno>
@@ -351,6 +352,7 @@ namespace nascent {
         }
 
         auto download = std::make_shared<Download>();
+        download->name = title;
         downloads[osu_key(set_id)] = download;
 
         std::vector<std::string> urls;
@@ -708,6 +710,8 @@ namespace nascent {
         }
 
         auto download = std::make_shared<Download>();
+        download->name = pack.name;
+        download->pack = true;
         downloads[key] = download;
         std::string name = folder_name(pack.name);
         std::filesystem::path destination = SettingsManager::song_directory() / utf8_path(name.empty() ? std::format("EtternaOnline pack {}", pack.id) : name);
@@ -769,6 +773,34 @@ namespace nascent {
             std::error_code ec;
             return entry.second->state == State::DONE && !std::filesystem::exists(entry.second->destination, ec);
         });
+    }
+
+    std::optional<BeatmapDownloads::Activity> BeatmapDownloads::activity() {
+        std::lock_guard<std::mutex> lock(downloads_mutex);
+        Activity activity;
+        double total = 0;
+
+        for (const auto& [key, download] : downloads) {
+            State state = download->state;
+
+            if (download->cancelled || (state != State::DOWNLOADING && state != State::EXTRACTING)) {
+                continue;
+            }
+
+            (download->pack ? activity.packs : activity.songs)++;
+            total += state == State::EXTRACTING ? 1.0 : std::clamp((double)download->progress, 0.0, 1.0);
+            activity.installing = state == State::EXTRACTING;
+            activity.name = download->name;
+        }
+
+        size_t count = activity.songs + activity.packs;
+
+        if (count == 0) {
+            return std::nullopt;
+        }
+
+        activity.progress = total / (double)count;
+        return activity;
     }
 
     bool BeatmapDownloads::take_library_changed() {

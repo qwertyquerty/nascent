@@ -28,6 +28,7 @@ namespace nascent {
 
         void reset_clock(double song_position, double now);
         void sync_clock(double song_position, double now);
+        void set_clock_speed(double speed, double now);
 
         void press(uint8_t key, double event_time);
         void release(uint8_t key, double event_time);

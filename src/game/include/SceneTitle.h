@@ -3,10 +3,12 @@
 #include "gse/Scene.h"
 #include "gse/ui/Layout.h"
 #include "SongClock.h"
+#include "Util.h"
 #include "gse/render/SpriteDecal.h"
 
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -25,9 +27,17 @@ namespace nascent {
         int audio_id = -1;
     };
 
+    struct TitleSong {
+        std::unique_ptr<Chart> chart;
+        PreparedSongAudio audio;
+    };
+
     class SceneTitle : public Scene {
         protected:
         std::optional<TitleTrack> handoff;
+        std::optional<std::future<std::shared_ptr<TitleSong>>> next_song;
+        std::optional<std::vector<std::filesystem::path>> song_candidates;
+        std::optional<std::vector<std::filesystem::path>> favorite_candidates;
 
         std::unique_ptr<Chart> logo_chart;
         std::unique_ptr<Attempt> logo_attempt;
@@ -69,8 +79,9 @@ namespace nascent {
         float shown_progress = 0;
         float reveal = 0;
 
-        std::unique_ptr<Chart> load_random_chart(std::vector<std::filesystem::path> candidates);
+        static std::unique_ptr<Chart> load_random_chart(std::vector<std::filesystem::path> candidates);
         bool load_background();
+        void apply_next_song();
         void update_loading(float elapsed_time);
         void draw_loading(olc::PixelGameEngine* window);
         void draw_cover(olc::PixelGameEngine* window, float opacity);

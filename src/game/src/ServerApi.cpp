@@ -382,6 +382,23 @@ namespace nascent {
         });
     }
 
+    std::future<ApiResult<ChartLeaderboard>> ServerApi::chart_performance_leaderboard(const std::string& chart_hash, int32_t limit, int32_t offset) {
+        std::string path = std::format("/charts/{}/leaderboard/performance?limit={}&offset={}", chart_hash, limit, offset);
+
+        return call<ChartLeaderboard>(Auth::VIEWER, "GET", path, nullptr, [](const json& j) {
+            ChartLeaderboard board;
+            board.chart = parse_chart(field(j, "chart"));
+            board.total = get_int(j, "total");
+            board.entries = get_list<RankedPlay>(j, "entries", parse_ranked_play);
+
+            if (field(j, "viewer").is_object()) {
+                board.viewer = parse_ranked_play(j["viewer"]);
+            }
+
+            return board;
+        });
+    }
+
     std::future<ApiResult<ServerChart>> ServerApi::upload_chart(const Chart& chart) {
         return call<ServerChart>(Auth::SIGNED_IN, "POST", "/charts", chart.serialize(), [](const json& j) {
             return parse_chart(field(j, "chart"));

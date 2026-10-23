@@ -30,7 +30,7 @@ namespace nascent {
 
         static void start();
         static void stop();
-        static std::future<ApiResult<Submission>> submit(const Chart& chart, const Replay& replay, std::shared_future<ApiResult<PlayTicket>> ticket);
+        static std::future<ApiResult<Submission>> submit(const Chart& chart, Replay replay, std::shared_future<ApiResult<PlayTicket>> ticket, std::filesystem::path replay_directory);
         static std::vector<SubmissionNotice> take_notices();
     };
 }

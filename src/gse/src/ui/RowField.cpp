@@ -226,20 +226,25 @@ namespace nascent {
         return std::format("{}{}", value, unit);
     }
 
+    int32_t SliderField::active_step() const {
+        return fine && step > 1 ? 1 : step;
+    }
+
     bool SliderField::update(Input& input, float elapsed_time) {
         RowField::update(input, elapsed_time);
+        fine = input.key_held(olc::Key::SHIFT);
         int32_t before = value;
         bool left = left_repeat.update(input.pressed(actions::LEFT), input.held(actions::LEFT), elapsed_time);
         bool right = right_repeat.update(input.pressed(actions::RIGHT), input.held(actions::RIGHT), elapsed_time);
 
         if (left) {
             input.consume(actions::LEFT);
-            value = std::max(minimum, value - step);
+            value = std::max(minimum, value - active_step());
         }
 
         if (right) {
             input.consume(actions::RIGHT);
-            value = std::min(maximum, value + step);
+            value = std::min(maximum, value + active_step());
         }
 
         return value != before;
@@ -249,8 +254,9 @@ namespace nascent {
         float bar_left = Ui::layout_pxf("form.slider_left");
         float bar_width = Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_left") - Ui::layout("form.slider_right_gap"));
         float fraction = std::clamp((x - bar_left) / std::max(1.0f, bar_width), 0.0f, 1.0f);
-        int32_t steps = step > 0 ? (int32_t)std::lround(fraction * (maximum - minimum) / step) : 0;
-        int32_t next = std::clamp(minimum + steps * step, minimum, maximum);
+        int32_t increment = active_step();
+        int32_t steps = increment > 0 ? (int32_t)std::lround(fraction * (maximum - minimum) / increment) : 0;
+        int32_t next = std::clamp(minimum + steps * increment, minimum, maximum);
 
         if (next == value) {
             return false;
@@ -260,7 +266,8 @@ namespace nascent {
         return true;
     }
 
-    bool SliderField::click(olc::vf2d point, Input&) {
+    bool SliderField::click(olc::vf2d point, Input& input) {
+        fine = input.key_held(olc::Key::SHIFT);
         float padding = Ui::layout_pxf("form.row_padding");
         dragging_bar = point.x >= Ui::layout_pxf("form.slider_left") - padding && point.x <= Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_right_gap")) + padding;
         return dragging_bar && set_from_point(point.x);

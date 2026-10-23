@@ -57,6 +57,7 @@ namespace nascent {
             jhit.release_err = err;
         }
 
+        score_counts[(size_t)score]++;
         total_score += hit_score_acc(score);
         current_combo = score == HitScore::MISS ? 0 : current_combo + 1;
         max_combo = std::max(current_combo, max_combo);
@@ -165,9 +166,18 @@ namespace nascent {
 
         JudgedHit* chosen_hit = nullptr;
         JudgedHit* first_candidate = nullptr;
+        int64_t reach = 0;
+
+        for (HitScore score : TIMED_HIT_SCORES) {
+            reach = std::max<int64_t>(reach, get_window_from_hit_acc_diff(score, hit_accuracy, false));
+        }
 
         for (uint32_t i = soonest_passed_hit_index; i < judged_hits.size(); i++) {
             JudgedHit& jhit = judged_hits[i];
+
+            if ((int64_t)jhit.chart_hit.time - time > reach) {
+                break;
+            }
 
             if (jhit.chart_hit.key != key || jhit.hit) {
                 continue;

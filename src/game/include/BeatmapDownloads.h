@@ -23,6 +23,8 @@ namespace nascent {
             std::atomic<double> progress = 0.0;
             std::atomic<bool> cancelled = false;
             std::filesystem::path destination;
+            std::string name;
+            bool pack = false;
 
             std::string error() const;
             void fail(std::string message);
@@ -30,6 +32,14 @@ namespace nascent {
             private:
             mutable std::mutex error_mutex;
             std::string error_message;
+        };
+
+        struct Activity {
+            size_t songs = 0;
+            size_t packs = 0;
+            double progress = 0;
+            bool installing = false;
+            std::string name;
         };
 
         struct ImportResult {
@@ -69,6 +79,7 @@ namespace nascent {
         static std::shared_ptr<Download> find_etterna_pack(int64_t pack_id);
         static bool cancel_etterna_pack(int64_t pack_id);
         static bool take_library_changed();
+        static std::optional<Activity> activity();
         static void forget_missing();
         static bool take_access_denied();
         static ImportResult import_archive(const std::filesystem::path& file);

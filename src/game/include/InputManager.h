@@ -54,6 +54,7 @@ namespace nascent {
         static const olc::Key chart_menu_key = olc::Key::F7;
         static const olc::Key sort_key = olc::Key::F8;
         static const olc::Key play_page_key = olc::Key::F7;
+        static const olc::Key watch_replay_key = olc::Key::F5;
         static const olc::Key field_key = olc::Key::TAB;
         static const olc::Key switch_key = olc::Key::TAB;
         static const olc::Key leaderboard_key = olc::Key::TAB;

@@ -11,6 +11,7 @@
 #include "Utf8Path.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -39,6 +40,7 @@ namespace nascent {
         std::thread worker;
         bool running = false;
         std::vector<SubmissionNotice> notices;
+        std::atomic<int32_t> saving = 0;
 
         int64_t unix_seconds() {
             return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -214,17 +216,37 @@ namespace nascent {
         if (worker.joinable()) {
             worker.join();
         }
+
+        while (saving > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
     }
 
-    std::future<ApiResult<Submission>> SubmissionQueue::submit(const Chart& chart, const Replay& replay, std::shared_future<ApiResult<PlayTicket>> ticket) {
-        nlohmann::json body = {{"chart_hash", chart.gameplay_hash()}, {"replay", replay}};
-        nlohmann::json chart_data = chart.serialize();
+    std::future<ApiResult<Submission>> SubmissionQueue::submit(const Chart& chart, Replay replay, std::shared_future<ApiResult<PlayTicket>> ticket, std::filesystem::path replay_directory) {
+        bool sending = ticket.valid();
         std::string username = Account::signed_in() ? Account::username() : std::string();
         std::string name = std::format("{} - {} [{}]", chart.info.artist, chart.info.title, chart.info.difficulty_name);
-        std::string stem = std::format("{}-{}", replay.played_at, sha256_hex(body.dump()).substr(0, 12));
-        std::erase_if(stem, [](char c) { return c == ':' || c == '-'; });
+        std::shared_ptr<Chart> snapshot = sending ? std::shared_ptr<Chart>(Chart::restore(chart.file_path, chart.unpitched_chart_info(), chart.unpitched_hit_objects(), chart.unpitched_timing(), chart.gameplay_hash(), chart.difficulty_key(), 1.0f)) : nullptr;
+        saving++;
 
-        return run_detached([body, chart_data, ticket, username, name, stem]() mutable {
+        std::future<ApiResult<Submission>> result = run_detached([replay = std::move(replay), replay_directory = std::move(replay_directory), snapshot, sending, ticket, username, name]() mutable {
+            std::string error;
+
+            if (!save_replay(replay, replay_directory, error)) {
+                std::cerr << std::format("Replay not saved: {}", error) << std::endl;
+            }
+
+            saving--;
+
+            if (!sending || snapshot == nullptr) {
+                return ApiResult<Submission>();
+            }
+
+            nlohmann::json body = {{"chart_hash", snapshot->gameplay_hash()}, {"replay", replay}};
+            nlohmann::json chart_data = snapshot->serialize();
+            std::string stem = std::format("{}-{}", replay.played_at, sha256_hex(body.dump()).substr(0, 12));
+            std::erase_if(stem, [](char c) { return c == ':' || c == '-'; });
+
             if (ticket.valid() && ticket.get().ok() && !ticket.get().value->ticket.empty()) {
                 body["ticket"] = ticket.get().value->ticket;
             }
@@ -251,6 +273,8 @@ namespace nascent {
 
             return result;
         });
+
+        return sending ? std::move(result) : std::future<ApiResult<Submission>>();
     }
 
     std::vector<SubmissionNotice> SubmissionQueue::take_notices() {

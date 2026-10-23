@@ -22,6 +22,7 @@
 #include "gse/render/SpriteDecal.h"
 #include "gse/render/Color.h"
 #include "Util.h"
+#include "gse/concurrency/Async.h"
 
 #include <algorithm>
 #include <cmath>
@@ -73,19 +74,57 @@ namespace nascent {
             return false;
         }
 
-        std::unique_ptr<Chart> chart;
-
-        if (SettingsManager::settings.title_songs == TitleSongs::FAVORITES) {
-            chart = load_random_chart(list->chart_paths(true).value_or(std::vector<std::filesystem::path>()));
+        if (next_song) {
+            return true;
         }
 
-        if (chart == nullptr) {
-            chart = load_random_chart(list->chart_paths(false).value_or(std::vector<std::filesystem::path>()));
+        bool favorites = SettingsManager::settings.title_songs == TitleSongs::FAVORITES;
+
+        if (favorites && !favorite_candidates) {
+            favorite_candidates = list->chart_paths(true).value_or(std::vector<std::filesystem::path>());
         }
 
-        if (chart == nullptr) {
+        if (!song_candidates) {
+            song_candidates = list->chart_paths(false).value_or(std::vector<std::filesystem::path>());
+        }
+
+        std::vector<std::filesystem::path> preferred = favorites ? *favorite_candidates : std::vector<std::filesystem::path>();
+        next_song = run_detached([preferred = std::move(preferred), all = *song_candidates]() mutable {
+            std::unique_ptr<Chart> chart = load_random_chart(std::move(preferred));
+
+            if (chart == nullptr) {
+                chart = load_random_chart(std::move(all));
+            }
+
+            if (chart == nullptr) {
+                return std::shared_ptr<TitleSong>();
+            }
+
+            PreparedSongAudio audio = prepare_song_audio(chart->audio_path);
+            return std::make_shared<TitleSong>(TitleSong{std::move(chart), std::move(audio)});
+        });
+
+        return true;
+    }
+
+    void SceneTitle::apply_next_song() {
+        if (!next_song || !is_ready(*next_song)) {
+            return;
+        }
+
+        bool finished = bg_chart == nullptr || (bg_started && !game->audio().engine().IsPlaying(bg_audio_id));
+
+        if (!finished) {
+            return;
+        }
+
+        std::shared_ptr<TitleSong> song = next_song->get();
+        next_song.reset();
+
+        if (song == nullptr || song->chart == nullptr) {
             std::cerr << "No chart in " << SettingsManager::settings.list_song_directory << " could be loaded for the title screen background" << std::endl;
-            return false;
+            bg_started = false;
+            return;
         }
 
         if (bg_audio_id != -1) {
@@ -93,11 +132,12 @@ namespace nascent {
             game->audio().engine().UnloadSound(bg_audio_id);
         }
 
-        build_background(std::move(chart));
-        bg_audio_id = load_song_audio(game->audio().engine(), bg_chart->audio_path);
+        bool prepared = song->audio.path == song->chart->audio_path;
+        build_background(std::move(song->chart));
+        bg_audio_id = prepared ? load_song_audio(game->audio().engine(), std::move(song->audio)) : load_song_audio(game->audio().engine(), bg_chart->audio_path);
         game->audio().apply_music_volume(bg_audio_id);
         bg_clock.reset(0, now_ms());
-        return true;
+        bg_started = false;
     }
 
     bool SceneTitle::adopt_track(const TitleTrack& track) {
@@ -347,14 +387,16 @@ namespace nascent {
             load_background();
         }
 
-        if (bg_chart != nullptr && logo_finished() && !game->audio().engine().IsPlaying(bg_audio_id)) {
-            if (bg_started) {
-                load_background();
-            }
+        apply_next_song();
 
+        if (bg_chart != nullptr && logo_finished() && !bg_started && !game->audio().engine().IsPlaying(bg_audio_id)) {
             bg_started = true;
             bg_fade = 0;
             game->audio().engine().Play(bg_audio_id);
+        }
+
+        if (bg_chart != nullptr && bg_started && !next_song) {
+            load_background();
         }
 
         if (bg_started) {

@@ -10,6 +10,12 @@ namespace nascent {
         has_report = true;
     }
 
+    void SongClock::set_speed(double speed, double now) {
+        anchor_position = position_at(now);
+        anchor_time = now;
+        this->speed = speed;
+    }
+
     void SongClock::sync(double reported_position, double now) {
         double predicted = position_at(now);
         double drift = reported_position - predicted;
@@ -29,6 +35,6 @@ namespace nascent {
     }
 
     double SongClock::position_at(double now) const {
-        return anchor_position + (now - anchor_time);
+        return anchor_position + (now - anchor_time) * speed;
     }
 }

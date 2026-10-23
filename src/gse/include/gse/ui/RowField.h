@@ -57,7 +57,9 @@ namespace nascent {
         KeyRepeat left_repeat;
         KeyRepeat right_repeat;
         bool dragging_bar = false;
+        bool fine = false;
 
+        int32_t active_step() const;
         bool set_from_point(float x);
 
         std::string display_value(bool focused) const override;

@@ -70,6 +70,24 @@ NASCENT_TEST(song_clock) {
     }
 }
 
+NASCENT_TEST(song_clock_speed) {
+    SongClock clock;
+    clock.reset(1000, 0);
+    clock.set_speed(2, 100);
+    CHECK(std::abs(clock.position_at(100) - 1100) < 1e-9);
+    CHECK(std::abs(clock.position_at(600) - 2100) < 1e-9);
+
+    for (double now = 600; now < 10000; now += 10) {
+        clock.sync(1100 + (now - 100) * 2, now);
+    }
+
+    CHECK(clock.snaps == 0);
+    CHECK(std::abs(clock.position_at(10000) - 20900) < 1.0);
+
+    clock.set_speed(0.5, 10000);
+    CHECK(std::abs(clock.position_at(12000) - clock.position_at(10000) - 1000) < 1e-9);
+}
+
 NASCENT_TEST(mp3_padding) {
     std::optional<Mp3Padding> lame = parse_mp3_padding(mp3_with_tag("Info", "LAME", 576));
     CHECK(lame && lame->sample_rate == 44100 && lame->samples == 1152 + 576 + MP3_DECODER_DELAY_SAMPLES);

@@ -21,10 +21,12 @@ namespace nascent {
         DATE_ADDED,
         KEY_COUNT,
         LONG_NOTES,
+        RECENTLY_PLAYED,
+        BEST_ACCURACY,
         COUNT
     };
 
-    inline constexpr std::array<const char*, (size_t)ListSort::COUNT> LIST_SORT_NAMES = {"Title", "Artist", "Difficulty", "BPM", "Length", "Date added", "Keys", "Long notes"};
+    inline constexpr std::array<const char*, (size_t)ListSort::COUNT> LIST_SORT_NAMES = {"Title", "Artist", "Difficulty", "BPM", "Length", "Date added", "Keys", "Long notes", "Recently played", "Best accuracy"};
 
     class SortMenu : public Overlay {
         protected:
