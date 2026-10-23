@@ -263,7 +263,6 @@ namespace nascent {
             key_fields.push_back(&form.add<KeyBindField>((KeyBinding)index));
         }
 
-
         form.add<SectionField>("Online");
         server_field = &form.add<TextField>("Server address", settings.server_url);
         server_typed = settings.server_url;
