@@ -363,6 +363,72 @@ namespace olc {
             fallbacks.emplace_back(path, fontSize);
         }
 
+        bool GetGlyphMetrics(char32_t chr, FT_Vector pen, FT_BBox &box,
+                             FT_Vector &advance) {
+            Font *toUse = GetGlyphFont(chr);
+
+            if (toUse->fontFace == nullptr) {
+                return false;
+            }
+
+            FT_Set_Transform(toUse->fontFace, nullptr, &pen);
+
+            if (FT_Load_Char(toUse->fontFace, chr, FT_LOAD_BITMAP_METRICS_ONLY)) {
+                return false;
+            }
+
+            FT_GlyphSlot slot = toUse->fontFace->glyph;
+            FT_Glyph glyph;
+
+            if (FT_Get_Glyph(slot, &glyph)) {
+                return false;
+            }
+
+            FT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_GRIDFIT, &box);
+            advance = slot->advance;
+            FT_Done_Glyph(glyph);
+            return true;
+        }
+
+        olc::Sprite *RenderGlyphToSprite(char32_t chr, int padding,
+                                         olc::vi2d &origin) {
+            Font *toUse = GetGlyphFont(chr);
+
+            if (toUse->fontFace == nullptr) {
+                return nullptr;
+            }
+
+            FT_Vector pen;
+            pen.x = 0;
+            pen.y = 0;
+            FT_Set_Transform(toUse->fontFace, nullptr, &pen);
+
+            if (FT_Load_Char(toUse->fontFace, chr,
+                             FT_LOAD_RENDER | FT_LOAD_COLOR)) {
+                return nullptr;
+            }
+
+            FT_GlyphSlot slot = toUse->fontFace->glyph;
+            int width = (int)slot->bitmap.width;
+            int height = (int)slot->bitmap.rows;
+
+            if (width <= 0 || height <= 0) {
+                return nullptr;
+            }
+
+            olc::Sprite *sprite = new olc::Sprite{width + padding * 2, height + padding * 2};
+
+            for (int x = 0; x < sprite->width; x++) {
+                for (int y = 0; y < sprite->height; y++) {
+                    sprite->SetPixel(x, y, olc::BLANK);
+                }
+            }
+
+            DrawBitmapTo(padding, padding, slot->bitmap, olc::WHITE, sprite);
+            origin = {slot->bitmap_left, -slot->bitmap_top};
+            return sprite;
+        }
+
         static bool init() {
             FT_Error error = FT_Init_FreeType(&library);
 
@@ -477,6 +543,20 @@ namespace olc {
 
         FT_UInt GetCharIndex(char32_t charCode) {
             return FT_Get_Char_Index(fontFace, charCode);
+        }
+
+        Font *GetGlyphFont(char32_t chr) {
+            if (GetCharIndex(chr) != 0) {
+                return this;
+            }
+
+            for (auto &font : fallbacks) {
+                if (font.GetCharIndex(chr) != 0) {
+                    return &font;
+                }
+            }
+
+            return this;
         }
 
         static std::u32string Utf8ToUtf32(const std::string &string) {

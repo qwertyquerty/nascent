@@ -3,6 +3,7 @@
 #include "Skin.h"
 
 #include "olcPixelGameEngine.h"
+#include "gse/concurrency/Async.h"
 #include "gse/render/MipDecal.h"
 
 #include <algorithm>
@@ -277,28 +278,70 @@ namespace nascent {
         streak = MipDecal(std::move(streak_sprite));
     }
 
-    void EntityStarfield::build_planet(Planet& planet, const PlanetLook& look) {
+    void EntityStarfield::build_planet(size_t index) {
+        const PlanetLook& look = PLANET_LOOKS[index];
+        uint32_t seed = (uint32_t)rng();
+        planet_seeds[index] = seed;
+
+        if (look.gradient_path == nullptr) {
+            PlanetSprites sprites = paint_planet(look, seed, olc::Sprite(), skin);
+            planets[index].body = MipDecal(std::move(sprites.body));
+            planets[index].halo = MipDecal(std::move(sprites.halo));
+            return;
+        }
+
+        planet_builds[index] = run_detached([look, seed] {
+            PlanetLevels levels;
+            olc::Sprite gradient;
+            gradient.LoadFromFile(look.gradient_path);
+
+            if (gradient.width <= 0 || gradient.height <= 0) {
+                return levels;
+            }
+
+            PlanetSprites sprites = paint_planet(look, seed, gradient, nullptr);
+            levels.painted = true;
+            levels.body = MipDecal::build_levels(std::move(sprites.body));
+            levels.halo = MipDecal::build_levels(std::move(sprites.halo));
+            return levels;
+        });
+    }
+
+    void EntityStarfield::finish_planets() {
+        for (size_t index = 0; index < SKY_VIEW_COUNT; index++) {
+            if (!is_ready(planet_builds[index])) {
+                continue;
+            }
+
+            PlanetLevels levels = planet_builds[index].get();
+
+            if (!levels.painted) {
+                PlanetSprites sprites = paint_planet(PLANET_LOOKS[index], planet_seeds[index], olc::Sprite(), skin);
+                planets[index].body = MipDecal(std::move(sprites.body));
+                planets[index].halo = MipDecal(std::move(sprites.halo));
+                continue;
+            }
+
+            planets[index].body = MipDecal(std::move(levels.body));
+            planets[index].halo = MipDecal(std::move(levels.halo));
+        }
+    }
+
+    EntityStarfield::PlanetSprites EntityStarfield::paint_planet(const PlanetLook& look, uint32_t seed, const olc::Sprite& gradient, const Skin* skin) {
         std::unique_ptr<olc::Sprite> body_sprite = std::make_unique<olc::Sprite>(STARFIELD_PLANET_SPRITE_SIZE, STARFIELD_PLANET_SPRITE_SIZE);
         std::unique_ptr<olc::Sprite> halo_sprite = std::make_unique<olc::Sprite>(STARFIELD_PLANET_SPRITE_SIZE, STARFIELD_PLANET_SPRITE_SIZE);
         double half = STARFIELD_PLANET_SPRITE_SIZE / 2.0;
         double body_radius = STARFIELD_PLANET_SPRITE_SIZE * STARFIELD_PLANET_BODY_RATIO;
-        uint32_t seed = (uint32_t)rng();
 
         Direction light = normalized(look.light.x, look.light.y, look.light.z);
         Direction pole = normalized(-std::sin(look.pole_tilt) * 0.95, -std::cos(look.pole_tilt) * 0.95, 0.3);
         double light_flat = std::sqrt(light.x * light.x + light.y * light.y);
 
-        olc::Sprite gradient;
-
-        if (look.gradient_path != nullptr) {
-            gradient.LoadFromFile(look.gradient_path);
-        }
-
         auto planet_color = [&](double t) {
             double position = std::lerp(look.gradient_start, look.gradient_end, std::clamp(t, 0.0, 1.0));
 
             if (gradient.width <= 0 || gradient.height <= 0) {
-                return skin->title_gradient_at(position, position);
+                return skin != nullptr ? skin->title_gradient_at(position, position) : olc::WHITE;
             }
 
             return gradient.GetPixel((int32_t)(position * (gradient.width - 1)), gradient.height / 2);
@@ -352,8 +395,7 @@ namespace nascent {
             }
         }
 
-        planet.body = MipDecal(std::move(body_sprite));
-        planet.halo = MipDecal(std::move(halo_sprite));
+        return {std::move(body_sprite), std::move(halo_sprite)};
     }
 
     EntityStarfield::Matrix EntityStarfield::view_matrix(SkyView target) const {
@@ -447,7 +489,7 @@ namespace nascent {
 
         for (size_t index = 0; index < SKY_VIEW_COUNT; index++) {
             if (PLANET_LOOKS[index].visible) {
-                build_planet(planets[index], PLANET_LOOKS[index]);
+                build_planet(index);
             }
         }
 
@@ -456,6 +498,7 @@ namespace nascent {
     }
 
     void EntityStarfield::update(float elapsed_time) {
+        finish_planets();
         time += elapsed_time;
         update_camera();
 

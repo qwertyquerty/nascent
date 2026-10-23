@@ -12,7 +12,12 @@ namespace nascent {
 
     class MipDecal {
         protected:
-        std::vector<SpriteDecal> levels;
+        mutable std::vector<SpriteDecal> levels;
+        mutable std::vector<std::unique_ptr<olc::Sprite>> pending;
+        bool clamp = true;
+
+        const olc::Sprite* sprite_at(size_t level) const;
+        olc::Decal* decal_at(size_t level) const;
 
         public:
         struct Pick {
@@ -26,7 +31,7 @@ namespace nascent {
 
         MipDecal() = default;
         explicit MipDecal(std::unique_ptr<olc::Sprite> sprite, bool clamp = true);
-        explicit MipDecal(std::vector<std::unique_ptr<olc::Sprite>> sprites, bool clamp = true);
+        explicit MipDecal(std::vector<std::unique_ptr<olc::Sprite>> sprites, bool clamp = true, bool lazy = false);
 
         Pick pick(float scale) const;
         olc::Decal* get() const;

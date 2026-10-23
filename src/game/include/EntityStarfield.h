@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstdint>
+#include <future>
+#include <memory>
 #include <random>
 #include <vector>
 
@@ -63,6 +65,17 @@ namespace nascent {
             MipDecal halo;
         };
 
+        struct PlanetSprites {
+            std::unique_ptr<olc::Sprite> body;
+            std::unique_ptr<olc::Sprite> halo;
+        };
+
+        struct PlanetLevels {
+            bool painted = false;
+            std::vector<std::unique_ptr<olc::Sprite>> body;
+            std::vector<std::unique_ptr<olc::Sprite>> halo;
+        };
+
         struct View {
             Matrix orientation;
             Direction spin_axis;
@@ -99,6 +112,8 @@ namespace nascent {
         MipDecal flare;
         MipDecal streak;
         std::array<Planet, SKY_VIEW_COUNT> planets;
+        std::array<std::future<PlanetLevels>, SKY_VIEW_COUNT> planet_builds;
+        std::array<uint32_t, SKY_VIEW_COUNT> planet_seeds = {};
         std::array<View, SKY_VIEW_COUNT> views;
         std::vector<Star> stars;
         std::vector<ShootingStar> shooting_stars;
@@ -125,7 +140,9 @@ namespace nascent {
         void spawn_shooting_star();
         void build_sky();
         void build_sprites();
-        void build_planet(Planet& planet, const PlanetLook& look);
+        void build_planet(size_t index);
+        void finish_planets();
+        static PlanetSprites paint_planet(const PlanetLook& look, uint32_t seed, const olc::Sprite& gradient, const Skin* skin);
         Matrix view_matrix(SkyView target) const;
         void place_planet(SkyView target);
         void anchor_view(SkyView target);

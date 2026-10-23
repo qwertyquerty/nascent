@@ -15,6 +15,7 @@ namespace nascent {
     void draw_text(olc::Font& font, std::string_view text, olc::vi2d baseline, olc::Pixel color);
     void draw_text(olc::Font& font, std::string_view text, int32_t x, int32_t y, olc::Pixel color);
     void draw_text(olc::Font& font, std::string_view text, olc::vf2d baseline, olc::Pixel color, float scale);
+    void draw_text(olc::Font& font, std::string_view text, olc::vf2d baseline, olc::Pixel color, float scale, bool snap);
     olc::FontRect text_bounds(olc::Font& font, std::string_view text);
     std::string fit_text(olc::Font& font, std::string text, int32_t max_width);
     SpriteDecal render_text_decal(olc::Font& font, std::string_view text, olc::Pixel color);
