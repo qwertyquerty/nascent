@@ -38,6 +38,7 @@ namespace nascent {
         const std::string* artist_text = nullptr;
         const std::string* title_text = nullptr;
         const std::string* mapper_text = nullptr;
+        bool played = false;
     };
 
     std::string ascii_lowercase(std::string text);

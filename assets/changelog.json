@@ -12,6 +12,8 @@
                 {
                     "title": "Fixes",
                     "notes": [
+                        "played=yes in the song list search now finds charts you've played at any rate, not just the current one.",
+                        "Dragging osu! beatmaps, song packs, skins and folders onto the game window works again on Windows.",
                         "Charts no longer sometimes start from the song preview point instead of the beginning after you go back to the song list and play again."
                     ]
                 }

@@ -28,6 +28,7 @@ namespace nascent {
         static void record(const std::string& chart_hash, float rate, const AttemptSummary& summary, const std::string& played_at);
         static const LocalBest* lookup(const std::string& chart_hash, float rate);
         static std::string last_played(const std::string& chart_hash);
+        static bool has_played(const std::string& chart_hash);
         static void flush();
     };
 }

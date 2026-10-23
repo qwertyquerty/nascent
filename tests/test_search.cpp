@@ -19,10 +19,11 @@ static ChartInfo search_info() {
     return info;
 }
 
-static bool matches(const std::string& search, std::optional<double> difficulty = 24.0, std::optional<double> best = std::nullopt, bool favorite = false) {
+static bool matches(const std::string& search, std::optional<double> difficulty = 24.0, std::optional<double> best = std::nullopt, bool favorite = false, bool played_other_rate = false) {
     ChartInfo info = search_info();
     std::string text = ascii_lowercase(std::string("Ether Strike Akira Complex Someone Insane"));
     SearchSubject subject{info, text, 900, 125.0, difficulty, best, 180.0, favorite};
+    subject.played = best.has_value() || played_other_rate;
     return matches_search(parse_search(search), subject);
 }
 
@@ -75,4 +76,7 @@ NASCENT_TEST(search_local_bests) {
     CHECK(matches("grade>=b", 24.0, 0.96));
     CHECK(!matches("grade>=s", 24.0, 0.96));
     CHECK(!matches("grade=a"));
+    CHECK(matches("played=yes", 24.0, std::nullopt, false, true));
+    CHECK(!matches("played=no", 24.0, std::nullopt, false, true));
+    CHECK(!matches("grade=a", 24.0, std::nullopt, false, true));
 }

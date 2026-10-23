@@ -452,7 +452,7 @@ namespace nascent {
         }
 
         SetWindowLongPtrW(window, GWL_STYLE, (LONG_PTR)style);
-        SetWindowLongPtrW(window, GWL_EXSTYLE, (LONG_PTR)ex_style);
+        SetWindowLongPtrW(window, GWL_EXSTYLE, (LONG_PTR)(ex_style | WS_EX_ACCEPTFILES));
         return SetWindowPos(window, HWND_TOP, area.left, area.top, area.right - area.left, area.bottom - area.top, SWP_FRAMECHANGED | SWP_SHOWWINDOW) != 0;
     }
 

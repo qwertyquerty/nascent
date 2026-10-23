@@ -169,6 +169,10 @@ namespace nascent {
         return found != store->value.last_played.end() ? found->second : std::string();
     }
 
+    bool LocalBests::has_played(const std::string& chart_hash) {
+        return store != nullptr && store->value.last_played.contains(chart_hash);
+    }
+
     const LocalBest* LocalBests::lookup(const std::string& chart_hash, float rate) {
         if (store == nullptr) {
             return nullptr;

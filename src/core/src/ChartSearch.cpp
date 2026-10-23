@@ -125,7 +125,7 @@ namespace nascent {
                     return true;
                 }
 
-                bool actual = filter.field == "played" ? subject.best_accuracy.has_value() : subject.favorite;
+                bool actual = filter.field == "played" ? subject.played : subject.favorite;
                 return (actual == *wanted) == (filter.op == "=");
             }
 

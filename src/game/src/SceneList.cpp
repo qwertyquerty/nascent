@@ -1153,7 +1153,8 @@ namespace nascent {
             build_sort_order();
         }
 
-        bool wants_best = query.filters_on("played") || query.filters_on("grade");
+        bool wants_played = query.filters_on("played");
+        bool wants_best = query.filters_on("grade");
         bool wants_favorite = query.filters_on("favorite");
         bool wants_fields = query.filters_on("artist") || query.filters_on("title") || query.filters_on("mapper");
 
@@ -1181,6 +1182,7 @@ namespace nascent {
                 wants_fields ? &artist_texts[index] : nullptr,
                 wants_fields ? &title_texts[index] : nullptr,
                 wants_fields ? &mapper_texts[index] : nullptr,
+                wants_played && LocalBests::has_played(library.hashes[index]),
             };
 
             matched[position] = matches_search(query, subject) ? 1 : 0;
