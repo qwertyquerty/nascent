@@ -67,6 +67,38 @@ class RedisStore:
         else:
             self.client.delete(self._board(board))
 
+    def _counts(self, scope: str) -> str:
+        return f"{self.prefix}counts:{scope}"
+
+    def count_get(self, key: str, scope: str | None = None) -> int | None:
+        if scope is None:
+            value = self.client.get(f"{self.prefix}count:{key}")
+            return None if value is None else int(value)
+
+        stored = self.client.hget(self._counts(scope), key)
+
+        if stored is None:
+            return None
+
+        value, _, expires = stored.decode().partition(":")
+        return int(value) if float(expires or 0) > time.time() else None
+
+    def count_put(self, key: str, value: int, seconds: int, scope: str | None = None) -> None:
+        if scope is None:
+            self.client.set(f"{self.prefix}count:{key}", value, ex=seconds)
+            return
+
+        pipe = self.client.pipeline(transaction=False)
+        pipe.hset(self._counts(scope), key, f"{value}:{time.time() + seconds}")
+        pipe.expire(self._counts(scope), seconds)
+        pipe.execute()
+
+    def count_forget(self, scopes: Iterable[str]) -> None:
+        names = [self._counts(scope) for scope in scopes]
+
+        if names:
+            self.client.delete(*names)
+
     def ping(self) -> bool:
         try:
             return bool(self.client.ping())
@@ -79,6 +111,7 @@ class MemoryStore:
         self.lock = threading.Lock()
         self.counters: dict[str, tuple[int, float]] = {}
         self.boards: dict[str, tuple[dict[int, float], list[tuple[float, int]]]] = {}
+        self.counts: dict[str | None, dict[str, tuple[int, float]]] = {}
 
     def hit(self, key: str, window: int) -> tuple[int, int]:
         now = time.time()
@@ -132,6 +165,25 @@ class MemoryStore:
 
         with self.lock:
             self.boards[board] = (scores, sorted((-score, member) for member, score in scores.items()))
+
+    def count_get(self, key: str, scope: str | None = None) -> int | None:
+        with self.lock:
+            value, expires = self.counts.get(scope, {}).get(key, (0, 0.0))
+            return value if expires > time.monotonic() else None
+
+    def count_put(self, key: str, value: int, seconds: int, scope: str | None = None) -> None:
+        now = time.monotonic()
+
+        with self.lock:
+            if sum(len(entries) for entries in self.counts.values()) > 10000:
+                self.counts = {name: kept for name, entries in self.counts.items() if (kept := {k: v for k, v in entries.items() if v[1] > now})}
+
+            self.counts.setdefault(scope, {})[key] = (value, now + seconds)
+
+    def count_forget(self, scopes: Iterable[str]) -> None:
+        with self.lock:
+            for scope in scopes:
+                self.counts.pop(scope, None)
 
     def ping(self) -> bool:
         return True

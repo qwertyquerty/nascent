@@ -1,3 +1,6 @@
+import threading
+import time
+
 import nascent_core as nc
 from flask import Blueprint, current_app
 from sqlalchemy import text
@@ -10,9 +13,10 @@ from ..services.calculator import RATE_KEYS, calculator_version
 
 blueprint = Blueprint("meta", __name__)
 
+_health_lock = threading.Lock()
 
-@blueprint.get("/health")
-def health():
+
+def _check_health() -> tuple[dict, int]:
     try:
         db.session.execute(text("SELECT 1"))
         database = True
@@ -22,6 +26,23 @@ def health():
     cache = store().ping()
     healthy = database and cache
     return {"status": "ok" if healthy else "degraded", "database": database, "cache": cache}, 200 if healthy else 503
+
+
+@blueprint.get("/health")
+def health():
+    seconds = current_app.config["HEALTH_CACHE_SECONDS"]
+
+    if seconds <= 0:
+        return _check_health()
+
+    with _health_lock:
+        checked = current_app.extensions.get("nascent_health")
+
+        if checked is None or time.monotonic() - checked[0] >= seconds:
+            checked = (time.monotonic(), *_check_health())
+            current_app.extensions["nascent_health"] = checked
+
+    return dict(checked[1]), checked[2]
 
 
 @blueprint.get("/info")

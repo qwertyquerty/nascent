@@ -9,7 +9,7 @@ from threading import Lock
 
 import nascent_core as nc
 from flask import current_app
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import timeutil
@@ -27,6 +27,7 @@ CHART_TEXT_LIMIT = 1024
 HASH_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 NATIVE_CACHE_SIZE = 64
 OSU_SOURCE = "osu"
+DOWNLOADABLE_SOURCES = ("osu", "etterna")
 OSU_ID_PATTERNS = {
     "source_id": re.compile(r"^\s*BeatmapID\s*:\s*(\d+)\s*$", re.MULTILINE),
     "source_set_id": re.compile(r"^\s*BeatmapSetID\s*:\s*(\d+)\s*$", re.MULTILINE),
@@ -204,6 +205,20 @@ def read_osu_file(raw: bytes) -> tuple[dict, dict, bool]:
     return json.loads(entry["chart"]), osu_source(raw), bool(entry["modified"])
 
 
+def downloadable_sources():
+    return ChartSource.source.in_(DOWNLOADABLE_SOURCES), ChartSource.source_set_id.is_not(None)
+
+
+def refresh_downloadable(chart_ids: Iterable[int | None]) -> None:
+    ids = sorted({chart_id for chart_id in chart_ids if chart_id is not None})
+
+    if not ids:
+        return
+
+    has_source = exists().where(ChartSource.chart_id == Chart.id, *downloadable_sources())
+    db.session.execute(update(Chart).where(Chart.id.in_(ids)).values(downloadable=has_source).execution_options(synchronize_session="fetch"))
+
+
 def add_chart_source(chart: Chart, source: str, checksum: str, source_id: int | None = None, source_set_id: int | None = None) -> ChartSource:
     existing = db.session.scalar(select(ChartSource).where(ChartSource.source == source, ChartSource.checksum == checksum))
 
@@ -211,9 +226,12 @@ def add_chart_source(chart: Chart, source: str, checksum: str, source_id: int | 
         existing = ChartSource(chart=chart, source=source, checksum=checksum)
         db.session.add(existing)
 
+    previous_id = existing.chart_id
     existing.chart = chart
     existing.source_id = source_id if source_id is not None else existing.source_id
     existing.source_set_id = source_set_id if source_set_id is not None else existing.source_set_id
+    db.session.flush()
+    refresh_downloadable((chart.id, previous_id))
     return existing
 
 
@@ -235,6 +253,7 @@ def replace_chart(old: Chart, new: Chart) -> Replacement:
 
     new.play_count += old.play_count
     db.session.execute(update(ChartSource).where(ChartSource.chart_id == old.id).values(chart_id=new.id))
+    refresh_downloadable((new.id,))
     db.session.execute(update(Play).where(Play.chart_id == old.id).values(chart_id=new.id))
     db.session.execute(update(Report).where(Report.chart_id == old.id).values(chart_id=new.id))
     db.session.execute(update(RetiredChart).where(RetiredChart.replaced_by_id == old.id).values(replaced_by_id=new.id))

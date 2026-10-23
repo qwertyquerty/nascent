@@ -9,7 +9,7 @@ from .. import timeutil
 from ..errors import ApiError
 from ..extensions import db
 from ..models import COUNTED_PLAY_STATUSES, Play, User
-from ..queries import count_rows
+from ..queries import cached_count
 from ..ratelimit import check_rate_limit
 from ..schemas import SubmissionIn, TicketIn, pagination, parse_body, query_int
 from ..security import current_user, require_not_banned
@@ -69,7 +69,7 @@ def list_plays():
     else:
         order = (Play.id.desc(),)
 
-    total = count_rows(query)
+    total = cached_count(query)
     plays = db.session.scalars(query.options(joinedload(Play.user), joinedload(Play.chart)).order_by(*order).offset(offset).limit(limit)).all()
     return {"sort": sort, "total": total, "plays": [play_out(play) for play in plays]}
 

@@ -94,11 +94,22 @@ def refresh_profile_best(user_id: int, chart_id: int) -> None:
         db.session.execute(update(Play).where(Play.id == best_id).values(is_profile_best=True))
 
 
-def _top_plays(user_id: int, limit: int) -> dict[int, list]:
+def _top_plays(user_id: int, limit: int, key_count: int | None = None) -> dict[int, list]:
     best = (Play.user_id == user_id, Play.is_profile_best.is_(True))
+    per_key: dict[int, list] = defaultdict(list)
+
+    if key_count is not None:
+        rows = db.session.execute(
+            select(Play.key_count, Play.performance, Play.accuracy).where(*best, Play.key_count == key_count).order_by(Play.performance.desc(), Play.id.asc()).limit(limit)
+        ).all()
+
+        if rows:
+            per_key[key_count] = rows
+
+        return per_key
+
     position = func.row_number().over(partition_by=Play.key_count, order_by=(Play.performance.desc(), Play.id.asc())).label("position")
     ranked = select(Play.key_count, Play.performance, Play.accuracy, position).where(*best).subquery()
-    per_key: dict[int, list] = defaultdict(list)
 
     for row in db.session.execute(
         select(ranked.c.key_count, ranked.c.performance, ranked.c.accuracy).where(ranked.c.position <= limit).order_by(ranked.c.key_count, ranked.c.position)
@@ -138,10 +149,12 @@ def _apply_totals(target: User | UserKeyStats, totals: Totals) -> None:
     target.max_combo = totals.max_combo
 
 
-def refresh_user_stats(user: User) -> None:
+def refresh_user_stats(user: User, key_count: int | None = None) -> None:
     weights = current_weights()
-    per_key = _top_plays(user.id, len(weights))
     by_key = _totals(user.id)
+    existing = {row.key_count: row for row in user.key_stats}
+    scope = key_count if key_count is not None and not (set(by_key) ^ set(existing)) - {key_count} else None
+    per_key = _top_plays(user.id, len(weights), scope)
     overall = Totals()
 
     for totals in by_key.values():
@@ -158,25 +171,25 @@ def refresh_user_stats(user: User) -> None:
     _apply_totals(user, overall)
     user.last_played_at = overall.last_played_at
 
-    existing = {row.key_count: row for row in user.key_stats}
-
-    for key_count in sorted(set(by_key) | set(existing)):
-        row = existing.get(key_count)
+    for mode in sorted(set(by_key) | set(existing)):
+        row = existing.get(mode)
 
         if row is None:
-            row = UserKeyStats(key_count=key_count)
+            row = UserKeyStats(key_count=mode)
             user.key_stats.append(row)
 
-        top = per_key.get(key_count, [])
-        row.performance = profile_performance([entry.performance for entry in top], weights)
-        row.accuracy = profile_accuracy([entry.accuracy for entry in top], weights)
-        _apply_totals(row, by_key.get(key_count, Totals()))
+        if scope is None or mode == scope:
+            top = per_key.get(mode, [])
+            row.performance = profile_performance([entry.performance for entry in top], weights)
+            row.accuracy = profile_accuracy([entry.accuracy for entry in top], weights)
+
+        _apply_totals(row, by_key.get(mode, Totals()))
 
 
-def apply_play_change(user: User, chart_id: int, rate_key: int) -> None:
+def apply_play_change(user: User, chart_id: int, rate_key: int, key_count: int | None = None) -> None:
     refresh_chart_best(user.id, chart_id, rate_key)
     refresh_profile_best(user.id, chart_id)
-    refresh_user_stats(user)
+    refresh_user_stats(user, key_count)
 
 
 def _key_stats(user: User, key_count: int) -> UserKeyStats | None:

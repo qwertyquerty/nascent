@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    DDL,
     JSON,
     BigInteger,
     Boolean,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     String,
     TypeDecorator,
     UniqueConstraint,
+    event,
     false,
     text,
 )
@@ -48,6 +50,13 @@ class UTCDateTime(TypeDecorator):
 
 
 BigId = BigInteger().with_variant(Integer, "sqlite")
+
+
+def in_dialect(dialect: str):
+    def include(item, name, type_, reflected, compare_to):
+        return reflected or dialect in item.info.get("dialects", (dialect,))
+
+    return include
 
 
 class Role(StrEnum):
@@ -197,6 +206,10 @@ class EmailVerification(db.Model):
     user: Mapped[User] = relationship()
 
 
+CHART_SORT_COLUMNS = ("title", "artist", "mapper", "difficulty", "duration_ms", "play_count", "key_count")
+CHART_SEARCH_COLUMNS = ("title", "title_unicode", "artist", "artist_unicode", "mapper", "difficulty_name")
+
+
 class Chart(db.Model):
     __tablename__ = "charts"
 
@@ -220,6 +233,7 @@ class Chart(db.Model):
     data_key: Mapped[str] = mapped_column(String(128))
     play_count: Mapped[int] = mapped_column(Integer, default=0)
     modified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    downloadable: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=timeutil.utcnow)
     ranked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
@@ -231,7 +245,18 @@ class Chart(db.Model):
     __table_args__ = (
         Index("ix_charts_status_difficulty", "status", "difficulty"),
         Index("ix_charts_created_at", "created_at"),
+        *(Index(f"ix_charts_{column}_id", column, "id") for column in CHART_SORT_COLUMNS),
+        Index(
+            "ix_charts_search",
+            *CHART_SEARCH_COLUMNS,
+            postgresql_using="gin",
+            postgresql_ops={column: "gin_trgm_ops" for column in CHART_SEARCH_COLUMNS},
+            info={"dialects": ("postgresql",)},
+        ).ddl_if(dialect="postgresql"),
     )
+
+
+event.listen(Chart.__table__, "before_create", DDL("CREATE EXTENSION IF NOT EXISTS pg_trgm").execute_if(dialect="postgresql"))
 
 
 class RetiredChart(db.Model):
@@ -388,6 +413,7 @@ Index("ix_plays_user_chart", Play.user_id, Play.chart_id, Play.rate_key)
 Index("ix_plays_chart_user", Play.chart_id, Play.user_id)
 Index("ix_plays_status", Play.status, Play.id)
 Index("ix_plays_submitted_at", Play.submitted_at)
+Index("ix_plays_user_submitted_at", Play.user_id, Play.submitted_at)
 
 
 class Report(db.Model):

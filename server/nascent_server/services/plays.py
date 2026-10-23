@@ -7,13 +7,14 @@ from typing import Any
 
 import nascent_core as nc
 from flask import current_app
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .. import tasks, timeutil
 from ..errors import ApiError
 from ..extensions import db
 from ..models import COUNTED_PLAY_STATUSES, Chart, ChartStatus, Play, PlayStatus, PlayTicket, Role, User
+from ..queries import cached_count, chart_scope, forget_counts, user_scope
 from ..ratelimit import check_rate_limit
 from ..security import TICKET_PREFIX, hash_token, new_token, require_not_banned
 from ..storage import put_json_gz, sharded_key
@@ -479,10 +480,12 @@ def submit_play(
         raise ApiError(409, "duplicate_replay", "This replay has already been submitted") from None
 
     put_json_gz(replay_key, replay.to_json())
+    ranking.apply_play_change(user, chart.id, rate_key, key_count)
+    scopes = (chart_scope(chart.id), user_scope(user.id))
     db.session.execute(update(Chart).where(Chart.id == chart.id).values(play_count=Chart.play_count + 1))
-    ranking.apply_play_change(user, chart.id, rate_key)
     db.session.commit()
 
+    forget_counts(scopes)
     ranking.sync_leaderboard(user)
 
     if chart_created:
@@ -509,57 +512,41 @@ def submit_play(
     )
 
 
+def _chart_board(chart_id: int, *conditions) -> Select:
+    return select(Play).join(User, User.id == Play.user_id).where(Play.chart_id == chart_id, User.is_banned.is_(False), *conditions)
+
+
 def chart_rank(play: Play) -> int | None:
     if not play.is_chart_best:
         return None
 
-    better = db.session.scalar(
-        select(func.count())
-        .select_from(Play)
-        .join(User, User.id == Play.user_id)
-        .where(
-            Play.chart_id == play.chart_id,
-            Play.rate_key == play.rate_key,
-            Play.is_chart_best.is_(True),
-            User.is_banned.is_(False),
-            (Play.accuracy > play.accuracy)
-            | ((Play.accuracy == play.accuracy) & (Play.max_combo > play.max_combo))
-            | ((Play.accuracy == play.accuracy) & (Play.max_combo == play.max_combo) & (Play.id < play.id)),
-        )
+    better = _chart_board(
+        play.chart_id,
+        Play.rate_key == play.rate_key,
+        Play.is_chart_best.is_(True),
+        (Play.accuracy > play.accuracy)
+        | ((Play.accuracy == play.accuracy) & (Play.max_combo > play.max_combo))
+        | ((Play.accuracy == play.accuracy) & (Play.max_combo == play.max_combo) & (Play.id < play.id)),
     )
-    return int(better or 0) + 1
+    return cached_count(better, chart_scope(play.chart_id)) + 1
 
 
 def chart_board_size(chart_id: int, rate_key: int) -> int:
-    return int(
-        db.session.scalar(
-            select(func.count())
-            .select_from(Play)
-            .join(User, User.id == Play.user_id)
-            .where(Play.chart_id == chart_id, Play.rate_key == rate_key, Play.is_chart_best.is_(True), User.is_banned.is_(False))
-        )
-        or 0
-    )
+    return cached_count(_chart_board(chart_id, Play.rate_key == rate_key, Play.is_chart_best.is_(True)), chart_scope(chart_id))
 
 
 def chart_performance_rank(play: Play) -> int | None:
     if not play.is_profile_best:
         return None
 
-    better = db.session.scalar(
-        select(func.count())
-        .select_from(Play)
-        .join(User, User.id == Play.user_id)
-        .where(
-            Play.chart_id == play.chart_id,
-            Play.is_profile_best.is_(True),
-            User.is_banned.is_(False),
-            (Play.performance > play.performance)
-            | ((Play.performance == play.performance) & (Play.accuracy > play.accuracy))
-            | ((Play.performance == play.performance) & (Play.accuracy == play.accuracy) & (Play.id < play.id)),
-        )
+    better = _chart_board(
+        play.chart_id,
+        Play.is_profile_best.is_(True),
+        (Play.performance > play.performance)
+        | ((Play.performance == play.performance) & (Play.accuracy > play.accuracy))
+        | ((Play.performance == play.performance) & (Play.accuracy == play.accuracy) & (Play.id < play.id)),
     )
-    return int(better or 0) + 1
+    return cached_count(better, chart_scope(play.chart_id)) + 1
 
 
 def is_rankable(duration_ms: int, note_count: int) -> bool:
@@ -574,4 +561,5 @@ def review_play(play: Play, moderator: User | None, approve: bool, note: str) ->
     play.reviewed_at = timeutil.utcnow()
     play.review_note = note[:500]
     db.session.flush()
-    ranking.apply_play_change(play.user, play.chart_id, play.rate_key)
+    ranking.apply_play_change(play.user, play.chart_id, play.rate_key, play.key_count)
+    forget_counts((chart_scope(play.chart_id), user_scope(play.user_id)))

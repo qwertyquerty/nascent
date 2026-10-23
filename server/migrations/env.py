@@ -5,6 +5,8 @@ from flask import current_app
 
 from alembic import context
 
+from nascent_server.models import in_dialect
+
 config = context.config
 
 fileConfig(config.config_file_name)
@@ -58,6 +60,7 @@ def run_migrations_online():
     connectable = get_engine()
 
     with connectable.connect() as connection:
+        conf_args.setdefault("include_object", in_dialect(connection.dialect.name))
         context.configure(
             connection=connection,
             target_metadata=get_metadata(),

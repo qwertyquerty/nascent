@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from ..errors import ApiError
 from ..extensions import db
 from ..models import User, UserKeyStats
-from ..queries import count_rows
+from ..queries import cached_count
 from ..schemas import pagination
 from ..serializers import user_summary
 from ..services import ranking
@@ -25,7 +25,7 @@ def sorted_page(offset: int, limit: int, key_count: int, sort: str) -> tuple[lis
         .join(User, User.id == UserKeyStats.user_id)
         .where(UserKeyStats.key_count == key_count, UserKeyStats.ranked_play_count > 0, User.is_banned.is_(False))
     )
-    total = count_rows(query)
+    total = cached_count(query)
     rows = db.session.execute(
         query.order_by(SORTS[sort].desc(), UserKeyStats.performance.desc(), UserKeyStats.user_id.asc()).offset(offset).limit(limit)
     ).all()

@@ -9,7 +9,7 @@ from .. import timeutil
 from ..extensions import db
 from ..ids import parse_id
 from ..models import COUNTED_PLAY_STATUSES, Chart, Play, User
-from ..queries import count_rows
+from ..queries import cached_count, user_scope
 from ..schemas import pagination, query_float, query_int
 from ..serializers import chart_summary, key_mode_out, play_out, totals_out, user_profile, user_summary
 from ..services import ranking
@@ -152,7 +152,7 @@ def best_plays(reference: str):
     total_weight = sum(weights)
 
     query = select(Play).options(joinedload(Play.chart)).where(Play.user_id == user.id, Play.is_profile_best.is_(True), Play.key_count == key_count)
-    total = count_rows(query)
+    total = cached_count(query, user_scope(user.id))
     plays = db.session.scalars(query.order_by(Play.performance.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
 
     entries = []
@@ -181,7 +181,7 @@ def recent_plays(reference: str):
     if "key_count" in request.args:
         query = query.where(Play.key_count == query_int("key_count", 4, 1, 32))
 
-    total = count_rows(query)
+    total = cached_count(query, user_scope(user.id))
 
     if before is not None:
         query = query.where(Play.id < before)

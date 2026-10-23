@@ -1,11 +1,11 @@
 from flask import Blueprint, current_app, request, send_file
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload, selectinload
 
 from ..errors import ApiError
 from ..extensions import db
 from ..models import Chart, ChartSource, ChartStatus, Play, User
-from ..queries import count_rows
+from ..queries import cached_count, chart_scope
 from ..ratelimit import check_rate_limit
 from ..schemas import json_body, pagination, query_float, query_int
 from ..security import authenticate, current_user, require_not_banned
@@ -30,8 +30,6 @@ SORTS = {
     "key_count": Chart.key_count,
 }
 
-
-DOWNLOADABLE_SOURCES = ("osu", "etterna")
 
 @blueprint.get("")
 def list_charts():
@@ -70,7 +68,7 @@ def list_charts():
 
     if request.args.get("downloadable") in ("1", "true"):
         query = query.where(
-            Chart.sources.any(and_(ChartSource.source.in_(DOWNLOADABLE_SOURCES), ChartSource.source_set_id.is_not(None))),
+            Chart.downloadable.is_(True),
             Chart.note_count >= current_app.config["RANKED_MIN_NOTES"],
             Chart.duration_ms >= current_app.config["RANKED_MIN_DURATION_MS"],
         )
@@ -89,7 +87,7 @@ def list_charts():
 
     order = request.args.get("order", "asc")
     column = SORTS[sort].desc() if order == "desc" else SORTS[sort].asc()
-    total = count_rows(query)
+    total = cached_count(query)
     charts = db.session.scalars(query.options(selectinload(Chart.sources)).order_by(column, Chart.id.asc()).offset(offset).limit(limit)).all()
     return {"total": total, "charts": [chart_summary(chart, include_sources=True) for chart in charts]}
 
@@ -140,7 +138,7 @@ def leaderboard(chart_hash: str):
         .join(User, User.id == Play.user_id)
         .where(Play.chart_id == chart.id, Play.rate_key == rate_key, Play.is_chart_best.is_(True), User.is_banned.is_(False))
     )
-    total = count_rows(query)
+    total = cached_count(query, chart_scope(chart.id))
     plays = db.session.scalars(query.options(joinedload(Play.user)).order_by(Play.accuracy.desc(), Play.max_combo.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
 
     body = {
@@ -171,7 +169,7 @@ def performance_leaderboard(chart_hash: str):
         .join(User, User.id == Play.user_id)
         .where(Play.chart_id == chart.id, Play.is_profile_best.is_(True), User.is_banned.is_(False))
     )
-    total = count_rows(query)
+    total = cached_count(query, chart_scope(chart.id))
     plays = db.session.scalars(query.options(joinedload(Play.user)).order_by(Play.performance.desc(), Play.accuracy.desc(), Play.id.asc()).offset(offset).limit(limit)).all()
 
     body = {

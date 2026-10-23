@@ -115,3 +115,37 @@ def test_submission_reports_the_previous_best_performance_at_any_rate(api, clock
 
     bob = api.token("bob")
     assert submit(api, clock, bob, make_replay(CHART, seed=4)).get_json()["previous_best_performance"] is None
+
+
+def test_submissions_leave_the_same_stats_as_a_full_refresh(api, app, clock):
+    from sqlalchemy import select
+
+    from nascent_server.extensions import db
+    from nascent_server.models import User
+    from nascent_server.services import ranking
+
+    rank_chart(api)
+    rank_chart(api, SEVEN)
+    alice = api.token("alice")
+
+    for replay, chart in (
+        (make_replay(CHART, seed=1, spread=30), CHART),
+        (make_replay(SEVEN, seed=2), SEVEN),
+        (make_replay(CHART, rate=1.5, seed=3), CHART),
+        (make_replay(SEVEN, seed=4, spread=50), SEVEN),
+        (make_replay(CHART, seed=5, spread=5), CHART),
+    ):
+        assert submit(api, clock, alice, replay, chart=chart).status_code == 201
+
+    def stats(user):
+        totals = ("play_count", "ranked_play_count", "total_hits", "ranked_playtime_ms", "total_playtime_ms", "max_combo")
+        modes = [(row.key_count, row.performance, row.accuracy, *(getattr(row, name) for name in totals)) for row in user.key_stats]
+        return [getattr(user, name) for name in totals] + [user.last_played_at], modes
+
+    with app.app_context():
+        user = db.session.scalar(select(User).where(User.username_key == "alice"))
+        stored = stats(user)
+        ranking.refresh_user_stats(user)
+        assert stats(user) == stored
+        assert [mode[0] for mode in stored[1]] == [4, 7]
+        assert all(mode[1] > 0 for mode in stored[1])
