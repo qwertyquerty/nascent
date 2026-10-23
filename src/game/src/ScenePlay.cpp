@@ -162,6 +162,7 @@ namespace nascent {
         if (handed_audio_id != -1) {
             chart_audio_id = std::exchange(handed_audio_id, -1);
             game->audio().stop(chart_audio_id);
+            game->audio().engine().Seek(chart_audio_id, 0);
             ma_sound_set_looping(game->audio().engine().GetSound(chart_audio_id), MA_FALSE);
         }
         else {

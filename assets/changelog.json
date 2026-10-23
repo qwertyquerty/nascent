@@ -8,6 +8,12 @@
                     "notes": [
                         "The data folder now has an empty skins folder from the start, so it's easy to find where downloaded skins go."
                     ]
+                },
+                {
+                    "title": "Fixes",
+                    "notes": [
+                        "Charts no longer sometimes start from the song preview point instead of the beginning after you go back to the song list and play again."
+                    ]
                 }
             ]
         },
