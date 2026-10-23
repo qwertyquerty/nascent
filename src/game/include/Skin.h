@@ -3,6 +3,7 @@
 #include "olcPixelGameEngine.h"
 #include "olcPGEX_TTF.h"
 #include "Accuracy.h"
+#include "Const.h"
 #include "Results.h"
 #include "gse/ui/Theme.h"
 #include "json.h"
@@ -23,6 +24,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace nascent {
@@ -43,10 +45,36 @@ namespace nascent {
         JUDGEMENT_BAD,
         JUDGEMENT_MISS,
         PLAY_BACKGROUND,
-        MENU_BACKGROUND
+        MENU_BACKGROUND,
+        LANE_BACKGROUND,
+        LANE_LIGHT,
+        STAGE_LEFT,
+        STAGE_RIGHT,
+        LANE_SEPARATOR,
+        JUDGEMENT_LINE,
+        LANE_COVER,
+        HOLD_HEAD_HELD,
+        HOLD_BODY_HELD,
+        GRADE_X,
+        GRADE_S,
+        GRADE_A,
+        GRADE_B,
+        GRADE_C,
+        GRADE_D,
+        GRADE_E,
+        GRADE_F,
+        PROGRESS_TRACK,
+        PROGRESS_FILL,
+        TIMING_BAR_BACKGROUND,
+        TIMING_BAR_HIT,
+        TIMING_BAR_AVERAGE
     };
 
-    inline constexpr size_t SKIN_IMAGE_COUNT = 15;
+    inline constexpr size_t SKIN_IMAGE_COUNT = 37;
+
+    inline constexpr std::array<const char*, 9> NOTE_SNAP_NAMES = {"4th", "8th", "12th", "16th", "24th", "32nd", "48th", "64th", "192nd"};
+    inline constexpr std::array<uint8_t, 9> NOTE_SNAP_DIVISIONS = {1, 2, 3, 4, 6, 8, 12, 16, 48};
+    inline constexpr size_t NOTE_SNAP_COUNT = NOTE_SNAP_NAMES.size();
 
     enum class SkinSound : uint8_t {
         HITSOUND,
@@ -141,9 +169,12 @@ namespace nascent {
         RANK_FIRST,
         RANK_SECOND,
         RANK_THIRD,
+        TIMING_EARLY,
+        TIMING_LATE,
+        HOLD_DROPPED,
     };
 
-    inline constexpr std::array<const char*, 56> SKIN_COLOR_NAMES = {
+    inline constexpr std::array<const char*, 59> SKIN_COLOR_NAMES = {
         "screen_background",
         "text",
         "text_muted",
@@ -200,10 +231,13 @@ namespace nascent {
         "rank_1",
         "rank_2",
         "rank_3",
+        "timing_early",
+        "timing_late",
+        "hold_dropped",
     };
 
     inline constexpr size_t SKIN_COLOR_COUNT = SKIN_COLOR_NAMES.size();
-    static_assert((size_t)SkinColor::RANK_THIRD + 1 == SKIN_COLOR_COUNT);
+    static_assert((size_t)SkinColor::HOLD_DROPPED + 1 == SKIN_COLOR_COUNT);
 
     struct SkinMascot {
         double width = 20;
@@ -266,13 +300,42 @@ namespace nascent {
         using ImageLanes = std::vector<ImageFrames>;
         using ImageFiles = std::array<ImageLanes, SKIN_IMAGE_COUNT>;
         using DecalKey = std::pair<std::filesystem::path, bool>;
+        using SnapFiles = std::array<std::array<ImageLanes, NOTE_SNAP_COUNT>, 2>;
+
+        struct ResolvedImage {
+            const ImageFrames* frames = nullptr;
+            std::vector<const MipDecal*> decals;
+            double fps = 0;
+            bool clamp = true;
+        };
+
+        struct LayoutHash {
+            using is_transparent = void;
+
+            size_t operator()(std::string_view key) const {
+                return std::hash<std::string_view>{}(key);
+            }
+        };
+
+        using LayoutValues = std::unordered_map<std::string, double, LayoutHash, std::equal_to<>>;
+
+        static constexpr int32_t UNRESOLVED_IMAGE = -1;
+        static constexpr int32_t MISSING_IMAGE = -2;
+        static constexpr size_t IMAGE_LOOKUP_SIZE = SKIN_IMAGE_COUNT * (NOTE_SNAP_COUNT + 1) * MAX_LANES;
 
         std::filesystem::path overlay;
         Skin* logo_skin = nullptr;
         std::map<uint8_t, ImageFiles> image_files;
+        std::map<uint8_t, SnapFiles> snap_files;
+        uint8_t layout_key_count = 0;
         std::map<DecalKey, MipDecal> decals;
         std::map<DecalKey, std::future<std::vector<std::unique_ptr<olc::Sprite>>>> pending_decals;
         mutable std::map<uint8_t, SkinManifest> keymode_manifests;
+        mutable std::array<const SkinManifest*, MAX_LANES + 1> manifest_lookup = {};
+        mutable std::array<std::optional<LayoutValues>, MAX_LANES + 1> layout_tables;
+        mutable std::array<const LayoutValues*, MAX_LANES + 1> layout_lookup = {};
+        std::array<std::vector<int32_t>, MAX_LANES + 1> image_lookup;
+        std::vector<ResolvedImage> resolved_images;
         mutable std::set<std::string, std::less<>> missing_layout;
         std::vector<std::string> load_problems;
         std::array<std::optional<int32_t>, SKIN_SOUND_COUNT> sounds;
@@ -293,7 +356,13 @@ namespace nascent {
         void sync_logo();
         std::filesystem::path find(const std::string& file) const;
         std::optional<std::filesystem::path> find_sound(const std::string& stem) const;
-        ImageLanes image_paths(SkinImage image, uint8_t key_count) const;
+        ImageLanes image_paths(const std::string& stem, uint8_t key_count) const;
+        std::optional<ResolvedImage> resolve_image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap) const;
+        const SkinManifest& build_manifest(uint8_t key_count) const;
+        const LayoutValues& layout_values(uint8_t key_count) const;
+        double missing_layout_value(std::string_view key) const;
+        void clear_lookups();
+        void queue_decals(const ImageLanes& lanes, bool clamp);
         void start_image_loads();
         const MipDecal& decal(const std::filesystem::path& path, bool clamp);
 
@@ -344,9 +413,12 @@ namespace nascent {
         const SkinManifest& manifest(uint8_t key_count) const;
         const std::vector<std::string>& problems() const;
         double layout(std::string_view key) const override;
+        double layout(std::string_view key, uint8_t key_count) const;
+        void set_layout_key_count(uint8_t key_count);
+        uint8_t get_layout_key_count() const;
 
-        const MipDecal* image(SkinImage image, uint8_t lane, uint8_t key_count);
-        const MipDecal* judgement_image(HitScore score, uint8_t key_count = 0);
+        const MipDecal* image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap = std::nullopt, std::optional<double> since = std::nullopt);
+        const MipDecal* judgement_image(HitScore score, uint8_t key_count = 0, std::optional<double> since = std::nullopt);
         const SkinMascot& mascot() const;
         olc::Decal* hit_score_decal(HitScore score) const;
         olc::Pixel title_gradient_at(double x, double y) const;
@@ -361,12 +433,29 @@ namespace nascent {
         olc::Pixel rank_color(int64_t rank) const;
         static std::array<olc::vf2d, GRADE_GLOW_STEPS> glow_offsets(float radius);
         static olc::Pixel glow_color(olc::Pixel color, float opacity);
-        void draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale = 1.0f, float opacity = 1.0f) const;
+        void draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale = 1.0f, float opacity = 1.0f);
         void draw_judgement(HitScore score, olc::Font& font, olc::vf2d baseline, float opacity = 1.0f);
         int32_t sound(SkinSound sound);
         int32_t voice(SkinSound sound);
         int32_t hitsound_voice();
         int32_t judgement_voice(HitScore score);
         int32_t get_random_menu_pluck();
+    };
+
+    class SkinLayoutScope {
+        Skin* skin;
+        uint8_t previous;
+
+        public:
+        SkinLayoutScope(Skin* skin, uint8_t key_count) : skin(skin), previous(skin->get_layout_key_count()) {
+            skin->set_layout_key_count(key_count);
+        }
+
+        ~SkinLayoutScope() {
+            skin->set_layout_key_count(previous);
+        }
+
+        SkinLayoutScope(const SkinLayoutScope&) = delete;
+        SkinLayoutScope& operator=(const SkinLayoutScope&) = delete;
     };
 }

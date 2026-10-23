@@ -46,7 +46,31 @@ namespace nascent {
             {"judgement_miss", std::nullopt},
             {"play_background", std::nullopt},
             {"menu_background", std::nullopt},
+            {"lane_background", std::nullopt},
+            {"lane_light", std::nullopt},
+            {"stage_left", std::nullopt},
+            {"stage_right", std::nullopt},
+            {"lane_separator", std::nullopt},
+            {"judgement_line", std::nullopt},
+            {"lane_cover", std::nullopt},
+            {"hold_head_held", SkinImage::HOLD_HEAD},
+            {"hold_body_held", SkinImage::HOLD_BODY},
+            {"grade_x", std::nullopt},
+            {"grade_s", std::nullopt},
+            {"grade_a", std::nullopt},
+            {"grade_b", std::nullopt},
+            {"grade_c", std::nullopt},
+            {"grade_d", std::nullopt},
+            {"grade_e", std::nullopt},
+            {"grade_f", std::nullopt},
+            {"progress_track", std::nullopt},
+            {"progress_fill", std::nullopt},
+            {"timing_bar_background", std::nullopt},
+            {"timing_bar_hit", std::nullopt},
+            {"timing_bar_average", std::nullopt},
         }};
+
+        constexpr std::array<SkinImage, 2> SNAP_IMAGES = {SkinImage::NOTE, SkinImage::HOLD_HEAD};
 
         constexpr std::array<const char*, SKIN_SOUND_COUNT> SOUND_STEMS = {
             "hitsound",
@@ -183,14 +207,30 @@ namespace nascent {
             return std::all_of(digits.begin(), digits.end(), [](char c) { return c >= '0' && c <= '9'; }) ? text.substr(0, split) : text;
         }
 
+        std::string snap_stem(SkinImage image, size_t snap) {
+            return std::format("{}_{}", IMAGE_SLOTS[(size_t)image].stem, NOTE_SNAP_NAMES[snap]);
+        }
+
         bool is_image_stem(std::string_view stem) {
             if (stem == "title_gradient") {
                 return true;
             }
 
+            for (SkinImage image : SNAP_IMAGES) {
+                for (size_t snap = 0; snap < NOTE_SNAP_COUNT; snap++) {
+                    if (stem == snap_stem(image, snap)) {
+                        return true;
+                    }
+                }
+            }
+
             return std::any_of(IMAGE_SLOTS.begin(), IMAGE_SLOTS.end(), [&](const ImageSlot& slot) {
                 return stem == slot.stem;
             });
+        }
+
+        bool tiled_body(SkinImage image) {
+            return image == SkinImage::HOLD_BODY || image == SkinImage::HOLD_BODY_HELD;
         }
 
         double seconds_since(std::chrono::steady_clock::time_point start) {
@@ -547,6 +587,14 @@ namespace nascent {
                 }
 
                 for (const auto& [key, value] : overrides.items()) {
+                    if (key == "layout") {
+                        if (!value.is_object()) {
+                            problem(std::format("keymodes {}: \"layout\" should be an object, like {{ \"playfield\": {{ \"judgement_scale\": 1.2 }} }}", keys));
+                        }
+
+                        continue;
+                    }
+
                     if (!key.starts_with('_') && !listed(PLAYFIELD_KEYS, key)) {
                         problem(std::format("keymodes {}: \"{}\" can't be changed per key count", keys, key));
                     }
@@ -680,6 +728,7 @@ namespace nascent {
     void Skin::load() {
         loaded_at = std::chrono::steady_clock::now();
         load_problems.clear();
+        clear_lookups();
         keymode_manifests.clear();
         missing_layout.clear();
 
@@ -772,6 +821,19 @@ namespace nascent {
             }
         }
 
+        for (const auto& [key_count, overrides] : skin_manifest.keymodes) {
+            if (auto layout = overrides.find("layout"); layout != overrides.end() && layout->is_object()) {
+                SkinManifest scoped;
+                scoped.apply_layout(*layout, "");
+
+                for (const auto& [key, value] : scoped.layout) {
+                    if (!known.layout.contains(key)) {
+                        load_problems.push_back(std::format("keymodes {}: \"layout.{}\" isn't a layout value", key_count, key));
+                    }
+                }
+            }
+        }
+
         for (size_t index = 0; index < SKIN_COLOR_COUNT; index++) {
             if (!skin_manifest.colors[index]) {
                 load_problems.push_back(std::format("there's no color \"{}\", so white is used", SKIN_COLOR_NAMES[index]));
@@ -804,6 +866,7 @@ namespace nascent {
         }
 
         title_gradient = std::make_unique<olc::Sprite>(find(GRADIENT_FILE).string());
+        layout_values(0);
         load_fonts();
         start_image_loads();
     }
@@ -923,10 +986,26 @@ namespace nascent {
             menu_plucks.reset();
         }
 
+        clear_lookups();
         image_files.clear();
         decals.clear();
         pending_decals.clear();
         chain.clear();
+    }
+
+    void Skin::clear_lookups() {
+        manifest_lookup.fill(nullptr);
+        layout_lookup.fill(nullptr);
+
+        for (std::optional<LayoutValues>& values : layout_tables) {
+            values.reset();
+        }
+
+        for (std::vector<int32_t>& lookup : image_lookup) {
+            lookup.clear();
+        }
+
+        resolved_images.clear();
     }
 
     const std::string& Skin::get_id() const {
@@ -938,6 +1017,20 @@ namespace nascent {
     }
 
     const SkinManifest& Skin::manifest(uint8_t key_count) const {
+        if (key_count > MAX_LANES) {
+            return build_manifest(key_count);
+        }
+
+        const SkinManifest*& cached = manifest_lookup[key_count];
+
+        if (cached == nullptr) {
+            cached = &build_manifest(key_count);
+        }
+
+        return *cached;
+    }
+
+    const SkinManifest& Skin::build_manifest(uint8_t key_count) const {
         auto overrides = skin_manifest.keymodes.find(key_count);
 
         if (overrides == skin_manifest.keymodes.end()) {
@@ -949,6 +1042,11 @@ namespace nascent {
         if (cached == keymode_manifests.end()) {
             SkinManifest merged = skin_manifest;
             merged.apply_playfield(overrides->second, "");
+
+            if (auto layout = overrides->second.find("layout"); layout != overrides->second.end() && layout->is_object()) {
+                merged.apply_layout(*layout, "");
+            }
+
             cached = keymode_manifests.emplace(key_count, std::move(merged)).first;
         }
 
@@ -959,13 +1057,49 @@ namespace nascent {
         return load_problems;
     }
 
-    double Skin::layout(std::string_view key) const {
-        auto found = skin_manifest.layout.find(key);
+    void Skin::set_layout_key_count(uint8_t key_count) {
+        layout_key_count = key_count;
+    }
 
-        if (found != skin_manifest.layout.end()) {
+    uint8_t Skin::get_layout_key_count() const {
+        return layout_key_count;
+    }
+
+    double Skin::layout(std::string_view key) const {
+        return layout(key, layout_key_count);
+    }
+
+    double Skin::layout(std::string_view key, uint8_t key_count) const {
+        const LayoutValues& values = layout_values(key_count);
+
+        if (auto found = values.find(key); found != values.end()) {
             return found->second;
         }
 
+        return missing_layout_value(key);
+    }
+
+    const Skin::LayoutValues& Skin::layout_values(uint8_t key_count) const {
+        if (key_count <= MAX_LANES && layout_lookup[key_count] != nullptr) {
+            return *layout_lookup[key_count];
+        }
+
+        uint8_t table = key_count > 0 && key_count <= MAX_LANES && skin_manifest.keymodes.contains(key_count) ? key_count : 0;
+        std::optional<LayoutValues>& values = layout_tables[table];
+
+        if (!values) {
+            const SkinManifest& source = table == 0 ? skin_manifest : manifest(table);
+            values.emplace(source.layout.begin(), source.layout.end());
+        }
+
+        if (key_count <= MAX_LANES) {
+            layout_lookup[key_count] = &*values;
+        }
+
+        return *values;
+    }
+
+    double Skin::missing_layout_value(std::string_view key) const {
         if (missing_layout.emplace(key).second) {
             std::cerr << "Skin layout value \"" << key << "\" is missing from the default skin" << std::endl;
         }
@@ -1001,9 +1135,8 @@ namespace nascent {
         return std::nullopt;
     }
 
-    Skin::ImageLanes Skin::image_paths(SkinImage image, uint8_t key_count) const {
+    Skin::ImageLanes Skin::image_paths(const std::string& stem, uint8_t key_count) const {
         std::error_code ec;
-        std::string stem = IMAGE_SLOTS[(size_t)image].stem;
 
         auto frames_of = [&](const std::filesystem::path& folder, const std::string& name) {
             ImageFrames frames;
@@ -1079,26 +1212,60 @@ namespace nascent {
 
         for (uint8_t key_count : key_counts) {
             ImageFiles& files = image_files[key_count];
+            SnapFiles& snaps = snap_files[key_count];
             bool tiled = manifest(key_count).hold_style == HoldStyle::TILE;
 
             for (size_t slot = 0; slot < SKIN_IMAGE_COUNT; slot++) {
-                files[slot] = image_paths((SkinImage)slot, key_count);
-                bool clamp = (SkinImage)slot != SkinImage::HOLD_BODY || !tiled;
+                files[slot] = image_paths(IMAGE_SLOTS[slot].stem, key_count);
+                queue_decals(files[slot], !tiled_body((SkinImage)slot) || !tiled);
+            }
 
-                for (const ImageFrames& frames : files[slot]) {
-                    for (const std::filesystem::path& path : frames) {
-                        DecalKey key = {path, clamp};
+            auto depth = [&](const ImageLanes& lanes) {
+                if (lanes.empty() || lanes.front().empty()) {
+                    return chain.size();
+                }
 
-                        if (pending_decals.contains(key)) {
-                            continue;
-                        }
+                std::filesystem::path folder = lanes.front().front().parent_path();
 
-                        auto build = [path] {
-                            return MipDecal::build_levels(std::make_unique<olc::Sprite>(path.string()));
-                        };
-                        pending_decals.emplace(key, run_detached(build));
+                for (size_t index = 0; index < chain.size(); index++) {
+                    if (folder == chain[index] || folder.parent_path() == chain[index]) {
+                        return index;
                     }
                 }
+
+                return chain.size();
+            };
+
+            size_t plain_note = depth(files[(size_t)SkinImage::NOTE]);
+            std::array<size_t, SNAP_IMAGES.size()> plain = {plain_note, std::min(plain_note, depth(files[(size_t)SkinImage::HOLD_HEAD]))};
+
+            for (size_t kind = 0; kind < SNAP_IMAGES.size(); kind++) {
+                for (size_t snap = 0; snap < NOTE_SNAP_COUNT; snap++) {
+                    snaps[kind][snap] = image_paths(snap_stem(SNAP_IMAGES[kind], snap), key_count);
+
+                    if (depth(snaps[kind][snap]) > plain[kind]) {
+                        snaps[kind][snap].clear();
+                    }
+
+                    queue_decals(snaps[kind][snap], true);
+                }
+            }
+        }
+    }
+
+    void Skin::queue_decals(const ImageLanes& lanes, bool clamp) {
+        for (const ImageFrames& frames : lanes) {
+            for (const std::filesystem::path& path : frames) {
+                DecalKey key = {path, clamp};
+
+                if (pending_decals.contains(key) || decals.contains(key)) {
+                    continue;
+                }
+
+                auto build = [path] {
+                    return MipDecal::build_levels(std::make_unique<olc::Sprite>(path.string()));
+                };
+                pending_decals.emplace(key, run_detached(build));
             }
         }
     }
@@ -1123,7 +1290,69 @@ namespace nascent {
         return decals.emplace(key, MipDecal(std::move(levels), clamp)).first->second;
     }
 
-    const MipDecal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count) {
+    const MipDecal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap, std::optional<double> since) {
+        std::optional<uint8_t> shown_snap = snap && *snap < NOTE_SNAP_COUNT ? snap : std::nullopt;
+        std::optional<ResolvedImage> uncached;
+        ResolvedImage* resolved = nullptr;
+
+        if (key_count <= MAX_LANES && lane < MAX_LANES) {
+            std::vector<int32_t>& lookup = image_lookup[key_count];
+
+            if (lookup.empty()) {
+                lookup.assign(IMAGE_LOOKUP_SIZE, UNRESOLVED_IMAGE);
+            }
+
+            int32_t& slot = lookup[((size_t)image * (NOTE_SNAP_COUNT + 1) + (shown_snap ? *shown_snap + 1 : 0)) * MAX_LANES + lane];
+
+            if (slot == UNRESOLVED_IMAGE) {
+                std::optional<ResolvedImage> found = resolve_image(image, lane, key_count, shown_snap);
+                slot = found ? (int32_t)resolved_images.size() : MISSING_IMAGE;
+
+                if (found) {
+                    resolved_images.push_back(std::move(*found));
+                }
+            }
+
+            if (slot == MISSING_IMAGE) {
+                return nullptr;
+            }
+
+            resolved = &resolved_images[(size_t)slot];
+        }
+        else {
+            uncached = resolve_image(image, lane, key_count, shown_snap);
+
+            if (!uncached) {
+                return nullptr;
+            }
+
+            resolved = &*uncached;
+        }
+
+        const ImageFrames& frames = *resolved->frames;
+        size_t frame = 0;
+
+        if (frames.size() > 1) {
+            double fps = resolved->fps;
+
+            if (since) {
+                frame = fps > 0 ? std::min(frames.size() - 1, (size_t)(std::max(0.0, *since) * fps)) : 0;
+            }
+            else {
+                frame = fps > 0 ? (size_t)(seconds_since(loaded_at) * fps) % frames.size() : 0;
+            }
+        }
+
+        const MipDecal*& chosen = resolved->decals[frame];
+
+        if (chosen == nullptr) {
+            chosen = &decal(frames[frame], resolved->clamp);
+        }
+
+        return *chosen ? chosen : nullptr;
+    }
+
+    std::optional<Skin::ResolvedImage> Skin::resolve_image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap) const {
         auto files = image_files.find(key_count);
 
         if (files == image_files.end()) {
@@ -1131,20 +1360,41 @@ namespace nascent {
         }
 
         if (files == image_files.end()) {
-            return nullptr;
+            return std::nullopt;
         }
 
+        auto snaps = snap_files.find(files->first);
         size_t slot = (size_t)image;
+        const ImageLanes* found = nullptr;
+        std::string stem;
 
-        while (files->second[slot].empty() && IMAGE_SLOTS[slot].fallback) {
+        while (found == nullptr) {
+            auto kind = std::find(SNAP_IMAGES.begin(), SNAP_IMAGES.end(), (SkinImage)slot);
+
+            if (snap && *snap < NOTE_SNAP_COUNT && kind != SNAP_IMAGES.end() && snaps != snap_files.end()) {
+                const ImageLanes& snapped = snaps->second[(size_t)(kind - SNAP_IMAGES.begin())][*snap];
+
+                if (!snapped.empty()) {
+                    found = &snapped;
+                    stem = snap_stem((SkinImage)slot, *snap);
+                    break;
+                }
+            }
+
+            if (!files->second[slot].empty()) {
+                found = &files->second[slot];
+                stem = IMAGE_SLOTS[slot].stem;
+                break;
+            }
+
+            if (!IMAGE_SLOTS[slot].fallback) {
+                return std::nullopt;
+            }
+
             slot = (size_t)*IMAGE_SLOTS[slot].fallback;
         }
 
-        const ImageLanes& lanes = files->second[slot];
-
-        if (lanes.empty()) {
-            return nullptr;
-        }
+        const ImageLanes& lanes = *found;
 
         const SkinManifest& settings = manifest(key_count);
         size_t index = lane;
@@ -1157,25 +1407,33 @@ namespace nascent {
         const ImageFrames& frames = lanes[index % lanes.size()];
 
         if (frames.empty()) {
-            return nullptr;
+            return std::nullopt;
         }
 
-        size_t frame = 0;
+        ResolvedImage resolved;
+        resolved.frames = &frames;
+        resolved.decals.assign(frames.size(), nullptr);
+        resolved.fps = settings.frame_rate;
+        resolved.clamp = !tiled_body((SkinImage)slot) || settings.hold_style != HoldStyle::TILE;
 
         if (frames.size() > 1) {
-            auto rate = settings.frame_rates.find(IMAGE_SLOTS[slot].stem);
-            double fps = rate != settings.frame_rates.end() ? rate->second : settings.frame_rate;
-            frame = fps > 0 ? (size_t)(seconds_since(loaded_at) * fps) % frames.size() : 0;
+            auto rate = settings.frame_rates.find(stem);
+
+            if (rate == settings.frame_rates.end()) {
+                rate = settings.frame_rates.find(IMAGE_SLOTS[slot].stem);
+            }
+
+            if (rate != settings.frame_rates.end()) {
+                resolved.fps = rate->second;
+            }
         }
 
-        bool clamp = (SkinImage)slot != SkinImage::HOLD_BODY || settings.hold_style != HoldStyle::TILE;
-        const MipDecal& chosen = decal(frames[frame], clamp);
-        return chosen ? &chosen : nullptr;
+        return resolved;
     }
 
-    const MipDecal* Skin::judgement_image(HitScore score, uint8_t key_count) {
+    const MipDecal* Skin::judgement_image(HitScore score, uint8_t key_count, std::optional<double> since) {
         std::optional<SkinImage> slot = judgement_slot(score);
-        return slot ? image(*slot, 0, key_count) : nullptr;
+        return slot ? image(*slot, 0, key_count, std::nullopt, since) : nullptr;
     }
 
     const SkinMascot& Skin::mascot() const {
@@ -1329,11 +1587,20 @@ namespace nascent {
     }
 
     std::array<olc::vf2d, Skin::GRADE_GLOW_STEPS> Skin::glow_offsets(float radius) {
+        static const std::array<olc::vf2d, GRADE_GLOW_STEPS> directions = [] {
+            std::array<olc::vf2d, GRADE_GLOW_STEPS> unit;
+
+            for (int step = 0; step < GRADE_GLOW_STEPS; step++) {
+                double angle = step * 2.0 * std::numbers::pi / GRADE_GLOW_STEPS;
+                unit[step] = {(float)std::cos(angle), (float)std::sin(angle)};
+            }
+
+            return unit;
+        }();
         std::array<olc::vf2d, GRADE_GLOW_STEPS> offsets;
 
         for (int step = 0; step < GRADE_GLOW_STEPS; step++) {
-            double angle = step * 2.0 * std::numbers::pi / GRADE_GLOW_STEPS;
-            offsets[step] = {(float)std::cos(angle) * radius, (float)std::sin(angle) * radius};
+            offsets[step] = {directions[step].x * radius, directions[step].y * radius};
         }
 
         return offsets;
@@ -1364,8 +1631,19 @@ namespace nascent {
         draw_text(font, text, baseline, fade(base, opacity), 1.0f);
     }
 
-    void Skin::draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale, float opacity) const {
+    void Skin::draw_grade(Grade grade, olc::Font& font, olc::vf2d baseline, float scale, float opacity) {
         std::string_view text = grade_name(grade);
+
+        if (const MipDecal* picture = image((SkinImage)((size_t)SkinImage::GRADE_X + (size_t)grade), 0, 0); picture != nullptr && picture->size().y > 0) {
+            olc::FontRect bounds = text_bounds(font, text);
+            float height = (float)bounds.size.y * scale;
+            float drawn = height / picture->size().y;
+            float width = picture->size().x * drawn;
+            olc::vf2d corner = {baseline.x + ((float)bounds.offset.x + (float)bounds.size.x / 2.0f) * scale - width / 2.0f, baseline.y + (float)bounds.offset.y * scale};
+            MipDecal::Pick level = picture->pick(drawn);
+            game->window->DrawDecal(corner, level.decal, {drawn / level.factor, drawn / level.factor}, fade(olc::WHITE, opacity));
+            return;
+        }
         olc::Pixel base = grade_color(grade);
         double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 

@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
+#include <vector>
 
 #include "olcPixelGameEngine.h"
 #include "gse/render/SpriteDecal.h"
@@ -11,6 +13,7 @@ namespace nascent {
     struct JudgedHit;
     class Chart;
     class Skin;
+    class MipDecal;
     enum class SkinImage : uint8_t;
 
     class EntityField {
@@ -20,11 +23,25 @@ namespace nascent {
 
         int32_t longest_hold_ms = 0;
         float longest_hold_pitch = 0;
+        std::vector<int32_t> latest_ends;
 
         void update_longest_hold();
+        size_t first_drawn_hit(double rate_px_per_ms) const;
 
-        SpriteDecal combo_decal;
-        uint32_t last_rendered_combo = 0;
+        std::vector<uint8_t> snaps;
+        float snaps_pitch = 0;
+        std::vector<bool> pressed_lanes;
+        std::vector<double> press_positions;
+        std::vector<double> release_positions;
+
+        void update_snaps();
+        void update_presses();
+        float lane_light_level(uint8_t lane) const;
+        void draw_stage(olc::PixelGameEngine* window, int32_t jl_y);
+        void draw_lane_lights(olc::PixelGameEngine* window, int32_t jl_y);
+        void draw_judgement_line(olc::PixelGameEngine* window, int32_t jl_y);
+        void draw_stretched(olc::PixelGameEngine* window, const MipDecal* image, double x, double top, double width, double height, olc::Pixel tint) const;
+        olc::Pixel hold_tint(olc::Pixel color, bool dropped) const;
 
         public:
         const Chart* chart;
@@ -71,7 +88,8 @@ namespace nascent {
         olc::Pixel note_tint(olc::Pixel color) const;
         void draw_judgement(olc::PixelGameEngine* window, const JudgedHit& judged, double t);
         olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
-        olc::Decal* sized_image(SkinImage image, uint8_t column, uint8_t key_count) const;
+        olc::Decal* sized_image(SkinImage image, uint8_t column, uint8_t key_count, std::optional<uint8_t> snap = std::nullopt, std::optional<double> since = std::nullopt) const;
+        double layout(std::string_view key) const;
         void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
         void draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const;
         void draw_lane_cover(olc::PixelGameEngine* window, double judge_y) const;

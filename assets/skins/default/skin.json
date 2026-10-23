@@ -22,6 +22,8 @@
             "hold_edge_inset": 0.5,
             "hold_repeat_spacing": 0.25,
             "lane_cover_fade": 40,
+            "lane_light_height": 0.4,
+            "lane_light_fade": 0.15,
             "receptor_glow_radius": 3,
             "judgement_glow_radius": 3,
             "judgement_pop_from": 0.8,
@@ -38,11 +40,6 @@
         "play": {
             "progress_width": 80,
             "progress_height": 6,
-            "progress_right": 100,
-            "progress_top": 40,
-            "stats_left": 20,
-            "stats_top": 40,
-            "stats_spacing": 40,
             "title_offset_fraction": 0.041666666666666664,
             "title_exit_fraction": 0.08333333333333333,
             "title_slide_speed": 2,
@@ -66,7 +63,6 @@
             "replay_seek_height": 6,
             "replay_seek_gap": 14,
             "replay_seek_step_ms": 40,
-            "judgement_counter_gap": 12,
             "judgement_counter_spacing": 28,
             "judgement_counter_value_x": 120
         },
@@ -208,7 +204,8 @@
             "section_gap": 30,
             "grade_offset": 56,
             "accuracy_offset": 90,
-            "name_offset": 190
+            "name_offset": 190,
+            "scrollbar_width": 4
         },
         "status_bar": {
             "height": 40,
@@ -482,6 +479,38 @@
         },
         "fps_counter": {
             "width": 100
+        },
+        "hud": {
+            "lane_width": 12,
+            "judgement_line_height": 6,
+            "judgement_height": 45,
+            "combo_height": 41,
+            "timing_bar_height": 0,
+            "timing_bar_length": 33,
+            "timing_bar_width": 5,
+            "fps_x": 98.9,
+            "fps_y": 1.2,
+            "accuracy_x": 1.1,
+            "accuracy_y": 3.8,
+            "error_x": 1.1,
+            "error_y": 7.6,
+            "performance_x": 1.1,
+            "performance_y": 11.4,
+            "judgement_counter_x": 1.1,
+            "judgement_counter_y": 14.5,
+            "progress_x": 98.9,
+            "progress_y": 3.7,
+            "show_fps": 1,
+            "show_judgement_line": 1,
+            "show_judgement": 1,
+            "show_combo": 1,
+            "show_accuracy": 1,
+            "show_average_error": 1,
+            "show_error_deviation": 1,
+            "show_performance": 0,
+            "show_judgement_counter": 0,
+            "show_timing_bar": 1,
+            "show_timing_average": 1
         }
     },
     "colors": {
@@ -521,6 +550,9 @@
         "graph_background": "#141418c8",
         "graph_center_line": "#ffffff5a",
         "timing_bar_hit": "#c8ffff",
+        "timing_early": "#c8ffff",
+        "timing_late": "#c8ffff",
+        "hold_dropped": "#ffffff",
         "browser_highlight": "#ffffff",
         "download_track": "#ffffff0c",
         "shooting_star_glow": "#ffffff",
