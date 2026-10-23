@@ -1,6 +1,17 @@
 {
     "releases": [
         {
+            "version": "0.6.0.beta12",
+            "sections": [
+                {
+                    "title": "Improved",
+                    "notes": [
+                        "The data folder now has an empty skins folder from the start, so it's easy to find where downloaded skins go."
+                    ]
+                }
+            ]
+        },
+        {
             "version": "0.5.0.beta11",
             "sections": [
                 {

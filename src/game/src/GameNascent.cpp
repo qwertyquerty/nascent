@@ -32,11 +32,13 @@
 #include <chrono>
 #include <exception>
 #include <ctime>
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <string_view>
 #include <limits>
 #include <optional>
+#include <system_error>
 #include <utility>
 
 namespace nascent {
@@ -74,6 +76,8 @@ namespace nascent {
         std::string_view commit = NASCENT_BUILD_COMMIT;
         std::cerr << std::format("Nascent {} ({}) on {}", NASCENT_VERSION_STRING, commit.empty() ? "local build" : commit.substr(0, 12), platform_description()) << std::endl;
         Account::load();
+        std::error_code skins_ec;
+        std::filesystem::create_directories(Skin::user_skins_directory(), skins_ec);
         SubmissionQueue::start();
         Updater::check();
         server_info = ServerApi::info();
