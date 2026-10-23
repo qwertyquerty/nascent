@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChartLibrary.h"
+#include "ChartSearch.h"
 #include "LibraryCache.h"
 #include "ChartMenu.h"
 #include "LeaderboardPanel.h"
@@ -20,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -144,10 +146,29 @@ namespace nascent {
         std::thread difficulty_worker;
         std::vector<const Chart*> rate_charts;
         std::vector<float> rate_pitches;
+        float rate_current_pitch = 1.0f;
         size_t rate_next = 0;
         size_t rate_busy = 0;
         bool rate_paused = false;
+        std::atomic<bool> rate_interrupted = false;
         std::vector<std::thread> rate_workers;
+        std::vector<std::unique_ptr<Chart>> retired_charts;
+        std::atomic<bool> difficulty_cache_loaded = false;
+        std::future<void> difficulty_cache_save;
+        double difficulty_cache_saved_at = 0;
+        bool difficulty_refresh_pending = false;
+        double difficulty_refreshed_at = 0;
+
+        std::vector<size_t> sort_order;
+        bool sort_order_dirty = true;
+        uint64_t library_version = 0;
+        uint64_t search_data_version = 0;
+        uint64_t searched_data_version = UINT64_MAX;
+        std::optional<SearchQuery> searched_query;
+        std::vector<std::string> artist_texts;
+        std::vector<std::string> title_texts;
+        std::vector<std::string> mapper_texts;
+        uint64_t field_texts_version = UINT64_MAX;
 
         float widest_grade = -1.0f;
 
@@ -165,18 +186,27 @@ namespace nascent {
         ScrollBar preview_seek;
         double preview_seek_target = -1;
         bool show_leaderboards = false;
+        std::optional<std::future<ApiResult<Replay>>> replay_download;
+        std::string replay_download_label;
+        std::string replay_download_hash;
+        int64_t replay_download_id = 0;
         bool recommended_started = false;
 
         void start_library_load();
         void reload_everything();
         void poll_library_load();
-        void apply_library(ChartLibrary loaded);
-        void apply_search(size_t keep_chart);
+        void apply_library(ChartLibrary loaded, std::vector<std::unique_ptr<Chart>> removed = {});
+        void apply_search(size_t keep_chart, bool narrow = false);
         void refresh_search();
+        void ensure_notes(Chart* chart);
+        void fill_difficulties();
+        void build_sort_order();
+        void build_field_texts();
+        void retire_idle_charts();
+        void save_difficulty_cache_later();
         static ListSort current_sort();
         void set_sort(ListSort sort);
         void open_sort_menu();
-        void sort_visible();
         void update_search();
         void draw_search(olc::PixelGameEngine* window);
         void select_chart(int32_t, bool sound = true);
@@ -190,6 +220,7 @@ namespace nascent {
         void queue_all_rates();
         void pause_rates(bool paused);
         void collect_difficulties();
+        static constexpr size_t DOWNLOAD_NAME_LIMIT = 40;
         std::optional<BackgroundWork> background_work();
         void update_background_work(float elapsed_time);
 
@@ -217,6 +248,10 @@ namespace nascent {
         void handle_chart_action(ChartAction action);
         void open_replay_menu();
         void watch_replay(Replay replay, std::string label);
+        void open_leaderboard_play(LeaderboardPick pick);
+        void toggle_leaderboard_mode();
+        void poll_replay_download();
+        void show_replay_results(Replay replay, std::string label, int64_t play_id);
         void toggle_favorite();
         size_t song_chart_count() const;
         size_t pack_chart_count() const;
@@ -231,7 +266,10 @@ namespace nascent {
         static constexpr int32_t SPOT_DOWNLOAD = 2;
         static constexpr int32_t SPOT_BROWSE = 3;
         static constexpr int32_t SPOT_RECOMMENDED_FIRST = 100;
-        static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.json";
+        static constexpr const char* DIFFICULTY_CACHE_FILE = "difficulty_cache.bin";
+        static constexpr size_t RATE_BATCH = 64;
+        static constexpr double DIFFICULTY_REFRESH_MS = 1000.0;
+        static constexpr double DIFFICULTY_SAVE_MS = 60000.0;
 
         SceneList(Skin* skin, Skin* logo_skin, EntityStarfield* sky);
         std::optional<std::vector<std::filesystem::path>> chart_paths(bool favorites_only);

@@ -6,12 +6,36 @@
                 {
                     "title": "New",
                     "notes": [
-                        "Japanese, Korean and Chinese characters in song titles and names now display."
+                        "Japanese, Korean and Chinese characters in song titles and names now display.",
+                        "Move the FPS counter, accuracy, average error, performance prediction, judgement counter and song progress bar anywhere on screen with their X and Y position settings in Options.",
+                        "Skins can now set which elements are shown, the lane width, judgement line height, judgement and combo heights, hit timing bar and the positions above. In Options these are grouped under Element Visibility and Element Positions, which show the skin's value until you change it. Delete puts one setting back to the skin's value, and Reset all to skin default resets a whole section.",
+                        "Options is reorganized so related settings sit together: Window, Gameplay, Audio, Calibration, Skin, Element Visibility, Element Positions, Keys, Online, Library and About. Scroll speed is now under Gameplay, and Discord rich presence under Online.",
+                        "Skins can now do a lot more: lane backgrounds, a light up each lane while a key is held, stage borders, lane separators, a judgement line and a lane cover image; note colours by beat snap like StepMania and Etterna noteskins; separate hold images while held and a colour for dropped holds; grade, progress bar and timing bar images with early and late colours; judgement and pressed receptor animations that play once from the start; and layout values per key count. See the skinning guide for the new image names.",
+                        "Click a play on the song list leaderboard to see its results screen, and press F5 on any results screen to watch the replay.",
+                        "Press your restart key (` by default) on the results screen to play the chart again.",
+                        "Watch replays from 0.25x to 2x speed with the up and down arrows, or click the speed at the bottom of the screen.",
+                        "New song list sorts: recently played and best accuracy.",
+                        "The song list leaderboards now scroll and show up to 100 plays each. Press Shift+Tab, or click the hint under them, to switch to a performance leaderboard that covers every rate.",
+                        "Hold Shift while changing scroll speed in options to change it 1 at a time.",
+                        "Song and pack downloads now show their progress at the top of the song list."
+                    ]
+                },
+                {
+                    "title": "Improved",
+                    "notes": [
+                        "Smoother gameplay: changing numbers like accuracy, combo, judgement counts and the FPS counter no longer cause small stutters, and long holds and busy charts cost less to draw.",
+                        "The FPS counter updates four times a second, so it's easier to read.",
+                        "Big song libraries use far less memory, load faster and no longer freeze the song list when a download finishes or a pack is added.",
+                        "Changing the rate while sorting or searching by difficulty no longer freezes the game; difficulties fill in as they're calculated.",
+                        "Typing in the song list search is faster, and so are local leaderboards, deleting songs and the end of a play.",
+                        "Songs start faster when you pick them from the song list, and title screen songs and song backgrounds load in the background without hitches.",
+                        "Totals on the website, like play and chart counts, can take up to 30 seconds to update."
                     ]
                 },
                 {
                     "title": "Fixes",
                     "notes": [
+                        "The song list preview for 1K, 2K and 3K charts no longer stretches the columns wider than they are for 4K.",
                         "StepMania, Etterna and osu! charts that can't be played correctly are no longer loaded: ones with negative or impossibly high BPMs, notes before the song starts, notes that start during a hold in the same column, or notes in the same column 5 ms or less apart. Rolls play as long notes and mines are left out. Your song library rescans once after updating to pick up the change."
                     ]
                 }

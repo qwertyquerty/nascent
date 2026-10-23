@@ -4,6 +4,7 @@
 #include "ServerApi.h"
 #include "gse/ui/Layout.h"
 #include "gse/ui/ScrollBar.h"
+#include "SkinSettings.h"
 #include "gse/ui/UiForm.h"
 #include "olcPixelGameEngine.h"
 
@@ -21,6 +22,9 @@ namespace nascent {
     class Chart;
     class ChoiceField;
     class EntityField;
+    class SkinChoiceField;
+    class SkinFollowing;
+    class SkinSliderField;
     class SliderField;
     class TextField;
     class KeyBindField;
@@ -34,9 +38,7 @@ namespace nascent {
 
         ChoiceField* skin_field = nullptr;
         ChoiceField* note_gradient_field = nullptr;
-        ChoiceField* judgement_line_field = nullptr;
         ChoiceField* frame_rate_field = nullptr;
-        ChoiceField* fps_counter_field = nullptr;
         ChoiceField* rich_presence_field = nullptr;
         ChoiceField* transition_field = nullptr;
         ChoiceField* title_music_field = nullptr;
@@ -67,28 +69,17 @@ namespace nascent {
         ChoiceField* hitsounds_field = nullptr;
         ChoiceField* output_device_field = nullptr;
         std::vector<std::string> output_devices;
-        SliderField* lane_width_field = nullptr;
         SliderField* background_brightness_field = nullptr;
         SliderField* note_opacity_field = nullptr;
         SliderField* receptor_opacity_field = nullptr;
         ChoiceField* lane_gap_field = nullptr;
         std::vector<int16_t> lane_gaps;
-        SliderField* judge_offset_field = nullptr;
         ChoiceField* scroll_direction_field = nullptr;
-        ChoiceField* judgement_field = nullptr;
-        SliderField* judgement_height_field = nullptr;
-        ChoiceField* combo_field = nullptr;
-        SliderField* combo_height_field = nullptr;
-        ChoiceField* accuracy_field = nullptr;
-        ChoiceField* average_error_field = nullptr;
-        ChoiceField* error_deviation_field = nullptr;
-        ChoiceField* performance_field = nullptr;
-        ChoiceField* judgement_counter_field = nullptr;
-        ChoiceField* timing_bar_field = nullptr;
-        ChoiceField* timing_average_field = nullptr;
-        SliderField* timing_bar_height_field = nullptr;
-        SliderField* timing_bar_length_field = nullptr;
-        SliderField* timing_bar_width_field = nullptr;
+        std::vector<SkinFollowing*> skin_fields;
+        std::vector<SkinFollowing*> visibility_fields;
+        std::vector<SkinFollowing*> position_fields;
+        ButtonField* reset_visibility_button = nullptr;
+        ButtonField* reset_positions_button = nullptr;
         SliderField* master_volume_field = nullptr;
         SliderField* music_volume_field = nullptr;
         SliderField* effects_volume_field = nullptr;
@@ -138,6 +129,10 @@ namespace nascent {
         void build_preview_chart();
         void rebuild_preview();
         void refresh_skins();
+        SkinSliderField& add_skin_slider(std::string label, SkinSetting setting, int32_t minimum, int32_t maximum);
+        SkinChoiceField& add_skin_toggle(std::string label, SkinToggle toggle, std::string off_label = "Hidden", std::string on_label = "Shown");
+        bool reset_to_skin(const std::vector<SkinFollowing*>& fields);
+        void add_hud_position(HudElement element);
         void report_bug();
         void refresh_linked_folders();
         void link_folder(const std::filesystem::path& folder);

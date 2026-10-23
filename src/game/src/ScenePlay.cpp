@@ -19,6 +19,7 @@
 #include "SceneResults.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "SkinSettings.h"
 #include "StatusBar.h"
 #include "SubmissionQueue.h"
 #include "Util.h"
@@ -31,6 +32,7 @@
 #include "gse/concurrency/Async.h"
 
 #include <algorithm>
+#include <tuple>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -80,7 +82,14 @@ namespace nascent {
                 continuing_audio_id = std::exchange(chart_audio_id, -1);
             }
 
-            game->scenes().replace(std::make_unique<SceneResults>(skin, chart, std::move(summary), std::future<ApiResult<Submission>>(), continuing_audio_id, false, replay_label));
+            auto results = std::make_unique<SceneResults>(skin, chart, std::move(summary), std::future<ApiResult<Submission>>(), continuing_audio_id, false, replay_label);
+            results->enable_replay(chart, *replay, replay_label, borrowed_background);
+
+            if (replay_play_id) {
+                results->set_play_id(*replay_play_id);
+            }
+
+            game->scenes().replace(std::move(results));
             return;
         }
 
@@ -110,17 +119,7 @@ namespace nascent {
         bool new_best = previous_best != nullptr && summary.accuracy > previous_best->accuracy;
         LocalBests::record(chart->gameplay_hash(), chart->pitch, summary, replay.played_at);
 
-        std::string error;
-        std::optional<std::filesystem::path> saved = save_replay(replay, user_config_directory(SettingsManager::APP_NAME) / "replays", error);
-        if (!saved) {
-            std::cerr << std::format("Replay not saved: {}", error) << std::endl;
-        }
-
-        std::future<ApiResult<Submission>> submission;
-
-        if (ticket.valid()) {
-            submission = SubmissionQueue::submit(*chart, replay, ticket);
-        }
+        std::future<ApiResult<Submission>> submission = SubmissionQueue::submit(*chart, replay, ticket, user_config_directory(SettingsManager::APP_NAME) / "replays");
 
         int continuing_audio_id = -1;
 
@@ -129,27 +128,46 @@ namespace nascent {
             chart_audio_id = -1;
         }
 
-        game->scenes().replace(std::make_unique<SceneResults>(skin, chart, std::move(summary), std::move(submission), continuing_audio_id, new_best));
+        auto results = std::make_unique<SceneResults>(skin, chart, std::move(summary), std::move(submission), continuing_audio_id, new_best);
+        results->enable_replay(chart, replay, std::format("your play from {}", replay.played_at.substr(0, 10)), borrowed_background);
+        game->scenes().replace(std::move(results));
+    }
+
+    void ScenePlay::set_replay_play_id(int64_t play_id) {
+        replay_play_id = play_id;
     }
 
     ScenePlay::~ScenePlay() {
+        if (handed_audio_id != -1 && game != nullptr) {
+            game->audio().stop(handed_audio_id);
+            game->audio().engine().UnloadSound(handed_audio_id);
+        }
     }
 
     void ScenePlay::on_create() {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         RichPresence::playing(*chart);
         request_ticket();
 
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
         start_attempt();
 
-        if (SettingsManager::settings.field_show_performance) {
+        if (skin_toggle(*skin, skin_toggles::SHOW_PERFORMANCE)) {
             difficulty_load = std::async(std::launch::async, [chart = chart] {
                 return DifficultyCalculator::calculate(*chart);
             });
         }
         load_background();
 
-        chart_audio_id = load_song_audio(game->audio().engine(), chart->audio_path);
+        if (handed_audio_id != -1) {
+            chart_audio_id = std::exchange(handed_audio_id, -1);
+            game->audio().stop(chart_audio_id);
+            ma_sound_set_looping(game->audio().engine().GetSound(chart_audio_id), MA_FALSE);
+        }
+        else {
+            chart_audio_id = load_song_audio(game->audio().engine(), chart->audio_path);
+        }
+
         game->audio().apply_music_volume(chart_audio_id);
 
         game->audio().play_effect(skin->get_random_menu_pluck());
@@ -160,7 +178,7 @@ namespace nascent {
     void ScenePlay::start_attempt() {
         olc::vi2d window_size = game->window->GetScreenSize();
         const Settings& settings = SettingsManager::settings;
-        double lane_width = std::min(window_size.y * settings.field_lane_width_percent / 100.0, (double)window_size.x / chart->info.key_count);
+        double lane_width = std::min(window_size.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)window_size.x / chart->info.key_count);
         double field_width = lane_width * chart->info.key_count;
 
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
@@ -171,6 +189,7 @@ namespace nascent {
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
         session->reset_clock(start_position_ms(), now_ms());
+        session->set_clock_speed(replay_speed(), now_ms());
         mirror = replay ? replay->settings.mirror : settings.field_mirror;
         replay_cursor = 0;
 
@@ -182,17 +201,17 @@ namespace nascent {
         field->set_attempt(&session->get_attempt());
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
-        field->judge_height = window_size.y * settings.field_judge_line_percent / 100.0;
+        field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
         field->upscroll = settings.field_upscroll;
         field->mirror = mirror;
         field->note_gradient = settings.field_note_gradient;
-        field->draw_judge = settings.field_show_judgement_line;
+        field->draw_judge = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_LINE);
         field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
-        field->draw_hit_score = settings.field_show_judgement;
-        field->draw_combo = settings.field_show_combo;
+        field->draw_hit_score = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT);
+        field->draw_combo = skin_toggle(*skin, skin_toggles::SHOW_COMBO);
         field->lane_cover = settings.field_lane_cover / 100.0;
-        field->judgement_height = settings.field_judgement_height / 100.0;
-        field->combo_height = settings.field_combo_height / 100.0;
+        field->judgement_height = skin_setting(*skin, skin_settings::JUDGEMENT_HEIGHT) / 100.0;
+        field->combo_height = skin_setting(*skin, skin_settings::COMBO_HEIGHT) / 100.0;
         field->note_opacity = settings.field_note_opacity / 100.0f;
         field->receptor_opacity = settings.field_receptor_opacity / 100.0f;
         last_judged = nullptr;
@@ -264,14 +283,15 @@ namespace nascent {
     }
 
     void ScenePlay::on_resize() {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d window_size = game->window->GetScreenSize();
         const Settings& settings = SettingsManager::settings;
-        double lane_width = std::min(window_size.y * settings.field_lane_width_percent / 100.0, (double)window_size.x / chart->info.key_count);
+        double lane_width = std::min(window_size.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)window_size.x / chart->info.key_count);
         double field_width = lane_width * chart->info.key_count;
 
         field->pos = {((double)window_size.x - field_width) / 2, 0};
         field->size = {field_width, (double)window_size.y};
-        field->judge_height = window_size.y * settings.field_judge_line_percent / 100.0;
+        field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
         field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
     }
 
@@ -461,30 +481,38 @@ namespace nascent {
     void ScenePlay::draw_timing_diagnostics(olc::PixelGameEngine* window) const {
         olc::Font& font = skin->display_font_small;
         olc::FontRect metrics = text_bounds(font, "Hgjy");
-        std::vector<std::string> lines = diagnostics_lines(false);
         float padding = Ui::layout_pxf("play.diagnostics_padding");
         float line_gap = Ui::layout_pxf("play.diagnostics_line_gap");
         float line_height = (float)metrics.size.y + line_gap;
         float top = Ui::layout_pxf("play.diagnostics_top");
         float max_width = Ui::layout_pxf("play.diagnostics_max_width");
-        float width = 0;
+        double now = now_ms();
 
-        for (std::string& line : lines) {
-            if (text_bounds(font, line).size.x > max_width) {
-                while (!line.empty() && text_bounds(font, line + "...").size.x > max_width) {
-                    line.pop_back();
+        if (!diagnostics_built_at || now < *diagnostics_built_at || now - *diagnostics_built_at >= DIAGNOSTICS_REFRESH_MS || diagnostics_fit_width != max_width) {
+            diagnostics_built_at = now;
+            diagnostics_fit_width = max_width;
+            diagnostics_cache = diagnostics_lines(false);
+            diagnostics_width = 0;
 
-                    while (!line.empty() && ((unsigned char)line.back() & 0xc0) == 0x80) {
+            for (std::string& line : diagnostics_cache) {
+                if (text_bounds(font, line).size.x > max_width) {
+                    while (!line.empty() && text_bounds(font, line + "...").size.x > max_width) {
                         line.pop_back();
+
+                        while (!line.empty() && ((unsigned char)line.back() & 0xc0) == 0x80) {
+                            line.pop_back();
+                        }
                     }
+
+                    line += "...";
                 }
 
-                line += "...";
+                diagnostics_width = std::max(diagnostics_width, (float)text_bounds(font, line).size.x);
             }
-
-            width = std::max(width, (float)text_bounds(font, line).size.x);
         }
 
+        const std::vector<std::string>& lines = diagnostics_cache;
+        float width = diagnostics_width;
         float x = (float)window->GetScreenSize().x - Ui::layout_pxf("play.diagnostics_right") - width - padding;
         float height = line_height * (float)lines.size() - line_gap + padding * 2;
         window->FillRectDecal({x - padding, top - padding}, {width + padding * 2, height}, skin->color(SkinColor::DIAGNOSTICS_BACKGROUND));
@@ -555,7 +583,7 @@ namespace nascent {
         audio_finished = false;
 
         if (target >= 0) {
-            double latency = game->audio().engine().GetOutputLatencyMilliseconds();
+            double latency = game->audio().engine().GetOutputLatencyMilliseconds() * replay_speed();
             game->audio().engine().Seek(chart_audio_id, (ma_uint64)std::lround((target + latency) * chart->pitch));
 
             if (!chart_started) {
@@ -625,6 +653,10 @@ namespace nascent {
         if (SettingsManager::settings.field_hitsounds) {
             game->audio().play_effect(skin->judgement_voice(judged->released ? judged->release_score : judged->hit_score));
         }
+    }
+
+    void ScenePlay::use_audio(int audio_id) {
+        handed_audio_id = audio_id;
     }
 
     void ScenePlay::use_background(const MipDecal* background) {
@@ -703,7 +735,22 @@ namespace nascent {
         }
     }
 
+    double ScenePlay::replay_speed() const {
+        return replay ? REPLAY_SPEEDS[replay_speed_index] : 1.0;
+    }
+
+    void ScenePlay::set_replay_speed(size_t index, double now) {
+        if (!replay || index >= REPLAY_SPEEDS.size() || index == replay_speed_index) {
+            return;
+        }
+
+        replay_speed_index = index;
+        session->set_clock_speed(replay_speed(), now);
+        game->audio().engine().SetPitch(chart_audio_id, chart->pitch * replay_speed());
+    }
+
     void ScenePlay::update(float elapsed_time) {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         double now = now_ms();
         set_cursor_hidden(!paused && !replay);
 
@@ -765,6 +812,14 @@ namespace nascent {
 
             if (input.key_pressed(olc::Key::SPACE) || spot == REPLAY_TOGGLE) {
                 toggle_replay_pause(now);
+            }
+
+            if (input.take(actions::UP) || spot == REPLAY_SPEED) {
+                set_replay_speed(spot == REPLAY_SPEED ? (replay_speed_index + 1) % REPLAY_SPEEDS.size() : replay_speed_index + 1, now);
+            }
+
+            if (input.take(actions::DOWN) && replay_speed_index > 0) {
+                set_replay_speed(replay_speed_index - 1, now);
             }
 
             if (InputManager::reset_pressed(input) || spot == REPLAY_RESTART) {
@@ -873,6 +928,7 @@ namespace nascent {
     };
 
     void ScenePlay::draw(olc::PixelGameEngine* window) {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d screensize = window->GetScreenSize();
         const Attempt& attempt = session->get_attempt();
 
@@ -884,41 +940,72 @@ namespace nascent {
         int32_t chart_start = chart->get_chart_start_ms();
         int32_t chart_length = std::max(1, chart->get_chart_end_ms() - chart_start);
         float progress = (float)((position - chart_start) / chart_length);
-        ProgressBar({Ui::layout_pxf("play.progress_width"), std::max(1.0f, Ui::layout_pxf("play.progress_height"))}, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, {screensize.x - Ui::layout_pxf("play.progress_right"), Ui::layout_pxf("play.progress_top")}, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+        olc::vf2d progress_size = {Ui::layout_pxf("play.progress_width"), std::max(1.0f, Ui::layout_pxf("play.progress_height"))};
+        olc::vf2d progress_position = hud_position(*skin, HudElement::PROGRESS, progress_size, screensize);
+        const MipDecal* progress_track = skin->image(SkinImage::PROGRESS_TRACK, 0, chart->info.key_count);
+        const MipDecal* progress_fill = skin->image(SkinImage::PROGRESS_FILL, 0, chart->info.key_count);
 
-        const Settings& settings = SettingsManager::settings;
-        int32_t stat_x = Ui::layout_px("play.stats_left");
-        int32_t stat_y = Ui::layout_px("play.stats_top");
-        int32_t stat_spacing = Ui::layout_px("play.stats_spacing");
+        if (progress_track == nullptr && progress_fill == nullptr) {
+            ProgressBar(progress_size, skin->color(SkinColor::PROGRESS_TRACK)).draw(window, progress_position, progress, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+        }
+        else {
+            if (progress_track != nullptr) {
+                draw_skin_image(window, progress_track, progress_position, progress_size, olc::WHITE);
+            }
+            else {
+                window->FillRectDecal(progress_position, progress_size, skin->color(SkinColor::PROGRESS_TRACK));
+            }
 
-        std::string error_text = settings.field_show_average_error ? std::format("{:+.1f}", attempt.get_avg_err()) : std::string();
+            if (progress_fill != nullptr) {
+                draw_skin_image(window, progress_fill, progress_position, progress_size, olc::WHITE, progress);
+            }
+            else {
+                window->FillRectDecal(progress_position, {progress_size.x * std::clamp(progress, 0.0f, 1.0f), progress_size.y}, skin->title_gradient_at(std::clamp(progress, 0.0f, 1.0f), 0.5));
+            }
+        }
+
+        bool show_average_error = skin_toggle(*skin, skin_toggles::SHOW_AVERAGE_ERROR);
+        bool show_error_deviation = skin_toggle(*skin, skin_toggles::SHOW_ERROR_DEVIATION);
+        std::string error_text = show_average_error ? std::format("{:+.1f}", attempt.get_avg_err()) : std::string();
 
         if (!difficulty && is_ready(difficulty_load)) {
             difficulty = difficulty_load.get();
         }
 
-        std::string performance_text = settings.field_show_performance && difficulty ? std::format("Perf: {:.1f}", performance_for(*difficulty, attempt.get_accuracy())) : std::string();
+        std::string performance_text = skin_toggle(*skin, skin_toggles::SHOW_PERFORMANCE) && difficulty ? std::format("Perf: {:.1f}", performance_for(*difficulty, attempt.get_accuracy())) : std::string();
 
-        if (settings.field_show_error_deviation) {
+        if (show_error_deviation) {
             error_text += std::format("{}± {:.1f}", error_text.empty() ? "" : " ", attempt.get_err_deviation());
         }
 
-        for (auto [shown, text] : {
-                 std::pair{settings.field_show_accuracy, std::format("{:.2f}%", attempt.get_accuracy() * 100)},
-                 std::pair{!error_text.empty(), error_text + " ms"},
-                 std::pair{!performance_text.empty(), performance_text},
-             }) {
+        bool show_error = !error_text.empty();
+        error_text += " ms";
+        constexpr std::array<std::string_view, 4> error_samples = {" ms", "+00.0 ms", "± 00.0 ms", "+00.0 ± 00.0 ms"};
+        std::string_view error_sample = error_samples[(show_average_error ? 1 : 0) + (show_error_deviation ? 2 : 0)];
+        const std::tuple<bool, std::string, HudElement, std::string_view> hud_texts[] = {
+            {skin_toggle(*skin, skin_toggles::SHOW_ACCURACY), std::format("{:.2f}%", attempt.get_accuracy() * 100), HudElement::ACCURACY, "100.00%"},
+            {show_error, std::move(error_text), HudElement::AVERAGE_ERROR, error_sample},
+            {!performance_text.empty(), std::move(performance_text), HudElement::PERFORMANCE, "Perf: 000.0"},
+        };
+
+        for (const auto& [shown, text, element, sample] : hud_texts) {
             if (shown) {
-                draw_text(skin->display_font_medium, text, stat_x, stat_y, skin->color(SkinColor::TEXT));
-                stat_y += stat_spacing;
+                olc::FontRect bounds = text_bounds(skin->display_font_medium, sample);
+                olc::vf2d spot = hud_position(*skin, element, {(float)bounds.size.x, (float)bounds.size.y}, screensize);
+                draw_text(skin->display_font_medium, text, {(int32_t)spot.x - bounds.offset.x, (int32_t)spot.y - bounds.offset.y}, skin->color(SkinColor::TEXT));
             }
         }
 
-        if (settings.field_show_judgement_counter) {
-            draw_judgement_counter(attempt, stat_x, stat_y + Ui::layout_px("play.judgement_counter_gap"));
+        if (skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_COUNTER)) {
+            olc::vf2d spot = hud_position(*skin, HudElement::JUDGEMENT_COUNTER, judgement_counter_size(), screensize);
+            draw_judgement_counter(attempt, (int32_t)spot.x, (int32_t)spot.y);
         }
 
-        std::string now_playing_string = std::format("{} - {}", chart->info.artist, chart->info.title);
+        if (now_playing_text.empty()) {
+            now_playing_text = std::format("{} - {}", chart->info.artist, chart->info.title);
+        }
+
+        const std::string& now_playing_string = now_playing_text;
         uint16_t w = text_bounds(skin->display_font_medium, now_playing_string).size.x;
         float title_offset = (float)(screensize.x * Ui::layout("play.title_offset_fraction"));
         float title_exit = (float)(screensize.x * Ui::layout("play.title_exit_fraction"));
@@ -937,7 +1024,7 @@ namespace nascent {
         int32_t hint_y = (int32_t)(screensize.y * Ui::layout("play.hint_top_fraction"));
 
         if (ticket_hint_alpha > 0) {
-            std::string waiting_hint = "Waiting for server...";
+            std::string_view waiting_hint = "Waiting for server...";
             int32_t waiting_width = text_bounds(skin->display_font_medium, waiting_hint).size.x;
             draw_text(skin->display_font_medium, waiting_hint, {screensize.x / 2 - waiting_width / 2, hint_y}, fade(skin->color(SkinColor::PLAY_HINT), ticket_hint_alpha));
         }
@@ -995,8 +1082,8 @@ namespace nascent {
             }
         }
 
-        if (settings.field_show_timing_bar) {
-            draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, screensize.x * settings.field_timing_bar_length / 100.0f, screensize.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f, settings.field_show_timing_average);
+        if (skin_toggle(*skin, skin_toggles::SHOW_TIMING_BAR)) {
+            draw_timing_bar(window, skin, attempt, screensize.x / 2.0f, (float)(screensize.x * skin_setting(*skin, skin_settings::TIMING_BAR_LENGTH) / 100.0), (float)(screensize.y * skin_setting(*skin, skin_settings::TIMING_BAR_WIDTH) / 100.0), (float)(skin_setting(*skin, skin_settings::TIMING_BAR_HEIGHT) / 100.0), skin_toggle(*skin, skin_toggles::SHOW_TIMING_AVERAGE));
         }
 
         if (replay) {
@@ -1005,19 +1092,17 @@ namespace nascent {
         }
     };
 
+    olc::vf2d ScenePlay::judgement_counter_size() const {
+        olc::Font& font = skin->display_font_small;
+        olc::FontRect value = text_bounds(font, "00000");
+        int32_t rows = (int32_t)std::count_if(ALL_HIT_SCORES.begin(), ALL_HIT_SCORES.end(), [](HitScore score) {
+            return score != HitScore::NONE;
+        });
+        return {(float)(Ui::layout_px("play.judgement_counter_value_x") + value.size.x), (float)(Ui::layout_px("play.judgement_counter_spacing") * rows)};
+    }
+
     void ScenePlay::draw_judgement_counter(const Attempt& attempt, int32_t x, int32_t y) const {
-        std::array<uint32_t, HIT_SCORE_COUNT> counts = {};
-
-        for (const JudgedHit& jhit : attempt.judged_hits) {
-            if (jhit.hit) {
-                counts[(size_t)jhit.hit_score]++;
-            }
-
-            if (jhit.released) {
-                counts[(size_t)jhit.release_score]++;
-            }
-        }
-
+        const std::array<uint32_t, HIT_SCORE_COUNT>& counts = attempt.score_counts;
         olc::Font& font = skin->display_font_small;
         int32_t value_x = x + Ui::layout_px("play.judgement_counter_value_x");
         int32_t spacing = Ui::layout_px("play.judgement_counter_spacing");
@@ -1093,6 +1178,7 @@ namespace nascent {
             {replay_paused ? "Space  play" : "Space  pause", REPLAY_TOGGLE},
             {"←  -5s", REPLAY_BACK},
             {"→  +5s", REPLAY_FORWARD},
+            {std::format("↑/↓  speed {:g}x", replay_speed()), REPLAY_SPEED},
             {"Ctrl+R  restart", REPLAY_RESTART},
             {std::format("{}  menu", InputManager::key_label(InputManager::get_key(KeyBinding::PAUSE))), REPLAY_MENU},
             {"Esc  stop watching", REPLAY_STOP},

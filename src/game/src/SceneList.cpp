@@ -16,6 +16,9 @@
 #include "gse/Platform.h"
 #include "gse/ui/ProgressBar.h"
 #include "Results.h"
+#include "SceneResults.h"
+#include "Attempt.h"
+#include "Replay.h"
 #include "RichPresence.h"
 #include "SceneAccount.h"
 #include "SceneBrowser.h"
@@ -46,14 +49,36 @@
 #include <iostream>
 #include <numbers>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace nascent {
+    static constexpr uint8_t PREVIEW_FULL_WIDTH_KEY_COUNT = 4;
+
     struct RecommendedSong {
         int64_t set_id;
         const char* artist;
         const char* title;
     };
+
+    template <typename F>
+    static void chunked_for(size_t count, F work) {
+        constexpr size_t CHUNK = 2048;
+
+        if (count <= CHUNK) {
+            for (size_t index = 0; index < count; index++) {
+                work(index);
+            }
+
+            return;
+        }
+
+        parallel_for((count + CHUNK - 1) / CHUNK, [&](size_t chunk) {
+            for (size_t index = chunk * CHUNK; index < std::min(count, (chunk + 1) * CHUNK); index++) {
+                work(index);
+            }
+        });
+    }
 
     static constexpr RecommendedSong RECOMMENDED_SONGS[] = {
         {1488740, "Orange Lounge", "100sec. Kitchen Battle!!"},
@@ -101,8 +126,7 @@ namespace nascent {
         this->logo_skin = logo_skin;
         this->sky = sky;
         difficulty_cache = std::make_unique<DifficultyCache>(user_config_directory(SettingsManager::APP_NAME) / DIFFICULTY_CACHE_FILE);
-        difficulty_cache->load();
-        library_cache = std::make_unique<LibraryCache>(user_config_directory(SettingsManager::APP_NAME) / LibraryCache::FILE_NAME);
+        library_cache = std::make_unique<LibraryCache>(user_config_directory(SettingsManager::APP_NAME));
 
         background_loader = std::thread([this] {
             background_load_loop();
@@ -152,6 +176,10 @@ namespace nascent {
             worker.join();
         }
 
+        if (difficulty_cache_save.valid()) {
+            difficulty_cache_save.wait();
+        }
+
         std::string error;
 
         if (!difficulty_cache->save(error)) {
@@ -160,6 +188,8 @@ namespace nascent {
     }
 
     void SceneList::on_create() {
+        leaderboards.set_mode(SettingsManager::settings.list_leaderboard_mode == (uint8_t)LeaderboardMode::PERFORMANCE ? LeaderboardMode::PERFORMANCE : LeaderboardMode::ACCURACY);
+
         if (!pending_selection_path.empty()) {
             std::string error;
             std::unique_ptr<Chart> chart = load_chart_file(pending_selection_path, pitch, error, pending_selection.value_or(std::string()));
@@ -177,6 +207,11 @@ namespace nascent {
     void SceneList::on_enter() {
         active = true;
         pause_rates(false);
+        search_data_version++;
+
+        if (current_sort() == ListSort::RECENTLY_PLAYED || current_sort() == ListSort::BEST_ACCURACY) {
+            sort_order_dirty = true;
+        }
         RichPresence::picking_song(selected_chart);
 
         bool downloads_changed = BeatmapDownloads::take_library_changed();
@@ -231,6 +266,7 @@ namespace nascent {
         pause_rates(true);
         stop_preview_audio();
         load_generation++;
+        replay_download_hash.clear();
     }
 
     void SceneList::on_resize() {
@@ -245,8 +281,24 @@ namespace nascent {
         status_bar.update(elapsed_time);
         poll_library_load();
         collect_difficulties();
+        retire_idle_charts();
+        save_difficulty_cache_later();
+
+        if (difficulty_refresh_pending && now_ms() - difficulty_refreshed_at >= DIFFICULTY_REFRESH_MS) {
+            difficulty_refresh_pending = false;
+            difficulty_refreshed_at = now_ms();
+            sort_order_dirty = sort_order_dirty || current_sort() == ListSort::DIFFICULTY;
+            float kept_offset = list_scroll_offset;
+            refresh_search();
+            list_scroll_offset = kept_offset;
+
+            if (!visible.empty() && library.charts[visible[selected_chart_index]].get() != selected_chart) {
+                select_chart(selected_chart_index, false);
+            }
+        }
         update_background_work(elapsed_time);
         leaderboards.update(elapsed_time, show_leaderboards && selected_chart != nullptr && !visible.empty(), selected_hash(), pitch);
+        poll_replay_download();
 
         if (!update_controls(elapsed_time)) {
             return;
@@ -355,6 +407,12 @@ namespace nascent {
     void SceneList::play_selected() {
         auto play = std::make_unique<ScenePlay>(selected_chart, skin);
         play->use_background(background_for(*selected_chart));
+
+        if (selected_chart_audio_id != -1 && preview_audio_chart == selected_chart) {
+            play->use_audio(std::exchange(selected_chart_audio_id, -1));
+            preview_audio_chart = nullptr;
+        }
+
         game->scenes().push(std::move(play));
     }
 
@@ -402,6 +460,22 @@ namespace nascent {
 
         if (update_preview_seek(input)) {
             return false;
+        }
+
+        if (show_leaderboards) {
+            if (leaderboards.update_scrollbars(input)) {
+                return false;
+            }
+
+            if (leaderboards.take_mode_click(input)) {
+                toggle_leaderboard_mode();
+                return false;
+            }
+
+            if (std::optional<LeaderboardPick> pick = leaderboards.take_click(input)) {
+                open_leaderboard_play(std::move(*pick));
+                return false;
+            }
         }
 
         if (std::optional<float> position = list_scrollbar.update(input, list_position())) {
@@ -528,7 +602,12 @@ namespace nascent {
         update_search();
 
         if (input.key_pressed(InputManager::leaderboard_key)) {
-            run_status_action(StatusAction::TOGGLE_SCORES, false);
+            if (input.key_held(InputManager::keybind_mod1)) {
+                toggle_leaderboard_mode();
+            }
+            else {
+                run_status_action(StatusAction::TOGGLE_SCORES, false);
+            }
         }
 
         if (input.take(game_actions::SORT_MENU)) {
@@ -586,6 +665,11 @@ namespace nascent {
         }
 
         int mwheel = input.mouse_wheel();
+
+        if (mwheel != 0 && show_leaderboards && leaderboards.scroll(input.mouse_position(), mwheel)) {
+            mwheel = 0;
+        }
+
         if (mwheel != 0) {
             select_chart(positive_modulo(
                 selected_chart_index + ((mwheel < 0) - (mwheel > 0)),
@@ -600,8 +684,29 @@ namespace nascent {
         return true;
     }
 
+    void SceneList::ensure_notes(Chart* chart) {
+        if (chart == nullptr || chart->has_notes()) {
+            return;
+        }
+
+        if (std::optional<std::vector<Hit>> notes = library_cache->load_notes(*chart)) {
+            chart->restore_notes(std::move(*notes));
+            return;
+        }
+
+        if (std::unique_ptr<Chart> loaded = load_chart_notes(nullptr, *chart)) {
+            chart->restore_notes(loaded->unpitched_hit_objects());
+        }
+    }
+
     void SceneList::select_chart(int32_t index, bool sound) {
+        Chart* previous = selected_chart;
         selected_chart = library.charts[visible[index]].get();
+        ensure_notes(selected_chart);
+
+        if (previous != nullptr && previous != selected_chart) {
+            previous->release_notes();
+        }
         status_bar.set_key_count(selected_chart->info.key_count);
 
         if (active) {
@@ -654,8 +759,10 @@ namespace nascent {
         olc::vi2d position = side_panel_position(screen);
         olc::vi2d size = side_panel_size(screen);
         float opacity = field ? field->opacity : 0.0f;
+        double width = size.x * std::min(1.0, (double)selected_chart->info.key_count / PREVIEW_FULL_WIDTH_KEY_COUNT);
+        double left = position.x + (size.x - width) / 2.0;
 
-        field = std::make_unique<EntityField>(selected_chart, skin, olc::vd2d{(double)position.x, 0.0}, olc::vd2d{(double)size.x, (double)screen.y});
+        field = std::make_unique<EntityField>(selected_chart, skin, olc::vd2d{left, 0.0}, olc::vd2d{width, (double)screen.y});
         field->draw_judge = false;
         field->upscroll = SettingsManager::settings.field_upscroll;
         field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
@@ -746,7 +853,7 @@ namespace nascent {
     void SceneList::apply_background_load(BackgroundLoadResult result) {
         if (!result.keep_image) {
             old_background_image = std::move(background_image);
-            background_image = MipDecal(std::move(result.levels));
+            background_image = MipDecal(std::move(result.levels), true, true);
             background_image_path = std::move(result.image_path);
             crossfade_timer = 1;
             crossfade = true;
@@ -810,6 +917,11 @@ namespace nascent {
         library_loader = std::thread([this, song_directories, load_pitch, cache, listing, has_library, use_cache] {
             bool base = has_library;
 
+            if (!difficulty_cache_loaded) {
+                cache->load();
+                difficulty_cache_loaded = true;
+            }
+
             if (use_cache) {
                 ChartLibrary cached = cached_chart_library(*listing, song_directories, load_pitch, *cache);
 
@@ -823,14 +935,15 @@ namespace nascent {
             LibraryUpdate update = scan_chart_library(song_directories, load_pitch, *cache, *listing, &library_load_progress);
 
             if (!base) {
-                std::vector<std::unique_ptr<Chart>> removed;
-                ChartLibrary full = merge_chart_library(ChartLibrary(), std::move(update), load_pitch, *cache, removed, &library_load_progress);
+                prepare_library_update(update, load_pitch, *cache, *listing, &library_load_progress);
+                ChartLibrary full = std::move(update.library);
                 prepare_replay_folders(full, &library_load_progress);
                 library_load_progress.begin(LibraryLoadStage::DONE, 0);
                 std::lock_guard<std::mutex> lock(library_load_mutex);
                 completed_library_load = std::move(full);
             }
             else if (update.changed) {
+                prepare_library_update(update, load_pitch, *cache, *listing);
                 std::lock_guard<std::mutex> lock(library_load_mutex);
                 completed_library_update = std::move(update);
             }
@@ -870,7 +983,8 @@ namespace nascent {
 
         if (update) {
             std::vector<std::unique_ptr<Chart>> removed;
-            apply_library(merge_chart_library(std::move(library), std::move(*update), pitch, *difficulty_cache, removed));
+            ChartLibrary merged = merge_chart_library(std::move(library), std::move(*update), pitch, *difficulty_cache, removed);
+            apply_library(std::move(merged), std::move(removed));
         }
 
         if (!finished) {
@@ -885,18 +999,37 @@ namespace nascent {
         }
     }
 
-    void SceneList::apply_library(ChartLibrary loaded) {
+    void SceneList::apply_library(ChartLibrary loaded, std::vector<std::unique_ptr<Chart>> removed) {
         std::string keep_selected = selected_hash();
         std::string keep_preview = preview_audio_chart != nullptr ? preview_audio_chart->gameplay_hash() : std::string();
+        Chart* previous = selected_chart;
 
-        cancel_difficulties(true);
+        cancel_difficulties(false);
+
+        for (std::unique_ptr<Chart>& chart : library.charts) {
+            if (chart != nullptr) {
+                retired_charts.push_back(std::move(chart));
+            }
+        }
+
+        for (std::unique_ptr<Chart>& chart : removed) {
+            if (chart != nullptr) {
+                retired_charts.push_back(std::move(chart));
+            }
+        }
+
         library = std::move(loaded);
+        library_version++;
+        search_data_version++;
+        sort_order_dirty = true;
         local_hashes = std::unordered_set<std::string>(library.hashes.begin(), library.hashes.end());
         queue_all_rates();
 
         if (library.pitch != pitch) {
             library.difficulties.assign(library.size(), std::nullopt);
         }
+
+        fill_difficulties();
 
         auto find_chart = [&](const std::string& hash) {
             auto found = std::find(library.hashes.begin(), library.hashes.end(), hash);
@@ -916,14 +1049,99 @@ namespace nascent {
 
         if (visible.empty()) {
             field.reset();
+
+            if (previous != nullptr) {
+                previous->release_notes();
+            }
+
             return;
         }
 
         select_chart(selected_chart_index, false);
+
+        if (previous != nullptr && previous != selected_chart) {
+            previous->release_notes();
+        }
     }
 
-    void SceneList::apply_search(size_t keep_chart) {
+    void SceneList::fill_difficulties() {
+        if (library.difficulties.size() != library.size()) {
+            library.difficulties.assign(library.size(), std::nullopt);
+        }
+
+        chunked_for(library.size(), [&](size_t index) {
+            if (!library.difficulties[index]) {
+                if (std::optional<double> cached = difficulty_cache->lookup(*library.charts[index], pitch)) {
+                    library.difficulties[index] = (float)*cached;
+                }
+            }
+        });
+    }
+
+    void SceneList::build_field_texts() {
+        if (field_texts_version == library_version) {
+            return;
+        }
+
+        artist_texts.assign(library.size(), std::string());
+        title_texts.assign(library.size(), std::string());
+        mapper_texts.assign(library.size(), std::string());
+
+        chunked_for(library.size(), [&](size_t index) {
+            const ChartInfo& info = library.charts[index]->info;
+            artist_texts[index] = search_field_text(info, "artist");
+            title_texts[index] = search_field_text(info, "title");
+            mapper_texts[index] = search_field_text(info, "mapper");
+        });
+
+        field_texts_version = library_version;
+    }
+
+    void SceneList::retire_idle_charts() {
+        if (retired_charts.empty()) {
+            return;
+        }
+
+        std::vector<std::unique_ptr<Chart>> freed;
+
+        {
+            std::lock_guard<std::mutex> lock(difficulty_mutex);
+
+            if (difficulty_busy || rate_busy > 0) {
+                return;
+            }
+
+            freed.swap(retired_charts);
+        }
+    }
+
+    void SceneList::save_difficulty_cache_later() {
+        double now = now_ms();
+
+        if (!difficulty_cache_loaded || now - difficulty_cache_saved_at < DIFFICULTY_SAVE_MS || (difficulty_cache_save.valid() && !is_ready(difficulty_cache_save))) {
+            return;
+        }
+
+        difficulty_cache_saved_at = now;
+
+        if (!difficulty_cache->is_dirty()) {
+            return;
+        }
+
+        DifficultyCache* cache = difficulty_cache.get();
+        difficulty_cache_save = std::async(std::launch::async, [cache] {
+            std::string error;
+
+            if (!cache->save(error)) {
+                std::cerr << "Difficulty cache: " << error << std::endl;
+            }
+        });
+    }
+
+    void SceneList::apply_search(size_t keep_chart, bool narrow) {
         SearchQuery query = parse_search(search);
+        bool narrowing = narrow && !sort_order_dirty && searched_query && searched_data_version == search_data_version && query_narrows(*searched_query, query);
+        std::vector<size_t> candidates = narrowing ? std::move(visible) : std::vector<size_t>();
         visible.clear();
         selected_chart_index = 0;
 
@@ -931,37 +1149,51 @@ namespace nascent {
             library.difficulties.assign(library.size(), std::nullopt);
         }
 
-        if (query.filters_on("difficulty") || current_sort() == ListSort::DIFFICULTY) {
-            parallel_for(library.size(), [&](size_t index) {
-                if (!library.difficulties[index]) {
-                    library.difficulties[index] = (float)difficulty_cache->difficulty(*library.charts[index], pitch);
-                }
-            });
+        if (!narrowing && sort_order_dirty) {
+            build_sort_order();
         }
 
-        for (size_t index = 0; index < library.size(); index++) {
+        bool wants_best = query.filters_on("played") || query.filters_on("grade");
+        bool wants_favorite = query.filters_on("favorite");
+        bool wants_fields = query.filters_on("artist") || query.filters_on("title") || query.filters_on("mapper");
+
+        if (wants_fields) {
+            build_field_texts();
+        }
+
+        const std::vector<size_t>& source = narrowing ? candidates : sort_order;
+        std::vector<char> matched(source.size(), 0);
+
+        chunked_for(source.size(), [&](size_t position) {
+            size_t index = source[position];
             const Chart& chart = *library.charts[index];
-            const LocalBest* best = LocalBests::lookup(library.hashes[index], pitch);
+            const LocalBest* best = wants_best ? LocalBests::lookup(library.hashes[index], pitch) : nullptr;
             std::optional<float> rating = get_difficulty(index);
             SearchSubject subject{
                 chart.info,
                 library.search_texts[index],
-                chart.hits.size(),
+                library.note_counts[index],
                 library.lengths_ms[index] / pitch / 1000.0,
                 rating ? std::optional<double>(*rating) : std::nullopt,
                 best != nullptr ? std::optional<double>(best->accuracy) : std::nullopt,
                 index < library.bpms.size() && library.bpms[index].main > 0 ? std::optional<double>(library.bpms[index].main * pitch) : std::nullopt,
-                Favorites::contains(library.hashes[index]),
+                wants_favorite && Favorites::contains(library.hashes[index]),
+                wants_fields ? &artist_texts[index] : nullptr,
+                wants_fields ? &title_texts[index] : nullptr,
+                wants_fields ? &mapper_texts[index] : nullptr,
             };
 
-            if (!matches_search(query, subject)) {
-                continue;
-            }
+            matched[position] = matches_search(query, subject) ? 1 : 0;
+        });
 
-            visible.push_back(index);
+        for (size_t position = 0; position < source.size(); position++) {
+            if (matched[position]) {
+                visible.push_back(source[position]);
+            }
         }
 
-        sort_visible();
+        searched_query = std::move(query);
+        searched_data_version = search_data_version;
         auto kept = std::find(visible.begin(), visible.end(), keep_chart);
         selected_chart_index = kept != visible.end() ? (int32_t)(kept - visible.begin()) : 0;
         list_scroll_offset = 0;
@@ -979,6 +1211,7 @@ namespace nascent {
 
         SettingsManager::settings.list_sort = (uint8_t)sort;
         SettingsManager::save();
+        sort_order_dirty = true;
         refresh_search();
     }
 
@@ -988,20 +1221,46 @@ namespace nascent {
         }));
     }
 
-    void SceneList::sort_visible() {
+    void SceneList::build_sort_order() {
         ListSort sort = current_sort();
+        sort_order.resize(library.size());
+
+        for (size_t index = 0; index < sort_order.size(); index++) {
+            sort_order[index] = index;
+        }
+
+        sort_order_dirty = false;
 
         if (sort == ListSort::TITLE) {
             return;
         }
 
         std::vector<std::string> artists;
+        std::vector<std::string> played;
+        std::vector<double> accuracies;
 
         if (sort == ListSort::ARTIST) {
             artists.resize(library.size());
 
-            for (size_t index : visible) {
+            for (size_t index = 0; index < library.size(); index++) {
                 artists[index] = ascii_lowercase(library.charts[index]->info.artist);
+            }
+        }
+
+        if (sort == ListSort::RECENTLY_PLAYED) {
+            played.resize(library.size());
+
+            for (size_t index = 0; index < library.size(); index++) {
+                played[index] = LocalBests::last_played(library.hashes[index]);
+            }
+        }
+
+        if (sort == ListSort::BEST_ACCURACY) {
+            accuracies.assign(library.size(), -1.0);
+
+            for (size_t index = 0; index < library.size(); index++) {
+                const LocalBest* best = LocalBests::lookup(library.hashes[index], pitch);
+                accuracies[index] = best != nullptr ? best->accuracy : -1.0;
             }
         }
 
@@ -1017,7 +1276,7 @@ namespace nascent {
             return index < library.added.size() ? library.added[index] : (int64_t)0;
         };
 
-        std::stable_sort(visible.begin(), visible.end(), [&](size_t a, size_t b) {
+        std::stable_sort(sort_order.begin(), sort_order.end(), [&](size_t a, size_t b) {
             switch (sort) {
                 case ListSort::ARTIST:
                     return artists[a] < artists[b];
@@ -1036,6 +1295,10 @@ namespace nascent {
                     return library.charts[a]->info.key_count < library.charts[b]->info.key_count;
                 case ListSort::LONG_NOTES:
                     return long_notes(a) < long_notes(b);
+                case ListSort::RECENTLY_PLAYED:
+                    return played[a] > played[b];
+                case ListSort::BEST_ACCURACY:
+                    return accuracies[a] > accuracies[b];
                 default:
                     return false;
             }
@@ -1076,7 +1339,7 @@ namespace nascent {
             return;
         }
 
-        apply_search(selected_library_index());
+        apply_search(selected_library_index(), true);
 
         if (!visible.empty() && library.charts[visible[selected_chart_index]].get() != selected_chart) {
             select_chart(selected_chart_index);
@@ -1308,9 +1571,98 @@ namespace nascent {
         game->scenes().push(std::move(play));
     }
 
+    void SceneList::toggle_leaderboard_mode() {
+        LeaderboardMode mode = leaderboards.get_mode() == LeaderboardMode::ACCURACY ? LeaderboardMode::PERFORMANCE : LeaderboardMode::ACCURACY;
+        leaderboards.set_mode(mode);
+        SettingsManager::settings.list_leaderboard_mode = (uint8_t)mode;
+        SettingsManager::save();
+
+        if (!show_leaderboards) {
+            run_status_action(StatusAction::TOGGLE_SCORES, false);
+            return;
+        }
+
+        leaderboards.show_now();
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+    }
+
+    void SceneList::open_leaderboard_play(LeaderboardPick pick) {
+        if (selected_chart == nullptr) {
+            return;
+        }
+
+        game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+
+        if (pick.path) {
+            std::string error;
+            std::optional<Replay> replay = load_replay(*pick.path, error);
+
+            if (!replay) {
+                game->notify(std::format("Couldn't open the replay: {}", error), true);
+                return;
+            }
+
+            show_replay_results(std::move(*replay), std::move(pick.label), 0);
+            return;
+        }
+
+        if (pick.play_id <= 0 || replay_download) {
+            return;
+        }
+
+        replay_download = ServerApi::replay(pick.play_id);
+        replay_download_label = std::move(pick.label);
+        replay_download_hash = selected_hash();
+        replay_download_id = pick.play_id;
+        game->notify("Downloading the replay...");
+    }
+
+    void SceneList::poll_replay_download() {
+        if (!replay_download || !is_ready(*replay_download)) {
+            return;
+        }
+
+        ApiResult<Replay> result = replay_download->get();
+        replay_download.reset();
+
+        if (!result.ok()) {
+            game->notify(std::format("Couldn't download the replay: {}", result.error()), true);
+            return;
+        }
+
+        if (!active || selected_chart == nullptr || selected_hash() != replay_download_hash) {
+            return;
+        }
+
+        show_replay_results(std::move(*result.value), std::move(replay_download_label), replay_download_id);
+    }
+
+    void SceneList::show_replay_results(Replay replay, std::string label, int64_t play_id) {
+        if (!replay.chart.gameplay_hash.empty() && replay.chart.gameplay_hash != selected_hash()) {
+            game->notify("That replay was recorded on a different version of this chart", true);
+            return;
+        }
+
+        if (!(replay.rate > 0.0f) || !std::isfinite(replay.rate)) {
+            game->notify("That replay has an invalid rate", true);
+            return;
+        }
+
+        double difficulty = difficulty_cache->difficulty(*selected_chart, replay.rate);
+        selected_chart->set_pitch(replay.rate);
+        AttemptSummary summary = summarize_attempt(simulate_replay(*selected_chart, replay), difficulty);
+        summary.pause_count = (uint32_t)replay.pauses.size();
+
+        auto results = std::make_unique<SceneResults>(skin, selected_chart, std::move(summary), std::future<ApiResult<Submission>>(), -1, false, label);
+        results->enable_replay(selected_chart, std::move(replay), std::move(label), background_for(*selected_chart));
+        results->set_play_id(play_id);
+        game->scenes().push(std::move(results));
+    }
+
     void SceneList::toggle_favorite() {
         bool added = Favorites::toggle(selected_hash());
         game->notify(added ? std::format("Added {} to favorites", selected_chart->info.title) : std::format("Removed {} from favorites", selected_chart->info.title));
+        search_data_version++;
         refresh_search();
 
         if (!visible.empty()) {
@@ -1360,10 +1712,16 @@ namespace nascent {
 
         std::vector<bool> removed(library.size(), false);
         size_t removed_count = 0;
+        std::u8string target = folder_key(action == ChartAction::DELETE_PACK ? chart_path.parent_path().parent_path() : chart_path.parent_path());
+
+        auto parent_of = [](std::u8string_view folder) {
+            size_t separator = folder.find_last_of(u8"/\\");
+            return separator == std::u8string_view::npos ? std::u8string_view() : folder.substr(0, separator);
+        };
 
         for (size_t index = 0; index < library.size(); index++) {
-            std::filesystem::path chart_folder = std::filesystem::weakly_canonical(library.charts[index]->file_path.parent_path(), ec);
-            bool inside = action == ChartAction::DELETE_PACK ? chart_folder.parent_path() == folder : chart_folder == folder;
+            std::u8string_view chart_folder = library.folders[index];
+            bool inside = action == ChartAction::DELETE_PACK ? parent_of(chart_folder) == target : chart_folder == target;
             removed[index] = whole_pack ? inside : library.charts[index].get() == selected_chart;
             removed_count += removed[index] ? 1 : 0;
         }
@@ -1404,9 +1762,10 @@ namespace nascent {
             }
         }
 
-        ChartLibrary remaining = library.without(removed);
+        std::vector<std::unique_ptr<Chart>> dropped;
+        ChartLibrary remaining = library.without(removed, dropped);
         selected_chart = next;
-        apply_library(std::move(remaining));
+        apply_library(std::move(remaining), std::move(dropped));
 
         if (library_loading) {
             library_reload_pending = true;
@@ -1629,7 +1988,7 @@ namespace nascent {
             difficulty_busy = true;
             lock.unlock();
 
-            float difficulty = (float)difficulty_cache->difficulty(*job.chart, job.pitch);
+            float difficulty = (float)library_difficulty(*difficulty_cache, library_cache.get(), *job.chart, job.pitch, false).value_or(0.0);
 
             lock.lock();
             difficulty_busy = false;
@@ -1654,6 +2013,7 @@ namespace nascent {
     }
 
     void SceneList::cancel_difficulties(bool wait) {
+        rate_interrupted = true;
         std::unique_lock<std::mutex> lock(difficulty_mutex);
         difficulty_generation++;
         difficulty_jobs.clear();
@@ -1676,16 +2036,50 @@ namespace nascent {
                 return;
             }
 
-            size_t item = rate_next++;
-            const Chart* chart = rate_charts[item % rate_charts.size()];
-            float rate = rate_pitches[item / rate_charts.size()];
+            size_t first = rate_next;
+            size_t last = std::min(rate_charts.size() * rate_pitches.size(), first + RATE_BATCH);
+            std::vector<std::tuple<size_t, const Chart*, float>> batch;
+
+            for (size_t item = first; item < last; item++) {
+                batch.emplace_back(item % rate_charts.size(), rate_charts[item % rate_charts.size()], rate_pitches[item / rate_charts.size()]);
+            }
+
+            rate_next = last;
+            uint64_t generation = difficulty_generation;
+            float current = rate_current_pitch;
             rate_busy++;
             lock.unlock();
 
-            difficulty_cache->difficulty(*chart, rate);
+            std::vector<DifficultyResult> computed;
+            size_t stopped = last;
+
+            for (size_t position = 0; position < batch.size(); position++) {
+                auto [index, chart, rate] = batch[position];
+
+                if (difficulty_cache->lookup(*chart, rate)) {
+                    continue;
+                }
+
+                if (rate_interrupted) {
+                    stopped = first + position;
+                    break;
+                }
+
+                std::optional<double> value = library_difficulty(*difficulty_cache, library_cache.get(), *chart, rate, false);
+
+                if (value && rate == current) {
+                    computed.push_back({generation, index, (float)*value});
+                }
+            }
 
             lock.lock();
             rate_busy--;
+
+            if (stopped < last && generation == difficulty_generation) {
+                rate_next = std::min(rate_next, stopped);
+            }
+
+            difficulty_results.insert(difficulty_results.end(), computed.begin(), computed.end());
             difficulty_cv.notify_all();
         }
     }
@@ -1710,7 +2104,9 @@ namespace nascent {
             }
 
             rate_pitches = std::move(pitches);
+            rate_current_pitch = pitch;
             rate_next = 0;
+            rate_interrupted = rate_paused;
         }
 
         difficulty_cv.notify_all();
@@ -1720,6 +2116,7 @@ namespace nascent {
         {
             std::lock_guard<std::mutex> lock(difficulty_mutex);
             rate_paused = paused;
+            rate_interrupted = paused;
         }
 
         difficulty_cv.notify_all();
@@ -1736,10 +2133,18 @@ namespace nascent {
             library.difficulties.assign(library.size(), std::nullopt);
         }
 
+        bool changed = false;
+
         for (const DifficultyResult& result : results) {
-            if (result.generation == difficulty_generation && result.index < library.difficulties.size()) {
+            if (result.generation == difficulty_generation && result.index < library.difficulties.size() && library.difficulties[result.index] != result.difficulty) {
                 library.difficulties[result.index] = result.difficulty;
+                changed = true;
             }
+        }
+
+        if (changed) {
+            search_data_version++;
+            difficulty_refresh_pending = difficulty_refresh_pending || current_sort() == ListSort::DIFFICULTY || (searched_query && searched_query->filters_on("difficulty"));
         }
     }
 
@@ -1759,6 +2164,42 @@ namespace nascent {
             size_t total = library_load_progress.total;
             float fraction = total == 0 ? 0.0f : std::min(1.0f, (float)library_load_progress.done / (float)total);
             return BackgroundWork{std::string(STAGE_LABELS[stage]), fraction};
+        }
+
+        if (std::optional<BeatmapDownloads::Activity> downloads = BeatmapDownloads::activity()) {
+            size_t count = downloads->songs + downloads->packs;
+            std::string label;
+
+            if (count == 1) {
+                std::string name = downloads->name;
+
+                if (name.size() > DOWNLOAD_NAME_LIMIT) {
+                    name.resize(DOWNLOAD_NAME_LIMIT);
+
+                    while (!name.empty() && ((unsigned char)name.back() & 0xc0) == 0x80) {
+                        name.pop_back();
+                    }
+
+                    if (!name.empty() && (unsigned char)name.back() >= 0xc0) {
+                        name.pop_back();
+                    }
+
+                    name += "...";
+                }
+
+                label = std::format("{} {}", downloads->installing ? "Installing" : "Downloading", name.empty() ? std::string(downloads->packs > 0 ? "a pack" : "a song") : name);
+            }
+            else if (downloads->packs == 0) {
+                label = std::format("Downloading {} songs", count);
+            }
+            else if (downloads->songs == 0) {
+                label = std::format("Downloading {} packs", count);
+            }
+            else {
+                label = std::format("Downloading {} songs and packs", count);
+            }
+
+            return BackgroundWork{std::move(label), (float)downloads->progress};
         }
 
         std::lock_guard<std::mutex> lock(difficulty_mutex);
@@ -1793,6 +2234,13 @@ namespace nascent {
         cancel_difficulties(false);
         queue_all_rates();
         library.difficulties.assign(library.size(), std::nullopt);
+        fill_difficulties();
+        search_data_version++;
+
+        if (current_sort() == ListSort::DIFFICULTY || current_sort() == ListSort::BEST_ACCURACY) {
+            sort_order_dirty = true;
+        }
+
         refresh_search();
 
         if (!visible.empty()) {

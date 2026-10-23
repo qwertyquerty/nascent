@@ -17,6 +17,7 @@
 #include "KeyBindField.h"
 #include "ServerClient.h"
 #include "SettingsManager.h"
+#include "SkinFields.h"
 #include "Skin.h"
 #include "gse/render/TextCache.h"
 #include "gse/ui/TextField.h"
@@ -123,16 +124,10 @@ namespace nascent {
             }
         }
 
-        form.add<SectionField>("Display");
-        skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
-        export_skin_button = &form.add<ButtonField>("Export skin");
-        delete_skin_button = &form.add<ButtonField>(DELETE_SKIN_LABEL);
-        note_gradient_field = &form.add<ChoiceField>("Note gradient", std::vector<std::string>{"Off", "On"}, settings.field_note_gradient ? 1 : 0);
-        frame_rate_field = &form.add<ChoiceField>("Frame rate limit", frame_rate_labels, frame_rate_index);
-        fps_counter_field = &form.add<ChoiceField>("FPS counter", std::vector<std::string>{"Off", "On"}, settings.show_fps ? 1 : 0);
-        rich_presence_field = &form.add<ChoiceField>("Discord rich presence", std::vector<std::string>{"Off", "On"}, settings.discord_rich_presence ? 1 : 0);
-        transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
-        title_music_field = &form.add<ChoiceField>("Title screen songs", std::vector<std::string>{"All", "Favorites", "None"}, std::min<size_t>((size_t)settings.title_songs, 2));
+        skin_fields.clear();
+        visibility_fields.clear();
+        position_fields.clear();
+        form.add<SectionField>("Window");
         if (window_placement_supported()) {
             fullscreen_field = &form.add<ChoiceField>("Display mode", std::vector<std::string>{"Windowed", "Fullscreen", "Borderless window"}, (size_t)SettingsManager::window_mode());
             monitors.clear();
@@ -165,6 +160,16 @@ namespace nascent {
             fullscreen_field = &form.add<ChoiceField>("Fullscreen (applies on restart)", std::vector<std::string>{"Off", "On"}, settings.display_fullscreen ? 1 : 0);
         }
 
+        frame_rate_field = &form.add<ChoiceField>("Frame rate limit", frame_rate_labels, frame_rate_index);
+        transition_field = &form.add<ChoiceField>("Scene transitions", transition_labels, transition_index);
+
+        form.add<SectionField>("Gameplay");
+        scroll_speed_field = &form.add<SliderField>("Scroll speed", settings.field_scroll_speed, SceneCalibration::SCROLL_SPEED_MIN, SceneCalibration::SCROLL_SPEED_MAX, SceneCalibration::SCROLL_SPEED_STEP, "");
+        scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
+        mirror_field = &form.add<ChoiceField>("Mirror", std::vector<std::string>{"Off", "On"}, settings.field_mirror ? 1 : 0);
+        lane_cover_field = &form.add<SliderField>("Noteblock", settings.field_lane_cover, -100, 100, PERCENT_STEP, "%");
+        instant_restart_field = &form.add<ChoiceField>("Instant restart", std::vector<std::string>{"Off", "On"}, settings.field_instant_restart ? 1 : 0);
+
         form.add<SectionField>("Audio");
         master_volume_field = &form.add<SliderField>("Master volume", settings.master_volume, 0, 100, PERCENT_STEP, "%");
         music_volume_field = &form.add<SliderField>("Music volume", settings.music_volume, 0, 100, PERCENT_STEP, "%");
@@ -188,18 +193,20 @@ namespace nascent {
 
         output_device_field = &form.add<ChoiceField>("Output device", device_labels, (size_t)(saved_device - output_devices.begin()));
 
+        title_music_field = &form.add<ChoiceField>("Title screen songs", std::vector<std::string>{"All", "Favorites", "None"}, std::min<size_t>((size_t)settings.title_songs, 2));
+
         form.add<SectionField>("Calibration");
         visual_offset_field = &form.add<SliderField>("Visual offset", settings.field_audio_visual_offset, -SceneCalibration::OFFSET_LIMIT_MS, SceneCalibration::OFFSET_LIMIT_MS, 1, " ms");
         input_offset_field = &form.add<SliderField>("Input offset", settings.field_audio_input_offset, -SceneCalibration::OFFSET_LIMIT_MS, SceneCalibration::OFFSET_LIMIT_MS, 1, " ms");
-        scroll_speed_field = &form.add<SliderField>("Scroll speed", settings.field_scroll_speed, SceneCalibration::SCROLL_SPEED_MIN, SceneCalibration::SCROLL_SPEED_MAX, SceneCalibration::SCROLL_SPEED_STEP, "");
         calibration_button = &form.add<ButtonField>("Open calibration");
 
-        form.add<SectionField>("Playfield");
-        lane_width_field = &form.add<SliderField>("Lane width", settings.field_lane_width_percent, LANE_WIDTH_MIN, LANE_WIDTH_MAX, PERCENT_STEP, "%");
-        background_brightness_field = &form.add<SliderField>("Background brightness", settings.field_background_brightness, 0, 100, PERCENT_STEP, "%");
+        form.add<SectionField>("Skin");
+        skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
+        export_skin_button = &form.add<ButtonField>("Export skin");
+        delete_skin_button = &form.add<ButtonField>(DELETE_SKIN_LABEL);
+        note_gradient_field = &form.add<ChoiceField>("Note gradient", std::vector<std::string>{"Off", "On"}, settings.field_note_gradient ? 1 : 0);
         note_opacity_field = &form.add<SliderField>("Note opacity", settings.field_note_opacity, 0, 100, PERCENT_STEP, "%");
         receptor_opacity_field = &form.add<SliderField>("Receptor opacity", settings.field_receptor_opacity, 0, 100, PERCENT_STEP, "%");
-
         lane_gaps = {-1};
 
         for (int16_t gap = 0; gap <= LANE_GAP_MAX; gap += LANE_GAP_STEP) {
@@ -219,40 +226,52 @@ namespace nascent {
 
         size_t lane_gap_index = (size_t)(std::find(lane_gaps.begin(), lane_gaps.end(), settings.field_lane_gap) - lane_gaps.begin());
         lane_gap_field = &form.add<ChoiceField>("Lane separation", lane_gap_labels, lane_gap_index);
-        judgement_line_field = &form.add<ChoiceField>("Judgement line", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement_line ? 1 : 0);
-        judge_offset_field = &form.add<SliderField>("Judgement line height", settings.field_judge_line_percent, 0, JUDGE_LINE_MAX, PERCENT_STEP, "%");
-        scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
-        mirror_field = &form.add<ChoiceField>("Mirror", std::vector<std::string>{"Off", "On"}, settings.field_mirror ? 1 : 0);
-        lane_cover_field = &form.add<SliderField>("Noteblock", settings.field_lane_cover, -100, 100, PERCENT_STEP, "%");
-        judgement_field = &form.add<ChoiceField>("Judgement", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement ? 1 : 0);
-        judgement_height_field = &form.add<SliderField>("Judgement height", settings.field_judgement_height, 0, 100, PERCENT_STEP, "%");
-        combo_field = &form.add<ChoiceField>("Combo", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_combo ? 1 : 0);
-        combo_height_field = &form.add<SliderField>("Combo height", settings.field_combo_height, 0, 100, PERCENT_STEP, "%");
-        accuracy_field = &form.add<ChoiceField>("Accuracy", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_accuracy ? 1 : 0);
-        average_error_field = &form.add<ChoiceField>("Average error", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_average_error ? 1 : 0);
-        error_deviation_field = &form.add<ChoiceField>("Error deviation", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_error_deviation ? 1 : 0);
-        performance_field = &form.add<ChoiceField>("Performance prediction", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_performance ? 1 : 0);
-        judgement_counter_field = &form.add<ChoiceField>("Judgement counter", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_judgement_counter ? 1 : 0);
-        timing_bar_field = &form.add<ChoiceField>("Hit timing bar", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_bar ? 1 : 0);
-        timing_average_field = &form.add<ChoiceField>("Hit timing average", std::vector<std::string>{"Hidden", "Shown"}, settings.field_show_timing_average ? 1 : 0);
-        timing_bar_height_field = &form.add<SliderField>("Hit timing bar height", settings.field_timing_bar_height, 0, 100, PERCENT_STEP, "%");
-        timing_bar_length_field = &form.add<SliderField>("Hit timing bar length", settings.field_timing_bar_length, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH, PERCENT_STEP, "%");
-        timing_bar_width_field = &form.add<SliderField>("Hit timing bar width", settings.field_timing_bar_width, TIMING_BAR_WIDTH_MIN, TIMING_BAR_WIDTH_MAX, PERCENT_STEP, "%");
+        background_brightness_field = &form.add<SliderField>("Background brightness", settings.field_background_brightness, 0, 100, PERCENT_STEP, "%");
+
+        form.add<SectionField>("Element Visibility");
+        reset_visibility_button = &form.add<ButtonField>("Reset all to skin default");
+        add_skin_toggle("Judgement line", skin_toggles::SHOW_JUDGEMENT_LINE);
+        add_skin_toggle("Judgement", skin_toggles::SHOW_JUDGEMENT);
+        add_skin_toggle("Combo", skin_toggles::SHOW_COMBO);
+        add_skin_toggle("Accuracy", skin_toggles::SHOW_ACCURACY);
+        add_skin_toggle("Average error", skin_toggles::SHOW_AVERAGE_ERROR);
+        add_skin_toggle("Error deviation", skin_toggles::SHOW_ERROR_DEVIATION);
+        add_skin_toggle("Performance prediction", skin_toggles::SHOW_PERFORMANCE);
+        add_skin_toggle("Judgement counter", skin_toggles::SHOW_JUDGEMENT_COUNTER);
+        add_skin_toggle("Hit timing bar", skin_toggles::SHOW_TIMING_BAR);
+        add_skin_toggle("Hit timing average", skin_toggles::SHOW_TIMING_AVERAGE);
+        add_skin_toggle("FPS counter", skin_toggles::SHOW_FPS, "Off", "On");
+
+        form.add<SectionField>("Element Positions");
+        reset_positions_button = &form.add<ButtonField>("Reset all to skin default");
+        add_skin_slider("Lane width", skin_settings::LANE_WIDTH, LANE_WIDTH_MIN, LANE_WIDTH_MAX);
+        add_skin_slider("Judgement line height", skin_settings::JUDGEMENT_LINE_HEIGHT, 0, JUDGE_LINE_MAX);
+        add_skin_slider("Judgement height", skin_settings::JUDGEMENT_HEIGHT, 0, 100);
+        add_skin_slider("Combo height", skin_settings::COMBO_HEIGHT, 0, 100);
+        add_hud_position(HudElement::ACCURACY);
+        add_hud_position(HudElement::AVERAGE_ERROR);
+        add_hud_position(HudElement::PERFORMANCE);
+        add_hud_position(HudElement::JUDGEMENT_COUNTER);
+        add_skin_slider("Hit timing bar height", skin_settings::TIMING_BAR_HEIGHT, 0, 100);
+        add_skin_slider("Hit timing bar length", skin_settings::TIMING_BAR_LENGTH, TIMING_BAR_LENGTH_MIN, TIMING_BAR_MAX_LENGTH);
+        add_skin_slider("Hit timing bar width", skin_settings::TIMING_BAR_WIDTH, TIMING_BAR_WIDTH_MIN, TIMING_BAR_WIDTH_MAX);
+        add_hud_position(HudElement::PROGRESS);
+        add_hud_position(HudElement::FPS);
 
         form.add<SectionField>("Keys");
-        instant_restart_field = &form.add<ChoiceField>("Instant restart", std::vector<std::string>{"Off", "On"}, settings.field_instant_restart ? 1 : 0);
-
         for (size_t index = 0; index < KEY_BINDINGS.size(); index++) {
             key_fields.push_back(&form.add<KeyBindField>((KeyBinding)index));
         }
+
 
         form.add<SectionField>("Online");
         server_field = &form.add<TextField>("Server address", settings.server_url);
         server_typed = settings.server_url;
         server_checked = settings.server_url;
 
-        form.add<SectionField>("Files");
-        data_folder_button = &form.add<ButtonField>("Open data folder");
+        rich_presence_field = &form.add<ChoiceField>("Discord rich presence", std::vector<std::string>{"Off", "On"}, settings.discord_rich_presence ? 1 : 0);
+
+        form.add<SectionField>("Library");
         link_folder_button = &form.add<ButtonField>("Link a charts folder");
         osu_songs = ChartFolders::osu_songs_folder();
 
@@ -269,11 +288,13 @@ namespace nascent {
         linked_folders_field = &form.add<ChoiceField>("Linked folders", std::vector<std::string>{"None"}, 0);
         refresh_linked_folders();
 
+        data_folder_button = &form.add<ButtonField>("Open data folder");
+
         form.add<SectionField>("About");
-        credits_button = &form.add<ButtonField>("Credits");
         changelog_button = &form.add<ButtonField>(std::format("Changelog (version {})", NASCENT_VERSION_STRING));
         report_bug_button = &form.add<ButtonField>("Report a bug");
         discord_button = &form.add<ButtonField>("Join the Discord");
+        credits_button = &form.add<ButtonField>("Credits");
 
         form.spacing = Ui::layout("options.field_spacing");
         form.focus_field(0);
@@ -305,7 +326,6 @@ namespace nascent {
         }
 
         settings.frame_rate_limit = frame_rates[frame_rate_field->selected];
-        settings.show_fps = fps_counter_field->selected == 1;
         settings.discord_rich_presence = rich_presence_field->selected == 1;
         RichPresence::set_enabled(settings.discord_rich_presence);
         float transition_time = TRANSITION_OPTIONS[transition_field->selected].second;
@@ -332,32 +352,21 @@ namespace nascent {
         settings.field_instant_restart = instant_restart_field->selected == 1;
         settings.field_lane_cover = (int8_t)lane_cover_field->value;
         settings.field_note_gradient = note_gradient_field->selected == 1;
-        settings.field_show_judgement_line = judgement_line_field->selected == 1;
         settings.title_songs = (TitleSongs)title_music_field->selected;
-        settings.field_lane_width_percent = (uint8_t)lane_width_field->value;
         settings.field_background_brightness = (uint8_t)background_brightness_field->value;
         settings.field_note_opacity = (uint8_t)note_opacity_field->value;
         settings.field_receptor_opacity = (uint8_t)receptor_opacity_field->value;
         settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
-        settings.field_judge_line_percent = (uint8_t)judge_offset_field->value;
         settings.field_audio_visual_offset = (int16_t)visual_offset_field->value;
         settings.field_audio_input_offset = (int16_t)input_offset_field->value;
         settings.field_scroll_speed = (uint16_t)scroll_speed_field->value;
         settings.field_upscroll = scroll_direction_field->selected == 1;
-        settings.field_show_judgement = judgement_field->selected == 1;
-        settings.field_judgement_height = (uint8_t)judgement_height_field->value;
-        settings.field_show_combo = combo_field->selected == 1;
-        settings.field_show_accuracy = accuracy_field->selected == 1;
-        settings.field_show_average_error = average_error_field->selected == 1;
-        settings.field_show_error_deviation = error_deviation_field->selected == 1;
-        settings.field_show_performance = performance_field->selected == 1;
-        settings.field_combo_height = (uint8_t)combo_height_field->value;
-        settings.field_show_judgement_counter = judgement_counter_field->selected == 1;
-        settings.field_show_timing_bar = timing_bar_field->selected == 1;
-        settings.field_show_timing_average = timing_average_field->selected == 1;
-        settings.field_timing_bar_height = (uint8_t)timing_bar_height_field->value;
-        settings.field_timing_bar_length = (uint8_t)timing_bar_length_field->value;
-        settings.field_timing_bar_width = (uint8_t)timing_bar_width_field->value;
+
+        for (SkinFollowing* field : skin_fields) {
+            field->refresh_skin(*skin);
+            field->store(settings);
+        }
+
         rebuild_preview();
         status = device_status;
 
@@ -408,6 +417,9 @@ namespace nascent {
         }
         else if (*clicked == FOOTER_RESET && form.focused_field() == linked_folders_field) {
             unlink_requested = true;
+        }
+        else if (SkinFollowing* skin_field = dynamic_cast<SkinFollowing*>(form.focused_field()); *clicked == FOOTER_RESET && skin_field != nullptr && skin_field->use_skin_value()) {
+            return true;
         }
         else if (KeyBindField* key_field = dynamic_cast<KeyBindField*>(form.focused_field()); key_field != nullptr && key_field->reset_binding()) {
             return true;
@@ -618,6 +630,36 @@ namespace nascent {
         open_folder(user_config_directory(SettingsManager::APP_NAME) / SKIN_EXPORT_FOLDER);
     }
 
+    SkinSliderField& SceneOptions::add_skin_slider(std::string label, SkinSetting setting, int32_t minimum, int32_t maximum) {
+        SkinSliderField& field = form.add<SkinSliderField>(std::move(label), setting, *skin, minimum, maximum, PERCENT_STEP, "%");
+        skin_fields.push_back(&field);
+        position_fields.push_back(&field);
+        return field;
+    }
+
+    SkinChoiceField& SceneOptions::add_skin_toggle(std::string label, SkinToggle toggle, std::string off_label, std::string on_label) {
+        SkinChoiceField& field = form.add<SkinChoiceField>(std::move(label), toggle, *skin, std::move(off_label), std::move(on_label));
+        skin_fields.push_back(&field);
+        visibility_fields.push_back(&field);
+        return field;
+    }
+
+    bool SceneOptions::reset_to_skin(const std::vector<SkinFollowing*>& fields) {
+        bool changed = false;
+
+        for (SkinFollowing* field : fields) {
+            changed = field->use_skin_value() || changed;
+        }
+
+        return changed;
+    }
+
+    void SceneOptions::add_hud_position(HudElement element) {
+        const HudSlot& slot = HUD_SLOTS[(size_t)element];
+        add_skin_slider(std::format("{} X position", slot.label), slot.x, 0, 100);
+        add_skin_slider(std::format("{} Y position", slot.label), slot.y, 0, 100);
+    }
+
     void SceneOptions::report_bug() {
         std::string body = std::format("**What happened?**\n\n\n**What did you expect to happen?**\n\n\n**Steps to reproduce**\n\n\nVersion: {}\n\nPlease attach {} from the folder Nascent opened.", NASCENT_VERSION_STRING, SettingsManager::LOG_FILE);
         bool opened = open_url(std::format("{}?body={}", BUG_REPORT_URL, ServerClient::url_encode(body)));
@@ -740,6 +782,16 @@ namespace nascent {
         else if (changelog_button->take_pressed()) {
             overlays.open(std::make_unique<ChangelogOverlay>(skin, Changelog::load(), "Changelog", "Every update so far"));
         }
+        else if (reset_visibility_button->take_pressed()) {
+            if (reset_to_skin(visibility_fields)) {
+                apply();
+            }
+        }
+        else if (reset_positions_button->take_pressed()) {
+            if (reset_to_skin(position_fields)) {
+                apply();
+            }
+        }
         else if (report_bug_button->take_pressed()) {
             report_bug();
         }
@@ -860,25 +912,25 @@ namespace nascent {
 
         const Settings& settings = SettingsManager::settings;
         olc::vi2d screen = game->window->GetScreenSize();
-        double width = screen.y * settings.field_lane_width_percent / 100.0 * PREVIEW_KEY_COUNT;
+        double width = screen.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0 * PREVIEW_KEY_COUNT;
 
         preview_field = std::make_unique<EntityField>(preview_chart.get(), skin, olc::vd2d{(double)screen.x * Ui::layout("options.preview_center") - width / 2, 0.0}, olc::vd2d{width, (double)screen.y});
         preview_field->draw_judge_colors = true;
         preview_field->draw_notes_past_judge = false;
-        preview_field->draw_hit_score = settings.field_show_judgement;
-        preview_field->draw_combo = settings.field_show_combo;
-        preview_field->judgement_height = settings.field_judgement_height / 100.0;
-        preview_field->combo_height = settings.field_combo_height / 100.0;
+        preview_field->draw_hit_score = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT);
+        preview_field->draw_combo = skin_toggle(*skin, skin_toggles::SHOW_COMBO);
+        preview_field->judgement_height = skin_setting(*skin, skin_settings::JUDGEMENT_HEIGHT) / 100.0;
+        preview_field->combo_height = skin_setting(*skin, skin_settings::COMBO_HEIGHT) / 100.0;
         preview_field->set_attempt(preview_attempt.get());
         preview_field->judge_alpha = (uint8_t)Ui::layout("options.preview_receptor_alpha");
-        preview_field->judge_height = screen.y * settings.field_judge_line_percent / 100.0;
+        preview_field->judge_height = screen.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
         preview_field->upscroll = settings.field_upscroll;
         preview_field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
         preview_field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
         preview_field->mirror = settings.field_mirror;
         preview_field->lane_cover = settings.field_lane_cover / 100.0;
         preview_field->note_gradient = settings.field_note_gradient;
-        preview_field->draw_judge = settings.field_show_judgement_line;
+        preview_field->draw_judge = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_LINE);
         preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
     }
 
@@ -968,6 +1020,18 @@ namespace nascent {
             return {{"↑/↓:  choose"}, {"Enter:  rebind", FOOTER_CONFIRM}, {"Delete:  reset", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
         }
 
+        if (form.focused_field() != nullptr && (form.focused_field() == reset_visibility_button || form.focused_field() == reset_positions_button)) {
+            return {{"↑/↓:  choose"}, {"Enter:  reset", FOOTER_CONFIRM}, {"Esc:  back", FOOTER_BACK}};
+        }
+
+        if (const SkinFollowing* skin_field = dynamic_cast<const SkinFollowing*>(form.focused_field()); skin_field != nullptr) {
+            if (skin_field->follows_skin) {
+                return {{"↑/↓:  choose"}, {"←/→:  change"}, {"Esc:  back", FOOTER_BACK}};
+            }
+
+            return {{"↑/↓:  choose"}, {"←/→:  change"}, {"Delete:  use skin", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
+        }
+
         if (form.focused_field() == linked_folders_field && !SettingsManager::settings.list_linked_directories.empty()) {
             return {{"←/→:  choose"}, {"Delete:  unlink", FOOTER_RESET}, {"Esc:  back", FOOTER_BACK}};
         }
@@ -990,6 +1054,10 @@ namespace nascent {
 
         if (server_field != nullptr && form.focused_field() == server_field) {
             return {{"Type an address"}, {"↑/↓:  choose"}, {"Esc:  save and go back", FOOTER_BACK}};
+        }
+
+        if (const SliderField* slider = dynamic_cast<const SliderField*>(form.focused_field()); slider != nullptr && slider->step > 1) {
+            return {{"↑/↓:  choose"}, {"←/→:  change"}, {"Shift:  fine steps"}, {"Esc:  back", FOOTER_BACK}};
         }
 
         return {{"↑/↓:  choose"}, {"←/→:  change"}, {"Esc:  back", FOOTER_BACK}};
@@ -1044,9 +1112,8 @@ namespace nascent {
         if (preview_field != nullptr) {
             preview_field->draw(window);
 
-            if (SettingsManager::settings.field_show_timing_bar && preview_attempt != nullptr) {
-                const Settings& settings = SettingsManager::settings;
-                draw_timing_bar(window, skin, *preview_attempt, (float)(screen.x * Ui::layout("options.preview_center")), screen.x * settings.field_timing_bar_length / 100.0f, screen.y * settings.field_timing_bar_width / 100.0f, settings.field_timing_bar_height / 100.0f, settings.field_show_timing_average);
+            if (skin_toggle(*skin, skin_toggles::SHOW_TIMING_BAR) && preview_attempt != nullptr) {
+                draw_timing_bar(window, skin, *preview_attempt, (float)(screen.x * Ui::layout("options.preview_center")), (float)(screen.x * skin_setting(*skin, skin_settings::TIMING_BAR_LENGTH) / 100.0), (float)(screen.y * skin_setting(*skin, skin_settings::TIMING_BAR_WIDTH) / 100.0), (float)(skin_setting(*skin, skin_settings::TIMING_BAR_HEIGHT) / 100.0), skin_toggle(*skin, skin_toggles::SHOW_TIMING_AVERAGE));
             }
         }
 

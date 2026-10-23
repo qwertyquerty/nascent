@@ -7,11 +7,51 @@
 #include "Utf8Path.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
 
+namespace nlohmann {
+    template <typename T>
+    struct adl_serializer<std::optional<T>> {
+        static void to_json(json& data, const std::optional<T>& value) {
+            if (value) {
+                data = *value;
+            }
+            else {
+                data = nullptr;
+            }
+        }
+
+        static void from_json(const json& data, std::optional<T>& value) {
+            if (data.is_null()) {
+                value.reset();
+            }
+            else {
+                value = data.get<T>();
+            }
+        }
+    };
+}
+
 namespace nascent {
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+        HudPositions,
+        fps_x,
+        fps_y,
+        accuracy_x,
+        accuracy_y,
+        error_x,
+        error_y,
+        performance_x,
+        performance_y,
+        judgement_counter_x,
+        judgement_counter_y,
+        progress_x,
+        progress_y
+    )
+
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
         Settings,
         field_scroll_speed,
@@ -45,11 +85,13 @@ namespace nascent {
         field_background_brightness,
         field_note_opacity,
         field_receptor_opacity,
+        hud,
         title_logo_start_delay,
         title_field_count,
         title_h_scroll_rate,
         title_songs,
         list_sort,
+        list_leaderboard_mode,
         play_start_delay,
         scene_transition_time,
         list_preview_fade_in_time,
@@ -80,7 +122,49 @@ namespace nascent {
     Settings SettingsManager::settings = Settings();
 
     static std::map<uint32_t, VersionedJsonFile::Migration> settings_migrations() {
-        return {};
+        return {
+            {1, [](nlohmann::json& data) {
+                 static const std::array<std::pair<const char*, int>, 7> skin_defaults = {{
+                     {"field_lane_width_percent", 12},
+                     {"field_judge_line_percent", 6},
+                     {"field_judgement_height", 45},
+                     {"field_combo_height", 41},
+                     {"field_timing_bar_height", 0},
+                     {"field_timing_bar_length", 33},
+                     {"field_timing_bar_width", 5},
+                 }};
+
+                 for (const auto& [key, value] : skin_defaults) {
+                     auto found = data.find(key);
+
+                     if (found != data.end() && found->is_number_integer() && found->get<int>() == value) {
+                         *found = nullptr;
+                     }
+                 }
+
+                 static const std::array<std::pair<const char*, bool>, 11> skin_toggles = {{
+                     {"show_fps", true},
+                     {"field_show_judgement_line", true},
+                     {"field_show_judgement", true},
+                     {"field_show_combo", true},
+                     {"field_show_accuracy", true},
+                     {"field_show_average_error", true},
+                     {"field_show_error_deviation", true},
+                     {"field_show_performance", false},
+                     {"field_show_judgement_counter", false},
+                     {"field_show_timing_bar", true},
+                     {"field_show_timing_average", true},
+                 }};
+
+                 for (const auto& [key, value] : skin_toggles) {
+                     auto found = data.find(key);
+
+                     if (found != data.end() && found->is_boolean() && found->get<bool>() == value) {
+                         *found = nullptr;
+                     }
+                 }
+             }},
+        };
     }
 
     static std::unique_ptr<SettingsStore<Settings>>& settings_store() {

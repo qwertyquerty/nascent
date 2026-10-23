@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,31 +17,46 @@ namespace nascent {
         NONE,
     };
 
+    struct HudPositions {
+        std::optional<uint8_t> fps_x;
+        std::optional<uint8_t> fps_y;
+        std::optional<uint8_t> accuracy_x;
+        std::optional<uint8_t> accuracy_y;
+        std::optional<uint8_t> error_x;
+        std::optional<uint8_t> error_y;
+        std::optional<uint8_t> performance_x;
+        std::optional<uint8_t> performance_y;
+        std::optional<uint8_t> judgement_counter_x;
+        std::optional<uint8_t> judgement_counter_y;
+        std::optional<uint8_t> progress_x;
+        std::optional<uint8_t> progress_y;
+    };
+
     struct Settings {
         uint16_t field_scroll_speed = 160; // vh / s
         uint8_t field_audio_sync_max_error = 20; // ms
         int16_t field_audio_visual_offset = 0; //ms
         int16_t field_audio_input_offset = 0; // ms
-        uint8_t field_lane_width_percent = 12; // % of the screen height
-        uint8_t field_judge_line_percent = 6; // % of the screen height
+        std::optional<uint8_t> field_lane_width_percent; // % of the screen height
+        std::optional<uint8_t> field_judge_line_percent; // % of the screen height
         int16_t field_lane_gap = -1; // px, -1 uses the skin's spacing
         bool field_upscroll = false;
-        bool field_show_judgement = true;
-        uint8_t field_judgement_height = 45; // % of the field above the judgement line's end
-        bool field_show_combo = true;
+        std::optional<bool> field_show_judgement;
+        std::optional<uint8_t> field_judgement_height; // % of the field above the judgement line's end
+        std::optional<bool> field_show_combo;
         bool field_note_gradient = true;
-        bool field_show_judgement_line = true;
-        bool field_show_accuracy = true;
-        bool field_show_average_error = true;
-        bool field_show_error_deviation = true;
-        bool field_show_performance = false;
-        bool field_show_judgement_counter = false;
-        uint8_t field_combo_height = 41; // % of the field above the judgement line's end
-        bool field_show_timing_bar = true;
-        bool field_show_timing_average = true;
-        uint8_t field_timing_bar_height = 0; // % of the screen above its bottom edge
-        uint8_t field_timing_bar_length = 33; // % of the screen width
-        uint8_t field_timing_bar_width = 5; // % of the screen height
+        std::optional<bool> field_show_judgement_line;
+        std::optional<bool> field_show_accuracy;
+        std::optional<bool> field_show_average_error;
+        std::optional<bool> field_show_error_deviation;
+        std::optional<bool> field_show_performance;
+        std::optional<bool> field_show_judgement_counter;
+        std::optional<uint8_t> field_combo_height; // % of the field above the judgement line's end
+        std::optional<bool> field_show_timing_bar;
+        std::optional<bool> field_show_timing_average;
+        std::optional<uint8_t> field_timing_bar_height; // % of the screen above its bottom edge
+        std::optional<uint8_t> field_timing_bar_length; // % of the screen width
+        std::optional<uint8_t> field_timing_bar_width; // % of the screen height
         bool field_mirror = false;
         bool field_instant_restart = false;
         int8_t field_lane_cover = 0;
@@ -48,12 +64,14 @@ namespace nascent {
         uint8_t field_background_brightness = 0;
         uint8_t field_note_opacity = 100;
         uint8_t field_receptor_opacity = 100;
+        HudPositions hud;
 
         float title_logo_start_delay = 1; // s
         uint8_t title_field_count = 9;
         uint16_t title_h_scroll_rate = 250; // px / s
         TitleSongs title_songs = TitleSongs::ALL;
         uint8_t list_sort = 0;
+        uint8_t list_leaderboard_mode = 0;
 
         float play_start_delay = 2; // s
 
@@ -71,7 +89,7 @@ namespace nascent {
         uint8_t music_volume = 75;
         uint8_t effects_volume = 75;
         std::string audio_output_device;
-        bool show_fps = true;
+        std::optional<bool> show_fps;
         bool account_screen_seen = false;
         std::string last_run_version;
 
@@ -98,7 +116,7 @@ namespace nascent {
         static constexpr const char* LOG_FILE = "nascent.log";
         static constexpr const char* SETTINGS_FILE_NAME = "settings.json";
         static constexpr double VOLUME_RANGE_DB = 40.0;
-        static constexpr uint32_t SETTINGS_VERSION = 1;
+        static constexpr uint32_t SETTINGS_VERSION = 2;
         static constexpr const char* SONG_DIRECTORY_NAME = "songs";
         static constexpr const char* LEGACY_SONG_DIRECTORY = "assets/songs";
 

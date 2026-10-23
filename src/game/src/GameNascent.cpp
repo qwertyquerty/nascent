@@ -16,6 +16,7 @@
 #include "gse/Platform.h"
 #include "StatusBar.h"
 #include "Skin.h"
+#include "SkinSettings.h"
 #include "SubmissionQueue.h"
 #include "ToastOverlay.h"
 #include "ReleaseUpdate.h"
@@ -39,12 +40,25 @@
 #include <utility>
 
 namespace nascent {
+    namespace {
+        constexpr float FPS_REFRESH_SECONDS = 0.25f;
+
+        struct FpsReadout {
+            float window = 0;
+            uint32_t frames = 0;
+            std::optional<uint16_t> shown;
+        };
+
+        FpsReadout fps_readout;
+    }
+
     GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
 
                                                              };
 
     GameNascent::~GameNascent() {
         SubmissionQueue::stop();
+        LocalBests::flush();
         RichPresence::shutdown();
         release_scenes();
         scene_list.reset();
@@ -175,11 +189,22 @@ namespace nascent {
         clear_color = skin->color(SkinColor::SCREEN_BACKGROUND);
         draw_scenes(window);
 
-        if (SettingsManager::settings.show_fps) {
-            uint16_t fps = elapsed_time > 0 ? (uint16_t)std::min(1 / elapsed_time, 65535.0f) : 0;
-            olc::FontRect metrics = text_bounds(skin->display_font_small, "Hgjy");
-            int32_t baseline = (StatusBar::height() - metrics.size.y) / 2 - metrics.offset.y;
-            draw_text(skin->display_font_small, std::format("FPS: {}", fps), window->GetScreenSize().x - Ui::layout_px("fps_counter.width"), baseline, skin->color(SkinColor::TEXT));
+        if (skin_toggle(*skin, skin_toggles::SHOW_FPS)) {
+            fps_readout.window += elapsed_time;
+            fps_readout.frames++;
+
+            if (!fps_readout.shown || fps_readout.window >= FPS_REFRESH_SECONDS) {
+                fps_readout.shown = fps_readout.window > 0 ? (uint16_t)std::min(fps_readout.frames / fps_readout.window, 65535.0f) : 0;
+                fps_readout.window = 0;
+                fps_readout.frames = 0;
+            }
+
+            olc::FontRect bounds = text_bounds(skin->display_font_small, "FPS: 0000");
+            olc::vf2d spot = hud_position(*skin, HudElement::FPS, {(float)bounds.size.x, (float)bounds.size.y}, window->GetScreenSize());
+            draw_text(skin->display_font_small, std::format("FPS: {}", *fps_readout.shown), (int32_t)spot.x - bounds.offset.x, (int32_t)spot.y - bounds.offset.y, skin->color(SkinColor::TEXT));
+        }
+        else {
+            fps_readout = FpsReadout();
         }
 
         overlays().draw(window);
@@ -303,7 +328,7 @@ namespace nascent {
     }
 
     int32_t GameNascent::fps_counter_width() {
-        return SettingsManager::settings.show_fps ? Ui::layout_px("fps_counter.width") : 0;
+        return skin_toggle(skin_toggles::SHOW_FPS) ? Ui::layout_px("fps_counter.width") : 0;
     }
 
     void GameNascent::show_toast(std::string message, bool is_error, float duration, std::function<void()> action) {

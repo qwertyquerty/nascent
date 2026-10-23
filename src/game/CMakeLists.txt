@@ -40,6 +40,8 @@ add_library(game
     src/ServerClient.cpp
     src/SettingsManager.cpp
     src/Skin.cpp
+    src/SkinSettings.cpp
+    src/SkinFields.cpp
     src/SortMenu.cpp
     src/StatusBar.cpp
     src/SubmissionQueue.cpp

@@ -7,6 +7,7 @@
 #include "InputManager.h"
 #include "gse/input/KeyEvents.h"
 #include "SettingsManager.h"
+#include "SkinSettings.h"
 #include "Skin.h"
 #include "gse/render/TextCache.h"
 #include "gse/ui/Ui.h"
@@ -313,7 +314,7 @@ namespace nascent {
         double field_width = Ui::layout("calibration.field_width");
         field->pos = {(double)window_size.x * (1.0 - field_width) - (double)window_size.x * Ui::layout("calibration.field_right_margin"), 0.0};
         field->size = {(double)(int32_t)(window_size.x * field_width), (double)window_size.y};
-        field->judge_height = window_size.y * SettingsManager::settings.field_judge_line_percent / 100.0;
+        field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
         field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(SettingsManager::settings.field_lane_gap)) : std::nullopt);
     }
 
