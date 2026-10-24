@@ -157,6 +157,8 @@
                     <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Personal best</span>
                 </div>
 
+                <other-games v-if="view.timeline" :notes="view.timeline.notes" :hit-accuracy="view.play.chart.hit_accuracy"></other-games>
+
                 <div v-if="staff && view.play.flags && view.play.status === 'pending_review'" class="box review-item">
                     <p class="has-text-weight-semibold mb-2">Waiting for review</p>
                     <ul class="review-flags mb-3">

@@ -1320,6 +1320,153 @@ app.component("chart-preview", {
     </div>`,
 });
 
+const ETTERNA_JUDGES = [["J4", 1], ["J5", 0.84], ["J6", 0.66], ["J7", 0.5], ["J8", 0.33], ["J9", 0.2]];
+const ETTERNA_WINDOWS = [["Marvelous", 22.5, "perfect"], ["Perfect", 45, "amazing"], ["Great", 90, "great"], ["Good", 135, "good"], ["Bad", 180, "bad"]];
+const ETTERNA_GRADES = [["AAAAA", 0.999935], ["AAAA", 0.99955], ["AAA", 0.997], ["AA", 0.93], ["A", 0.8], ["B", 0.7], ["C", 0.6]];
+const ETTERNA_MISS_WEIGHT = -5.5;
+const ETTERNA_HOLD_DROP_WEIGHT = -4.5;
+const ETTERNA_HOLD_LENIENCE_MS = 250;
+const OSU_JUDGEMENTS = [["MAX", "perfect"], ["300", "amazing"], ["200", "great"], ["100", "good"], ["50", "bad"]];
+const OSU_GRADES = [["SS", 1], ["S", 0.95], ["A", 0.9], ["B", 0.8], ["C", 0.7]];
+const OSU_OD_OFFSET = 4;
+
+function erf(x) {
+    const sign = Math.sign(x);
+    const t = 1 / (1 + 0.3275911 * Math.abs(x));
+    const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+    return sign * (1 - poly * Math.exp(-x * x));
+}
+
+function wife3Points(error, timescale) {
+    const ms = Math.abs(error);
+    const zero = 65 * timescale ** 0.75;
+    const deviation = 22.7 * timescale ** 0.75;
+    const maxBooWeight = 180 * timescale;
+
+    if (ms <= 5 * timescale) {
+        return 2;
+    }
+
+    if (ms <= zero) {
+        return 2 * erf((zero - ms) / deviation);
+    }
+
+    return ms <= maxBooWeight ? ((ms - zero) * ETTERNA_MISS_WEIGHT) / (maxBooWeight - zero) : ETTERNA_MISS_WEIGHT;
+}
+
+function etternaScore(notes, timescale) {
+    const counts = Object.fromEntries([...ETTERNA_WINDOWS.map(([name]) => [name, 0]), ["Miss", 0]]);
+    let points = 0;
+    let drops = 0;
+
+    for (const note of notes) {
+        const window = note.hit_played ? ETTERNA_WINDOWS.find(([, ms]) => Math.abs(note.hit_error) <= ms * timescale) : null;
+        counts[window ? window[0] : "Miss"]++;
+        points += window ? wife3Points(note.hit_error, timescale) : ETTERNA_MISS_WEIGHT;
+
+        if (note.hold && (!window || (note.release_played && note.release_error < -ETTERNA_HOLD_LENIENCE_MS))) {
+            drops++;
+            points += ETTERNA_HOLD_DROP_WEIGHT;
+        }
+    }
+
+    const accuracy = notes.length ? points / (2 * notes.length) : 0;
+    const grade = ETTERNA_GRADES.find(([, minimum]) => accuracy >= minimum)?.[0] ?? "D";
+    return {
+        accuracy,
+        grade,
+        counts: [...ETTERNA_WINDOWS.map(([name, , color]) => [name, counts[name], color]), ["Miss", counts.Miss, "miss"], ["Holds dropped", drops, "miss"]],
+    };
+}
+
+function osuWindows(od) {
+    return {MAX: 16, 300: 64 - 3 * od, 200: 97 - 3 * od, 100: 127 - 3 * od, 50: 151 - 3 * od};
+}
+
+function osuJudgement(note, windows) {
+    const head = Math.abs(note.hit_error);
+
+    if (!note.hit_played || head > windows[50]) {
+        return "Miss";
+    }
+
+    if (!note.hold) {
+        return OSU_JUDGEMENTS.find(([name]) => head <= windows[name])[0];
+    }
+
+    if (note.release_played && note.release_error < -windows[50]) {
+        return "50";
+    }
+
+    const total = head + (note.release_played ? Math.abs(note.release_error) : windows[50]);
+
+    if (head <= windows.MAX * 1.2 && total <= windows.MAX * 2.4) {
+        return "MAX";
+    }
+
+    if (head <= windows[300] * 1.1 && total <= windows[300] * 2.2) {
+        return "300";
+    }
+
+    if (head <= windows[200] && total <= windows[200] * 2) {
+        return "200";
+    }
+
+    return head <= windows[100] && total <= windows[100] * 2 ? "100" : "50";
+}
+
+function osuScore(notes, od) {
+    const windows = osuWindows(od);
+    const counts = Object.fromEntries([...OSU_JUDGEMENTS.map(([name]) => [name, 0]), ["Miss", 0]]);
+
+    for (const note of notes) {
+        counts[osuJudgement(note, windows)]++;
+    }
+
+    const points = 300 * (counts.MAX + counts[300]) + 200 * counts[200] + 100 * counts[100] + 50 * counts[50];
+    const accuracy = notes.length ? points / (300 * notes.length) : 0;
+    const grade = OSU_GRADES.find(([name, minimum]) => (name === "SS" ? accuracy >= minimum : accuracy > minimum))?.[0] ?? "D";
+    return {accuracy, grade, counts: [...OSU_JUDGEMENTS.map(([name, color]) => [name, counts[name], color]), ["Miss", counts.Miss, "miss"]]};
+}
+
+app.component("other-games", {
+    props: {notes: Array, hitAccuracy: {type: Number, default: 0}},
+    data() {
+        return {game: "etterna", judge: 1, od: Math.min(10, Math.max(0, this.hitAccuracy + OSU_OD_OFFSET)), judges: ETTERNA_JUDGES};
+    },
+    computed: {
+        result() {
+            return this.game === "etterna" ? etternaScore(this.notes, this.judge) : osuScore(this.notes, this.od);
+        },
+    },
+    template: `<div class="box other-games">
+        <div class="other-games-header">
+            <div class="buttons has-addons mb-0" role="group" aria-label="Game">
+                <button v-for="[game, label] in [['etterna', 'Etterna Wife3'], ['osu', 'osu! stable']]" :key="game" type="button" class="button is-small mb-0"
+                    :class="{'is-link is-selected': game === $data.game}" :aria-pressed="game === $data.game" @click="$data.game = game">{{ label }}</button>
+            </div>
+            <div class="select is-small">
+                <select v-if="game === 'etterna'" v-model.number="judge" aria-label="Etterna judge">
+                    <option v-for="[label, timescale] in judges" :key="label" :value="timescale">{{ label }}</option>
+                </select>
+                <select v-else v-model.number="od" aria-label="osu! overall difficulty">
+                    <option v-for="value in 11" :key="value" :value="value - 1">OD {{ value - 1 }}</option>
+                </select>
+            </div>
+        </div>
+        <div class="other-games-summary">
+            <div class="play-stat"><p class="stat-label">Grade</p><p class="stat-value">{{ result.grade }}</p></div>
+            <div class="play-stat"><p class="stat-label">Accuracy</p><p class="stat-value">{{ $f.accuracy(result.accuracy) }}</p></div>
+        </div>
+        <div class="tags mb-2" :aria-label="'Judgements in ' + (game === 'etterna' ? 'Etterna' : 'osu!')">
+            <span v-for="[name, count, color] in result.counts" :key="name" class="tag is-medium judgement-count">
+                <span class="judgement-name" :class="'judgement-' + color">{{ name }}</span>{{ $f.number(count) }}
+            </span>
+        </div>
+        <p class="help">Worked out from this play's hit and release timings. Etterna and osu! judge a few things differently, like holds and rate changes, so the real score could be slightly different.</p>
+    </div>`,
+});
+
 app.component("history-graph", {
     props: {history: Object},
     data: () => ({metric: "performance", hover: null}),

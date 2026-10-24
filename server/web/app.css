@@ -589,6 +589,22 @@ th:has(.reveal-button) {
     gap: 0.5rem;
 }
 
+.other-games-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.other-games-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    margin-bottom: 1rem;
+}
+
 .judgement-name {
     font-family: var(--nascent-display);
 }

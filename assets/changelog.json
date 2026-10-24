@@ -1,6 +1,17 @@
 {
     "releases": [
         {
+            "version": "0.6.0.beta13",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "Play pages on the website show what the play would have scored in Etterna (Wife3, J4 to J9) and osu! stable (any OD)."
+                    ]
+                }
+            ]
+        },
+        {
             "version": "0.5.1.beta12",
             "sections": [
                 {
