@@ -252,8 +252,13 @@ def stats() -> Page:
 
 
 def difficulty() -> Page:
-    description = "Nascent Calc V2 analysis"
+    description = "Nascent Calc V3 analysis and how it compares with V2"
     return Page(f"Difficulty calculator · {SITE_NAME}", "Difficulty calculator", description, "/difficulty", image=False)
+
+
+def difficulty_v2() -> Page:
+    description = "Nascent Calc V2 analysis"
+    return Page(f"Difficulty calculator v2 · {SITE_NAME}", "Difficulty calculator v2", description, "/diffv2", image=False)
 
 
 def plays() -> Page:
@@ -271,7 +276,7 @@ def not_found() -> Page:
 
 def build_page(path: str) -> Page:
     parts = [part for part in path.split("/") if part]
-    sections = {"leaderboard": leaderboard, "charts": charts, "plays": plays, "stats": stats, "difficulty": difficulty}
+    sections = {"leaderboard": leaderboard, "charts": charts, "plays": plays, "stats": stats, "difficulty": difficulty, "diffv3": difficulty, "diffv2": difficulty_v2}
     details = {"users": user, "charts": chart, "plays": play}
 
     if not parts:

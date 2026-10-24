@@ -70,6 +70,15 @@ def test_robots_and_sitemaps(api, clock):
     assert api.get("/sitemaps/users-2.xml").status_code == 404
 
 
+def test_difficulty_pages(api):
+    for path, canonical, heading in (("/difficulty", "/difficulty", "V3"), ("/diffv3", "/difficulty", "V3"), ("/diffv2", "/diffv2", "V2")):
+        html, found, robots, _ = page(api, path)
+        assert (found, robots.split(",")[0]) == (f"{SITE}{canonical}", "index"), path
+        assert f"Nascent Calc {heading}" in html, path
+
+    assert f"{SITE}/diffv2" in re.findall(r"<loc>([^<]+)</loc>", api.get("/sitemaps/pages.xml").get_data(as_text=True))
+
+
 def test_legal_pages(api):
     html, canonical, robots, _ = page(api, "/privacy")
     assert (canonical, robots.split(",")[0]) == (f"{SITE}/privacy", "index")

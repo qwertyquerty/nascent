@@ -20,13 +20,14 @@
     <script src="/palette.js" defer></script>
     <script src="/replay.js" defer></script>
     <script src="/difficulty.js" defer></script>
+    <script src="/diffv3.js" defer></script>
     <script src="/app.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to content</a>
 <!--prerender-->
 <template id="app-template">
-    <nav v-if="route.name !== 'difficulty'" class="navbar has-shadow" aria-label="Main">
+    <nav v-if="!['difficulty', 'diffv2', 'diffv3'].includes(route.name)" class="navbar has-shadow" aria-label="Main">
         <div class="container">
             <div class="navbar-brand">
                 <a class="navbar-item" href="/" aria-label="Nascent home"><img class="nav-logo" src="/logo_n.png" alt=""></a>
@@ -359,8 +360,9 @@
                 </div>
             </template>
 
-            <template v-else-if="route.name === 'difficulty'">
+            <template v-else-if="route.name === 'diffv2'">
                 <h1 class="title">{{ view.data.model.name }}</h1>
+                <p class="subtitle is-6 mb-5"><a href="/diffv3">See Nascent Calc V3 and how it compares</a></p>
 
                 <h2 class="title is-4">Scale</h2>
                 <plotly-chart class="mb-5" :figure="view.figures.display" :height="620" label="Display curve from model skill to displayed difficulty, with the dan courses marked"></plotly-chart>
@@ -416,6 +418,160 @@
 
                 <h2 class="title is-4">Jacks</h2>
                 <plotly-chart class="mb-5" :figure="view.figures.jack" :height="400" label="Jack difficulty by gap for short and long runs, on a log scale"></plotly-chart>
+
+                <h2 class="title is-4">Biggest contributors</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.contribution" :height="600" label="Share of total difficulty by feature group"></plotly-chart>
+
+                <h2 class="title is-4">Every weight</h2>
+                <chart-tabs class="mb-5" :charts="view.figures.heatmaps" label="Weight heatmaps"></chart-tabs>
+
+                <h2 class="title is-4">Weight adjustments</h2>
+                <plotly-chart :figure="view.figures.factors" :height="340" label="Strong-player and hold-release factors against each base weight"></plotly-chart>
+            </template>
+
+            <template v-else-if="route.name === 'diffv3' || route.name === 'difficulty'">
+                <h1 class="title">{{ view.data.model.name }}</h1>
+                <p class="subtitle is-6 mb-5">In development; the game still uses V2. <a href="/diffv2">V2 page</a></p>
+
+                <h2 class="title is-4">Against V2 on held-out songs</h2>
+                <p class="mb-3">Chart pairs ranked like players' scores, on unseen songs (95% intervals).</p>
+                <plotly-chart class="mb-4" :figure="view.figures.reserved" :height="380" label="Pairs ranked correctly on held-out songs for Nascent v3, Nascent v2, Etterna MSD and osu! stars"></plotly-chart>
+                <div class="table-container mb-6">
+                    <table class="table is-fullwidth">
+                        <thead><tr><th scope="col">Charts</th><th scope="col" class="is-numeric">V3</th><th scope="col" class="is-numeric">V2</th><th scope="col" class="is-numeric">Change</th><th scope="col" class="is-numeric">V3 close pairs</th><th scope="col" class="is-numeric">V2 close pairs</th><th scope="col" class="is-numeric">MSD</th><th scope="col" class="is-numeric">osu! stars</th></tr></thead>
+                        <tbody><tr v-for="row in view.figures.reservedRows" :key="row.mode">
+                            <th scope="row">{{ row.mode }}</th>
+                            <td class="is-numeric">{{ (row.v3.pairs * 100).toFixed(2) }}%</td><td class="is-numeric">{{ (row.v2.pairs * 100).toFixed(2) }}%</td>
+                            <td class="is-numeric">{{ row.gain >= 0 ? '+' : '' }}{{ (row.gain * 100).toFixed(2) }}</td>
+                            <td class="is-numeric">{{ (row.v3.close * 100).toFixed(2) }}%</td><td class="is-numeric">{{ (row.v2.close * 100).toFixed(2) }}%</td>
+                            <td class="is-numeric">{{ (row.msd.pairs * 100).toFixed(2) }}%</td><td class="is-numeric">{{ (row.osu.pairs * 100).toFixed(2) }}%</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+
+                <h2 class="title is-4">Biggest movers</h2>
+                <p class="mb-3">{{ view.data.compare.movers.charts.toLocaleString() }} charts compared. Median change {{ ((view.data.compare.movers.median_ratio - 1) * 100).toFixed(1) }}%; {{ (view.data.compare.movers.moved_10_percent * 100).toFixed(0) }}% moved over 10%.</p>
+                <p class="mb-3 has-text-grey">Top {{ view.data.compare.movers.biggest.length }} ({{ view.data.compare.movers.min_scores }}+ scores), sorted by V2.</p>
+                <plotly-chart class="mb-5" :figure="view.figures.movers" :height="view.figures.moversHeight" label="The charts that moved most from v2 to v3, sorted by v2 difficulty"></plotly-chart>
+                <h3 class="title is-5">Every chart's change</h3>
+                <plotly-chart class="mb-5" :figure="view.figures.histogram" :height="320" label="Histogram of the change from v2 to v3"></plotly-chart>
+                <h3 class="title is-5">V3 against V2</h3>
+                <plotly-chart class="mb-6" :figure="view.figures.versions" :height="620" label="Scatter of v3 against v2 difficulty for thousands of charts"></plotly-chart>
+
+                <h2 class="title is-4">Which patterns moved</h2>
+                <chart-tabs class="mb-6" :charts="view.figures.patterns" label="Change from v2 by chart pattern"></chart-tabs>
+
+                <h2 class="title is-4">Which patterns are still misjudged</h2>
+                <p class="mb-3">Below zero: charts with more of the pattern are rated too hard.</p>
+                <plotly-chart class="mb-6" :figure="view.figures.pairPatterns" :height="560" label="Correlation between mis-ranked pairs and chart patterns for v2 and v3"></plotly-chart>
+
+                <h2 class="title is-4">Vibro</h2>
+                <p class="mb-3">Against what each map's scores imply. Average gap: V3 {{ view.data.compare.anthology.v3.mean_gap >= 0 ? '+' : '' }}{{ view.data.compare.anthology.v3.mean_gap.toFixed(1) }}, V2 {{ view.data.compare.anthology.v2.mean_gap >= 0 ? '+' : '' }}{{ view.data.compare.anthology.v2.mean_gap.toFixed(1) }}.</p>
+                <plotly-chart class="mb-4" :figure="view.figures.anthology" :height="860" label="Vibro anthology maps rated by v2 and v3 against what their scores imply"></plotly-chart>
+                <div v-if="view.figures.fairness.length" class="table-container mb-6">
+                    <table class="table is-fullwidth">
+                        <thead><tr><th scope="col">Charts</th><th scope="col">Calculator</th><th scope="col" class="is-numeric">Vibro overrated by</th><th scope="col" class="is-numeric">Fast minijacks overrated by</th><th scope="col" class="is-numeric">Vibro ordering</th></tr></thead>
+                        <tbody><tr v-for="row in view.figures.fairness" :key="row.dataset + row.calculator">
+                            <th scope="row">{{ row.dataset }}</th><td>{{ row.calculator }}</td>
+                            <td class="is-numeric">{{ row.vibro >= 0 ? '+' : '' }}{{ row.vibro.toFixed(1) }}</td><td class="is-numeric">{{ row['fast minijacks'] >= 0 ? '+' : '' }}{{ row['fast minijacks'].toFixed(1) }}</td><td class="is-numeric">{{ row['vibro order'].toFixed(3) }}</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+
+                <h2 class="title is-4">Dans</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.dans" :height="620" label="Each dan course at 1.0x in v2 and v3"></plotly-chart>
+                <template v-if="view.figures.skillDans">
+                    <h3 class="title is-5">Skill dans</h3>
+                    <p class="mb-3">REFORM Speed, Stamina, Tech and Jack courses at 1.0x.</p>
+                    <plotly-chart class="mb-4" :figure="view.figures.skillDans" :height="620" label="Change from v2 to v3 for each course in the Speed, Stamina, Tech and Jack dan packs"></plotly-chart>
+                    <div class="table-container mb-5">
+                        <table class="table is-fullwidth is-narrow">
+                            <thead><tr><th>Dan</th><th v-for="skill in view.figures.skillDanRows.skills" :key="skill">{{ skill }}</th></tr></thead>
+                            <tbody><tr v-for="row in view.figures.skillDanRows.rows" :key="row.level">
+                                <th scope="row">{{ row.level }}</th>
+                                <td v-for="(cell, index) in row.cells" :key="index"><template v-if="cell"><span class="has-text-grey">{{ cell.song }}</span><br>{{ cell.v2.toFixed(1) }} → {{ cell.v3.toFixed(1) }} <span :class="cell.direction > 0 ? 'has-text-danger' : cell.direction < 0 ? 'has-text-info' : 'has-text-grey'">({{ cell.change }})</span></template></td>
+                            </tr></tbody>
+                        </table>
+                    </div>
+                </template>
+                <h3 class="title is-5">Dans at every rate</h3>
+                <plotly-chart class="mb-5" :figure="view.figures.rates" :height="620" label="Heatmap of each dan course's v3 difficulty at rates from 0.75x to 1.5x"></plotly-chart>
+                <h3 class="title is-5">Change from V2 at every rate</h3>
+                <plotly-chart class="mb-6" :figure="view.figures.rateDelta" :height="620" label="Heatmap of the change from v2 to v3 for each dan course and rate"></plotly-chart>
+
+                <h2 class="title is-4">Nascent Benchmark</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.scores" :height="340" label="Difficulty implied by player scores on held-out osu!mania charts against Nascent v3, v2, MSD and osu! star ratings"></plotly-chart>
+
+                <h2 class="title is-4">CalcTestList</h2>
+                <plotly-chart class="mb-4" :figure="view.figures.calcTest" :height="340" label="CalcTestList targets against Nascent v3, v2, MSD and osu! star ratings"></plotly-chart>
+                <h3 class="title is-5">By skillset</h3>
+                <plotly-chart class="mb-5" :figure="view.figures.calcSkills" :height="340" label="CalcTestList error by skillset for Nascent v3, v2 and MSD"></plotly-chart>
+
+                <h2 class="title is-4">2015 community vote</h2>
+                <plotly-chart class="mb-4" :figure="view.figures.community" :height="340" label="2015 community ratings against Nascent v3, v2, MSD and osu! star ratings"></plotly-chart>
+
+                <div class="table-container mb-6">
+                    <table class="table is-fullwidth">
+                        <thead>
+                            <tr><th scope="col" rowspan="2">Calculator</th><th scope="colgroup" colspan="2" class="has-text-centered">Nascent Benchmark</th><th scope="colgroup" colspan="2" class="has-text-centered">CalcTestList</th><th scope="colgroup" colspan="2" class="has-text-centered">2015 vote</th></tr>
+                            <tr><th scope="col" class="is-numeric">Agreement</th><th scope="col" class="is-numeric">Error</th><th scope="col" class="is-numeric">Agreement</th><th scope="col" class="is-numeric">Error</th><th scope="col" class="is-numeric">Agreement</th><th scope="col" class="is-numeric">Error</th></tr>
+                        </thead>
+                        <tbody><tr v-for="row in view.figures.benchmarks" :key="row.name">
+                            <th scope="row">{{ row.name }}</th>
+                            <td class="is-numeric">{{ row.scores.spearman.toFixed(3) }}</td><td class="is-numeric">{{ row.scores.error.toFixed(3) }}</td>
+                            <td class="is-numeric">{{ row.calcTest.spearman.toFixed(3) }}</td><td class="is-numeric">{{ row.calcTest.error.toFixed(2) }}</td>
+                            <td class="is-numeric">{{ row.community.spearman.toFixed(3) }}</td><td class="is-numeric">{{ row.community.error.toFixed(3) }}</td>
+                        </tr></tbody>
+                    </table>
+                </div>
+
+                <h2 class="title is-4">Scale</h2>
+                <p class="mb-3">One note is 1, EXTRA-ZETA is 100. Under {{ view.data.model.small_chart.notes }} notes, fewer notes means easier.</p>
+                <plotly-chart class="mb-6" :figure="view.figures.display" :height="620" label="Display curve from model skill to displayed difficulty, with the dan courses marked"></plotly-chart>
+
+                <h2 class="title is-4">Against Etterna MSD</h2>
+                <plotly-chart class="mb-6" :figure="view.figures.scatter" :height="620" label="Scatter of Nascent v3 difficulty against MSD for thousands of charts, with the dan courses marked"></plotly-chart>
+
+                <h2 class="title is-4">Against osu! star rating</h2>
+                <plotly-chart class="mb-6" :figure="view.figures.osuScatter" :height="620" label="Scatter of Nascent v3 difficulty against osu! star rating for thousands of osu!mania charts, with the dan courses marked"></plotly-chart>
+
+                <h2 class="title is-4">New in V3</h2>
+                <h3 class="title is-5">Strain multipliers by note type</h3>
+                <plotly-chart class="mb-5" :figure="view.figures.rows" :height="460" label="Strain multiplier for each note type, below 1 means easier"></plotly-chart>
+                <h3 class="title is-5">Dataset adjustments used during training</h3>
+                <p class="mb-3">Training only; the game uses the shared multipliers.</p>
+                <plotly-chart class="mb-5" :figure="view.figures.rowAdjustments" :height="560" label="Per-dataset adjustments to the strain multipliers"></plotly-chart>
+                <div class="columns">
+                    <div class="column">
+                        <h3 class="title is-5">How much a release counts</h3>
+                        <plotly-chart :figure="view.figures.release" :height="340" label="How much a hold's release counts by hold length"></plotly-chart>
+                    </div>
+                    <div class="column">
+                        <h3 class="title is-5">Long jack runs against short</h3>
+                        <plotly-chart :figure="view.figures.vibro" :height="340" label="How much a long jack run counts relative to a short one, by feature family"></plotly-chart>
+                    </div>
+                </div>
+                <h3 class="title is-5">New features</h3>
+                <plotly-chart class="mb-6" :figure="view.figures.newShare" :height="340" label="Share of difficulty from features new in v3"></plotly-chart>
+
+                <div class="columns">
+                    <div class="column">
+                        <h2 class="title is-4">Difficulty to accuracy</h2>
+                        <plotly-chart :figure="view.figures.loss" :height="360" label="Accuracy lost per note against difficulty minus skill, for presses and releases"></plotly-chart>
+                    </div>
+                    <div class="column">
+                        <h2 class="title is-4">Stronger players</h2>
+                        <plotly-chart :figure="view.figures.mix" :height="360" label="Share of strong-player weights used at each skill level"></plotly-chart>
+                    </div>
+                </div>
+
+                <h2 class="title is-4">Length, notes and holds</h2>
+                <div class="columns mb-5">
+                    <div v-for="(figure, index) in view.figures.covariates" :key="index" class="column"><plotly-chart :figure="figure" :height="280" :label="['Difficulty multiplier by note count', 'Difficulty multiplier by active length', 'Difficulty multiplier by hold share'][index]"></plotly-chart></div>
+                </div>
+
+                <h2 class="title is-4">Jacks</h2>
+                <plotly-chart class="mb-5" :figure="view.figures.jack" :height="420" label="Jack difficulty by gap for one-finger and chorded, short and long runs, on a log scale"></plotly-chart>
 
                 <h2 class="title is-4">Biggest contributors</h2>
                 <plotly-chart class="mb-5" :figure="view.figures.contribution" :height="600" label="Share of total difficulty by feature group"></plotly-chart>
@@ -873,7 +1029,7 @@
         </div>
     </div>
 
-    <footer v-if="route.name !== 'difficulty'" class="footer has-text-centered is-size-7 has-text-grey">
+    <footer v-if="!['difficulty', 'diffv2', 'diffv3'].includes(route.name)" class="footer has-text-centered is-size-7 has-text-grey">
         Nascent &middot; <a :href="release?.page || 'https://github.com/qwertyquerty/nascent/releases'">Download</a> &middot; <a href="https://github.com/qwertyquerty/nascent">Source</a> &middot; <a href="https://discord.gg/f538azJwXT" target="_blank" rel="noopener">Discord</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/staff">Staff</a>
     </footer>
 </template>

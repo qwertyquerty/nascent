@@ -549,7 +549,7 @@ const loaders = {
         return {title: "Stats", stats, activity, keyPeak, gradeTotal};
     },
 
-    async difficulty() {
+    async diffv2() {
         const [data] = await Promise.all([
             fetch("/difficulty-data.json").then((response) => {
                 if (!response.ok) {
@@ -560,7 +560,25 @@ const loaders = {
             }),
             loadPlotly(),
         ]);
-        return {title: "Difficulty calculator", data, figures: difficultyFigures(data)};
+        return {title: "Difficulty calculator v2", data, figures: difficultyFigures(data)};
+    },
+
+    async diffv3() {
+        const [data] = await Promise.all([
+            fetch("/diffv3-data.json").then((response) => {
+                if (!response.ok) {
+                    throw new Error("Couldn't load the difficulty calculator data.");
+                }
+
+                return response.json();
+            }),
+            loadPlotly(),
+        ]);
+        return {title: "Difficulty calculator v3", data, figures: diffv3Figures(data)};
+    },
+
+    difficulty(route, keyCounts) {
+        return loaders.diffv3(route, keyCounts);
     },
 
     async charts({params}) {

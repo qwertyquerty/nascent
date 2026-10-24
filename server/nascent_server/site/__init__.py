@@ -49,7 +49,7 @@ def listed(kind: str):
 
 def sitemap_entries(name: str) -> list[tuple[str, str | None]] | None:
     if name == "pages":
-        paths = ["/", "/leaderboard", *(f"/leaderboard?key_count={count}" for count in key_counts()[1:]), "/charts", "/charts?status=all", "/stats", "/difficulty", "/privacy", "/terms"]
+        paths = ["/", "/leaderboard", *(f"/leaderboard?key_count={count}" for count in key_counts()[1:]), "/charts", "/charts?status=all", "/stats", "/difficulty", "/diffv2", "/privacy", "/terms"]
         return [(site_url(path), None) for path in paths]
 
     kind, _, number = name.partition("-")
