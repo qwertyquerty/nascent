@@ -6,7 +6,10 @@
                 {
                     "title": "New",
                     "notes": [
-                        "Play pages on the website show what the play would have scored in Etterna (Wife3, J4 to J9) and osu! stable (any OD)."
+                        "Play pages on the website show what the play would have scored in Etterna (Wife3, J4 to J9) and osu! stable (any OD).",
+                        "Notes can be coloured by beat snap, turn on Snap colors in Options under Skin. Skins can set the colours and whether it default to on.",
+                        "The note preview in Options plays a longer pattern with all kinds of rhythms, so every snap colour shows up.",
+                        "New Nascent Percy skin, with long note caps cut off for shorter long notes."
                     ]
                 }
             ]

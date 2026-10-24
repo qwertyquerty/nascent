@@ -172,9 +172,18 @@ namespace nascent {
         TIMING_EARLY,
         TIMING_LATE,
         HOLD_DROPPED,
+        SNAP_4TH,
+        SNAP_8TH,
+        SNAP_12TH,
+        SNAP_16TH,
+        SNAP_24TH,
+        SNAP_32ND,
+        SNAP_48TH,
+        SNAP_64TH,
+        SNAP_192ND,
     };
 
-    inline constexpr std::array<const char*, 59> SKIN_COLOR_NAMES = {
+    inline constexpr std::array<const char*, 68> SKIN_COLOR_NAMES = {
         "screen_background",
         "text",
         "text_muted",
@@ -234,10 +243,20 @@ namespace nascent {
         "timing_early",
         "timing_late",
         "hold_dropped",
+        "snap_4th",
+        "snap_8th",
+        "snap_12th",
+        "snap_16th",
+        "snap_24th",
+        "snap_32nd",
+        "snap_48th",
+        "snap_64th",
+        "snap_192nd",
     };
 
     inline constexpr size_t SKIN_COLOR_COUNT = SKIN_COLOR_NAMES.size();
-    static_assert((size_t)SkinColor::HOLD_DROPPED + 1 == SKIN_COLOR_COUNT);
+    static_assert((size_t)SkinColor::SNAP_192ND + 1 == SKIN_COLOR_COUNT);
+    static_assert((size_t)SkinColor::SNAP_192ND - (size_t)SkinColor::SNAP_4TH + 1 == NOTE_SNAP_COUNT);
 
     struct SkinMascot {
         double width = 20;

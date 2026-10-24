@@ -3,6 +3,7 @@
 #include "Chart.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "SkinSettings.h"
 #include "gse/render/MipDecal.h"
 
 #include "olcPixelGameEngine.h"
@@ -67,6 +68,7 @@ namespace nascent {
         float hold_edge_inset = (float)layout("playfield.hold_edge_inset");
         double hold_repeat_spacing = note_size * layout("playfield.hold_repeat_spacing");
         bool gradient_notes = manifest.tint != SkinTint::NONE && note_gradient;
+        bool snap_colors = skin_toggle(*skin, skin_toggles::SNAP_COLORS);
         double smear_visible_from = flip_y(upscroll ? screen_height : 0) - note_size;
 
         for (size_t i = first_drawn_hit(scroll_rate_px_per_ms); i < chart->hits.size(); i++) {
@@ -92,6 +94,13 @@ namespace nascent {
             }
 
             if ((screen_hit_y - hit_height) < pos.y + size.y) {
+                SkinImage head_image = hit.hit_type == HitType::HOLD ? SkinImage::HOLD_HEAD : SkinImage::NOTE;
+                bool snap_tinted = snap_colors && snap && sized_image(head_image, column, key_count, snap) == sized_image(head_image, column, key_count);
+                olc::Pixel snap_color = snap_tinted ? skin->color((SkinColor)((size_t)SkinColor::SNAP_4TH + *snap)) : olc::WHITE;
+                auto base_color = [&](double x, double y) {
+                    return snap_tinted ? snap_color : note_color(x, y, window);
+                };
+
                 bool textured_body = manifest.hold_style == HoldStyle::STRETCH || manifest.hold_style == HoldStyle::TILE;
                 olc::Decal* hold_body = hit.hit_type == HitType::HOLD && textured_body ? sized_image(holding ? SkinImage::HOLD_BODY_HELD : SkinImage::HOLD_BODY, column, key_count) : nullptr;
 
@@ -107,7 +116,7 @@ namespace nascent {
                     body_bottom = std::min(body_bottom, pos.y + size.y);
 
                     if (body_bottom > body_top) {
-                        draw_hold_body(window, hold_body, hit_x, body_top, body_bottom, hold_tint(note_tint(note_color(hit_x, screen_hit_y, window)), dropped || missed));
+                        draw_hold_body(window, hold_body, hit_x, body_top, body_bottom, hold_tint(note_tint(base_color(hit_x, screen_hit_y)), dropped || missed));
                     }
 
                     olc::Decal* cap = sized_image(SkinImage::HOLD_CAP, column, key_count);
@@ -119,14 +128,14 @@ namespace nascent {
                         float end = (float)flip_y(cap_top);
                         float cap_texture_height = (float)cap->sprite->height;
                         float cap_inset = cap_texture_height > hold_edge_inset ? hold_edge_inset : 0.0f;
-                        window->DrawPartialWarpedDecal(cap, {{(float)hit_x, top}, {(float)hit_x, end}, {(float)(hit_x + note_size), end}, {(float)(hit_x + note_size), top}}, {0.0f, cap_inset}, {(float)cap->sprite->width, cap_texture_height - cap_inset}, hold_tint(note_tint(note_color(hit_x, screen_hit_y, window)), dropped || missed));
+                        window->DrawPartialWarpedDecal(cap, {{(float)hit_x, top}, {(float)hit_x, end}, {(float)(hit_x + note_size), end}, {(float)(hit_x + note_size), top}}, {0.0f, cap_inset}, {(float)cap->sprite->width, cap_texture_height - cap_inset}, hold_tint(note_tint(base_color(hit_x, screen_hit_y)), dropped || missed));
                     }
                 }
                 else if (hit.hit_type == HitType::HOLD && hold_repeat_spacing > 0) {
                     olc::Decal* smear = sized_image(SkinImage::NOTE, column, key_count, snap);
                     double smear_origin = screen_hit_y - hit_height;
                     auto smear_tint = [&](double y) {
-                        olc::Pixel hold_color = note_color(hit_x, y, window);
+                        olc::Pixel hold_color = base_color(hit_x, y);
                         hold_color.a = manifest.hold_alpha;
                         return hold_tint(note_tint(hold_color), dropped || missed);
                     };
@@ -139,17 +148,17 @@ namespace nascent {
                             break;
                         }
 
-                        draw_square(window, smear, hit_x, hold_smear_y, gradient_notes ? smear_tint(hold_smear_y) : tint);
+                        draw_square(window, smear, hit_x, hold_smear_y, gradient_notes && !snap_tinted ? smear_tint(hold_smear_y) : tint);
                     }
                 }
 
                 if (hold_body != nullptr && holding) {
-                    draw_square(window, sized_image(SkinImage::HOLD_HEAD_HELD, column, key_count, snap), hit_x, std::min(screen_hit_y, jl_y), note_tint(note_color(hit_x, jl_y, window)));
+                    draw_square(window, sized_image(SkinImage::HOLD_HEAD_HELD, column, key_count, snap), hit_x, std::min(screen_hit_y, jl_y), note_tint(base_color(hit_x, jl_y)));
                 }
                 else if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
                     bool hold = hit.hit_type == HitType::HOLD;
                     olc::Decal* head = sized_image(hold ? SkinImage::HOLD_HEAD : SkinImage::NOTE, column, key_count, snap);
-                    draw_square(window, head, hit_x, screen_hit_y, hold_tint(note_tint(note_color(hit_x, screen_hit_y, window)), hold && (dropped || missed)));
+                    draw_square(window, head, hit_x, screen_hit_y, hold_tint(note_tint(base_color(hit_x, screen_hit_y)), hold && (dropped || missed)));
                 }
             }
         }

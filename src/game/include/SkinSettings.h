@@ -33,6 +33,7 @@ namespace nascent {
         inline constexpr SkinToggle SHOW_JUDGEMENT_COUNTER = {[](Settings& settings) -> std::optional<bool>& { return settings.field_show_judgement_counter; }, "hud.show_judgement_counter"};
         inline constexpr SkinToggle SHOW_TIMING_BAR = {[](Settings& settings) -> std::optional<bool>& { return settings.field_show_timing_bar; }, "hud.show_timing_bar"};
         inline constexpr SkinToggle SHOW_TIMING_AVERAGE = {[](Settings& settings) -> std::optional<bool>& { return settings.field_show_timing_average; }, "hud.show_timing_average"};
+        inline constexpr SkinToggle SNAP_COLORS = {[](Settings& settings) -> std::optional<bool>& { return settings.field_snap_colors; }, "playfield.snap_colors"};
     }
 
     namespace skin_settings {

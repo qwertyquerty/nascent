@@ -32,6 +32,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <string_view>
 #include <format>
 #include <string>
 #include <utility>
@@ -48,10 +49,9 @@ namespace nascent {
     static constexpr int32_t TIMING_BAR_WIDTH_MIN = 1;
     static constexpr int32_t TIMING_BAR_WIDTH_MAX = 20;
     static constexpr uint8_t PREVIEW_KEY_COUNT = 4;
-    static constexpr int32_t PREVIEW_BEAT_MS = 250;
+    static constexpr int32_t PREVIEW_BEAT_MS = 375;
     static constexpr int32_t PREVIEW_LOOP_BEATS = 32;
-    static constexpr int32_t PREVIEW_HOLD_BEATS = 2;
-    static constexpr int32_t PREVIEW_HOLD_EVERY = 8;
+    static constexpr int32_t PREVIEW_BEAT_TICKS = 48;
     static constexpr int32_t PREVIEW_TAP_MS = 60;
     static constexpr const char* DELETE_SKIN_LABEL = "Delete skin";
     static constexpr const char* SKIN_EXPORT_FOLDER = "exports";
@@ -205,6 +205,7 @@ namespace nascent {
         export_skin_button = &form.add<ButtonField>("Export skin");
         delete_skin_button = &form.add<ButtonField>(DELETE_SKIN_LABEL);
         note_gradient_field = &form.add<ChoiceField>("Note gradient", std::vector<std::string>{"Off", "On"}, settings.field_note_gradient ? 1 : 0);
+        skin_fields.push_back(&form.add<SkinChoiceField>("Snap colors", skin_toggles::SNAP_COLORS, *skin, "Off", "On"));
         note_opacity_field = &form.add<SliderField>("Note opacity", settings.field_note_opacity, 0, 100, PERCENT_STEP, "%");
         receptor_opacity_field = &form.add<SliderField>("Receptor opacity", settings.field_receptor_opacity, 0, 100, PERCENT_STEP, "%");
         lane_gaps = {-1};
@@ -884,16 +885,74 @@ namespace nascent {
 
         std::vector<Hit> hits;
 
-        for (int32_t beat = 0; beat < PREVIEW_LOOP_BEATS * 2; beat++) {
-            uint8_t lane = (uint8_t)(beat % PREVIEW_KEY_COUNT);
-            int32_t time = beat * PREVIEW_BEAT_MS;
+        for (int32_t loop = 0; loop < 2; loop++) {
+            int32_t offset = loop * PREVIEW_LOOP_BEATS * PREVIEW_BEAT_TICKS;
 
-            if (beat % PREVIEW_HOLD_EVERY == PREVIEW_KEY_COUNT / 2) {
-                hits.push_back({lane, HitType::HOLD, time, time + PREVIEW_HOLD_BEATS * PREVIEW_BEAT_MS});
-            }
-            else {
-                hits.push_back({lane, HitType::HIT, time, time});
-            }
+            auto time_at = [](int32_t tick) {
+                return (int32_t)std::lround((double)tick * PREVIEW_BEAT_MS / PREVIEW_BEAT_TICKS);
+            };
+
+            auto note = [&](double beat, int32_t ticks, uint8_t lane, int32_t hold_ticks = 0) {
+                int32_t tick = offset + (int32_t)std::lround(beat * PREVIEW_BEAT_TICKS) + ticks;
+                int32_t time = time_at(tick);
+                hits.push_back({lane, hold_ticks > 0 ? HitType::HOLD : HitType::HIT, time, hold_ticks > 0 ? time_at(tick + hold_ticks) : time});
+            };
+
+            auto run = [&](double beat, int32_t step_ticks, std::string_view lanes) {
+                for (size_t index = 0; index < lanes.size(); index++) {
+                    note(beat, (int32_t)index * step_ticks, (uint8_t)(lanes[index] - '0'));
+                }
+            };
+
+            note(0, 0, 0);
+            note(0, 0, 3);
+            note(0.5, 0, 1);
+            note(1, 0, 1);
+            note(1, 0, 2);
+            note(1.5, 0, 3);
+            note(2, 0, 0);
+            note(2, 0, 2);
+            note(2.5, 0, 1);
+            note(3, 0, 1);
+            note(3, 0, 3);
+            note(3.5, 0, 0);
+            note(4, 0, 0, PREVIEW_BEAT_TICKS * 2);
+            run(4, PREVIEW_BEAT_TICKS / 4, "12321232");
+            run(6, PREVIEW_BEAT_TICKS / 4, "1230");
+            note(7, 0, 2);
+            run(8, PREVIEW_BEAT_TICKS / 3, "012310231203");
+            run(12, PREVIEW_BEAT_TICKS / 4, "012");
+            run(13, PREVIEW_BEAT_TICKS / 4, "321");
+            run(14, PREVIEW_BEAT_TICKS / 4, "012");
+            note(14.5, 0, 3, PREVIEW_BEAT_TICKS * 5 / 4);
+            run(15, PREVIEW_BEAT_TICKS / 4, "012");
+            note(16, 0, 0, PREVIEW_BEAT_TICKS * 3 / 2);
+            run(16, PREVIEW_BEAT_TICKS / 6, "123");
+            run(17, PREVIEW_BEAT_TICKS / 6, "321");
+            note(18, 0, 3, PREVIEW_BEAT_TICKS * 3 / 2);
+            run(18, PREVIEW_BEAT_TICKS / 6, "012");
+            run(19, PREVIEW_BEAT_TICKS / 6, "210");
+            run(20, PREVIEW_BEAT_TICKS / 8, "010");
+            run(21, PREVIEW_BEAT_TICKS / 8, "323");
+            run(22, PREVIEW_BEAT_TICKS / 8, "121");
+            run(23, PREVIEW_BEAT_TICKS / 8, "030");
+            run(24, PREVIEW_BEAT_TICKS / 12, "0123");
+            note(25, 0, 3, PREVIEW_BEAT_TICKS);
+            run(25, PREVIEW_BEAT_TICKS / 12, "01");
+            run(26, PREVIEW_BEAT_TICKS / 16, "0123");
+            run(27, PREVIEW_BEAT_TICKS / 16, "3210");
+            note(28, 0, 0);
+            note(28, 1, 1);
+            note(28.5, 0, 2);
+            note(28.75, 0, 1);
+            note(29, 0, 3);
+            note(29, 1, 2);
+            note(29.5, 0, 0);
+            note(30, 0, 1, PREVIEW_BEAT_TICKS);
+            note(30, 0, 2, PREVIEW_BEAT_TICKS);
+            note(30.5, 0, 0);
+            note(31, 0, 3);
+            note(31.5, 0, 0);
         }
 
         std::string error;

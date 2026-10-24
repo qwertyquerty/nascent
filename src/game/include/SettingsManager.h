@@ -45,6 +45,7 @@ namespace nascent {
         std::optional<uint8_t> field_judgement_height; // % of the field above the judgement line's end
         std::optional<bool> field_show_combo;
         bool field_note_gradient = true;
+        std::optional<bool> field_snap_colors;
         std::optional<bool> field_show_judgement_line;
         std::optional<bool> field_show_accuracy;
         std::optional<bool> field_show_average_error;
