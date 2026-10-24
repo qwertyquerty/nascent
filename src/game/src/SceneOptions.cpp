@@ -9,7 +9,7 @@
 #include "ChartSearch.h"
 #include "ChangelogOverlay.h"
 #include "ChartFolders.h"
-#include "EtternaSkin.h"
+#include "SkinArchive.h"
 #include "EntityField.h"
 #include "gse/Game.h"
 #include "gse/Platform.h"
@@ -42,8 +42,7 @@ namespace nascent {
     static constexpr int32_t PERCENT_STEP = 1;
     static constexpr int32_t LANE_WIDTH_MIN = 6;
     static constexpr int32_t LANE_WIDTH_MAX = 18;
-    static constexpr int16_t LANE_GAP_MAX = 48;
-    static constexpr int16_t LANE_GAP_STEP = 4;
+    static constexpr int32_t LANE_GAP_MAX = 64;
     static constexpr int32_t JUDGE_LINE_MAX = 37;
     static constexpr int32_t TIMING_BAR_LENGTH_MIN = 10;
     static constexpr int32_t TIMING_BAR_WIDTH_MIN = 1;
@@ -165,7 +164,7 @@ namespace nascent {
 
         form.add<SectionField>("Gameplay");
         scroll_speed_field = &form.add<SliderField>("Scroll speed", settings.field_scroll_speed, SceneCalibration::SCROLL_SPEED_MIN, SceneCalibration::SCROLL_SPEED_MAX, SceneCalibration::SCROLL_SPEED_STEP, "");
-        scroll_direction_field = &form.add<ChoiceField>("Scroll direction", std::vector<std::string>{"Down", "Up"}, settings.field_upscroll ? 1 : 0);
+        skin_fields.push_back(&form.add<SkinChoiceField>("Scroll direction", skin_toggles::UPSCROLL, *skin, "Down", "Up"));
         mirror_field = &form.add<ChoiceField>("Mirror", std::vector<std::string>{"Off", "On"}, settings.field_mirror ? 1 : 0);
         lane_cover_field = &form.add<SliderField>("Noteblock", settings.field_lane_cover, -100, 100, PERCENT_STEP, "%");
         instant_restart_field = &form.add<ChoiceField>("Instant restart", std::vector<std::string>{"Off", "On"}, settings.field_instant_restart ? 1 : 0);
@@ -204,29 +203,11 @@ namespace nascent {
         skin_field = &form.add<ChoiceField>("Skin", skin_labels, skin_index);
         export_skin_button = &form.add<ButtonField>("Export skin");
         delete_skin_button = &form.add<ButtonField>(DELETE_SKIN_LABEL);
-        note_gradient_field = &form.add<ChoiceField>("Note gradient", std::vector<std::string>{"Off", "On"}, settings.field_note_gradient ? 1 : 0);
+        skin_fields.push_back(&form.add<SkinChoiceField>("Note gradient", skin_toggles::NOTE_GRADIENT, *skin, "Off", "On"));
         skin_fields.push_back(&form.add<SkinChoiceField>("Snap colors", skin_toggles::SNAP_COLORS, *skin, "Off", "On"));
-        note_opacity_field = &form.add<SliderField>("Note opacity", settings.field_note_opacity, 0, 100, PERCENT_STEP, "%");
-        receptor_opacity_field = &form.add<SliderField>("Receptor opacity", settings.field_receptor_opacity, 0, 100, PERCENT_STEP, "%");
-        lane_gaps = {-1};
-
-        for (int16_t gap = 0; gap <= LANE_GAP_MAX; gap += LANE_GAP_STEP) {
-            lane_gaps.push_back(gap);
-        }
-
-        if (std::find(lane_gaps.begin(), lane_gaps.end(), settings.field_lane_gap) == lane_gaps.end()) {
-            lane_gaps.push_back(settings.field_lane_gap);
-            std::sort(lane_gaps.begin(), lane_gaps.end());
-        }
-
-        std::vector<std::string> lane_gap_labels;
-
-        for (int16_t gap : lane_gaps) {
-            lane_gap_labels.push_back(gap < 0 ? std::string("Skin") : std::format("{} px", gap));
-        }
-
-        size_t lane_gap_index = (size_t)(std::find(lane_gaps.begin(), lane_gaps.end(), settings.field_lane_gap) - lane_gaps.begin());
-        lane_gap_field = &form.add<ChoiceField>("Lane separation", lane_gap_labels, lane_gap_index);
+        skin_fields.push_back(&form.add<SkinSliderField>("Note opacity", skin_settings::NOTE_OPACITY, *skin, 0, 100, PERCENT_STEP, "%"));
+        skin_fields.push_back(&form.add<SkinSliderField>("Receptor opacity", skin_settings::RECEPTOR_OPACITY, *skin, 0, 100, PERCENT_STEP, "%"));
+        skin_fields.push_back(&form.add<LaneGapField>("Lane separation", *skin, PREVIEW_KEY_COUNT, LANE_GAP_MAX));
         background_brightness_field = &form.add<SliderField>("Background brightness", settings.field_background_brightness, 0, 100, PERCENT_STEP, "%");
 
         form.add<SectionField>("Element Visibility");
@@ -237,8 +218,8 @@ namespace nascent {
         add_skin_toggle("Accuracy", skin_toggles::SHOW_ACCURACY);
         add_skin_toggle("Average error", skin_toggles::SHOW_AVERAGE_ERROR);
         add_skin_toggle("Error deviation", skin_toggles::SHOW_ERROR_DEVIATION);
-        add_skin_toggle("Performance prediction", skin_toggles::SHOW_PERFORMANCE);
-        add_skin_toggle("Judgement counter", skin_toggles::SHOW_JUDGEMENT_COUNTER);
+        add_skin_toggle("Perf prediction", skin_toggles::SHOW_PERFORMANCE);
+        add_skin_toggle("Judgement count", skin_toggles::SHOW_JUDGEMENT_COUNTER);
         add_skin_toggle("Hit timing bar", skin_toggles::SHOW_TIMING_BAR);
         add_skin_toggle("Hit timing average", skin_toggles::SHOW_TIMING_AVERAGE);
         add_skin_toggle("FPS counter", skin_toggles::SHOW_FPS, "Off", "On");
@@ -351,16 +332,11 @@ namespace nascent {
         settings.field_mirror = mirror_field->selected == 1;
         settings.field_instant_restart = instant_restart_field->selected == 1;
         settings.field_lane_cover = (int8_t)lane_cover_field->value;
-        settings.field_note_gradient = note_gradient_field->selected == 1;
         settings.title_songs = (TitleSongs)title_music_field->selected;
         settings.field_background_brightness = (uint8_t)background_brightness_field->value;
-        settings.field_note_opacity = (uint8_t)note_opacity_field->value;
-        settings.field_receptor_opacity = (uint8_t)receptor_opacity_field->value;
-        settings.field_lane_gap = lane_gaps[lane_gap_field->selected];
         settings.field_audio_visual_offset = (int16_t)visual_offset_field->value;
         settings.field_audio_input_offset = (int16_t)input_offset_field->value;
         settings.field_scroll_speed = (uint16_t)scroll_speed_field->value;
-        settings.field_upscroll = scroll_direction_field->selected == 1;
 
         for (SkinFollowing* field : skin_fields) {
             field->refresh_skin(*skin);
@@ -656,8 +632,8 @@ namespace nascent {
 
     void SceneOptions::add_hud_position(HudElement element) {
         const HudSlot& slot = HUD_SLOTS[(size_t)element];
-        add_skin_slider(std::format("{} X position", slot.label), slot.x, 0, 100);
-        add_skin_slider(std::format("{} Y position", slot.label), slot.y, 0, 100);
+        add_skin_slider(std::format("{} X pos", slot.label), slot.x, 0, 100);
+        add_skin_slider(std::format("{} Y pos", slot.label), slot.y, 0, 100);
     }
 
     void SceneOptions::report_bug() {
@@ -982,14 +958,14 @@ namespace nascent {
         preview_field->set_attempt(preview_attempt.get());
         preview_field->judge_alpha = (uint8_t)Ui::layout("options.preview_receptor_alpha");
         preview_field->judge_height = screen.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
-        preview_field->upscroll = settings.field_upscroll;
-        preview_field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
-        preview_field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
+        preview_field->upscroll = skin_toggle(*skin, skin_toggles::UPSCROLL);
+        preview_field->note_opacity = (float)(skin_setting(*skin, skin_settings::NOTE_OPACITY) / 100.0);
+        preview_field->receptor_opacity = (float)(skin_setting(*skin, skin_settings::RECEPTOR_OPACITY) / 100.0);
         preview_field->mirror = settings.field_mirror;
         preview_field->lane_cover = settings.field_lane_cover / 100.0;
-        preview_field->note_gradient = settings.field_note_gradient;
+        preview_field->note_gradient = skin_toggle(*skin, skin_toggles::NOTE_GRADIENT);
         preview_field->draw_judge = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_LINE);
-        preview_field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
+        preview_field->set_lane_gap(lane_gap_setting());
     }
 
     void SceneOptions::on_resize() {

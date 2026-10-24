@@ -67,10 +67,16 @@ namespace nascent {
         PROGRESS_FILL,
         TIMING_BAR_BACKGROUND,
         TIMING_BAR_HIT,
-        TIMING_BAR_AVERAGE
+        TIMING_BAR_AVERAGE,
+        HIT_LIGHT,
+        HOLD_LIGHT,
+        STAGE_BOTTOM,
+        COMBO_BURST,
+        COMBO_DIGIT,
+        WARNING_ARROW
     };
 
-    inline constexpr size_t SKIN_IMAGE_COUNT = 37;
+    inline constexpr size_t SKIN_IMAGE_COUNT = 43;
 
     inline constexpr std::array<const char*, 9> NOTE_SNAP_NAMES = {"4th", "8th", "12th", "16th", "24th", "32nd", "48th", "64th", "192nd"};
     inline constexpr std::array<uint8_t, 9> NOTE_SNAP_DIVISIONS = {1, 2, 3, 4, 6, 8, 12, 16, 48};
@@ -85,10 +91,12 @@ namespace nascent {
         JUDGEMENT_GREAT,
         JUDGEMENT_GOOD,
         JUDGEMENT_BAD,
-        JUDGEMENT_MISS
+        JUDGEMENT_MISS,
+        COMBO_BREAK,
+        COMBO_BURST
     };
 
-    inline constexpr size_t SKIN_SOUND_COUNT = 9;
+    inline constexpr size_t SKIN_SOUND_COUNT = 11;
 
     enum class SkinFont : uint8_t {
         LARGE,
@@ -181,9 +189,13 @@ namespace nascent {
         SNAP_48TH,
         SNAP_64TH,
         SNAP_192ND,
+        BARLINE,
+        COMBO_HOLDING,
+        COMBO_BREAK,
+        KEY_LABEL,
     };
 
-    inline constexpr std::array<const char*, 68> SKIN_COLOR_NAMES = {
+    inline constexpr std::array<const char*, 72> SKIN_COLOR_NAMES = {
         "screen_background",
         "text",
         "text_muted",
@@ -252,10 +264,14 @@ namespace nascent {
         "snap_48th",
         "snap_64th",
         "snap_192nd",
+        "barline",
+        "combo_holding",
+        "combo_break",
+        "key_label",
     };
 
     inline constexpr size_t SKIN_COLOR_COUNT = SKIN_COLOR_NAMES.size();
-    static_assert((size_t)SkinColor::SNAP_192ND + 1 == SKIN_COLOR_COUNT);
+    static_assert((size_t)SkinColor::KEY_LABEL + 1 == SKIN_COLOR_COUNT);
     static_assert((size_t)SkinColor::SNAP_192ND - (size_t)SkinColor::SNAP_4TH + 1 == NOTE_SNAP_COUNT);
 
     struct SkinMascot {
@@ -269,12 +285,24 @@ namespace nascent {
         double size = 0;
     };
 
+    enum class NoteShape : uint8_t {
+        SQUARE,
+        IMAGE
+    };
+
+    enum class ReceptorStyle : uint8_t {
+        SQUARE,
+        COLUMN
+    };
+
     struct SkinManifest {
         std::string name;
         std::string inherits;
         bool hidden = false;
         SkinTint tint = SkinTint::GRADIENT;
         HoldStyle hold_style = HoldStyle::REPEAT;
+        NoteShape note_shape = NoteShape::SQUARE;
+        ReceptorStyle receptor_style = ReceptorStyle::SQUARE;
         double key_spacing = 0.15;
         uint8_t hold_alpha = 64;
         std::optional<double> hold_body_aspect;
@@ -377,6 +405,8 @@ namespace nascent {
         std::optional<std::filesystem::path> find_sound(const std::string& stem) const;
         ImageLanes image_paths(const std::string& stem, uint8_t key_count) const;
         std::optional<ResolvedImage> resolve_image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap) const;
+        ResolvedImage* find_image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap, std::optional<ResolvedImage>& uncached);
+        const MipDecal* frame_decal(ResolvedImage& resolved, size_t frame);
         const SkinManifest& build_manifest(uint8_t key_count) const;
         const LayoutValues& layout_values(uint8_t key_count) const;
         double missing_layout_value(std::string_view key) const;
@@ -438,6 +468,8 @@ namespace nascent {
 
         const MipDecal* image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap = std::nullopt, std::optional<double> since = std::nullopt);
         const MipDecal* judgement_image(HitScore score, uint8_t key_count = 0, std::optional<double> since = std::nullopt);
+        const MipDecal* image_frame(SkinImage image, uint8_t key_count, size_t frame);
+        size_t frame_count(SkinImage image, uint8_t key_count);
         const SkinMascot& mascot() const;
         olc::Decal* hit_score_decal(HitScore score) const;
         olc::Pixel title_gradient_at(double x, double y) const;
@@ -457,6 +489,7 @@ namespace nascent {
         int32_t sound(SkinSound sound);
         int32_t voice(SkinSound sound);
         int32_t hitsound_voice();
+        int32_t combo_break_voice();
         int32_t judgement_voice(HitScore score);
         int32_t get_random_menu_pluck();
     };

@@ -9,7 +9,19 @@
                         "Play pages on the website show what the play would have scored in Etterna (Wife3, J4 to J9) and osu! stable (any OD).",
                         "Notes can be coloured by beat snap, turn on Snap colors in Options under Skin. Skins can set the colours and whether it default to on.",
                         "The note preview in Options plays a longer pattern with all kinds of rhythms, so every snap colour shows up.",
-                        "New Nascent Percy skin, with long note caps cut off for shorter long notes."
+                        "New Nascent Percy skin, with long note caps cut off for shorter long notes.",
+                        "Drag an osu! skin (.osk) onto the game window to import it: almost everything in its osu!mania skin carries over for every key count, including notes, keys, judgements, hit lighting, the stage, barlines, combo digits and colours, combo bursts, warning arrows, sounds and layout.",
+                        "Skins can now add hit and hold lighting, a stage bottom overlay, barlines, combo digit pictures, combo bursts with a sound, warning arrows before the first note, key labels on the receptors and a separate combo colour while holding.",
+                        "Scroll direction now follows the skin until you change it in Options, so skins can default to upscroll.",
+                        "Skins can add a combo_break sound that plays when you miss after a combo of 30 or more.",
+                        "Note gradient, note opacity, receptor opacity and lane separation now follow the skin until you change them in Options, which shows the skin's value, so skins can turn the gradient off or make notes and receptors see-through. Press Delete on one to go back to the skin's value."
+                    ]
+                },
+                {
+                    "title": "Fixes",
+                    "notes": [
+                        "Restarting from the pause menu no longer draws the playfield at the wrong size with skins that set a different layout for each key count.",
+                        "The judgement counter no longer overlaps the average error and performance prediction in its default spot."
                     ]
                 }
             ]

@@ -39,12 +39,12 @@ namespace nascent {
         int16_t field_audio_input_offset = 0; // ms
         std::optional<uint8_t> field_lane_width_percent; // % of the screen height
         std::optional<uint8_t> field_judge_line_percent; // % of the screen height
-        int16_t field_lane_gap = -1; // px, -1 uses the skin's spacing
-        bool field_upscroll = false;
+        std::optional<uint8_t> field_lane_gap; // px
+        std::optional<bool> field_upscroll;
         std::optional<bool> field_show_judgement;
         std::optional<uint8_t> field_judgement_height; // % of the field above the judgement line's end
         std::optional<bool> field_show_combo;
-        bool field_note_gradient = true;
+        std::optional<bool> field_note_gradient;
         std::optional<bool> field_snap_colors;
         std::optional<bool> field_show_judgement_line;
         std::optional<bool> field_show_accuracy;
@@ -63,8 +63,8 @@ namespace nascent {
         int8_t field_lane_cover = 0;
         bool field_hitsounds = false;
         uint8_t field_background_brightness = 0;
-        uint8_t field_note_opacity = 100;
-        uint8_t field_receptor_opacity = 100;
+        std::optional<uint8_t> field_note_opacity;
+        std::optional<uint8_t> field_receptor_opacity;
         HudPositions hud;
 
         float title_logo_start_delay = 1; // s
@@ -117,7 +117,7 @@ namespace nascent {
         static constexpr const char* LOG_FILE = "nascent.log";
         static constexpr const char* SETTINGS_FILE_NAME = "settings.json";
         static constexpr double VOLUME_RANGE_DB = 40.0;
-        static constexpr uint32_t SETTINGS_VERSION = 2;
+        static constexpr uint32_t SETTINGS_VERSION = 5;
         static constexpr const char* SONG_DIRECTORY_NAME = "songs";
         static constexpr const char* LEGACY_SONG_DIRECTORY = "assets/songs";
 

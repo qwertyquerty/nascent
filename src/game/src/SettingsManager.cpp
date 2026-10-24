@@ -205,6 +205,30 @@ namespace nascent {
 
     static std::map<uint32_t, VersionedJsonFile::Migration> settings_migrations() {
         return {
+            {4, [](nlohmann::json& data) {
+                 if (auto upscroll = data.find("field_upscroll"); upscroll != data.end() && upscroll->is_boolean() && !upscroll->get<bool>()) {
+                     *upscroll = nullptr;
+                 }
+             }},
+            {3, [](nlohmann::json& data) {
+                 if (auto gap = data.find("field_lane_gap"); gap != data.end() && gap->is_number_integer()) {
+                     int value = gap->get<int>();
+                     *gap = value < 0 ? nlohmann::json(nullptr) : nlohmann::json(std::min(value, 255));
+                 }
+
+                 if (auto opacity = data.find("field_receptor_opacity"); opacity != data.end() && opacity->is_number_integer() && opacity->get<int>() == 100) {
+                     *opacity = nullptr;
+                 }
+             }},
+            {2, [](nlohmann::json& data) {
+                 if (auto gradient = data.find("field_note_gradient"); gradient != data.end() && gradient->is_boolean() && gradient->get<bool>()) {
+                     *gradient = nullptr;
+                 }
+
+                 if (auto opacity = data.find("field_note_opacity"); opacity != data.end() && opacity->is_number_integer() && opacity->get<int>() == 100) {
+                     *opacity = nullptr;
+                 }
+             }},
             {1, [](nlohmann::json& data) {
                  static const std::array<std::pair<const char*, int>, 7> skin_defaults = {{
                      {"field_lane_width_percent", 12},

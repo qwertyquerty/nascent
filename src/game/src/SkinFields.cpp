@@ -8,8 +8,16 @@
 #include <utility>
 
 namespace nascent {
-    SkinSliderField::SkinSliderField(std::string label, SkinSetting setting, const Skin& skin, int32_t minimum, int32_t maximum, int32_t step, std::string unit)
+    SkinSliderField::SkinSliderField(std::string label, SkinSetting setting, int32_t minimum, int32_t maximum, int32_t step, std::string unit)
         : SliderField(std::move(label), 0, minimum, maximum, step, std::move(unit)), setting(setting) {
+    }
+
+    SkinSliderField::SkinSliderField(std::string label, SkinSetting setting, const Skin& skin, int32_t minimum, int32_t maximum, int32_t step, std::string unit)
+        : SkinSliderField(std::move(label), setting, minimum, maximum, step, std::move(unit)) {
+        load_saved(skin);
+    }
+
+    void SkinSliderField::load_saved(const Skin& skin) {
         const std::optional<uint8_t>& saved = setting.value(SettingsManager::settings);
         follows_skin = !saved.has_value();
         refresh_skin(skin);
@@ -19,12 +27,16 @@ namespace nascent {
         }
     }
 
+    double SkinSliderField::skin_default(const Skin& skin) const {
+        return skin.layout(setting.key);
+    }
+
     std::string SkinSliderField::display_value(bool focused) const {
         return follows_skin ? std::format("Skin ({}{})", value, unit) : SliderField::display_value(focused);
     }
 
     void SkinSliderField::refresh_skin(const Skin& skin) {
-        skin_value = std::clamp<int32_t>((int32_t)std::lround(skin.layout(setting.key)), minimum, maximum);
+        skin_value = std::clamp<int32_t>((int32_t)std::lround(skin_default(skin)), minimum, maximum);
 
         if (follows_skin) {
             value = skin_value;
@@ -65,6 +77,15 @@ namespace nascent {
         bool changed = SliderField::drag(point);
         follows_skin = follows_skin && !changed;
         return changed;
+    }
+
+    LaneGapField::LaneGapField(std::string label, const Skin& skin, uint8_t key_count, int32_t maximum)
+        : SkinSliderField(std::move(label), skin_settings::LANE_GAP, 0, maximum, 1, " px"), key_count(key_count) {
+        load_saved(skin);
+    }
+
+    double LaneGapField::skin_default(const Skin& skin) const {
+        return skin_lane_gap(skin, key_count);
     }
 
     SkinChoiceField::SkinChoiceField(std::string label, SkinToggle toggle, const Skin& skin, std::string off_label, std::string on_label)

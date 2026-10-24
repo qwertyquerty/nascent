@@ -127,11 +127,11 @@ namespace nascent {
         field = std::make_unique<EntityField>(chart.get(), skin, olc::vd2d{0.0, 0.0}, olc::vd2d{1.0, 1.0});
         field->draw_judge_colors = true;
         field->judge_alpha = (uint8_t)Ui::layout("calibration.receptor_alpha");
-        field->upscroll = SettingsManager::settings.field_upscroll;
-        field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
-        field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
+        field->upscroll = skin_toggle(*skin, skin_toggles::UPSCROLL);
+        field->note_opacity = (float)(skin_setting(*skin, skin_settings::NOTE_OPACITY) / 100.0);
+        field->receptor_opacity = (float)(skin_setting(*skin, skin_settings::RECEPTOR_OPACITY) / 100.0);
         field->mirror = SettingsManager::settings.field_mirror;
-        field->note_gradient = SettingsManager::settings.field_note_gradient;
+        field->note_gradient = skin_toggle(*skin, skin_toggles::NOTE_GRADIENT);
         on_resize();
 
         std::filesystem::path click_path = std::filesystem::temp_directory_path() / "nascent_calibration_click.wav";
@@ -315,7 +315,7 @@ namespace nascent {
         field->pos = {(double)window_size.x * (1.0 - field_width) - (double)window_size.x * Ui::layout("calibration.field_right_margin"), 0.0};
         field->size = {(double)(int32_t)(window_size.x * field_width), (double)window_size.y};
         field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
-        field->set_lane_gap(SettingsManager::settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(SettingsManager::settings.field_lane_gap)) : std::nullopt);
+        field->set_lane_gap(lane_gap_setting());
     }
 
     void SceneCalibration::draw(olc::PixelGameEngine* window) {

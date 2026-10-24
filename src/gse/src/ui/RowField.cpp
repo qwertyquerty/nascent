@@ -250,10 +250,20 @@ namespace nascent {
         return value != before;
     }
 
+    float SliderField::bar_width() const {
+        float bar_left = Ui::layout_pxf("form.slider_left");
+        float bar_right = Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_right_gap"));
+
+        if (value_right > value_left) {
+            bar_right = std::min(bar_right, (float)value_left - Ui::layout_pxf("form.row_padding"));
+        }
+
+        return std::max(1.0f, bar_right - bar_left);
+    }
+
     bool SliderField::set_from_point(float x) {
         float bar_left = Ui::layout_pxf("form.slider_left");
-        float bar_width = Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_left") - Ui::layout("form.slider_right_gap"));
-        float fraction = std::clamp((x - bar_left) / std::max(1.0f, bar_width), 0.0f, 1.0f);
+        float fraction = std::clamp((x - bar_left) / bar_width(), 0.0f, 1.0f);
         int32_t increment = active_step();
         int32_t steps = increment > 0 ? (int32_t)std::lround(fraction * (maximum - minimum) / increment) : 0;
         int32_t next = std::clamp(minimum + steps * increment, minimum, maximum);
@@ -269,7 +279,8 @@ namespace nascent {
     bool SliderField::click(olc::vf2d point, Input& input) {
         fine = input.key_held(olc::Key::SHIFT);
         float padding = Ui::layout_pxf("form.row_padding");
-        dragging_bar = point.x >= Ui::layout_pxf("form.slider_left") - padding && point.x <= Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_right_gap")) + padding;
+        float bar_left = Ui::layout_pxf("form.slider_left");
+        dragging_bar = point.x >= bar_left - padding && point.x <= bar_left + bar_width() + padding;
         return dragging_bar && set_from_point(point.x);
     }
 
@@ -280,13 +291,12 @@ namespace nascent {
     int32_t SliderField::draw(olc::PixelGameEngine* window, UiTheme& theme, olc::vi2d position, bool focused) const {
         int32_t row_height = RowField::draw(window, theme, position, focused);
         float bar_left = Ui::layout_pxf("form.slider_left");
-        float bar_width = Ui::pxf(Ui::layout("form.row_width") - Ui::layout("form.slider_left") - Ui::layout("form.slider_right_gap"));
         float bar_height = std::max(1.0f, Ui::layout_pxf("form.slider_height"));
         float fill = maximum > minimum ? (float)(value - minimum) / (float)(maximum - minimum) : 0.0f;
         olc::Pixel color = theme.accent(fill);
         color.a = (uint8_t)Ui::layout(focused ? "form.slider_focused_alpha" : "form.slider_idle_alpha");
 
-        ProgressBar({bar_width, bar_height}, theme.color(UiColor::PROGRESS_TRACK)).draw(window, {(float)position.x + bar_left, (float)position.y + (row_height - bar_height) / 2}, fill, color);
+        ProgressBar({bar_width(), bar_height}, theme.color(UiColor::PROGRESS_TRACK)).draw(window, {(float)position.x + bar_left, (float)position.y + (row_height - bar_height) / 2}, fill, color);
         return row_height;
     }
 

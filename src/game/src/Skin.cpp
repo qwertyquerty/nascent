@@ -68,6 +68,12 @@ namespace nascent {
             {"timing_bar_background", std::nullopt},
             {"timing_bar_hit", std::nullopt},
             {"timing_bar_average", std::nullopt},
+            {"hit_light", std::nullopt},
+            {"hold_light", std::nullopt},
+            {"stage_bottom", std::nullopt},
+            {"combo_burst", std::nullopt},
+            {"combo_digit", std::nullopt},
+            {"warning_arrow", std::nullopt},
         }};
 
         constexpr std::array<SkinImage, 2> SNAP_IMAGES = {SkinImage::NOTE, SkinImage::HOLD_HEAD};
@@ -82,14 +88,18 @@ namespace nascent {
             "judgement_good",
             "judgement_bad",
             "judgement_miss",
+            "combo_break",
+            "combo_burst",
         };
 
         constexpr std::array<const char*, 4> SOUND_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac"};
         constexpr std::array<std::string_view, 12> GENERAL_KEYS = {"format", "name", "author", "version", "source", "inherits", "hidden", "colors", "difficulty_scale", "fonts", "layout", "keymodes"};
-        constexpr std::array<std::string_view, 15> PLAYFIELD_KEYS = {
+        constexpr std::array<std::string_view, 17> PLAYFIELD_KEYS = {
             "tint",
             "tint_notes",
             "hold_style",
+            "note_shape",
+            "receptor_style",
             "hold_alpha",
             "hold_body_aspect",
             "hold_body_head_offset",
@@ -441,6 +451,24 @@ namespace nascent {
 
             if (style != "stretch" && style != "tile" && style != "repeat") {
                 problem(std::format("{}\"hold_style\" should be \"repeat\", \"stretch\" or \"tile\"", context));
+            }
+        }
+
+        if (const nlohmann::json* value = setting("note_shape", &nlohmann::json::is_string, "\"square\" or \"image\"")) {
+            std::string shape = value->get<std::string>();
+            note_shape = shape == "image" ? NoteShape::IMAGE : NoteShape::SQUARE;
+
+            if (shape != "image" && shape != "square") {
+                problem(std::format("{}\"note_shape\" should be \"square\" or \"image\"", context));
+            }
+        }
+
+        if (const nlohmann::json* value = setting("receptor_style", &nlohmann::json::is_string, "\"square\" or \"column\"")) {
+            std::string style = value->get<std::string>();
+            receptor_style = style == "column" ? ReceptorStyle::COLUMN : ReceptorStyle::SQUARE;
+
+            if (style != "column" && style != "square") {
+                problem(std::format("{}\"receptor_style\" should be \"square\" or \"column\"", context));
             }
         }
 
@@ -1290,9 +1318,7 @@ namespace nascent {
         return decals.emplace(key, MipDecal(std::move(levels), clamp)).first->second;
     }
 
-    const MipDecal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap, std::optional<double> since) {
-        std::optional<uint8_t> shown_snap = snap && *snap < NOTE_SNAP_COUNT ? snap : std::nullopt;
-        std::optional<ResolvedImage> uncached;
+    Skin::ResolvedImage* Skin::find_image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> shown_snap, std::optional<ResolvedImage>& uncached) {
         ResolvedImage* resolved = nullptr;
 
         if (key_count <= MAX_LANES && lane < MAX_LANES) {
@@ -1329,6 +1355,45 @@ namespace nascent {
             resolved = &*uncached;
         }
 
+        return resolved;
+    }
+
+    const MipDecal* Skin::frame_decal(ResolvedImage& resolved, size_t frame) {
+        const MipDecal*& chosen = resolved.decals[frame];
+
+        if (chosen == nullptr) {
+            chosen = &decal((*resolved.frames)[frame], resolved.clamp);
+        }
+
+        return *chosen ? chosen : nullptr;
+    }
+
+    const MipDecal* Skin::image_frame(SkinImage image, uint8_t key_count, size_t frame) {
+        std::optional<ResolvedImage> uncached;
+        ResolvedImage* resolved = find_image(image, 0, key_count, std::nullopt, uncached);
+
+        if (resolved == nullptr || resolved->frames->empty()) {
+            return nullptr;
+        }
+
+        return frame_decal(*resolved, frame % resolved->frames->size());
+    }
+
+    size_t Skin::frame_count(SkinImage image, uint8_t key_count) {
+        std::optional<ResolvedImage> uncached;
+        ResolvedImage* resolved = find_image(image, 0, key_count, std::nullopt, uncached);
+        return resolved != nullptr ? resolved->frames->size() : 0;
+    }
+
+    const MipDecal* Skin::image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap, std::optional<double> since) {
+        std::optional<uint8_t> shown_snap = snap && *snap < NOTE_SNAP_COUNT ? snap : std::nullopt;
+        std::optional<ResolvedImage> uncached;
+        ResolvedImage* resolved = find_image(image, lane, key_count, shown_snap, uncached);
+
+        if (resolved == nullptr) {
+            return nullptr;
+        }
+
         const ImageFrames& frames = *resolved->frames;
         size_t frame = 0;
 
@@ -1343,13 +1408,7 @@ namespace nascent {
             }
         }
 
-        const MipDecal*& chosen = resolved->decals[frame];
-
-        if (chosen == nullptr) {
-            chosen = &decal(frames[frame], resolved->clamp);
-        }
-
-        return *chosen ? chosen : nullptr;
+        return frame_decal(*resolved, frame);
     }
 
     std::optional<Skin::ResolvedImage> Skin::resolve_image(SkinImage image, uint8_t lane, uint8_t key_count, std::optional<uint8_t> snap) const {
@@ -1704,6 +1763,10 @@ namespace nascent {
 
     int32_t Skin::hitsound_voice() {
         return voice(SkinSound::HITSOUND);
+    }
+
+    int32_t Skin::combo_break_voice() {
+        return voice(SkinSound::COMBO_BREAK);
     }
 
     int32_t Skin::judgement_voice(HitScore score) {

@@ -31,6 +31,7 @@
 #include "GameNascent.h"
 #include "SettingsManager.h"
 #include "Skin.h"
+#include "SkinSettings.h"
 #include "gse/render/TextCache.h"
 #include "gse/ui/Ui.h"
 #include "Utf8Path.h"
@@ -764,11 +765,11 @@ namespace nascent {
 
         field = std::make_unique<EntityField>(selected_chart, skin, olc::vd2d{left, 0.0}, olc::vd2d{width, (double)screen.y});
         field->draw_judge = false;
-        field->upscroll = SettingsManager::settings.field_upscroll;
-        field->note_opacity = SettingsManager::settings.field_note_opacity / 100.0f;
-        field->receptor_opacity = SettingsManager::settings.field_receptor_opacity / 100.0f;
+        field->upscroll = skin_toggle(*skin, skin_toggles::UPSCROLL);
+        field->note_opacity = (float)(skin_setting(*skin, skin_settings::NOTE_OPACITY) / 100.0);
+        field->receptor_opacity = (float)(skin_setting(*skin, skin_settings::RECEPTOR_OPACITY) / 100.0);
         field->mirror = SettingsManager::settings.field_mirror;
-        field->note_gradient = SettingsManager::settings.field_note_gradient;
+        field->note_gradient = skin_toggle(*skin, skin_toggles::NOTE_GRADIENT);
         field->set_position(preview_position);
         field->opacity = opacity;
     }

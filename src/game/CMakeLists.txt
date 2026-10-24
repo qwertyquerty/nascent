@@ -12,6 +12,8 @@ add_library(game
     src/EntityFFT.cpp
     src/EntityField.cpp
     src/EtternaSkin.cpp
+    src/OsuSkin.cpp
+    src/SkinArchive.cpp
     src/EntityStarfield.cpp
     src/GameNascent.cpp
     src/InputManager.cpp

@@ -34,6 +34,8 @@ namespace nascent {
         inline constexpr SkinToggle SHOW_TIMING_BAR = {[](Settings& settings) -> std::optional<bool>& { return settings.field_show_timing_bar; }, "hud.show_timing_bar"};
         inline constexpr SkinToggle SHOW_TIMING_AVERAGE = {[](Settings& settings) -> std::optional<bool>& { return settings.field_show_timing_average; }, "hud.show_timing_average"};
         inline constexpr SkinToggle SNAP_COLORS = {[](Settings& settings) -> std::optional<bool>& { return settings.field_snap_colors; }, "playfield.snap_colors"};
+        inline constexpr SkinToggle NOTE_GRADIENT = {[](Settings& settings) -> std::optional<bool>& { return settings.field_note_gradient; }, "playfield.note_gradient"};
+        inline constexpr SkinToggle UPSCROLL = {[](Settings& settings) -> std::optional<bool>& { return settings.field_upscroll; }, "playfield.upscroll"};
     }
 
     namespace skin_settings {
@@ -44,6 +46,9 @@ namespace nascent {
         inline constexpr SkinSetting TIMING_BAR_HEIGHT = {[](Settings& settings) -> std::optional<uint8_t>& { return settings.field_timing_bar_height; }, "hud.timing_bar_height"};
         inline constexpr SkinSetting TIMING_BAR_LENGTH = {[](Settings& settings) -> std::optional<uint8_t>& { return settings.field_timing_bar_length; }, "hud.timing_bar_length"};
         inline constexpr SkinSetting TIMING_BAR_WIDTH = {[](Settings& settings) -> std::optional<uint8_t>& { return settings.field_timing_bar_width; }, "hud.timing_bar_width"};
+        inline constexpr SkinSetting NOTE_OPACITY = {[](Settings& settings) -> std::optional<uint8_t>& { return settings.field_note_opacity; }, "playfield.note_opacity"};
+        inline constexpr SkinSetting RECEPTOR_OPACITY = {[](Settings& settings) -> std::optional<uint8_t>& { return settings.field_receptor_opacity; }, "playfield.receptor_opacity"};
+        inline constexpr SkinSetting LANE_GAP = {[](Settings& settings) -> std::optional<uint8_t>& { return settings.field_lane_gap; }, nullptr};
     }
 
     enum class HudElement : uint8_t {
@@ -66,12 +71,14 @@ namespace nascent {
         {"FPS counter", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.fps_x; }, "hud.fps_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.fps_y; }, "hud.fps_y"}},
         {"Accuracy", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.accuracy_x; }, "hud.accuracy_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.accuracy_y; }, "hud.accuracy_y"}},
         {"Average error", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.error_x; }, "hud.error_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.error_y; }, "hud.error_y"}},
-        {"Performance prediction", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.performance_x; }, "hud.performance_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.performance_y; }, "hud.performance_y"}},
-        {"Judgement counter", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.judgement_counter_x; }, "hud.judgement_counter_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.judgement_counter_y; }, "hud.judgement_counter_y"}},
+        {"Perf prediction", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.performance_x; }, "hud.performance_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.performance_y; }, "hud.performance_y"}},
+        {"Judgement count", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.judgement_counter_x; }, "hud.judgement_counter_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.judgement_counter_y; }, "hud.judgement_counter_y"}},
         {"Song progress", {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.progress_x; }, "hud.progress_x"}, {[](Settings& settings) -> std::optional<uint8_t>& { return settings.hud.progress_y; }, "hud.progress_y"}},
     }};
 
     double skin_setting(const Skin& skin, const SkinSetting& setting);
+    std::optional<double> lane_gap_setting();
+    double skin_lane_gap(const Skin& skin, uint8_t key_count);
     bool skin_toggle(const Skin& skin, const SkinToggle& toggle);
     bool skin_toggle(const SkinToggle& toggle);
     olc::vf2d hud_position(const Skin& skin, HudElement element, olc::vf2d size, olc::vi2d screen);

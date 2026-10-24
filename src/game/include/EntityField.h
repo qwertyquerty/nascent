@@ -1,7 +1,9 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -34,8 +36,25 @@ namespace nascent {
         std::vector<double> press_positions;
         std::vector<double> release_positions;
 
+        double note_height_scale = 1;
+        bool flip_notes = false;
+        bool flip_receptors = false;
+        bool any_holding = false;
+        std::vector<double> holding_since;
+        uint32_t last_combo = 0;
+        uint32_t broken_combo = 0;
+        double broken_at = -1e9;
+
         void update_snaps();
         void update_presses();
+        double hit_line_y(int32_t jl_y) const;
+        void draw_barlines(olc::PixelGameEngine* window, int32_t jl_y, double rate_px_per_ms);
+        void draw_lighting(olc::PixelGameEngine* window, int32_t jl_y);
+        void draw_light(olc::PixelGameEngine* window, const MipDecal* image, double center_x, double center_y, double height, float alpha) const;
+        void draw_stage_bottom(olc::PixelGameEngine* window);
+        void draw_intro(olc::PixelGameEngine* window, int32_t jl_y);
+        void draw_combo_counter(olc::PixelGameEngine* window, double t);
+        void draw_combo_text(olc::PixelGameEngine* window, const std::string& text, olc::vf2d center, float scale, olc::Pixel tint);
         float lane_light_level(uint8_t lane) const;
         void draw_stage(olc::PixelGameEngine* window, int32_t jl_y);
         void draw_lane_lights(olc::PixelGameEngine* window, int32_t jl_y);
@@ -54,6 +73,8 @@ namespace nascent {
         bool draw_judge_colors = false;
         bool note_gradient = true;
         std::vector<float> lane_light;
+        std::vector<std::string> key_labels;
+        bool show_intro = false;
         bool draw_hit_score = true;
         bool draw_combo = false;
         double judge_height = 0;
@@ -90,7 +111,10 @@ namespace nascent {
         olc::Pixel note_color(double x, double y, olc::PixelGameEngine* window) const;
         olc::Decal* sized_image(SkinImage image, uint8_t column, uint8_t key_count, std::optional<uint8_t> snap = std::nullopt, std::optional<double> since = std::nullopt) const;
         double layout(std::string_view key) const;
-        void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
+        void draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint, bool flipped = false) const;
+        void draw_note(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const;
+        void draw_box(olc::PixelGameEngine* window, olc::Decal* decal, double x, double top, double width, double height, olc::Pixel tint, bool flipped = false) const;
+        void draw_quad(olc::PixelGameEngine* window, olc::Decal* decal, const std::array<olc::vf2d, 4>& corners, olc::Pixel tint) const;
         void draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const;
         void draw_lane_cover(olc::PixelGameEngine* window, double judge_y) const;
         void draw_receptors(olc::PixelGameEngine* window, int32_t jl_y);

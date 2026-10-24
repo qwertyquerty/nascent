@@ -2,7 +2,7 @@
 
 #include "BeatmapDownloads.h"
 #include "Changelog.h"
-#include "EtternaSkin.h"
+#include "SkinArchive.h"
 #include "Screenshots.h"
 #include "ServerApi.h"
 #include "gse/Game.h"

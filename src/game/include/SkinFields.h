@@ -26,6 +26,10 @@ namespace nascent {
         int32_t skin_value = 0;
 
         std::string display_value(bool focused) const override;
+        virtual double skin_default(const Skin& skin) const;
+        void load_saved(const Skin& skin);
+
+        SkinSliderField(std::string label, SkinSetting setting, int32_t minimum, int32_t maximum, int32_t step, std::string unit);
 
         public:
         SkinSetting setting;
@@ -39,6 +43,16 @@ namespace nascent {
         bool update(Input& input, float elapsed_time) override;
         bool click(olc::vf2d point, Input& input) override;
         bool drag(olc::vf2d point) override;
+    };
+
+    class LaneGapField : public SkinSliderField {
+        protected:
+        uint8_t key_count;
+
+        double skin_default(const Skin& skin) const override;
+
+        public:
+        LaneGapField(std::string label, const Skin& skin, uint8_t key_count, int32_t maximum);
     };
 
     class SkinChoiceField : public ChoiceField, public SkinFollowing {

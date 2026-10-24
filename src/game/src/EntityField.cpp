@@ -18,6 +18,11 @@
 
 namespace nascent {
     static constexpr double SNAP_TOLERANCE_MS = 3.0;
+    static constexpr double LIGHT_FADE_IN_MS = 80.0;
+    static constexpr double LIGHT_FADE_OUT_MS = 120.0;
+    static constexpr double LIGHT_SEARCH_MS = 1000.0;
+    static constexpr double COMBO_BREAK_POP_MS = 200.0;
+    static constexpr double KEY_LABEL_FADE_MS = 500.0;
 
     EntityField::EntityField(const Chart* chart, Skin* skin, olc::vd2d pos, olc::vd2d size) {
         this->chart = chart;
@@ -51,18 +56,41 @@ namespace nascent {
 
         int32_t jl_y = pos.y + size.y - note_size - judge_height;
         bool cover_bottom = lane_cover < 0;
+        double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
+        note_height_scale = layout("playfield.note_height_scale");
+        note_height_scale = note_height_scale > 0 ? note_height_scale : 1.0;
+        flip_notes = upscroll && layout("playfield.upscroll_flip_notes") > 0;
+        flip_receptors = upscroll && layout("playfield.upscroll_flip_receptors") > 0;
+        holding_since.assign(key_count, -1.0);
+        any_holding = false;
+
+        if (attempt != nullptr) {
+            uint32_t combo = attempt->get_combo();
+
+            if (position < broken_at) {
+                broken_at = -1e9;
+            }
+
+            if (combo < last_combo) {
+                broken_combo = last_combo;
+                broken_at = position;
+            }
+
+            last_combo = combo;
+        }
 
         update_snaps();
         update_presses();
         draw_stage(window, jl_y);
         draw_lane_lights(window, jl_y);
         draw_judgement_line(window, jl_y);
+        draw_barlines(window, jl_y, scroll_rate_px_per_ms);
 
-        if (!cover_bottom) {
+        bool receptors_over_notes = cover_bottom || layout("playfield.receptors_over_notes") > 0;
+
+        if (!receptors_over_notes) {
             draw_receptors(window, jl_y);
         }
-
-        double scroll_rate_px_per_ms = ((double)scroll_speed * screen_height / 100.0 / 1000.0);
 
         update_longest_hold();
         float hold_edge_inset = (float)layout("playfield.hold_edge_inset");
@@ -84,7 +112,12 @@ namespace nascent {
 
             int32_t hit_y = (hit.time - position) * scroll_rate_px_per_ms;
             uint8_t column = display_column(hit.key);
-            int32_t hit_x = pos.x + (column * (note_size + note_x_spacing));
+            double hit_x = pos.x + (column * (note_size + note_x_spacing));
+
+            if (holding && column < holding_since.size()) {
+                holding_since[column] = std::max(0.0, position - judged->attempt_hit.time);
+                any_holding = true;
+            }
             int32_t hit_height = hit.hit_type == HitType::HOLD ? (hit.end_time - hit.time) * scroll_rate_px_per_ms : 0;
 
             int32_t screen_hit_y = jl_y - hit_y;
@@ -122,7 +155,7 @@ namespace nascent {
                     olc::Decal* cap = sized_image(SkinImage::HOLD_CAP, column, key_count);
 
                     if (cap != nullptr && tail_y < body_bottom && cap->sprite->width > 0) {
-                        double cap_height = note_size * cap->sprite->height / cap->sprite->width;
+                        double cap_height = note_size * note_height_scale * cap->sprite->height / cap->sprite->width;
                         double cap_top = body_top - cap_height;
                         float top = (float)flip_y(body_top);
                         float end = (float)flip_y(cap_top);
@@ -148,26 +181,30 @@ namespace nascent {
                             break;
                         }
 
-                        draw_square(window, smear, hit_x, hold_smear_y, gradient_notes && !snap_tinted ? smear_tint(hold_smear_y) : tint);
+                        draw_note(window, smear, hit_x, hold_smear_y, gradient_notes && !snap_tinted ? smear_tint(hold_smear_y) : tint);
                     }
                 }
 
                 if (hold_body != nullptr && holding) {
-                    draw_square(window, sized_image(SkinImage::HOLD_HEAD_HELD, column, key_count, snap), hit_x, std::min(screen_hit_y, jl_y), note_tint(base_color(hit_x, jl_y)));
+                    draw_note(window, sized_image(SkinImage::HOLD_HEAD_HELD, column, key_count, snap), hit_x, std::min(screen_hit_y, jl_y), note_tint(base_color(hit_x, jl_y)));
                 }
                 else if (((draw_notes_past_judge && !hit_played) || screen_hit_y <= jl_y) && screen_hit_y < pos.y + size.y) {
                     bool hold = hit.hit_type == HitType::HOLD;
                     olc::Decal* head = sized_image(hold ? SkinImage::HOLD_HEAD : SkinImage::NOTE, column, key_count, snap);
-                    draw_square(window, head, hit_x, screen_hit_y, hold_tint(note_tint(base_color(hit_x, screen_hit_y)), hold && (dropped || missed)));
+                    draw_note(window, head, hit_x, screen_hit_y, hold_tint(note_tint(base_color(hit_x, screen_hit_y)), hold && (dropped || missed)));
                 }
             }
         }
 
         draw_lane_cover(window, jl_y);
 
-        if (cover_bottom) {
+        if (receptors_over_notes) {
             draw_receptors(window, jl_y);
         }
+
+        draw_lighting(window, jl_y);
+        draw_stage_bottom(window);
+        draw_intro(window, jl_y);
 
         const JudgedHit* jhit = attempt != nullptr && (draw_hit_score || draw_combo) ? attempt->get_last_scored() : nullptr;
 
@@ -179,14 +216,7 @@ namespace nascent {
             }
 
             if (draw_combo) {
-                std::string combo = std::format("{}", attempt->get_combo());
-                olc::FontRect bounds = text_bounds(skin->combo_font, combo);
-
-                if (bounds.size.x > 0 && bounds.size.y > 0) {
-                    float scale = smoothstep(layout("playfield.combo_pop_from"), layout("playfield.combo_pop_to"), t * layout("playfield.combo_pop_speed")) * (float)layout("playfield.combo_scale");
-                    olc::vf2d corner = {(float)(pos.x + size.x / 2 - bounds.size.x * scale / 2), (float)(overlay_y(combo_height) - bounds.size.y * scale / 2)};
-                    draw_text(skin->combo_font, combo, corner - olc::vf2d{(float)bounds.offset.x, (float)bounds.offset.y} * scale, with_opacity(skin->color(SkinColor::COMBO)), scale, false);
-                }
+                draw_combo_counter(window, t);
             }
         }
 
@@ -201,6 +231,72 @@ namespace nascent {
             draw_text(font, std::format("SB {}", chart->section_beat_at(position)), corner + olc::vf2d{0.0f, line * 2}, skin->color(SkinColor::TEXT), 1.0f);
         }
     };
+
+    void EntityField::draw_combo_counter(olc::PixelGameEngine* window, double t) {
+        float base_scale = (float)layout("playfield.combo_scale");
+        float scale = smoothstep(layout("playfield.combo_pop_from"), layout("playfield.combo_pop_to"), t * layout("playfield.combo_pop_speed")) * base_scale;
+        olc::vf2d center = {(float)(pos.x + size.x / 2), (float)overlay_y(combo_height)};
+        draw_combo_text(window, std::format("{}", attempt->get_combo()), center, scale, with_opacity(skin->color(any_holding ? SkinColor::COMBO_HOLDING : SkinColor::COMBO)));
+
+        double popped = position - broken_at;
+
+        if (layout("playfield.combo_break_pop") > 0 && broken_combo > 0 && popped >= 0 && popped < COMBO_BREAK_POP_MS) {
+            double progress = popped / COMBO_BREAK_POP_MS;
+            olc::Pixel tint = skin->color(SkinColor::COMBO_BREAK);
+            tint.a = (uint8_t)std::lround(tint.a * 0.8 * (1.0 - progress));
+            window->SetDecalMode(olc::DecalMode::ADDITIVE);
+            draw_combo_text(window, std::format("{}", broken_combo), center, base_scale * (float)(1.0 + 3.0 * progress), with_opacity(tint));
+            window->SetDecalMode(olc::DecalMode::NORMAL);
+        }
+    }
+
+    void EntityField::draw_combo_text(olc::PixelGameEngine* window, const std::string& text, olc::vf2d center, float scale, olc::Pixel tint) {
+        uint8_t key_count = chart->info.key_count;
+
+        if (skin->frame_count(SkinImage::COMBO_DIGIT, key_count) >= 10) {
+            std::vector<const MipDecal*> digits;
+
+            for (char c : text) {
+                const MipDecal* digit = c >= '0' && c <= '9' ? skin->image_frame(SkinImage::COMBO_DIGIT, key_count, (size_t)(c - '0')) : nullptr;
+
+                if (digit != nullptr && digit->size().x > 0 && digit->size().y > 0) {
+                    digits.push_back(digit);
+                }
+            }
+
+            if (digits.empty()) {
+                return;
+            }
+
+            double digit_height = layout("playfield.combo_digit_height");
+            double height = (digit_height > 0 ? size.y * digit_height : digits.front()->size().y * Ui::scale()) * scale;
+            double overlap = height * layout("playfield.combo_digit_overlap");
+            double total = -overlap * (double)(digits.size() - 1);
+
+            for (const MipDecal* digit : digits) {
+                total += height * digit->size().x / digit->size().y;
+            }
+
+            double x = center.x - total / 2;
+            double top = center.y - height / 2;
+
+            for (const MipDecal* digit : digits) {
+                float drawn = (float)(height / digit->size().y);
+                MipDecal::Pick level = digit->pick(drawn);
+                window->DrawDecal({(float)x, (float)top}, level.decal, {drawn / level.factor, drawn / level.factor}, tint);
+                x += height * digit->size().x / digit->size().y - overlap;
+            }
+
+            return;
+        }
+
+        olc::FontRect bounds = text_bounds(skin->combo_font, text);
+
+        if (bounds.size.x > 0 && bounds.size.y > 0) {
+            olc::vf2d corner = {center.x - bounds.size.x * scale / 2, center.y - bounds.size.y * scale / 2};
+            draw_text(skin->combo_font, text, corner - olc::vf2d{(float)bounds.offset.x, (float)bounds.offset.y} * scale, tint, scale, false);
+        }
+    }
 
     void EntityField::draw_judgement(olc::PixelGameEngine* window, const JudgedHit& judged, double t) {
         HitScore shown_score = judged.released ? judged.release_score : judged.hit_score;
@@ -259,13 +355,51 @@ namespace nascent {
         return decal->pick((float)(note_size / decal->size().x)).decal;
     }
 
-    void EntityField::draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const {
+    void EntityField::draw_square(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint, bool flipped) const {
+        draw_box(window, decal, x, y, note_size, note_size, tint, flipped);
+    }
+
+    void EntityField::draw_note(olc::PixelGameEngine* window, olc::Decal* decal, double x, double y, olc::Pixel tint) const {
         if (decal == nullptr) {
             return;
         }
 
-        double top = upscroll ? flip_y(y + note_size) : y;
-        window->DrawWarpedDecal(decal, {{(float)x, (float)top}, {(float)x, (float)(top + note_size)}, {(float)(x + note_size), (float)(top + note_size)}, {(float)(x + note_size), (float)top}}, tint);
+        if (skin->manifest(chart->info.key_count).note_shape != NoteShape::IMAGE || decal->sprite == nullptr || decal->sprite->width <= 0) {
+            draw_square(window, decal, x, y, tint, flip_notes);
+            return;
+        }
+
+        double height = note_size * note_height_scale * decal->sprite->height / decal->sprite->width;
+        draw_box(window, decal, x, y + (note_size - height) / 2, note_size, height, tint, flip_notes);
+    }
+
+    void EntityField::draw_box(olc::PixelGameEngine* window, olc::Decal* decal, double x, double top, double width, double height, olc::Pixel tint, bool flipped) const {
+        if (decal == nullptr) {
+            return;
+        }
+
+        float screen_top = (float)(upscroll ? flip_y(top + height) : top);
+        float left = (float)x;
+        float right = (float)(x + width);
+        float bottom = screen_top + (float)height;
+
+        if (flipped) {
+            std::swap(screen_top, bottom);
+        }
+
+        draw_quad(window, decal, {{{left, screen_top}, {left, bottom}, {right, bottom}, {right, screen_top}}}, tint);
+    }
+
+    void EntityField::draw_quad(olc::PixelGameEngine* window, olc::Decal* decal, const std::array<olc::vf2d, 4>& corners, olc::Pixel tint) const {
+        if (decal == nullptr || decal->sprite == nullptr) {
+            return;
+        }
+
+        float width = (float)decal->sprite->width;
+        float height = (float)decal->sprite->height;
+        float inset_x = width > 2.0f ? 0.5f : 0.0f;
+        float inset_y = height > 2.0f ? 0.5f : 0.0f;
+        window->DrawPartialWarpedDecal(decal, corners, {inset_x, inset_y}, {width - inset_x * 2.0f, height - inset_y * 2.0f}, tint);
     }
 
     void EntityField::draw_hold_body(olc::PixelGameEngine* window, olc::Decal* body, double x, double tail, double head, olc::Pixel tint) const {
@@ -312,9 +446,10 @@ namespace nascent {
 
         if (draw_judge) {
             float glow_radius = std::max(1.0f, Ui::pxf(layout("playfield.receptor_glow_radius")));
+            double receptor_height = size.y * layout("playfield.receptor_height");
 
             for (uint8_t column = 0; column < key_count; column++) {
-                int32_t jl_x = pos.x + (column * (note_size + note_x_spacing));
+                double jl_x = pos.x + (column * (note_size + note_x_spacing));
 
                 uint8_t lane = display_column(column);
                 bool held = get_key(lane);
@@ -326,15 +461,33 @@ namespace nascent {
                 double pressed = manifest.receptor_pressed_alpha;
                 color.a = (uint8_t)std::lround(std::clamp((idle + (pressed - idle) * light) * std::clamp(receptor_opacity, 0.0f, 1.0f), 0.0, 255.0));
 
+                bool column_style = manifest.receptor_style == ReceptorStyle::COLUMN && receptor != nullptr && receptor->sprite != nullptr && receptor->sprite->width > 0;
+                double column_height = note_size;
+
+                if (column_style) {
+                    column_height = receptor_height > 0 ? receptor_height : note_size * receptor->sprite->height / receptor->sprite->width;
+                }
+
+                double column_top = pos.y + size.y - column_height;
+
+                auto draw_receptor = [&](double x, double y, olc::Pixel tint) {
+                    if (column_style) {
+                        draw_box(window, receptor, x, column_top + (y - jl_y), note_size, column_height, tint, flip_receptors);
+                    }
+                    else {
+                        draw_square(window, receptor, x, y, tint, flip_receptors);
+                    }
+                };
+
                 if (!lane_light.empty() && light > 0.0f) {
                     olc::Pixel glow = Skin::glow_color(color, light);
 
                     for (olc::vf2d offset : Skin::glow_offsets(glow_radius)) {
-                        draw_square(window, receptor, jl_x + offset.x, jl_y + offset.y, with_opacity(glow));
+                        draw_receptor(jl_x + offset.x, jl_y + offset.y, with_opacity(glow));
                     }
                 }
 
-                draw_square(window, receptor, jl_x, jl_y, with_opacity(color));
+                draw_receptor(jl_x, jl_y, with_opacity(color));
             }
         }
     }
@@ -478,7 +631,7 @@ namespace nascent {
             std::swap(upper, lower);
         }
 
-        window->DrawWarpedDecal(decal, {{left, upper}, {left, lower}, {right, lower}, {right, upper}}, tint);
+        draw_quad(window, decal, {{{left, upper}, {left, lower}, {right, lower}, {right, upper}}}, tint);
     }
 
     void EntityField::draw_stage(olc::PixelGameEngine* window, int32_t) {
@@ -523,7 +676,7 @@ namespace nascent {
             }
 
             double x = pos.x + column * (note_size + note_x_spacing);
-            double bottom = jl_y + note_size;
+            double bottom = jl_y + note_size - size.y * layout("playfield.lane_light_offset");
             olc::Pixel tint = olc::WHITE;
             tint.a = (uint8_t)std::lround(255 * level);
             double drawn_top = upscroll ? flip_y(bottom) : bottom - height;
@@ -538,9 +691,212 @@ namespace nascent {
             return;
         }
 
-        double height = size.x * line->size().y / line->size().x;
-        double center = flip_y(jl_y + note_size / 2);
+        double image_height = size.y * layout("playfield.judgement_line_image_height");
+        double height = image_height > 0 ? image_height : size.x * line->size().y / line->size().x;
+        double center = flip_y(hit_line_y(jl_y));
         draw_stretched(window, line, pos.x, center - height / 2, size.x, height, with_opacity(olc::WHITE));
+    }
+
+    double EntityField::hit_line_y(int32_t jl_y) const {
+        return jl_y + note_size / 2 - size.y * layout("playfield.hit_line_offset");
+    }
+
+    void EntityField::draw_barlines(olc::PixelGameEngine* window, int32_t jl_y, double rate_px_per_ms) {
+        double height = size.y * layout("playfield.barline_height");
+
+        if (!(height > 0) || !(rate_px_per_ms > 0) || chart->timing_points.empty()) {
+            return;
+        }
+
+        double line_y = hit_line_y(jl_y);
+        double latest = position + (line_y - pos.y) / rate_px_per_ms;
+        double earliest = position - (pos.y + size.y - line_y + height) / rate_px_per_ms;
+        olc::Pixel color = with_opacity(skin->color(SkinColor::BARLINE));
+        const std::vector<ChartTimingPoint>& points = chart->timing_points;
+
+        for (size_t index = 0; index < points.size(); index++) {
+            const ChartTimingPoint& point = points[index];
+            double measure = (double)point.beat_length * std::max<uint8_t>(1, point.meter);
+            double end = index + 1 < points.size() ? (double)points[index + 1].time : latest + measure;
+
+            if (!(measure > 0) || end <= earliest || point.time > latest) {
+                continue;
+            }
+
+            for (double bar = std::max(0.0, std::ceil((earliest - point.time) / measure));; bar++) {
+                double time = point.time + bar * measure;
+
+                if (time >= end || time > latest) {
+                    break;
+                }
+
+                double bottom = line_y - (time - position) * rate_px_per_ms;
+                double top = upscroll ? flip_y(bottom) : bottom - height;
+                window->FillRectDecal({(float)pos.x, (float)top}, {(float)size.x, (float)height}, color);
+            }
+        }
+    }
+
+    void EntityField::draw_light(olc::PixelGameEngine* window, const MipDecal* image, double center_x, double center_y, double height, float alpha) const {
+        if (image == nullptr || image->size().x <= 0 || image->size().y <= 0 || alpha <= 0) {
+            return;
+        }
+
+        double drawn_height = height > 0 ? height : note_size * image->size().y / image->size().x;
+        double width = drawn_height * image->size().x / image->size().y;
+        olc::Decal* decal = image->pick((float)(width / image->size().x)).decal;
+        olc::Pixel tint = olc::WHITE;
+        tint.a = (uint8_t)std::lround(255.0f * std::clamp(alpha, 0.0f, 1.0f));
+        float left = (float)(center_x - width / 2);
+        float right = (float)(center_x + width / 2);
+        float top = (float)(center_y - drawn_height / 2);
+        float bottom = (float)(center_y + drawn_height / 2);
+        draw_quad(window, decal, {{{left, top}, {left, bottom}, {right, bottom}, {right, top}}}, with_opacity(tint));
+    }
+
+    void EntityField::draw_lighting(olc::PixelGameEngine* window, int32_t jl_y) {
+        const uint8_t key_count = chart->info.key_count;
+        std::vector<double> hit_since(key_count, -1.0);
+        std::vector<double> release_since(key_count, -1.0);
+
+        if (attempt != nullptr && attempt->judged_hits.size() == chart->hits.size()) {
+            auto start = std::lower_bound(latest_ends.begin(), latest_ends.end(), position - LIGHT_FADE_IN_MS - LIGHT_FADE_OUT_MS - LIGHT_SEARCH_MS, [](int32_t end, double time) {
+                return end < time;
+            });
+
+            for (size_t index = (size_t)(start - latest_ends.begin()); index < chart->hits.size() && chart->hits[index].time <= position + LIGHT_SEARCH_MS; index++) {
+                const Hit& hit = chart->hits[index];
+                const JudgedHit& judged = attempt->judged_hits[index];
+                uint8_t column = display_column(hit.key);
+
+                if (!judged.hit_played || column >= key_count) {
+                    continue;
+                }
+
+                auto lit_at = [&](double time) {
+                    double since = position - time;
+
+                    if (since >= 0 && since <= LIGHT_FADE_IN_MS + LIGHT_FADE_OUT_MS && (hit_since[column] < 0 || since < hit_since[column])) {
+                        hit_since[column] = since;
+                    }
+                };
+
+                if (judged.hit_score != HitScore::MISS) {
+                    lit_at(judged.attempt_hit.time);
+                }
+
+                if (hit.hit_type == HitType::HOLD && judged.released) {
+                    if (judged.release_played && judged.release_score != HitScore::MISS) {
+                        lit_at(judged.attempt_hit.end_time);
+                    }
+
+                    double since = position - judged.attempt_hit.end_time;
+
+                    if (since >= 0 && since <= LIGHT_FADE_OUT_MS && (release_since[column] < 0 || since < release_since[column])) {
+                        release_since[column] = since;
+                    }
+                }
+            }
+        }
+
+        double center_y = flip_y(hit_line_y(jl_y));
+        double hit_height = size.y * layout("playfield.hit_light_height");
+        double hold_height = size.y * layout("playfield.hold_light_height");
+        window->SetDecalMode(olc::DecalMode::ADDITIVE);
+
+        for (uint8_t column = 0; column < key_count; column++) {
+            double center_x = pos.x + column * (note_size + note_x_spacing) + note_size / 2;
+
+            if (hit_since[column] >= 0) {
+                double since = hit_since[column];
+                float alpha = (float)(since < LIGHT_FADE_IN_MS ? since / LIGHT_FADE_IN_MS : 1.0 - (since - LIGHT_FADE_IN_MS) / LIGHT_FADE_OUT_MS);
+                draw_light(window, skin->image(SkinImage::HIT_LIGHT, column, key_count, std::nullopt, since / 1000.0), center_x, center_y, hit_height, alpha);
+            }
+
+            float hold_alpha = 0.0f;
+
+            if (column < holding_since.size() && holding_since[column] >= 0) {
+                hold_alpha = (float)std::min(1.0, holding_since[column] / LIGHT_FADE_IN_MS);
+            }
+            else if (release_since[column] >= 0) {
+                hold_alpha = (float)(1.0 - release_since[column] / LIGHT_FADE_OUT_MS);
+            }
+
+            if (hold_alpha > 0) {
+                draw_light(window, skin->image(SkinImage::HOLD_LIGHT, column, key_count), center_x, center_y, hold_height, hold_alpha);
+            }
+        }
+
+        window->SetDecalMode(olc::DecalMode::NORMAL);
+    }
+
+    void EntityField::draw_stage_bottom(olc::PixelGameEngine* window) {
+        const MipDecal* image = skin->image(SkinImage::STAGE_BOTTOM, 0, chart->info.key_count);
+
+        if (image == nullptr || image->size().x <= 0 || image->size().y <= 0) {
+            return;
+        }
+
+        double height = size.y * layout("playfield.stage_bottom_height");
+        double width = height > 0 ? height * image->size().x / image->size().y : size.x;
+        height = height > 0 ? height : width * image->size().y / image->size().x;
+        float left = (float)(pos.x + size.x / 2 - width / 2);
+        float right = (float)(left + width);
+        float top = (float)(upscroll ? pos.y : pos.y + size.y - height);
+        float bottom = (float)(top + height);
+        olc::Decal* decal = image->pick((float)(width / image->size().x)).decal;
+        draw_quad(window, decal, {{{left, top}, {left, bottom}, {right, bottom}, {right, top}}}, with_opacity(olc::WHITE));
+    }
+
+    void EntityField::draw_intro(olc::PixelGameEngine* window, int32_t jl_y) {
+        if (!show_intro || chart->hits.empty() || position >= chart->hits.front().time) {
+            return;
+        }
+
+        const uint8_t key_count = chart->info.key_count;
+        double first = chart->hits.front().time;
+        const ChartTimingPoint* point = chart->timing_point_at(first);
+        double beat = point != nullptr && point->beat_length > 0 ? point->beat_length : 500.0;
+        double bar = beat * (point != nullptr ? std::max<uint8_t>(1, point->meter) : 4);
+        double line_y = hit_line_y(jl_y);
+        double until_first = first - position;
+
+        if (until_first <= bar * 3 && first >= bar * 3 && std::fmod(until_first / beat, 1.0) < 0.5) {
+            double arrow_height = size.y * layout("playfield.warning_arrow_height");
+
+            for (uint8_t column = 0; column < key_count; column++) {
+                olc::Decal* arrow = sized_image(SkinImage::WARNING_ARROW, column, key_count);
+
+                if (arrow == nullptr || arrow->sprite == nullptr || arrow->sprite->width <= 0) {
+                    continue;
+                }
+
+                double height = arrow_height > 0 ? arrow_height : note_size * arrow->sprite->height / arrow->sprite->width;
+                double width = arrow_height > 0 ? height * arrow->sprite->width / arrow->sprite->height : note_size;
+                double x = pos.x + column * (note_size + note_x_spacing) + (note_size - width) / 2;
+                draw_box(window, arrow, x, line_y - height, width, height, with_opacity(olc::WHITE), upscroll);
+            }
+        }
+
+        if (layout("playfield.key_labels") > 0 && key_labels.size() >= key_count) {
+            olc::Font& font = skin->display_font_small;
+            olc::Pixel color = skin->color(SkinColor::KEY_LABEL);
+            color.a = (uint8_t)std::lround(color.a * std::clamp(until_first / KEY_LABEL_FADE_MS, 0.0, 1.0));
+
+            for (uint8_t column = 0; column < key_count; column++) {
+                const std::string& label = key_labels[column];
+                olc::FontRect bounds = text_bounds(font, label);
+
+                if (bounds.size.x <= 0 || bounds.size.y <= 0) {
+                    continue;
+                }
+
+                double center_x = pos.x + column * (note_size + note_x_spacing) + note_size / 2;
+                double center_y = flip_y(line_y + note_size / 2);
+                olc::vf2d corner = {(float)(center_x - bounds.size.x / 2.0), (float)(center_y - bounds.size.y / 2.0)};
+                draw_text(font, label, corner - olc::vf2d{(float)bounds.offset.x, (float)bounds.offset.y}, with_opacity(color), 1.0f);
+            }
+        }
     }
 
     olc::Pixel EntityField::hold_tint(olc::Pixel color, bool dropped) const {

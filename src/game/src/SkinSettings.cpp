@@ -12,6 +12,18 @@ namespace nascent {
         return chosen ? (double)*chosen : skin.layout(setting.key);
     }
 
+    std::optional<double> lane_gap_setting() {
+        const std::optional<uint8_t>& chosen = SettingsManager::settings.field_lane_gap;
+        return chosen ? std::optional<double>(Ui::pxf(*chosen)) : std::nullopt;
+    }
+
+    double skin_lane_gap(const Skin& skin, uint8_t key_count) {
+        double keys = std::max<double>(key_count, 1);
+        double spacing = skin.manifest(key_count).key_spacing;
+        double lane = Ui::REFERENCE_HEIGHT * skin_setting(skin, skin_settings::LANE_WIDTH) / 100.0;
+        return keys * lane / (keys + keys * spacing - spacing) * spacing;
+    }
+
     bool skin_toggle(const Skin& skin, const SkinToggle& toggle) {
         const std::optional<bool>& chosen = toggle.value(SettingsManager::settings);
         return chosen ? *chosen : skin.layout(toggle.key) != 0;

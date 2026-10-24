@@ -37,7 +37,6 @@ namespace nascent {
         UiForm form;
 
         ChoiceField* skin_field = nullptr;
-        ChoiceField* note_gradient_field = nullptr;
         ChoiceField* frame_rate_field = nullptr;
         ChoiceField* rich_presence_field = nullptr;
         ChoiceField* transition_field = nullptr;
@@ -70,11 +69,6 @@ namespace nascent {
         ChoiceField* output_device_field = nullptr;
         std::vector<std::string> output_devices;
         SliderField* background_brightness_field = nullptr;
-        SliderField* note_opacity_field = nullptr;
-        SliderField* receptor_opacity_field = nullptr;
-        ChoiceField* lane_gap_field = nullptr;
-        std::vector<int16_t> lane_gaps;
-        ChoiceField* scroll_direction_field = nullptr;
         std::vector<SkinFollowing*> skin_fields;
         std::vector<SkinFollowing*> visibility_fields;
         std::vector<SkinFollowing*> position_fields;

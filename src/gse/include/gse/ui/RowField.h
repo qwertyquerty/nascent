@@ -60,6 +60,7 @@ namespace nascent {
         bool fine = false;
 
         int32_t active_step() const;
+        float bar_width() const;
         bool set_from_point(float x);
 
         std::string display_value(bool focused) const override;

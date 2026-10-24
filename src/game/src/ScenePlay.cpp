@@ -177,6 +177,7 @@ namespace nascent {
     };
 
     void ScenePlay::start_attempt() {
+        SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d window_size = game->window->GetScreenSize();
         const Settings& settings = SettingsManager::settings;
         double lane_width = std::min(window_size.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)window_size.x / chart->info.key_count);
@@ -203,20 +204,28 @@ namespace nascent {
         field->draw_judge_colors = true;
         field->judge_alpha = 64;
         field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
-        field->upscroll = settings.field_upscroll;
+        field->upscroll = skin_toggle(*skin, skin_toggles::UPSCROLL);
         field->mirror = mirror;
-        field->note_gradient = settings.field_note_gradient;
+        field->note_gradient = skin_toggle(*skin, skin_toggles::NOTE_GRADIENT);
         field->draw_judge = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_LINE);
-        field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
+        field->set_lane_gap(lane_gap_setting());
         field->draw_hit_score = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT);
         field->draw_combo = skin_toggle(*skin, skin_toggles::SHOW_COMBO);
         field->lane_cover = settings.field_lane_cover / 100.0;
         field->judgement_height = skin_setting(*skin, skin_settings::JUDGEMENT_HEIGHT) / 100.0;
         field->combo_height = skin_setting(*skin, skin_settings::COMBO_HEIGHT) / 100.0;
-        field->note_opacity = settings.field_note_opacity / 100.0f;
-        field->receptor_opacity = settings.field_receptor_opacity / 100.0f;
+        field->note_opacity = (float)(skin_setting(*skin, skin_settings::NOTE_OPACITY) / 100.0);
+        field->receptor_opacity = (float)(skin_setting(*skin, skin_settings::RECEPTOR_OPACITY) / 100.0);
         last_judged = nullptr;
         last_judged_release = false;
+        last_combo = 0;
+        combo_burst_at.reset();
+        field->show_intro = true;
+        field->key_labels.clear();
+
+        for (olc::Key key : lane_keys) {
+            field->key_labels.push_back(InputManager::key_label(key));
+        }
 
         for (HitScore score : ALL_HIT_SCORES) {
             skin->judgement_voice(score);
@@ -286,14 +295,13 @@ namespace nascent {
     void ScenePlay::on_resize() {
         SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d window_size = game->window->GetScreenSize();
-        const Settings& settings = SettingsManager::settings;
         double lane_width = std::min(window_size.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)window_size.x / chart->info.key_count);
         double field_width = lane_width * chart->info.key_count;
 
         field->pos = {((double)window_size.x - field_width) / 2, 0};
         field->size = {field_width, (double)window_size.y};
         field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
-        field->set_lane_gap(settings.field_lane_gap >= 0 ? std::optional<double>(Ui::pxf(settings.field_lane_gap)) : std::nullopt);
+        field->set_lane_gap(lane_gap_setting());
     }
 
     void ScenePlay::record_frame(float elapsed_time) {
@@ -581,6 +589,7 @@ namespace nascent {
         session->reset_clock(target, now);
         feed_replay(target, false);
         session->update(now);
+        last_combo = session->get_attempt().get_combo();
         audio_finished = false;
 
         if (target >= 0) {
@@ -641,7 +650,64 @@ namespace nascent {
         session->set_keys(chart_lanes(InputManager::get_lane_keys_held(game->input(), lane_keys)), now);
     }
 
+    void ScenePlay::start_combo_burst() {
+        size_t count = skin->frame_count(SkinImage::COMBO_BURST, chart->info.key_count);
+
+        if (count == 0) {
+            return;
+        }
+
+        bool random = skin->layout("playfield.combo_burst_random") > 0;
+        combo_burst_index = random ? (size_t)std::rand() % count : combo_burst_next++ % count;
+        double side = skin->layout("playfield.combo_burst_side");
+        combo_burst_right = side >= 2 ? std::rand() % 2 == 0 : side >= 1;
+        combo_burst_at = now_ms();
+        game->audio().play_effect(skin->voice(SkinSound::COMBO_BURST));
+    }
+
+    void ScenePlay::draw_combo_burst(olc::PixelGameEngine* window) const {
+        if (!combo_burst_at) {
+            return;
+        }
+
+        double t = (now_ms() - *combo_burst_at) / 1000.0;
+        const MipDecal* image = skin->image_frame(SkinImage::COMBO_BURST, chart->info.key_count, combo_burst_index);
+
+        if (t < 0 || t > COMBO_BURST_SECONDS || image == nullptr || image->size().x <= 0 || image->size().y <= 0) {
+            return;
+        }
+
+        olc::vi2d screen = window->GetScreenSize();
+        double burst_height = skin->layout("playfield.combo_burst_height");
+        double height = burst_height > 0 ? screen.y * burst_height : image->size().y * Ui::scale();
+        double width = height * image->size().x / image->size().y;
+        double slide = 1.0 - smoothstep(1.0, 0.0, t / COMBO_BURST_SLIDE_SECONDS);
+        double fade = std::clamp((COMBO_BURST_SECONDS - t) / COMBO_BURST_FADE_SECONDS, 0.0, 1.0);
+        double inner = combo_burst_right ? screen.x - width * slide : width * slide;
+        float outer = (float)(combo_burst_right ? inner + width : inner - width);
+        float top = (float)(screen.y - height);
+        float bottom = (float)screen.y;
+        olc::Pixel tint = olc::WHITE;
+        tint.a = (uint8_t)std::lround(255.0 * fade);
+        olc::Decal* decal = image->pick((float)(width / image->size().x)).decal;
+        window->DrawWarpedDecal(decal, {{{outer, top}, {outer, bottom}, {(float)inner, bottom}, {(float)inner, top}}}, tint);
+    }
+
     void ScenePlay::play_judgement_sound() {
+        uint32_t combo = session->get_attempt().get_combo();
+        double combo_break_min = std::max(1.0, skin->layout("playfield.combo_break_min"));
+
+        if (combo == 0 && last_combo >= combo_break_min) {
+            game->audio().play_effect(skin->combo_break_voice());
+        }
+
+        double burst_every = skin->layout("playfield.combo_burst_combo");
+
+        if (burst_every >= 1 && combo > last_combo && combo / (uint32_t)burst_every > last_combo / (uint32_t)burst_every) {
+            start_combo_burst();
+        }
+
+        last_combo = combo;
         const JudgedHit* judged = session->get_attempt().get_last_scored();
 
         if (judged == nullptr || (judged == last_judged && judged->released == last_judged_release)) {
@@ -936,6 +1002,7 @@ namespace nascent {
         draw_background(window);
         draw_mascot(window);
         field->draw(window);
+        draw_combo_burst(window);
 
         double position = paused ? paused_position : session->song_position(now_ms());
         int32_t chart_start = chart->get_chart_start_ms();
@@ -1107,6 +1174,7 @@ namespace nascent {
         olc::Font& font = skin->display_font_small;
         int32_t value_x = x + Ui::layout_px("play.judgement_counter_value_x");
         int32_t spacing = Ui::layout_px("play.judgement_counter_spacing");
+        y -= text_bounds(font, "Hgjy").offset.y;
 
         for (HitScore score : ALL_HIT_SCORES) {
             if (score == HitScore::NONE) {

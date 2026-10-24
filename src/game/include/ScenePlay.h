@@ -81,9 +81,17 @@ namespace nascent {
         float background_fade = 0;
         const JudgedHit* last_judged = nullptr;
         bool last_judged_release = false;
+        uint32_t last_combo = 0;
+        std::optional<double> combo_burst_at;
+        size_t combo_burst_index = 0;
+        size_t combo_burst_next = 0;
+        bool combo_burst_right = true;
 
         static inline bool show_hit_log = false;
         static constexpr double DIAGNOSTICS_REFRESH_MS = 250.0;
+        static constexpr double COMBO_BURST_SECONDS = 1.5;
+        static constexpr double COMBO_BURST_SLIDE_SECONDS = 0.35;
+        static constexpr double COMBO_BURST_FADE_SECONDS = 0.4;
         mutable std::vector<std::string> diagnostics_cache;
         mutable std::optional<double> diagnostics_built_at;
         mutable float diagnostics_fit_width = 0;
@@ -127,6 +135,8 @@ namespace nascent {
         void load_background();
         void draw_background(olc::PixelGameEngine* window) const;
         void draw_mascot(olc::PixelGameEngine* window) const;
+        void start_combo_burst();
+        void draw_combo_burst(olc::PixelGameEngine* window) const;
 
         public:
         void on_resize() override;
