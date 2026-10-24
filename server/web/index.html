@@ -131,6 +131,11 @@
                 <h1 class="title is-3 mb-1"><a :href="$link.chart(view.play.chart.hash, view.play.rate)">{{ view.titles.main }}</a></h1>
                 <p class="subtitle is-6 mb-4"><span v-if="view.titles.sub" class="has-text-grey">{{ view.titles.sub }} &middot; </span>[{{ view.play.chart.difficulty_name }}] by {{ view.play.chart.mapper }}</p>
 
+                <div v-if="view.timeline" class="tabs is-small is-toggle mb-3" role="tablist" aria-label="Scoring"><ul>
+                    <li v-for="[game, label] in [['nascent', 'Nascent'], ['etterna', 'Etterna Wife3'], ['osu', 'osu! stable']]" :key="game" :class="{'is-active': view.resultGame === game}"><a role="tab" :aria-selected="view.resultGame === game" href="#" @click.prevent="view.resultGame = game">{{ label }}</a></li>
+                </ul></div>
+
+                <template v-if="view.resultGame === 'nascent' || !view.timeline">
                 <div class="play-summary box">
                     <span class="grade play-grade" :class="'grade-' + view.play.grade">{{ view.play.grade }}</span>
                     <div v-for="[label, value, extra, color] in [
@@ -156,8 +161,8 @@
                     <span v-if="view.play.status === 'rejected'" class="tag is-medium is-warning is-light">rejected</span>
                     <span v-if="view.play.is_chart_best" class="tag is-medium is-success is-light">Personal best</span>
                 </div>
-
-                <other-games v-if="view.timeline" :notes="view.timeline.notes" :hit-accuracy="view.play.chart.hit_accuracy"></other-games>
+                </template>
+                <other-games v-else :game="view.resultGame" :notes="view.timeline.notes" :hit-accuracy="view.play.chart.hit_accuracy"></other-games>
 
                 <div v-if="staff && view.play.flags && view.play.status === 'pending_review'" class="box review-item">
                     <p class="has-text-weight-semibold mb-2">Waiting for review</p>

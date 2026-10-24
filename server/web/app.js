@@ -521,7 +521,7 @@ const loaders = {
         const path = `/plays/${encodeURIComponent(id)}`;
         const [{play, leaderboard}, timeline] = await Promise.all([notFoundAs(api(path), "This play doesn't exist or isn't public."), api(`${path}/timeline`).catch(() => null)]);
         const title = `${play.user.username} · ${play.grade} ${format.accuracy(play.accuracy)} on ${chartName(play.chart)}`;
-        return {title, play, leaderboard, timeline, titles: chartTitles(play.chart), startAt: timestamp(params.t)};
+        return {title, play, leaderboard, timeline, titles: chartTitles(play.chart), startAt: timestamp(params.t), resultGame: "nascent"};
     },
 
     async user({id, params}, keyCounts) {
@@ -1430,40 +1430,37 @@ function osuScore(notes, od) {
 }
 
 app.component("other-games", {
-    props: {notes: Array, hitAccuracy: {type: Number, default: 0}},
+    props: {game: String, notes: Array, hitAccuracy: {type: Number, default: 0}},
     data() {
-        return {game: "etterna", judge: 1, od: Math.min(10, Math.max(0, this.hitAccuracy + OSU_OD_OFFSET)), judges: ETTERNA_JUDGES};
+        return {judge: 1, od: Math.min(10, Math.max(0, this.hitAccuracy + OSU_OD_OFFSET)), judges: ETTERNA_JUDGES};
     },
     computed: {
         result() {
             return this.game === "etterna" ? etternaScore(this.notes, this.judge) : osuScore(this.notes, this.od);
         },
     },
-    template: `<div class="box other-games">
-        <div class="other-games-header">
-            <div class="buttons has-addons mb-0" role="group" aria-label="Game">
-                <button v-for="[game, label] in [['etterna', 'Etterna Wife3'], ['osu', 'osu! stable']]" :key="game" type="button" class="button is-small mb-0"
-                    :class="{'is-link is-selected': game === $data.game}" :aria-pressed="game === $data.game" @click="$data.game = game">{{ label }}</button>
-            </div>
-            <div class="select is-small">
-                <select v-if="game === 'etterna'" v-model.number="judge" aria-label="Etterna judge">
-                    <option v-for="[label, timescale] in judges" :key="label" :value="timescale">{{ label }}</option>
-                </select>
-                <select v-else v-model.number="od" aria-label="osu! overall difficulty">
-                    <option v-for="value in 11" :key="value" :value="value - 1">OD {{ value - 1 }}</option>
-                </select>
-            </div>
-        </div>
-        <div class="other-games-summary">
-            <div class="play-stat"><p class="stat-label">Grade</p><p class="stat-value">{{ result.grade }}</p></div>
+    template: `<div>
+        <div class="play-summary box">
+            <span class="grade play-grade">{{ result.grade }}</span>
             <div class="play-stat"><p class="stat-label">Accuracy</p><p class="stat-value">{{ $f.accuracy(result.accuracy) }}</p></div>
+            <div class="play-stat">
+                <p class="stat-label">{{ game === 'etterna' ? 'Judge' : 'Overall difficulty' }}</p>
+                <div class="select is-small">
+                    <select v-if="game === 'etterna'" v-model.number="judge" aria-label="Etterna judge">
+                        <option v-for="[label, timescale] in judges" :key="label" :value="timescale">{{ label }}</option>
+                    </select>
+                    <select v-else v-model.number="od" aria-label="osu! overall difficulty">
+                        <option v-for="value in 11" :key="value" :value="value - 1">OD {{ value - 1 }}</option>
+                    </select>
+                </div>
+            </div>
         </div>
         <div class="tags mb-2" :aria-label="'Judgements in ' + (game === 'etterna' ? 'Etterna' : 'osu!')">
             <span v-for="[name, count, color] in result.counts" :key="name" class="tag is-medium judgement-count">
                 <span class="judgement-name" :class="'judgement-' + color">{{ name }}</span>{{ $f.number(count) }}
             </span>
         </div>
-        <p class="help">Worked out from this play's hit and release timings. Etterna and osu! judge a few things differently, like holds and rate changes, so the real score could be slightly different.</p>
+        <p class="help mb-4">Worked out from this play's hit and release timings. Etterna and osu! judge a few things differently, like holds and rate changes, so the real score could be slightly different.</p>
     </div>`,
 });
 
