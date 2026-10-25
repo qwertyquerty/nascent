@@ -524,7 +524,9 @@ namespace nascent {
 
     std::vector<Hit> ChartDocument::stretched(const std::vector<Hit>& hits, double factor, double anchor) const {
         double anchor_beat = beat_at(anchor);
-        auto scale = [&](int32_t time) { return (int32_t)std::lround(time_at_beat(anchor_beat + (beat_at(time) - anchor_beat) * factor)); };
+        auto scale = [&](int32_t time) {
+            return (int32_t)std::lround(time_at_beat(anchor_beat + (beat_at(time) - anchor_beat) * factor));
+        };
         std::vector<Hit> result = hits;
 
         for (Hit& hit : result) {

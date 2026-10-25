@@ -292,7 +292,8 @@ namespace nascent {
             size_t playable = (size_t)std::count_if(choices.begin(), choices.end(), [](const ChartDocument::ChartChoice& choice) { return choice.error.empty(); });
 
             if (playable == 0) {
-                std::string reason = !error.empty() ? error : choices.empty() ? "no charts in this file" : choices.front().error;
+                std::string reason = !error.empty() ? error : choices.empty() ? "no charts in this file"
+                                                                              : choices.front().error;
                 set_status(std::format("Couldn't open {}: {}", path_utf8(path.filename()), reason), true);
                 return;
             }
@@ -559,7 +560,9 @@ namespace nascent {
     }
 
     void EditorGame::configure_field() {
-        field->underlay = [this](olc::PixelGameEngine* target) { draw_underlay(target); };
+        field->underlay = [this](olc::PixelGameEngine* target) {
+            draw_underlay(target);
+        };
         field->draw_hit_score = false;
         field->draw_combo = false;
         field->draw_notes_past_judge = true;
@@ -1178,7 +1181,7 @@ namespace nascent {
         const ChartData& data = document->data();
         const ChartInfo& info = data.info;
 
-        auto text_field = [&](const char* label, std::string ChartInfo::*member) {
+        auto text_field = [&](const char* label, std::string ChartInfo::* member) {
             std::string value = info.*member;
             ImGui::InputText(label, &value);
 
@@ -1368,7 +1371,9 @@ namespace nascent {
                 ImGui::InputFloat("##bpm", &bpm, 0.0f, 0.0f, "%.3f");
 
                 if (ImGui::IsItemDeactivatedAfterEdit() && bpm > 1.0f && bpm < 10000.0f) {
-                    edit = [index, bpm](ChartData& edited) { edited.timing_points[index].beat_length = 60000.0f / bpm; };
+                    edit = [index, bpm](ChartData& edited) {
+                        edited.timing_points[index].beat_length = 60000.0f / bpm;
+                    };
                 }
 
                 ImGui::TableNextColumn();
@@ -1377,7 +1382,9 @@ namespace nascent {
                 ImGui::InputInt("##meter", &meter, 0, 0);
 
                 if (ImGui::IsItemDeactivatedAfterEdit() && meter >= 1 && meter <= 32) {
-                    edit = [index, meter](ChartData& edited) { edited.timing_points[index].meter = (uint8_t)meter; };
+                    edit = [index, meter](ChartData& edited) {
+                        edited.timing_points[index].meter = (uint8_t)meter;
+                    };
                 }
 
                 ImGui::TableNextColumn();
@@ -1403,7 +1410,9 @@ namespace nascent {
                 ImGui::TableNextColumn();
 
                 if (ImGui::SmallButton("X")) {
-                    edit = [index](ChartData& edited) { edited.timing_points.erase(edited.timing_points.begin() + (ptrdiff_t)index); };
+                    edit = [index](ChartData& edited) {
+                        edited.timing_points.erase(edited.timing_points.begin() + (ptrdiff_t)index);
+                    };
                 }
 
                 ImGui::PopID();
@@ -2158,7 +2167,8 @@ namespace nascent {
         if (gesture.kind != Gesture::Kind::NONE && keys.mouse(0).bHeld && !playback.is_playing()) {
             float above = view.y + AUTO_SCROLL_EDGE_PX - point.y;
             float below = point.y - (view.y + view.h - AUTO_SCROLL_EDGE_PX);
-            double depth = above > 0 ? above / AUTO_SCROLL_EDGE_PX : below > 0 ? -below / AUTO_SCROLL_EDGE_PX : 0.0;
+            double depth = above > 0 ? above / AUTO_SCROLL_EDGE_PX : below > 0 ? -below / AUTO_SCROLL_EDGE_PX
+                                                                               : 0.0;
 
             if (depth != 0.0) {
                 double pixels = std::clamp(depth, -AUTO_SCROLL_MAX_DEPTH, AUTO_SCROLL_MAX_DEPTH) * AUTO_SCROLL_PX_PER_SECOND * io.DeltaTime;
@@ -2739,8 +2749,12 @@ namespace nascent {
             bool active = ImGui::IsItemActive();
             ImDrawList* draw = ImGui::GetWindowDrawList();
             float bottom = corner.y + height;
-            auto y_of = [&](double time) { return bottom - (float)(std::clamp(time / length, 0.0, 1.0) * height); };
-            auto time_of = [&](float y) { return std::clamp((double)(bottom - y) / height, 0.0, 1.0) * length; };
+            auto y_of = [&](double time) {
+                return bottom - (float)(std::clamp(time / length, 0.0, 1.0) * height);
+            };
+            auto time_of = [&](float y) {
+                return std::clamp((double)(bottom - y) / height, 0.0, 1.0) * length;
+            };
 
             draw->AddRectFilled(corner, ImVec2(corner.x + DENSITY_BAR_WIDTH, bottom), IM_COL32(12, 12, 18, 200), 4.0f);
 

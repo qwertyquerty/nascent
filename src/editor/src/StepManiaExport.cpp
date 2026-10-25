@@ -526,7 +526,8 @@ namespace nascent {
     bool export_stepmania(const ChartData& data, const std::filesystem::path& path, int32_t meter, std::string& error) {
         std::string extension = path_utf8(path.extension());
         std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-        std::optional<std::string> text = extension == ".ssc" ? chart_to_ssc(data, meter, error) : extension == ".dwi" ? chart_to_dwi(data, meter, error) : chart_to_sm(data, meter, error);
+        std::optional<std::string> text = extension == ".ssc" ? chart_to_ssc(data, meter, error) : extension == ".dwi" ? chart_to_dwi(data, meter, error)
+                                                                                                                       : chart_to_sm(data, meter, error);
 
         if (!text) {
             return false;

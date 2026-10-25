@@ -32,8 +32,8 @@ namespace {
 
     bool same_notes(const std::vector<Hit>& a, const std::vector<Hit>& b) {
         return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const Hit& x, const Hit& y) {
-            return x.key == y.key && x.hit_type == y.hit_type && std::abs(x.time - y.time) <= 1 && (x.hit_type != HitType::HOLD || std::abs(x.end_time - y.end_time) <= 1);
-        });
+                   return x.key == y.key && x.hit_type == y.hit_type && std::abs(x.time - y.time) <= 1 && (x.hit_type != HitType::HOLD || std::abs(x.end_time - y.end_time) <= 1);
+               });
     }
 
     std::vector<Hit> imported(std::string_view text) {
@@ -195,7 +195,8 @@ NASCENT_TEST(editor_opens_stepmania_files) {
     std::string single = chart_to_ssc(four, 10, error).value_or("");
     std::string doubles = chart_to_ssc(eight, 14, error).value_or("");
     std::filesystem::path file = folder / "pack.ssc";
-    std::ofstream(file, std::ios::binary) << single << "\n" << doubles.substr(doubles.find("//---------------"));
+    std::ofstream(file, std::ios::binary) << single << "\n"
+                                          << doubles.substr(doubles.find("//---------------"));
 
     CHECK(ChartDocument::is_stepmania(file) && ChartDocument::is_stepmania(folder / "song.DWI") && !ChartDocument::is_stepmania(folder / "song.osu"));
     std::vector<ChartDocument::ChartChoice> choices = ChartDocument::stepmania_charts(file, error);
