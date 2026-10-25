@@ -17,6 +17,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(NASCENT_VERSION "0.0.0-dev" CACHE STRING "Version string used for packaging")
 set(NASCENT_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin" CACHE PATH "Directory the game executable is written to, inside a per configuration subdirectory")
 option(NASCENT_BUILD_TESTS "Build the Nascent unit tests" ON)
+option(NASCENT_BUILD_EDITOR "Build the chart editor" OFF)
 option(NASCENT_STATIC_RUNTIME "Link the C/C++ runtime statically where the toolchain allows it" ON)
 
 get_property(NASCENT_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -62,6 +63,10 @@ add_subdirectory(src/main)
 if(NASCENT_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(NASCENT_BUILD_EDITOR)
+    add_subdirectory(src/editor)
 endif()
 
 include(cmake/Packaging.cmake)

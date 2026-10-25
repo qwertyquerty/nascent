@@ -71,7 +71,8 @@ namespace nascent {
 
         static const olc::Key menu_start_key = olc::Key::ENTER;
 
-        static const olc::Key exit_key = olc::Key::PAUSE;
+        static const olc::Key exit_shortcut_key = olc::Key::Q;
+        static const olc::Key exit_modifier = olc::Key::CTRL;
 
         static const olc::Key back_key = olc::Key::ESCAPE;
 
@@ -79,6 +80,7 @@ namespace nascent {
 
         static bool switch_pressed(const Input& input);
         static bool reset_pressed(const Input& input);
+        static bool exit_pressed(const Input& input);
         static bool update_pressed(const Input& input);
         static std::optional<olc::Key> key_from_name(std::string_view name);
         static std::string_view key_name(olc::Key key);

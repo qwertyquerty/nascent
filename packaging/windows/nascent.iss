@@ -19,6 +19,11 @@
 #ifndef IconFile
   #error IconFile must be defined
 #endif
+#ifdef IncludeEditor
+  #define GameComponent "; Components: game"
+#else
+  #define GameComponent ""
+#endif
 
 [Setup]
 AppId={{C0B50DD6-2EE5-4B10-B974-2E14DF225101}
@@ -40,7 +45,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputBaseFilename}
 SetupIconFile={#IconFile}
-UninstallDisplayIcon={app}\Nascent.exe
+UninstallDisplayIcon={uninstallexe}
 UninstallDisplayName=Nascent
 Compression=lzma2
 SolidCompression=yes
@@ -52,30 +57,62 @@ WizardSmallImageFile=wizard\small_58.png,wizard\small_87.png,wizard\small_116.pn
 CloseApplications=yes
 RestartApplications=no
 
+#ifdef IncludeEditor
+[Types]
+Name: "custom"; Description: "Custom"; Flags: iscustom
+
+[Components]
+Name: "game"; Description: "Nascent"; Types: custom
+Name: "editor"; Description: "Nascent Editor (chart editor)"; Types: custom
+
+#endif
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked{#GameComponent}
+#ifdef IncludeEditor
+Name: "editordesktopicon"; Description: "Create a desktop shortcut for the chart editor"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; Components: editor
+#endif
 
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\licenses"
 Type: filesandordirs; Name: "{app}\.nascent-update"
+#ifdef IncludeEditor
+Type: files; Name: "{app}\Nascent.exe"; Components: not game
+Type: files; Name: "{userprograms}\Nascent.lnk"; Components: not game
+Type: files; Name: "{userdesktop}\Nascent.lnk"; Components: not game
+Type: files; Name: "{app}\NascentEditor.exe"; Components: not editor
+Type: files; Name: "{userprograms}\Nascent Editor.lnk"; Components: not editor
+Type: files; Name: "{userdesktop}\Nascent Editor.lnk"; Components: not editor
+#endif
 
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "\Nascent.exe,\NascentEditor.exe"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\Nascent.exe"; DestDir: "{app}"; Flags: ignoreversion{#GameComponent}
+#ifdef IncludeEditor
+Source: "{#SourceDir}\NascentEditor.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: editor
+#endif
 Source: "..\..\assets\skins\default\display_font.ttf"; Flags: dontcopy
 
 [Icons]
-Name: "{userprograms}\Nascent"; Filename: "{app}\Nascent.exe"
-Name: "{userdesktop}\Nascent"; Filename: "{app}\Nascent.exe"; Tasks: desktopicon
+Name: "{userprograms}\Nascent"; Filename: "{app}\Nascent.exe"{#GameComponent}
+Name: "{userdesktop}\Nascent"; Filename: "{app}\Nascent.exe"; Tasks: desktopicon{#GameComponent}
+#ifdef IncludeEditor
+Name: "{userprograms}\Nascent Editor"; Filename: "{app}\NascentEditor.exe"; Components: editor
+Name: "{userdesktop}\Nascent Editor"; Filename: "{app}\NascentEditor.exe"; Tasks: editordesktopicon; Components: editor
+#endif
 
 [Run]
-Filename: "{app}\Nascent.exe"; Description: "{cm:LaunchProgram,Nascent}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Nascent.exe"; Description: "{cm:LaunchProgram,Nascent}"; Flags: nowait postinstall skipifsilent{#GameComponent}
+#ifdef IncludeEditor
+Filename: "{app}\NascentEditor.exe"; Description: "{cm:LaunchProgram,Nascent Editor}"; Flags: nowait postinstall skipifsilent unchecked; Components: editor
+#endif
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\assets"
 Type: filesandordirs; Name: "{app}\licenses"
 Type: filesandordirs; Name: "{app}\.nascent-update"
 Type: files; Name: "{app}\Nascent.exe"
+Type: files; Name: "{app}\NascentEditor.exe"
 Type: files; Name: "{app}\README.md"
 Type: dirifempty; Name: "{app}"
 
@@ -111,6 +148,18 @@ begin
   end
   else
     DisplayFontPath := '';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+#ifdef IncludeEditor
+  if (CurPageID = wpSelectComponents) and not WizardIsComponentSelected('game') and not WizardIsComponentSelected('editor') then
+  begin
+    MsgBox('Choose at least one thing to install.', mbError, MB_OK);
+    Result := False;
+  end;
+#endif
 end;
 
 procedure DeinitializeSetup;

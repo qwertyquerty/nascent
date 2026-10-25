@@ -41,8 +41,8 @@ namespace nascent {
     };
 
     std::optional<ReleaseVersion> parse_release_version(std::string_view text);
-    std::string update_package_name(std::string_view tag, std::string_view os, std::string_view arch, UpdatePackage package);
-    std::optional<UpdateRelease> newest_update(const nlohmann::json& releases, const ReleaseVersion& current, std::string_view os, std::string_view arch, UpdatePackage package);
+    std::string update_package_name(std::string_view tag, std::string_view os, std::string_view arch, UpdatePackage package, std::string_view product = "nascent");
+    std::optional<UpdateRelease> newest_update(const nlohmann::json& releases, const ReleaseVersion& current, std::string_view os, std::string_view arch, UpdatePackage package, std::string_view product = "nascent");
     std::optional<std::string> checksum_for(std::string_view checksums, std::string_view file_name);
 
     inline constexpr const char* CHECKSUMS_FILE_NAME = "SHA256SUMS";

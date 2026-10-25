@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -74,6 +75,8 @@ namespace nascent {
         bool note_gradient = true;
         std::vector<float> lane_light;
         std::vector<std::string> key_labels;
+        std::function<void(olc::PixelGameEngine*)> underlay;
+        std::optional<bool> snap_colors;
         bool show_intro = false;
         bool draw_hit_score = true;
         bool draw_combo = false;

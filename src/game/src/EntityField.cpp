@@ -82,6 +82,11 @@ namespace nascent {
         update_snaps();
         update_presses();
         draw_stage(window, jl_y);
+
+        if (underlay) {
+            underlay(window);
+        }
+
         draw_lane_lights(window, jl_y);
         draw_judgement_line(window, jl_y);
         draw_barlines(window, jl_y, scroll_rate_px_per_ms);
@@ -96,7 +101,7 @@ namespace nascent {
         float hold_edge_inset = (float)layout("playfield.hold_edge_inset");
         double hold_repeat_spacing = note_size * layout("playfield.hold_repeat_spacing");
         bool gradient_notes = manifest.tint != SkinTint::NONE && note_gradient;
-        bool snap_colors = skin_toggle(*skin, skin_toggles::SNAP_COLORS);
+        bool snap_colors = this->snap_colors.value_or(skin_toggle(*skin, skin_toggles::SNAP_COLORS));
         double smear_visible_from = flip_y(upscroll ? screen_height : 0) - note_size;
 
         for (size_t i = first_drawn_hit(scroll_rate_px_per_ms); i < chart->hits.size(); i++) {

@@ -87,14 +87,43 @@ foreach(nascent_entry IN LISTS nascent_license_files)
 endforeach()
 
 set(nascent_platform_commands)
+set(nascent_installer_defines)
+
+if(TARGET NascentEditor AND NOT APPLE)
+    list(APPEND nascent_platform_commands COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:NascentEditor>" "${nascent_binary_dir}")
+    list(APPEND nascent_installer_defines "/DIncludeEditor")
+endif()
 
 if(APPLE)
+    set(NASCENT_BUNDLE_DISPLAY_NAME "Nascent")
+    set(NASCENT_BUNDLE_EXECUTABLE "Nascent")
+    set(NASCENT_BUNDLE_IDENTIFIER "io.github.qwertyquerty.nascent")
+    set(NASCENT_BUNDLE_CATEGORY "public.app-category.music-games")
     configure_file("${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in" "${CMAKE_BINARY_DIR}/packaging/Info.plist" @ONLY)
     list(APPEND nascent_platform_commands
         COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/packaging/Info.plist" "${nascent_contents}/Info.plist"
         COMMAND ${CMAKE_COMMAND} "-DNASCENT_ICON_SOURCE=${PROJECT_SOURCE_DIR}/assets/logo/logo_n.png" "-DNASCENT_ICON_OUTPUT_DIR=${nascent_assets_dir}" -P "${PROJECT_SOURCE_DIR}/packaging/macos/MakeIcon.cmake"
         COMMAND codesign --force --deep --sign - "${nascent_root}/Nascent.app"
     )
+
+    if(TARGET NascentEditor)
+        set(nascent_editor_contents "${nascent_root}/Nascent Editor.app/Contents")
+        set(NASCENT_BUNDLE_DISPLAY_NAME "Nascent Editor")
+        set(NASCENT_BUNDLE_EXECUTABLE "NascentEditor")
+        set(NASCENT_BUNDLE_IDENTIFIER "io.github.qwertyquerty.nascent.editor")
+        set(NASCENT_BUNDLE_CATEGORY "public.app-category.music")
+        configure_file("${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in" "${CMAKE_BINARY_DIR}/packaging/EditorInfo.plist" @ONLY)
+        list(APPEND nascent_platform_commands
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${nascent_editor_contents}/MacOS" "${nascent_editor_contents}/Resources/assets"
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:NascentEditor>" "${nascent_editor_contents}/MacOS"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/packaging/EditorInfo.plist" "${nascent_editor_contents}/Info.plist"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/skins" "${nascent_editor_contents}/Resources/assets/skins"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/fonts" "${nascent_editor_contents}/Resources/assets/fonts"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/assets/logo" "${nascent_editor_contents}/Resources/assets/logo"
+            COMMAND ${CMAKE_COMMAND} "-DNASCENT_ICON_SOURCE=${PROJECT_SOURCE_DIR}/src/editor/nascent_editor.png" "-DNASCENT_ICON_OUTPUT_DIR=${nascent_editor_contents}/Resources" "-DNASCENT_ICON_NAME=NascentEditor" -P "${PROJECT_SOURCE_DIR}/packaging/macos/MakeIcon.cmake"
+            COMMAND codesign --force --deep --sign - "${nascent_root}/Nascent Editor.app"
+        )
+    endif()
 endif()
 
 add_custom_target(package_stage
@@ -115,6 +144,10 @@ add_custom_target(package_stage
     VERBATIM
 )
 add_dependencies(package_stage NascentMain)
+
+if(TARGET NascentEditor)
+    add_dependencies(package_stage NascentEditor)
+endif()
 
 add_custom_target(portable_zip
     COMMAND ${CMAKE_COMMAND} -E make_directory "${nascent_dist}"
@@ -148,17 +181,25 @@ if(WIN32)
                 "/DOutputDir=${nascent_native_dist}"
                 "/DOutputBaseFilename=${nascent_package_name}-setup"
                 "/DIconFile=${nascent_native_icon}"
+                ${nascent_installer_defines}
                 "${PROJECT_SOURCE_DIR}/packaging/windows/nascent.iss"
         )
         set(nascent_installer_comment "Packaging ${nascent_dist}/${nascent_package_name}-setup.exe")
     endif()
 elseif(APPLE)
     set(nascent_dmg_root "${CMAKE_BINARY_DIR}/dmg")
+    set(nascent_dmg_editor_commands)
+
+    if(TARGET NascentEditor)
+        set(nascent_dmg_editor_commands COMMAND ditto "${nascent_root}/Nascent Editor.app" "${nascent_dmg_root}/Nascent Editor.app")
+    endif()
+
     set(nascent_installer_commands
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${nascent_dmg_root}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${nascent_dmg_root}" "${nascent_dist}"
         COMMAND ditto "${nascent_root}/Nascent.app" "${nascent_dmg_root}/Nascent.app"
         COMMAND ${CMAKE_COMMAND} -E create_symlink /Applications "${nascent_dmg_root}/Applications"
+        ${nascent_dmg_editor_commands}
         COMMAND ${CMAKE_COMMAND} -E rm -f "${nascent_dist}/${nascent_package_name}.dmg"
         COMMAND hdiutil create -volname Nascent -srcfolder "${nascent_dmg_root}" -ov -format UDZO "${nascent_dist}/${nascent_package_name}.dmg"
     )
@@ -180,8 +221,25 @@ elseif(NASCENT_APPIMAGETOOL)
         COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/assets/logo/logo_n.png" "${nascent_appdir}/nascent.png"
         COMMAND chmod 755 "${nascent_appdir}/AppRun" "${nascent_appdir}/usr/bin/Nascent"
         COMMAND ${CMAKE_COMMAND} -E rm -f "${nascent_dist}/${nascent_package_name}.AppImage"
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${nascent_appdir}/usr/bin/NascentEditor"
         COMMAND ${CMAKE_COMMAND} -E env "ARCH=${nascent_appimage_arch}" APPIMAGE_EXTRACT_AND_RUN=1 "${NASCENT_APPIMAGETOOL}" "${nascent_appdir}" "${nascent_dist}/${nascent_package_name}.AppImage"
     )
+
+    if(TARGET NascentEditor)
+        set(nascent_editor_appdir "${CMAKE_BINARY_DIR}/EditorAppDir")
+        set(nascent_editor_package_name "nascent-editor-${NASCENT_VERSION}-${nascent_os}-${nascent_arch}")
+        list(APPEND nascent_installer_commands
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "${nascent_editor_appdir}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${nascent_editor_appdir}/usr/bin"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${nascent_root}" "${nascent_editor_appdir}/usr/bin"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${nascent_editor_appdir}/usr/bin/Nascent"
+            COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/packaging/linux/editor/AppRun" "${PROJECT_SOURCE_DIR}/packaging/linux/editor/nascent-editor.desktop" "${nascent_editor_appdir}"
+            COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_SOURCE_DIR}/src/editor/nascent_editor.png" "${nascent_editor_appdir}/nascent-editor.png"
+            COMMAND chmod 755 "${nascent_editor_appdir}/AppRun" "${nascent_editor_appdir}/usr/bin/NascentEditor"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "${nascent_dist}/${nascent_editor_package_name}.AppImage"
+            COMMAND ${CMAKE_COMMAND} -E env "ARCH=${nascent_appimage_arch}" APPIMAGE_EXTRACT_AND_RUN=1 "${NASCENT_APPIMAGETOOL}" "${nascent_editor_appdir}" "${nascent_dist}/${nascent_editor_package_name}.AppImage"
+        )
+    endif()
     set(nascent_installer_comment "Packaging ${nascent_dist}/${nascent_package_name}.AppImage")
 endif()
 

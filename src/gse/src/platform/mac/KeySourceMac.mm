@@ -1,3 +1,4 @@
+#include "gse/Platform.h"
 #include "gse/input/KeySource.h"
 
 #import <AppKit/AppKit.h>
@@ -348,6 +349,13 @@ namespace nascent {
         else {
             dispatch_sync(dispatch_get_main_queue(), block);
         }
+    }
+
+    void set_window_title(const std::string& title) {
+        std::string copy = title;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          lock_window_title(copy);
+        });
     }
 
     std::optional<InputMode> start_key_source(KeyEventQueue* queue, const std::string& title) {

@@ -100,8 +100,8 @@ namespace nascent {
         return version;
     }
 
-    std::string update_package_name(std::string_view tag, std::string_view os, std::string_view arch, UpdatePackage package) {
-        return std::format("nascent-{}-{}-{}.{}", tag, os, arch, package == UpdatePackage::APPIMAGE ? "AppImage" : "zip");
+    std::string update_package_name(std::string_view tag, std::string_view os, std::string_view arch, UpdatePackage package, std::string_view product) {
+        return std::format("{}-{}-{}-{}.{}", product, tag, os, arch, package == UpdatePackage::APPIMAGE ? "AppImage" : "zip");
     }
 
     static std::string string_field(const nlohmann::json& object, const char* name) {
@@ -138,7 +138,7 @@ namespace nascent {
         return std::nullopt;
     }
 
-    std::optional<UpdateRelease> newest_update(const nlohmann::json& releases, const ReleaseVersion& current, std::string_view os, std::string_view arch, UpdatePackage package) {
+    std::optional<UpdateRelease> newest_update(const nlohmann::json& releases, const ReleaseVersion& current, std::string_view os, std::string_view arch, UpdatePackage package, std::string_view product) {
         std::optional<UpdateRelease> newest;
         std::optional<ReleaseVersion> newest_version;
 
@@ -158,7 +158,7 @@ namespace nascent {
                 continue;
             }
 
-            std::optional<ReleaseAsset> asset = find_asset(release, update_package_name(tag, os, arch, package));
+            std::optional<ReleaseAsset> asset = find_asset(release, update_package_name(tag, os, arch, package, product));
             std::optional<ReleaseAsset> checksums = find_asset(release, CHECKSUMS_FILE_NAME);
 
             if (!asset || !checksums) {

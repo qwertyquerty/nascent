@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nascent Editor
+Comment=Chart editor for Nascent
+Exec=NascentEditor
+Icon=nascent-editor
+Categories=AudioVideo;Audio;
+Terminal=false

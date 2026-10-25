@@ -43,6 +43,8 @@ namespace nascent {
     void set_cursor_hidden(bool hidden);
     bool fit_window_to_screen(int32_t& width, int32_t& height);
     void allow_app_switching_in_fullscreen();
+    void allow_window_maximize();
+    void set_window_title(const std::string& title);
     bool window_placement_supported();
     std::vector<DisplayInfo> list_displays();
     bool place_window(WindowMode mode, const std::string& display_id, int32_t width, int32_t height);

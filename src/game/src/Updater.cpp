@@ -26,12 +26,15 @@ namespace nascent {
 #if defined(_WIN32)
         constexpr const char* PACKAGE_OS = "win";
         constexpr const char* EXECUTABLE_NAME = "Nascent.exe";
+        constexpr const char* EDITOR_EXECUTABLE_NAME = "NascentEditor.exe";
 #elif defined(__APPLE__)
         constexpr const char* PACKAGE_OS = "mac";
         constexpr const char* EXECUTABLE_NAME = "Nascent";
+        constexpr const char* EDITOR_EXECUTABLE_NAME = "NascentEditor";
 #else
         constexpr const char* PACKAGE_OS = "linux";
         constexpr const char* EXECUTABLE_NAME = "Nascent";
+        constexpr const char* EDITOR_EXECUTABLE_NAME = "NascentEditor";
 #endif
 
 #if defined(__x86_64__) || defined(_M_X64)
@@ -43,6 +46,8 @@ namespace nascent {
 #endif
 
         constexpr const char* BUNDLE_NAME = "Nascent.app";
+        constexpr const char* EDITOR_BUNDLE_NAME = "Nascent Editor.app";
+        constexpr const char* EDITOR_APPIMAGE_PRODUCT = "nascent-editor";
         constexpr const char* STAGING_NAME = ".nascent-update";
         constexpr const char* STAGED_APPIMAGE = "new.AppImage";
         constexpr int MOVE_ATTEMPTS = 10;
@@ -69,6 +74,10 @@ namespace nascent {
         std::mutex mutex;
         UpdateSnapshot state;
         std::optional<UpdateNotice> notice;
+
+        bool editor_running() {
+            return executable_path().filename() == EDITOR_EXECUTABLE_NAME;
+        }
 
         std::optional<InstallTarget> install_target() {
             std::filesystem::path executable = executable_path();
@@ -357,8 +366,21 @@ namespace nascent {
 
             std::filesystem::create_directories(outgoing, ec);
 
+            bool editor = editor_running();
+
             if (target.kind == InstallKind::BUNDLE) {
-                moves = {{target.root, outgoing / target.root.filename()}, {incoming / BUNDLE_NAME, target.root}};
+                for (const char* bundle : {BUNDLE_NAME, EDITOR_BUNDLE_NAME}) {
+                    bool running_bundle = (bundle == EDITOR_BUNDLE_NAME) == editor;
+                    std::filesystem::path current = running_bundle ? target.root : target.root.parent_path() / bundle;
+
+                    if (!std::filesystem::exists(incoming / bundle, ec) || (!running_bundle && !std::filesystem::exists(current, ec))) {
+                        continue;
+                    }
+
+                    moves.push_back({current, outgoing / bundle});
+                    moves.push_back({incoming / bundle, current});
+                }
+
                 return apply_moves(moves, error);
             }
 
@@ -367,11 +389,16 @@ namespace nascent {
             for (const auto& entry : std::filesystem::directory_iterator(incoming, ec)) {
                 std::filesystem::path name = entry.path().filename();
 
-                if (name == EXECUTABLE_NAME && !running.empty()) {
+                if (name == EXECUTABLE_NAME && !running.empty() && !editor) {
                     name = running;
                 }
 
                 std::filesystem::path current = target.root / name;
+                bool optional = editor ? name == EXECUTABLE_NAME : name == EDITOR_EXECUTABLE_NAME;
+
+                if (optional && !std::filesystem::exists(current, ec)) {
+                    continue;
+                }
 
                 if (std::filesystem::exists(current, ec)) {
                     moves.push_back({current, outgoing / name});
@@ -456,8 +483,9 @@ namespace nascent {
         bool installable = target && writable(*target);
 
         UpdatePackage package = target ? target->package : UpdatePackage::ZIP;
+        std::string product = package == UpdatePackage::APPIMAGE && editor_running() ? EDITOR_APPIMAGE_PRODUCT : "nascent";
 
-        std::thread([current = *current, package, installable] {
+        std::thread([current = *current, package, installable, product] {
             std::string error;
             bool retryable = false;
             std::string url = std::format("https://api.github.com/repos/{}/releases?per_page={}", REPOSITORY, RELEASES_PER_PAGE);
@@ -465,7 +493,7 @@ namespace nascent {
             std::optional<UpdateRelease> release;
 
             if (body) {
-                release = newest_update(nlohmann::json::parse(*body, nullptr, false), current, PACKAGE_OS, PACKAGE_ARCH, package);
+                release = newest_update(nlohmann::json::parse(*body, nullptr, false), current, PACKAGE_OS, PACKAGE_ARCH, package, product);
             }
             else {
                 std::cerr << "Updates: could not check for a new release: " << error << std::endl;

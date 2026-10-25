@@ -32,6 +32,8 @@ namespace nascent {
     static std::array<int, 2> wake_pipe = {-1, -1};
     static std::atomic<KeyEventQueue*> key_queue = nullptr;
     static Display* key_display = nullptr;
+    static Window key_window = 0;
+    static Display* title_display = nullptr;
     static Display* modifier_display = nullptr;
     static bool modifier_display_opened = false;
     static constexpr size_t KEYMAP_BYTES = 32;
@@ -235,6 +237,12 @@ namespace nascent {
         return key != olc::Key::NONE ? key : key_from_keysym(XLookupKeysym(&event, 0));
     }
 
+    static void set_net_name(Display* display, Window window, const std::string& title) {
+        Atom utf8 = XInternAtom(display, "UTF8_STRING", False);
+        Atom net_name = XInternAtom(display, "_NET_WM_NAME", False);
+        XChangeProperty(display, window, net_name, utf8, 8, PropModeReplace, (const unsigned char*)title.c_str(), (int)title.size());
+    }
+
     static void name_window(Display* display, Window window, const std::string& title) {
         std::string instance = title;
 
@@ -244,9 +252,7 @@ namespace nascent {
 
         XClassHint hint = {instance.data(), const_cast<char*>(title.c_str())};
         XSetClassHint(display, window, &hint);
-        Atom utf8 = XInternAtom(display, "UTF8_STRING", False);
-        Atom net_name = XInternAtom(display, "_NET_WM_NAME", False);
-        XChangeProperty(display, window, net_name, utf8, 8, PropModeReplace, (const unsigned char*)title.c_str(), (int)title.size());
+        set_net_name(display, window, title);
     }
 
     static bool is_auto_repeat_release(Display* display, const XEvent& event) {
@@ -320,6 +326,21 @@ namespace nascent {
         }
     }
 
+    void set_window_title(const std::string& title) {
+        if (key_window == 0) {
+            return;
+        }
+
+        if (title_display == nullptr) {
+            title_display = XOpenDisplay(nullptr);
+        }
+
+        if (title_display != nullptr) {
+            set_net_name(title_display, key_window, title);
+            XFlush(title_display);
+        }
+    }
+
     std::optional<InputMode> start_key_source(KeyEventQueue* queue, const std::string& title) {
         if (key_thread.joinable()) {
             key_queue = queue;
@@ -358,6 +379,7 @@ namespace nascent {
         XFlush(display);
 
         key_display = display;
+        key_window = window;
         key_queue = queue;
         key_thread = std::thread(run_key_thread, display, detectable_repeat == True);
         return InputMode::X11_THREAD;
@@ -380,5 +402,11 @@ namespace nascent {
         wake_pipe = {-1, -1};
         XCloseDisplay(key_display);
         key_display = nullptr;
+        key_window = 0;
+
+        if (title_display != nullptr) {
+            XCloseDisplay(title_display);
+            title_display = nullptr;
+        }
     }
 }

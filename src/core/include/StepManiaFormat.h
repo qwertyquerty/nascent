@@ -24,5 +24,5 @@ namespace nascent {
         std::string error;
     };
 
-    std::vector<StepManiaChart> stepmania_to_chart_jsons(std::string_view text, std::string& error);
+    std::vector<StepManiaChart> stepmania_to_chart_jsons(std::string_view text, std::string& error, bool allow_empty = false);
 }

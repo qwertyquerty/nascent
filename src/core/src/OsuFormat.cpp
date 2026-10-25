@@ -126,7 +126,7 @@ namespace nascent {
         return osu_to_chart_json(text, error, modified);
     }
 
-    std::optional<nlohmann::json> osu_to_chart_json(std::string_view text, std::string& error, bool& modified) {
+    std::optional<nlohmann::json> osu_to_chart_json(std::string_view text, std::string& error, bool& modified, bool allow_empty) {
         modified = false;
 
         if (text.starts_with(UTF8_BOM)) {
@@ -205,7 +205,7 @@ namespace nascent {
                 return std::tie(a.time, a.key) < std::tie(b.time, b.key);
             });
 
-            validate_chart_hits(hits);
+            validate_chart_hits(hits, allow_empty);
             nlohmann::json timing_points = nlohmann::json::array();
 
             for (std::string_view line : sections["TimingPoints"]) {

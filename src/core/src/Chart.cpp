@@ -66,7 +66,7 @@ namespace nascent {
         };
     }
 
-    std::unique_ptr<Chart> Chart::load(const std::filesystem::path& path, float pitch, std::string& error) {
+    std::unique_ptr<Chart> Chart::load(const std::filesystem::path& path, float pitch, std::string& error, bool allow_empty) {
         std::ifstream ifs(path, std::ios::binary);
 
         if (!ifs) {
@@ -75,14 +75,15 @@ namespace nascent {
         }
 
         std::string text((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-        return load_text(text, path, pitch, error);
+        return load_text(text, path, pitch, error, allow_empty);
     }
 
-    std::unique_ptr<Chart> Chart::load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error) {
+    std::unique_ptr<Chart> Chart::load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error, bool allow_empty) {
         nlohmann::json jdata;
 
         if (path.extension() == OSU_FILE_EXTENSION) {
-            std::optional<nlohmann::json> converted = osu_to_chart_json(text, error);
+            bool modified = false;
+            std::optional<nlohmann::json> converted = osu_to_chart_json(text, error, modified, allow_empty);
 
             if (!converted) {
                 return nullptr;
@@ -100,7 +101,7 @@ namespace nascent {
             }
         }
 
-        std::unique_ptr<Chart> chart = parse(jdata, pitch, error);
+        std::unique_ptr<Chart> chart = parse(jdata, pitch, error, allow_empty);
 
         if (chart == nullptr || !chart->assign_paths(path, error)) {
             return nullptr;
@@ -142,7 +143,7 @@ namespace nascent {
         return chart;
     }
 
-    std::unique_ptr<Chart> Chart::parse(const nlohmann::json& data, float pitch, std::string& error) {
+    std::unique_ptr<Chart> Chart::parse(const nlohmann::json& data, float pitch, std::string& error, bool allow_empty) {
         std::unique_ptr<Chart> chart(new Chart());
 
         try {
@@ -155,7 +156,7 @@ namespace nascent {
             return nullptr;
         }
 
-        if (!chart->validate_and_prepare(error)) {
+        if (!chart->validate_and_prepare(error, allow_empty)) {
             return nullptr;
         }
 
@@ -239,7 +240,7 @@ namespace nascent {
         return chart;
     }
 
-    bool Chart::validate_and_prepare(std::string& error) {
+    bool Chart::validate_and_prepare(std::string& error, bool allow_empty) {
         ChartInfo& info = unpitched_info;
 
         if (info.key_count == 0 || info.key_count > MAX_LANES) {
@@ -247,7 +248,7 @@ namespace nascent {
             return false;
         }
 
-        if (unpitched_hits.empty()) {
+        if (unpitched_hits.empty() && !allow_empty) {
             error = "chart has no hit objects";
             return false;
         }

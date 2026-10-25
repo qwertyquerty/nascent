@@ -11,6 +11,14 @@
                 "isDefault": true
             },
             "problemMatcher": []
+        },
+        {
+            "label": "CMake: build chart editor",
+            "type": "cmake",
+            "command": "build",
+            "targets": ["NascentEditor"],
+            "group": "build",
+            "problemMatcher": []
         }
     ]
 }

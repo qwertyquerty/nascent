@@ -1319,7 +1319,7 @@ namespace nascent {
             });
         }
 
-        std::vector<StepManiaChart> dwi_charts(const std::vector<Tag>& tags) {
+        std::vector<StepManiaChart> dwi_charts(const std::vector<Tag>& tags, bool allow_empty) {
             Tags song;
 
             for (const Tag& tag : tags) {
@@ -1424,7 +1424,7 @@ namespace nascent {
                     }
 
                     chart.chart_key = chart_key_from_rows(key_rows, KeyTiming(key_bpms, key_stops, {}, {}));
-                    validate_chart_hits(hits);
+                    validate_chart_hits(hits, allow_empty);
                     Source source;
                     source.steps_type = chart.steps_type;
                     source.difficulty = tag.params[0];
@@ -1442,7 +1442,7 @@ namespace nascent {
         }
     }
 
-    std::vector<StepManiaChart> stepmania_to_chart_jsons(std::string_view text, std::string& error) {
+    std::vector<StepManiaChart> stepmania_to_chart_jsons(std::string_view text, std::string& error, bool allow_empty) {
         if (text.starts_with(UTF8_BOM)) {
             text.remove_prefix(UTF8_BOM.size());
         }
@@ -1450,7 +1450,7 @@ namespace nascent {
         std::vector<Tag> tags = read_tags(text);
 
         if (is_dwi(tags)) {
-            return dwi_charts(tags);
+            return dwi_charts(tags, allow_empty);
         }
 
         Tags song;
@@ -1483,7 +1483,7 @@ namespace nascent {
                 chart.chart_key = stepmania_chart_key(source.notes, *key_count, song, source.tags);
                 Timing timing = timing_for(song, source.tags);
                 std::vector<Hit> hits = parse_notes(source.notes, *key_count, timing, chart.modified);
-                validate_chart_hits(hits);
+                validate_chart_hits(hits, allow_empty);
                 chart.chart = chart_json(song, source, *key_count, std::move(hits), timing.timing_points());
             }
             catch (const std::exception& e) {

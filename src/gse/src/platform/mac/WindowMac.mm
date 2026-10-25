@@ -124,6 +124,9 @@ namespace nascent {
         return NSApp != nil ? std::optional<bool>(NSApp.isActive) : std::nullopt;
     }
 
+    void allow_window_maximize() {
+    }
+
     void allow_app_switching_in_fullscreen() {
         if (switching_observed || NSApp == nil) {
             return;

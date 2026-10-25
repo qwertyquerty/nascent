@@ -18,8 +18,8 @@ namespace nascent {
         return bpm > 0 && bpm <= CHART_MAX_BPM;
     }
 
-    inline void validate_chart_hits(const std::vector<Hit>& hits) {
-        if (hits.empty()) {
+    inline void validate_chart_hits(const std::vector<Hit>& hits, bool allow_empty = false) {
+        if (hits.empty() && !allow_empty) {
             throw std::runtime_error("chart has no notes");
         }
 

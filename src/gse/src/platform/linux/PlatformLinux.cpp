@@ -25,6 +25,9 @@ namespace nascent {
     void allow_app_switching_in_fullscreen() {
     }
 
+    void allow_window_maximize() {
+    }
+
     static constexpr int COMMAND_NOT_FOUND = 127;
 
     static std::string shell_quote(const std::string& text) {

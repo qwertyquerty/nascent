@@ -58,7 +58,7 @@ namespace nascent {
         std::string cached_difficulty_key;
         bool notes_loaded = true;
 
-        bool validate_and_prepare(std::string& error);
+        bool validate_and_prepare(std::string& error, bool allow_empty = false);
         bool assign_paths(const std::filesystem::path& path, std::string& error);
         std::string compute_gameplay_hash() const;
         std::string compute_difficulty_key() const;
@@ -77,9 +77,9 @@ namespace nascent {
         static constexpr std::string_view CHART_HASH_FORMAT = "nascent-chart-v2";
         static constexpr double BPM_PRECISION = 100.0;
 
-        static std::unique_ptr<Chart> load(const std::filesystem::path& path, float pitch, std::string& error);
-        static std::unique_ptr<Chart> load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error);
-        static std::unique_ptr<Chart> parse(const nlohmann::json& data, float pitch, std::string& error);
+        static std::unique_ptr<Chart> load(const std::filesystem::path& path, float pitch, std::string& error, bool allow_empty = false);
+        static std::unique_ptr<Chart> load_text(std::string_view text, const std::filesystem::path& path, float pitch, std::string& error, bool allow_empty = false);
+        static std::unique_ptr<Chart> parse(const nlohmann::json& data, float pitch, std::string& error, bool allow_empty = false);
         static std::unique_ptr<Chart> create(const ChartInfo& info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string& error);
         static std::unique_ptr<Chart> restore(const std::filesystem::path& path, ChartInfo info, std::vector<Hit> hits, std::vector<ChartTimingPoint> timing_points, std::string gameplay_hash, std::string difficulty_key, float pitch);
 

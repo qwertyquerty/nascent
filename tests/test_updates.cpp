@@ -96,3 +96,13 @@ NASCENT_TEST(checksums_are_found_by_file_name) {
     CHECK(!checksum_for(std::string(63, 'a') + "  x.zip", "x.zip"));
     CHECK(!checksum_for(std::string(64, 'g') + "  x.zip", "x.zip"));
 }
+
+NASCENT_TEST(update_package_names_per_product) {
+    CHECK(update_package_name("1.2.0", "linux", "x86_64", UpdatePackage::APPIMAGE) == "nascent-1.2.0-linux-x86_64.AppImage");
+    CHECK(update_package_name("1.2.0", "linux", "arm64", UpdatePackage::APPIMAGE, "nascent-editor") == "nascent-editor-1.2.0-linux-arm64.AppImage");
+
+    nlohmann::json releases = nlohmann::json::array({release("1.2.0", {update_package_name("1.2.0", "linux", "x86_64", UpdatePackage::APPIMAGE), CHECKSUMS_FILE_NAME})});
+    ReleaseVersion current = version("1.0.0");
+    CHECK(newest_update(releases, current, "linux", "x86_64", UpdatePackage::APPIMAGE).has_value());
+    CHECK(!newest_update(releases, current, "linux", "x86_64", UpdatePackage::APPIMAGE, "nascent-editor").has_value());
+}

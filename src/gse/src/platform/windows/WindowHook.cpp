@@ -281,6 +281,14 @@ namespace nascent {
         return true;
     }
 
+    void set_window_title(const std::string& title) {
+        window_title = utf8_to_wide(title);
+
+        if (hooked_window != nullptr) {
+            SetWindowTextW(hooked_window, window_title.c_str());
+        }
+    }
+
     void uninstall_window_hook() {
         hooked_queue = nullptr;
 
@@ -393,6 +401,18 @@ namespace nascent {
 
     bool window_placement_supported() {
         return true;
+    }
+
+    void allow_window_maximize() {
+        HWND window = game_window();
+
+        if (window == nullptr) {
+            return;
+        }
+
+        LONG_PTR style = GetWindowLongPtrW(window, GWL_STYLE);
+        SetWindowLongPtrW(window, GWL_STYLE, style | WS_MAXIMIZEBOX);
+        SetWindowPos(window, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
     std::vector<DisplayInfo> list_displays() {

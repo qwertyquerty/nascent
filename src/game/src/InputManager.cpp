@@ -33,6 +33,10 @@ namespace nascent {
         return input.key_held(reset_modifier) && input.key_pressed(reset_shortcut_key);
     }
 
+    bool InputManager::exit_pressed(const Input& input) {
+        return input.key_held(exit_modifier) && input.key_pressed(exit_shortcut_key);
+    }
+
     bool InputManager::update_pressed(const Input& input) {
         return input.key_held(update_modifier) && input.key_pressed(update_key);
     }
@@ -224,7 +228,7 @@ namespace nascent {
     }
 
     bool InputManager::can_bind(olc::Key key) {
-        return key != olc::Key::NONE && key != back_key && key != exit_key;
+        return key != olc::Key::NONE && key != back_key;
     }
 
     std::optional<KeyBinding> InputManager::set_key(KeyBinding binding, olc::Key key) {

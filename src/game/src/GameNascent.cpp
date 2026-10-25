@@ -158,7 +158,7 @@ namespace nascent {
     }
 
     void GameNascent::update(float elapsed_time) {
-        if (input().key_pressed(InputManager::exit_key)) {
+        if (InputManager::exit_pressed(input())) {
             quit();
             return;
         }

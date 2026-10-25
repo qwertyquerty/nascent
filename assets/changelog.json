@@ -1,6 +1,23 @@
 {
     "releases": [
         {
+            "version": "0.7.0.beta14",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "New chart editor, Nascent Editor, ships with every release: the Windows installer lets you pick the game, the editor or both, macOS gets a separate Nascent Editor app and Linux a separate AppImage."
+                    ]
+                },
+                {
+                    "title": "Improved",
+                    "notes": [
+                        "Quit the game with Ctrl + Q instead of the Pause/Break key, which can now be bound like any other key."
+                    ]
+                }
+            ]
+        },
+        {
             "version": "0.6.0.beta13",
             "sections": [
                 {

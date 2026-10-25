@@ -167,7 +167,7 @@ namespace nascent {
 
         if (capturing) {
             for (const KeyEvent& event : game->input().events()) {
-                if (event.pressed && event.time >= capture_time && event.key != olc::Key::NONE && event.key != InputManager::back_key && event.key != InputManager::exit_key) {
+                if (event.pressed && event.time >= capture_time && event.key != olc::Key::NONE && event.key != InputManager::back_key) {
                     bind(event.key);
                     break;
                 }
