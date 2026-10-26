@@ -29,6 +29,7 @@ add_executable(NascentEditor
     src/FileDialog.cpp
     src/ImGuiBackend.cpp
     src/OsuExport.cpp
+    src/PatternGenerator.cpp
     src/Playback.cpp
     src/StepManiaExport.cpp
     src/Waveform.cpp
@@ -64,6 +65,7 @@ if(NASCENT_BUILD_TESTS)
         src/ArchiveExport.cpp
         src/ChartDocument.cpp
         src/OsuExport.cpp
+        src/PatternGenerator.cpp
         src/StepManiaExport.cpp
     )
 

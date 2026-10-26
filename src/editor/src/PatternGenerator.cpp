@@ -114,7 +114,8 @@ namespace nascent {
 
                 bool jack = !previous.empty() && !jacked && chance(settings.jack_chance, rng);
                 size_t step = row % every;
-                size_t size = chord_size > 1 && step == 0 ? chord_size : settings.jumps_between && chord_size > 2 && every >= 4 && step == every / 2 ? 2 : 1;
+                size_t size = chord_size > 1 && step == 0 ? chord_size : settings.jumps_between && chord_size > 2 && every >= 4 && step == every / 2 ? 2
+                                                                                                                                                     : 1;
 
                 if (size > 1) {
                     previous = jack ? chord(previous, size, 1, keys, rng) : chord(blocked, size, 0, keys, rng);
@@ -194,7 +195,8 @@ namespace nascent {
 
                 for (uint8_t column = 0; column < keys; column++) {
                     int edge = std::min<int>(column, keys - 1 - column);
-                    bool grouped = split == SplitStyle::ALTERNATING ? column % 2 == 0 : split == SplitStyle::HALVES ? column < (keys + 1) / 2 : edge * 2 < keys / 2;
+                    bool grouped = split == SplitStyle::ALTERNATING ? column % 2 == 0 : split == SplitStyle::HALVES ? column < (keys + 1) / 2
+                                                                                                                    : edge * 2 < keys / 2;
                     (grouped ? first : second).push_back(column);
                 }
 
@@ -239,15 +241,15 @@ namespace nascent {
     const std::vector<PatternStyle>& pattern_styles() {
         static const std::vector<PatternStyle> styles = {
             {"Stream", {
-                {"Stream", PatternFamily::STREAM},
-            }},
+                           {"Stream", PatternFamily::STREAM},
+                       }},
             {"Trill", {
-                {"Single trill", PatternFamily::SINGLE_TRILL},
-                {"Split trill", PatternFamily::SPLIT_TRILL},
-            }},
+                          {"Single trill", PatternFamily::SINGLE_TRILL},
+                          {"Split trill", PatternFamily::SPLIT_TRILL},
+                      }},
             {"Jacks", {
-                {"Jacks", PatternFamily::JACKS},
-            }},
+                          {"Jacks", PatternFamily::JACKS},
+                      }},
         };
         return styles;
     }
