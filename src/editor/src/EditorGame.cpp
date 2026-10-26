@@ -536,9 +536,14 @@ namespace nascent {
     }
 
     void EditorGame::change_snap(int32_t direction) {
-        auto current = std::find(DIVISORS.begin(), DIVISORS.end(), divisor);
-        int32_t index = current == DIVISORS.end() ? 3 : (int32_t)(current - DIVISORS.begin());
-        divisor = DIVISORS[(size_t)std::clamp<int32_t>(index + (direction > 0 ? 1 : -1), 0, (int32_t)DIVISORS.size() - 1)];
+        if (direction > 0) {
+            auto finer = std::upper_bound(DIVISORS.begin(), DIVISORS.end(), divisor);
+            divisor = finer != DIVISORS.end() ? *finer : divisor;
+        }
+        else {
+            auto coarser = std::lower_bound(DIVISORS.begin(), DIVISORS.end(), divisor);
+            divisor = coarser != DIVISORS.begin() ? *(coarser - 1) : divisor;
+        }
     }
 
     void EditorGame::change_scroll_speed(int32_t notches) {
@@ -1140,11 +1145,30 @@ namespace nascent {
 
         ImGui::SeparatorText("Editing");
 
-        if (ImGui::BeginCombo("Snap", std::format("1/{}", divisor).c_str())) {
+        if (ImGui::BeginCombo("Snap", std::format("1/{}", divisor).c_str(), ImGuiComboFlags_HeightLarge)) {
             for (uint32_t option : DIVISORS) {
                 if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == divisor)) {
                     divisor = option;
                 }
+            }
+
+            ImGui::SeparatorText("Polyrhythm");
+
+            for (uint32_t option : POLYRHYTHM_DIVISORS) {
+                if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == divisor)) {
+                    divisor = option;
+                }
+            }
+
+            ImGui::SeparatorText("Other");
+            ImGui::SetNextItemWidth(90);
+            ImGui::InputInt("##custom_snap", &custom_divisor, 1, 0);
+            custom_divisor = std::clamp(custom_divisor, 1, MAX_DIVISOR);
+            ImGui::SameLine();
+
+            if (ImGui::Button(std::format("Use 1/{}", custom_divisor).c_str())) {
+                divisor = (uint32_t)custom_divisor;
+                ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndCombo();
@@ -2908,6 +2932,12 @@ namespace nascent {
         bool on_grid = std::abs(document->snap(position, divisor) - position) < ON_GRID_MS;
         float judge_y = std::floor((float)field->note_top(position, target) + height / 2);
         target->FillRectDecal({(float)field->pos.x - JUDGE_LINE_OVERHANG, judge_y - 1}, {(float)field->size.x + JUDGE_LINE_OVERHANG * 2, 2}, on_grid ? olc::Pixel(90, 230, 255, 235) : olc::Pixel(255, 80, 120, 235));
+
+        if (!snap_enabled && (gesture.kind == Gesture::Kind::PLACE || (show_ghost && hover_column.has_value()))) {
+            double placing = gesture.kind == Gesture::Kind::PLACE ? gesture.end : hover_time;
+            float y = std::floor((float)field->note_top(placing, target) + height / 2);
+            target->FillRectDecal({(float)field->pos.x, y}, {(float)field->size.x, 1}, olc::Pixel(255, 255, 255, 200));
+        }
 
         if (show_ghost && hover_column.has_value()) {
             olc::Decal* decal = field->sized_image(SkinImage::NOTE, *hover_column, keys);

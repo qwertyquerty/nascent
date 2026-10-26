@@ -244,6 +244,9 @@ namespace nascent {
         public:
         static constexpr uint8_t EDITOR_LAYER = 1;
         static constexpr std::array<uint32_t, 11> DIVISORS = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48};
+        static constexpr std::array<uint32_t, 8> POLYRHYTHM_DIVISORS = {5, 7, 9, 10, 11, 13, 14, 15};
+        static constexpr int MAX_DIVISOR = 96;
+        int custom_divisor = 20;
         static constexpr std::array<float, 7> RATES = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
 
         explicit EditorGame(olc::PixelGameEngine* window);

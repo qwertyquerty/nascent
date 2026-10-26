@@ -67,6 +67,8 @@ NASCENT_TEST(editor_document_editing) {
     CHECK(document->snap(130, 4) == 125 && document->snap(190, 4) == 250);
     CHECK(document->step(130, 4, 1) == 250 && document->step(130, 4, -1) == 125);
     CHECK(std::abs(document->snap(170, 3) - 500.0 / 3.0) < 1e-6);
+    CHECK(document->snap(130, 5) == 100 && document->step(100, 5, 1) == 200);
+    CHECK(std::abs(document->snap(80, 7) - 500.0 / 7.0) < 1e-6 && std::abs(document->step(0, 7, 3) - 1500.0 / 7.0) < 1e-6);
 
     document->change([](ChartData& data) {
         data.timing_points.push_back({1000, 250.0f, 4});
