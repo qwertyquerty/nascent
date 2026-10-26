@@ -261,10 +261,12 @@ NASCENT_TEST(editor_stretches_by_beats) {
 NASCENT_TEST(editor_generates_patterns) {
     auto valid = [](const std::vector<PatternRow>& rows, size_t count, uint8_t keys) {
         return rows.size() == count && std::all_of(rows.begin(), rows.end(), [&](const PatternRow& row) {
-            return !row.empty() && std::is_sorted(row.begin(), row.end()) && std::adjacent_find(row.begin(), row.end()) == row.end() && row.back() < keys;
-        });
+                   return !row.empty() && std::is_sorted(row.begin(), row.end()) && std::adjacent_find(row.begin(), row.end()) == row.end() && row.back() < keys;
+               });
     };
-    auto shared = [](const PatternRow& a, const PatternRow& b) { return std::count_if(a.begin(), a.end(), [&](uint8_t column) { return std::find(b.begin(), b.end(), column) != b.end(); }); };
+    auto shared = [](const PatternRow& a, const PatternRow& b) {
+        return std::count_if(a.begin(), a.end(), [&](uint8_t column) { return std::find(b.begin(), b.end(), column) != b.end(); });
+    };
 
     std::vector<PatternSettings> variations(6);
     variations[1].chords = StreamChords::QUADS;
