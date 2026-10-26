@@ -1190,14 +1190,59 @@ namespace nascent {
             }
         };
 
-        auto int_field = [&](const char* label, int value, int minimum, int maximum, const std::function<void(ChartInfo&, int)>& apply) {
+        auto int_field = [&](const char* label, int current, int minimum, int maximum, const std::function<void(ChartInfo&, int)>& apply) {
             bool slider = maximum - minimum <= 40;
-            bool changed = slider ? ImGui::SliderInt(label, &value, minimum, maximum) : ImGui::InputInt(label, &value, 10, 100);
-            (void)changed;
+            std::string widget = slider ? std::string(label) : std::format("##{}", label);
+            ImGuiID id = ImGui::GetID(widget.c_str());
+            auto pending = editing_ints.find(id);
+            int value = pending != editing_ints.end() ? pending->second : current;
+            auto commit = [&](int next) {
+                next = std::clamp(next, minimum, maximum);
+
+                if (next != current) {
+                    document->change([&](ChartData& edited) { apply(edited.info, next); });
+                }
+            };
+
+            if (slider) {
+                ImGui::SliderInt(widget.c_str(), &value, minimum, maximum);
+            }
+            else {
+                float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+                float button = ImGui::GetFrameHeight();
+                ImGui::SetNextItemWidth(std::max(40.0f, ImGui::CalcItemWidth() - (button + spacing) * 2));
+                ImGui::InputInt(widget.c_str(), &value, 0, 0);
+            }
+
+            if (ImGui::IsItemActive()) {
+                editing_ints[id] = value;
+            }
+            else {
+                editing_ints.erase(id);
+            }
 
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                value = std::clamp(value, minimum, maximum);
-                document->change([&](ChartData& edited) { apply(edited.info, value); });
+                commit(value);
+            }
+
+            if (!slider) {
+                float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+                float button = ImGui::GetFrameHeight();
+                int step = ImGui::GetIO().KeyCtrl ? 100 : 10;
+                ImGui::SameLine(0, spacing);
+
+                if (ImGui::Button(std::format("-##{}", label).c_str(), ImVec2(button, button))) {
+                    commit(current - step);
+                }
+
+                ImGui::SameLine(0, spacing);
+
+                if (ImGui::Button(std::format("+##{}", label).c_str(), ImVec2(button, button))) {
+                    commit(current + step);
+                }
+
+                ImGui::SameLine(0, spacing);
+                ImGui::TextUnformatted(label);
             }
         };
 

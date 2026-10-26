@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace nascent {
@@ -107,6 +108,7 @@ namespace nascent {
         bool confirm_requested = false;
         bool quit_confirmed = false;
         bool update_restart_requested = false;
+        std::unordered_map<unsigned int, int> editing_ints;
 
         Rect view;
         double position = 0;
