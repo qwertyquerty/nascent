@@ -3,6 +3,7 @@
 #include "ArchiveExport.h"
 #include "DifficultyCalculator.h"
 #include "OsuExport.h"
+#include "PatternGenerator.h"
 #include "SettingsManager.h"
 #include "Skin.h"
 #include "SkinSettings.h"
@@ -25,6 +26,7 @@
 #include <functional>
 #include <numbers>
 #include <numeric>
+#include <random>
 #include <set>
 
 namespace nascent {
@@ -34,9 +36,11 @@ namespace nascent {
         constexpr double HITSOUND_JUMP_MS = 250.0;
         constexpr size_t HITSOUNDS_PER_FRAME = 8;
         constexpr size_t GRID_LIMIT = 4000;
-        constexpr uint32_t MIN_SCROLL_SPEED = 50;
+        constexpr uint32_t MIN_SCROLL_SPEED = 25;
         constexpr uint32_t MAX_SCROLL_SPEED = 500;
         constexpr int32_t SCROLL_SPEED_STEP = 10;
+        constexpr int MIN_LANE_WIDTH = 3;
+        constexpr int MAX_LANE_WIDTH = 30;
         constexpr size_t METRONOME_PER_FRAME = 4;
         constexpr float WAVEFORM_ROW_PX = 3.0f;
         constexpr double WAVEFORM_VISUAL_OFFSET_MS = 20.0;
@@ -204,6 +208,7 @@ namespace nascent {
         playback.set_volume(SettingsManager::volume_gain(music_volume));
         olc::Font::init();
         Updater::check();
+        pattern_seed = std::random_device{}();
         input().start();
         use_blank_canvas();
         window->GetLayers()[EDITOR_LAYER].pDrawTarget.Create(1, 1);
@@ -549,6 +554,18 @@ namespace nascent {
 
     void EditorGame::change_scroll_speed(int32_t notches) {
         scroll_speed = (uint32_t)std::clamp<int32_t>((int32_t)scroll_speed + notches * SCROLL_SPEED_STEP, (int32_t)MIN_SCROLL_SPEED, (int32_t)MAX_SCROLL_SPEED);
+    }
+
+    int EditorGame::lane_width_percent() const {
+        if (lane_width.has_value() || skin == nullptr) {
+            return lane_width.value_or(12);
+        }
+
+        return (int)std::lround(skin_setting(*skin, skin_settings::LANE_WIDTH));
+    }
+
+    void EditorGame::change_lane_width(int32_t steps) {
+        lane_width = std::clamp(lane_width_percent() + steps, MIN_LANE_WIDTH, MAX_LANE_WIDTH);
     }
 
     void EditorGame::step(int32_t steps) {
@@ -924,6 +941,11 @@ namespace nascent {
                 transform_requested = true;
             }
 
+            if (ImGui::MenuItem("Generate pattern...", nullptr, false, open)) {
+                pattern_divisor = divisor;
+                pattern_open = true;
+            }
+
             if (ImGui::MenuItem("Quantize selection...", nullptr, false, open && !selection.empty())) {
                 quantize_divisor = divisor;
                 quantize_requested = true;
@@ -1190,6 +1212,16 @@ namespace nascent {
 
         if (ImGui::SliderInt("Scroll speed", &speed, (int)MIN_SCROLL_SPEED, (int)MAX_SCROLL_SPEED)) {
             scroll_speed = (uint32_t)speed;
+        }
+
+        int width = lane_width_percent();
+
+        if (ImGui::SliderInt("Lane width", &width, MIN_LANE_WIDTH, MAX_LANE_WIDTH, "%d%%")) {
+            lane_width = width;
+        }
+
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Width of each lane as a share of the window height, starts at the skin's width (Ctrl + Shift + wheel or arrows)");
         }
 
         ImGui::SliderFloat("Judge line", &judge_offset, 0.05f, 0.6f, "%.2f");
@@ -1627,6 +1659,7 @@ namespace nascent {
             {"Shift + arrows", "change snap"},
             {"Ctrl + wheel", "change scroll speed"},
             {"Ctrl + = / -", "change scroll speed"},
+            {"Ctrl + Shift + wheel / arrows", "change lane width"},
             {"Space", "play or pause"},
             {"Left / Right", "move by one snap"},
             {"Up / Down", "move by one beat"},
@@ -1830,6 +1863,7 @@ namespace nascent {
 
         draw_transform_popup();
         draw_quantize_popup();
+        draw_pattern_window();
 
         if (audio_prompt_requested) {
             ImGui::OpenPopup("Dropped audio");
@@ -2055,20 +2089,31 @@ namespace nascent {
             paste_clipboard();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::UP)) {
-            nudge_selection(1, 0);
-        }
+        if (ctrl && shift) {
+            if (keys.key_pressed(olc::Key::UP) || keys.key_pressed(olc::Key::RIGHT)) {
+                change_lane_width(1);
+            }
 
-        if (ctrl && keys.key_pressed(olc::Key::DOWN)) {
-            nudge_selection(-1, 0);
+            if (keys.key_pressed(olc::Key::DOWN) || keys.key_pressed(olc::Key::LEFT)) {
+                change_lane_width(-1);
+            }
         }
+        else if (ctrl) {
+            if (keys.key_pressed(olc::Key::UP)) {
+                nudge_selection(1, 0);
+            }
 
-        if (ctrl && keys.key_pressed(olc::Key::LEFT)) {
-            nudge_selection(0, -1);
-        }
+            if (keys.key_pressed(olc::Key::DOWN)) {
+                nudge_selection(-1, 0);
+            }
 
-        if (ctrl && keys.key_pressed(olc::Key::RIGHT)) {
-            nudge_selection(0, 1);
+            if (keys.key_pressed(olc::Key::LEFT)) {
+                nudge_selection(0, -1);
+            }
+
+            if (keys.key_pressed(olc::Key::RIGHT)) {
+                nudge_selection(0, 1);
+            }
         }
 
         if (ctrl && (keys.key_pressed(olc::Key::EQUALS) || keys.key_pressed(olc::Key::NP_ADD))) {
@@ -2185,7 +2230,7 @@ namespace nascent {
         uint8_t keys = std::max<uint8_t>(preview->info.key_count, 1);
         SkinLayoutScope layout_scope(skin.get(), keys);
         olc::vi2d screen = window->GetScreenSize();
-        double lane = std::min(screen.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)view.w / keys);
+        double lane = std::min(screen.y * lane_width_percent() / 100.0, (double)view.w / keys);
         double width = std::max(1.0, lane * keys);
 
         field->pos = {view.x + (view.w - width) / 2.0, (double)view.y};
@@ -2227,6 +2272,9 @@ namespace nascent {
                 }
                 else if (gesture.kind != Gesture::Kind::NONE) {
                     step(notches);
+                }
+                else if (keys.key_held(olc::Key::CTRL) && keys.key_held(olc::Key::SHIFT)) {
+                    change_lane_width(notches);
                 }
                 else if (keys.key_held(olc::Key::CTRL)) {
                     change_scroll_speed(notches);
@@ -2482,6 +2530,305 @@ namespace nascent {
         set_status(std::format("{} {} notes {:g}x", factor >= 1.0 ? "Stretched" : "Shrunk", selection.size(), factor >= 1.0 ? factor : 1.0 / factor));
     }
 
+    bool EditorGame::snap_picker(const char* label, uint32_t& value) {
+        bool changed = false;
+
+        if (ImGui::BeginCombo(label, std::format("1/{}", value).c_str(), ImGuiComboFlags_HeightLarge)) {
+            auto options = [&](const auto& divisors) {
+                for (uint32_t option : divisors) {
+                    if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == value)) {
+                        value = option;
+                        changed = true;
+                    }
+                }
+            };
+
+            options(DIVISORS);
+            ImGui::SeparatorText("Complex tuplets");
+            options(COMPLEX_TUPLET_DIVISORS);
+            ImGui::EndCombo();
+        }
+
+        return changed;
+    }
+
+    std::vector<Hit> EditorGame::pattern_hits() const {
+        std::vector<Hit> hits;
+
+        if (document == nullptr || document->timing_point_at(position) == nullptr) {
+            return hits;
+        }
+
+        const PatternVariant& variant = pattern_styles()[pattern_style].variants[pattern_variant];
+        double time = std::max(0.0, document->snap(position, pattern_divisor));
+        size_t rows = std::min<size_t>((size_t)pattern_beats * pattern_divisor, MAX_PATTERN_ROWS);
+
+        for (const PatternRow& row : generate_pattern(variant.family, document->data().info.key_count, rows, pattern_seed, pattern_settings)) {
+            int32_t at = (int32_t)std::lround(time);
+
+            for (uint8_t key : row) {
+                hits.push_back({key, HitType::HIT, at, at});
+            }
+
+            double next = document->step(time, pattern_divisor, 1);
+
+            if (next <= time) {
+                break;
+            }
+
+            time = next;
+        }
+
+        return hits;
+    }
+
+    void EditorGame::place_pattern() {
+        std::vector<Hit> generated = pattern_hits();
+
+        if (generated.empty()) {
+            return;
+        }
+
+        int32_t first = generated.front().time;
+        int32_t last = generated.back().time;
+        std::vector<Hit> replaced;
+
+        if (pattern_replace) {
+            for (const Hit& hit : document->data().hits) {
+                if (hit.time >= first && hit.time <= last) {
+                    replaced.push_back(hit);
+                }
+            }
+        }
+
+        document->change([&](ChartData& data) { replace_hits(data, replaced, generated); });
+        selection = generated;
+        selection_revision = document->revision();
+        pattern_seed = std::random_device{}();
+        set_status(std::format("Placed {} notes of {} at {}", generated.size(), pattern_styles()[pattern_style].variants[pattern_variant].name, clock_text(first)));
+    }
+
+    void EditorGame::draw_pattern_settings(PatternFamily family) {
+        PatternSettings& settings = pattern_settings;
+        int keys = std::max<int>(document->data().info.key_count, 1);
+        constexpr float WIDTH = 200.0f;
+
+        auto lane_slider = [&](const char* label, uint8_t& lane) {
+            int value = std::min<int>(lane, keys - 1) + 1;
+            ImGui::SetNextItemWidth(WIDTH);
+
+            if (ImGui::SliderInt(label, &value, 1, keys)) {
+                lane = (uint8_t)(value - 1);
+            }
+        };
+
+        auto lane_combo = [&](const char* label, int& lane) {
+            bool changed = false;
+            ImGui::SetNextItemWidth(WIDTH);
+
+            if (ImGui::BeginCombo(label, std::format("Lane {}", lane + 1).c_str())) {
+                for (int option = 0; option < keys; option++) {
+                    if (ImGui::Selectable(std::format("Lane {}", option + 1).c_str(), option == lane)) {
+                        lane = option;
+                        changed = true;
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+
+            return changed;
+        };
+
+        auto lane_range = [&]() {
+            int from = std::min<int>(settings.first_lane, keys - 1);
+            int to = std::min<int>(settings.last_lane, keys - 1);
+
+            if (lane_combo("From lane", from)) {
+                settings.first_lane = (uint8_t)from;
+                settings.last_lane = to < from ? (uint8_t)from : settings.last_lane;
+            }
+
+            if (lane_combo("To lane", to)) {
+                settings.last_lane = to == keys - 1 ? 255 : (uint8_t)to;
+                settings.first_lane = from > to ? (uint8_t)to : settings.first_lane;
+            }
+        };
+
+        auto percent = [&](const char* label, int& value, int minimum) {
+            ImGui::SetNextItemWidth(WIDTH);
+            ImGui::SliderInt(label, &value, minimum, 100, "%d%%");
+        };
+
+        auto choice = [&](const char* label, auto& value, std::initializer_list<const char*> names) {
+            std::vector<const char*> list(names);
+            int index = std::clamp((int)value, 0, (int)list.size() - 1);
+            ImGui::SetNextItemWidth(WIDTH);
+
+            if (ImGui::Combo(label, &index, list.data(), (int)list.size())) {
+                value = (std::remove_reference_t<decltype(value)>)index;
+            }
+        };
+
+        switch (family) {
+            case PatternFamily::STREAM: {
+                lane_range();
+                choice("Flow", settings.flow, {"Random", "Roll", "Zigzag"});
+
+                if (settings.flow == StreamFlow::RANDOM) {
+                    percent("Disconnect chance", settings.disconnect_chance, 0);
+                    percent("Trill chance", settings.trill_chance, 0);
+                }
+                else {
+                    ImGui::Checkbox("Reverse direction", &settings.reverse);
+                }
+
+                choice("Chords", settings.chords, {"None", "Jumps", "Hands", "Quads", "Custom size"});
+
+                if (settings.chords != StreamChords::NONE) {
+                    ImGui::SetNextItemWidth(WIDTH);
+                    ImGui::SliderInt("Chord every", &settings.chord_every, 1, 16, settings.chord_every == 1 ? "note" : "%d notes");
+
+                    if (settings.chords == StreamChords::CUSTOM) {
+                        ImGui::SetNextItemWidth(WIDTH);
+                        ImGui::SliderInt("Chord size", &settings.chord_size, 2, std::max(2, keys));
+                    }
+
+                    if (stream_chord_size(settings) > 2) {
+                        ImGui::Checkbox("Jumps between chords", &settings.jumps_between);
+                    }
+
+                    if ((int)stream_chord_size(settings) > keys) {
+                        ImGui::TextDisabled("Chords are capped at %d notes, the number of lanes", keys);
+                    }
+                }
+
+                percent("Jack chance", settings.jack_chance, 0);
+                ImGui::Checkbox("Anchor", &settings.anchor);
+
+                if (settings.anchor) {
+                    lane_slider("Anchor lane", settings.anchor_lane);
+                    ImGui::SetNextItemWidth(WIDTH);
+                    ImGui::SliderInt("Anchor every", &settings.anchor_every, 2, 8, "%d notes");
+                    ImGui::Checkbox("Keep the anchor lane out of the stream", &settings.anchor_alone);
+                }
+
+                break;
+            }
+            case PatternFamily::SINGLE_TRILL:
+                lane_slider("Lane A", settings.lane_a);
+                lane_slider("Lane B", settings.lane_b);
+                break;
+            case PatternFamily::SPLIT_TRILL:
+                lane_range();
+                choice("Split", settings.split, {"Odd / even lanes (13 24)", "Left / right halves (12 34)", "Inner / outer (14 23)"});
+                ImGui::Checkbox("Start on the other group", &settings.reverse);
+                break;
+            case PatternFamily::JACKS:
+                lane_range();
+                percent("Density", settings.density, 1);
+                ImGui::Checkbox("Vary chord sizes", &settings.vary_sizes);
+                ImGui::SetNextItemWidth(WIDTH);
+                ImGui::SliderInt("Lanes kept", &settings.kept_lanes, 1, keys);
+
+                break;
+        }
+
+        settings.chord_every = std::clamp(settings.chord_every, 1, 16);
+        settings.chord_size = std::clamp(settings.chord_size, 2, std::max(2, keys));
+        settings.anchor_every = std::clamp(settings.anchor_every, 2, 8);
+        settings.kept_lanes = std::clamp(settings.kept_lanes, 1, keys);
+    }
+
+    void EditorGame::draw_pattern_window() {
+        pattern_preview.clear();
+
+        if (!pattern_open || document == nullptr) {
+            return;
+        }
+
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.3f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+
+        if (!ImGui::Begin("Generate pattern", &pattern_open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking)) {
+            ImGui::End();
+            return;
+        }
+
+        const std::vector<PatternStyle>& styles = pattern_styles();
+        pattern_style = std::min(pattern_style, styles.size() - 1);
+        ImGui::SetNextItemWidth(200);
+
+        if (ImGui::BeginCombo("Style", styles[pattern_style].name)) {
+            for (size_t index = 0; index < styles.size(); index++) {
+                if (ImGui::Selectable(styles[index].name, index == pattern_style)) {
+                    pattern_style = index;
+                    pattern_variant = 0;
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        const std::vector<PatternVariant>& variants = styles[pattern_style].variants;
+        pattern_variant = std::min(pattern_variant, variants.size() - 1);
+
+        if (variants.size() > 1) {
+            ImGui::SetNextItemWidth(200);
+
+            if (ImGui::BeginCombo("Pattern", variants[pattern_variant].name)) {
+                for (size_t index = 0; index < variants.size(); index++) {
+                    if (ImGui::Selectable(variants[index].name, index == pattern_variant)) {
+                        pattern_variant = index;
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+        }
+
+        ImGui::SeparatorText("Pattern");
+        draw_pattern_settings(variants[pattern_variant].family);
+        ImGui::SeparatorText("Placement");
+        ImGui::SetNextItemWidth(200);
+        snap_picker("Snap", pattern_divisor);
+        ImGui::SetNextItemWidth(200);
+        ImGui::InputInt("Beats", &pattern_beats);
+        pattern_beats = std::clamp(pattern_beats, 1, MAX_PATTERN_BEATS);
+        ImGui::Checkbox("Replace notes already there", &pattern_replace);
+
+        if (ImGui::Button("New random pattern")) {
+            pattern_seed = std::random_device{}();
+        }
+
+        ImGui::Separator();
+
+        if (document->data().timing_points.empty()) {
+            ImGui::TextUnformatted("Add a timing point first, patterns are placed on the beat grid.");
+            ImGui::End();
+            return;
+        }
+
+        pattern_preview = pattern_hits();
+
+        if (!pattern_preview.empty()) {
+            int32_t first = pattern_preview.front().time;
+            int32_t last = pattern_preview.back().time;
+            size_t replaced = pattern_replace ? (size_t)std::count_if(document->data().hits.begin(), document->data().hits.end(), [&](const Hit& hit) { return hit.time >= first && hit.time <= last; }) : 0;
+            ImGui::TextUnformatted(std::format("{} notes from {} to {}", pattern_preview.size(), clock_text(first), clock_text(last)).c_str());
+
+            if (replaced > 0) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "%s", std::format("Replaces the {} notes already in that stretch", replaced).c_str());
+            }
+        }
+
+        if (ImGui::Button("Place pattern", ImVec2(140, 0))) {
+            place_pattern();
+        }
+
+        ImGui::End();
+    }
+
     void EditorGame::draw_quantize_popup() {
         if (quantize_requested) {
             ImGui::OpenPopup("Quantize selection");
@@ -2502,24 +2849,7 @@ namespace nascent {
         }
         else {
             ImGui::SetNextItemWidth(120);
-
-            if (ImGui::BeginCombo("Snap to", std::format("1/{}", quantize_divisor).c_str(), ImGuiComboFlags_HeightLarge)) {
-                for (uint32_t option : DIVISORS) {
-                    if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == quantize_divisor)) {
-                        quantize_divisor = option;
-                    }
-                }
-
-                ImGui::SeparatorText("Complex tuplets");
-
-                for (uint32_t option : COMPLEX_TUPLET_DIVISORS) {
-                    if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == quantize_divisor)) {
-                        quantize_divisor = option;
-                    }
-                }
-
-                ImGui::EndCombo();
-            }
+            snap_picker("Snap to", quantize_divisor);
 
             ImGui::Checkbox("Quantize long note ends too", &quantize_ends);
             std::vector<Hit> result = document->quantized(selection, quantize_divisor, quantize_ends);
@@ -3039,6 +3369,16 @@ namespace nascent {
             double placing = gesture.kind == Gesture::Kind::PLACE ? gesture.end : hover_time;
             float y = std::floor((float)field->note_top(placing, target) + height / 2);
             target->FillRectDecal({(float)field->pos.x, y}, {(float)field->size.x, 1}, olc::Pixel(255, 255, 255, 200));
+        }
+
+        for (const Hit& hit : pattern_preview) {
+            float top = (float)field->note_top(hit.time, target);
+
+            if (hit.key >= keys || top + height < view.y || top > view.y + view.h) {
+                continue;
+            }
+
+            field->draw_note(target, field->sized_image(SkinImage::NOTE, hit.key, keys), field->lane_left(hit.key), top, olc::Pixel(255, 255, 255, 115));
         }
 
         if (show_ghost && hover_column.has_value()) {

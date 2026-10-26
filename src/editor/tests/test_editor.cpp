@@ -3,6 +3,7 @@
 #include "ArchiveExport.h"
 #include "ChartDocument.h"
 #include "OsuExport.h"
+#include "PatternGenerator.h"
 #include "StepManiaExport.h"
 #include "StepManiaFormat.h"
 
@@ -255,4 +256,168 @@ NASCENT_TEST(editor_stretches_by_beats) {
     std::vector<Hit> sloppy = {tap(0, 1010), tap(1, 1240), hold(2, 1490, 1770), hold(3, 1990, 2010)};
     CHECK(same_notes(document->quantized(sloppy, 4, true), {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1750), hold(3, 2000, 2062)}));
     CHECK(same_notes(document->quantized(sloppy, 4, false), {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1780), hold(3, 2000, 2020)}));
+}
+
+NASCENT_TEST(editor_generates_patterns) {
+    auto valid = [](const std::vector<PatternRow>& rows, size_t count, uint8_t keys) {
+        return rows.size() == count && std::all_of(rows.begin(), rows.end(), [&](const PatternRow& row) {
+            return !row.empty() && std::is_sorted(row.begin(), row.end()) && std::adjacent_find(row.begin(), row.end()) == row.end() && row.back() < keys;
+        });
+    };
+    auto shared = [](const PatternRow& a, const PatternRow& b) { return std::count_if(a.begin(), a.end(), [&](uint8_t column) { return std::find(b.begin(), b.end(), column) != b.end(); }); };
+
+    std::vector<PatternSettings> variations(6);
+    variations[1].chords = StreamChords::QUADS;
+    variations[1].jumps_between = true;
+    variations[1].chord_every = 4;
+    variations[2].flow = StreamFlow::ZIGZAG;
+    variations[2].chords = StreamChords::JUMPS;
+    variations[2].anchor = true;
+    variations[2].anchor_lane = 5;
+    variations[3].disconnect_chance = 0;
+    variations[3].jack_chance = 50;
+    variations[3].density = 100;
+    variations[3].split = SplitStyle::HALVES;
+    variations[4].first_lane = 2;
+    variations[4].last_lane = 4;
+    variations[4].chords = StreamChords::CUSTOM;
+    variations[4].chord_size = 9;
+    variations[4].kept_lanes = 6;
+    variations[4].split = SplitStyle::INNER_OUTER;
+    variations[5].density = 1;
+    variations[5].vary_sizes = false;
+    variations[5].lane_a = 9;
+
+    for (PatternFamily family : {PatternFamily::STREAM, PatternFamily::SINGLE_TRILL, PatternFamily::SPLIT_TRILL, PatternFamily::JACKS}) {
+        for (const PatternSettings& settings : variations) {
+            for (uint8_t keys = 1; keys <= 10; keys++) {
+                CHECK(valid(generate_pattern(family, keys, 48, 7, settings), 48, keys));
+            }
+
+            CHECK(generate_pattern(family, 7, 32, 99, settings) == generate_pattern(family, 7, 32, 99, settings));
+        }
+    }
+
+    PatternSettings connected;
+    connected.disconnect_chance = 0;
+    PatternSettings disconnected;
+    disconnected.disconnect_chance = 100;
+    std::vector<PatternRow> skipping = generate_pattern(PatternFamily::STREAM, 7, 64, 3, disconnected);
+    PatternSettings jumps;
+    jumps.chords = StreamChords::JUMPS;
+    std::vector<PatternRow> random = generate_pattern(PatternFamily::STREAM, 4, 64, 3);
+    std::vector<PatternRow> flowing = generate_pattern(PatternFamily::STREAM, 7, 64, 3, connected);
+    std::vector<PatternRow> jumpstream = generate_pattern(PatternFamily::STREAM, 4, 64, 3, jumps);
+
+    for (size_t row = 1; row < 64; row++) {
+        CHECK(shared(random[row], random[row - 1]) == 0);
+        CHECK(std::abs(flowing[row][0] - flowing[row - 1][0]) == 1);
+        CHECK(std::abs(skipping[row][0] - skipping[row - 1][0]) >= 2);
+        CHECK(shared(jumpstream[row], jumpstream[row - 1]) == 0 && jumpstream[row].size() == (row % 2 == 0 ? 2u : 1u));
+    }
+
+    auto jacks_in = [&](const std::vector<PatternRow>& rows) {
+        size_t count = 0;
+
+        for (size_t row = 1; row < rows.size(); row++) {
+            count += shared(rows[row], rows[row - 1]) > 0 ? 1 : 0;
+        }
+
+        return count;
+    };
+    PatternSettings rolling_jumps;
+    rolling_jumps.flow = StreamFlow::ROLL;
+    rolling_jumps.chords = StreamChords::JUMPS;
+    PatternSettings shared_anchor_hands;
+    shared_anchor_hands.anchor = true;
+    shared_anchor_hands.anchor_alone = false;
+    shared_anchor_hands.anchor_lane = 3;
+    shared_anchor_hands.chords = StreamChords::HANDS;
+    shared_anchor_hands.chord_every = 4;
+    CHECK(jacks_in(generate_pattern(PatternFamily::STREAM, 4, 96, 8, rolling_jumps)) == 0);
+    CHECK(jacks_in(generate_pattern(PatternFamily::STREAM, 7, 96, 8, shared_anchor_hands)) == 0);
+    PatternSettings trills;
+    trills.trill_chance = 100;
+    std::vector<PatternRow> trilling = generate_pattern(PatternFamily::STREAM, 7, 64, 8, trills);
+    std::vector<PatternRow> untrilled = generate_pattern(PatternFamily::STREAM, 7, 64, 8);
+
+    for (size_t row = 2; row < 64; row++) {
+        CHECK(trilling[row] == trilling[row - 2]);
+        CHECK(untrilled[row] != untrilled[row - 2]);
+    }
+
+    PatternSettings jacky;
+    jacky.jack_chance = 100;
+    CHECK(jacks_in(generate_pattern(PatternFamily::STREAM, 4, 96, 8, jacky)) >= 40);
+
+    PatternSettings roll;
+    roll.flow = StreamFlow::ROLL;
+    CHECK(generate_pattern(PatternFamily::STREAM, 4, 6, 0, roll) == std::vector<PatternRow>({{0}, {1}, {2}, {3}, {0}, {1}}));
+    roll.reverse = true;
+    roll.first_lane = 4;
+    roll.last_lane = 6;
+    CHECK(generate_pattern(PatternFamily::STREAM, 7, 4, 0, roll) == std::vector<PatternRow>({{6}, {5}, {4}, {6}}));
+    roll.flow = StreamFlow::ZIGZAG;
+    roll.reverse = false;
+    roll.first_lane = 0;
+    roll.last_lane = 255;
+    CHECK(generate_pattern(PatternFamily::STREAM, 4, 7, 0, roll) == std::vector<PatternRow>({{0}, {1}, {2}, {3}, {2}, {1}, {0}}));
+
+    PatternSettings anchored;
+    anchored.anchor = true;
+    anchored.anchor_lane = 2;
+    anchored.anchor_every = 3;
+    std::vector<PatternRow> anchor_rows = generate_pattern(PatternFamily::STREAM, 6, 30, 5, anchored);
+
+    anchored.flow = StreamFlow::ROLL;
+    anchored.chords = StreamChords::HANDS;
+    std::vector<PatternRow> anchored_hands = generate_pattern(PatternFamily::STREAM, 6, 30, 5, anchored);
+    anchored.anchor_alone = false;
+    anchored.anchor_every = 4;
+    std::vector<PatternRow> shared_anchor = generate_pattern(PatternFamily::STREAM, 6, 90, 5, anchored);
+    bool anchor_in_stream = false;
+
+    for (size_t row = 0; row < anchor_rows.size(); row++) {
+        CHECK((row % 3 == 0) == (anchor_rows[row] == PatternRow{2}));
+        CHECK((row % 3 == 0) == (std::find(anchored_hands[row].begin(), anchored_hands[row].end(), 2) != anchored_hands[row].end()));
+    }
+
+    for (size_t row = 0; row < shared_anchor.size(); row++) {
+        CHECK(row % 4 != 0 || shared_anchor[row] == PatternRow{2});
+        anchor_in_stream = anchor_in_stream || (row % 4 != 0 && std::find(shared_anchor[row].begin(), shared_anchor[row].end(), 2) != shared_anchor[row].end());
+    }
+
+    CHECK(anchor_in_stream);
+
+    PatternSettings trill;
+    trill.lane_a = 1;
+    trill.lane_b = 3;
+    CHECK(generate_pattern(PatternFamily::SINGLE_TRILL, 4, 3, 0, trill) == std::vector<PatternRow>({{1}, {3}, {1}}));
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 4, 2, 0, trill) == std::vector<PatternRow>({{0, 2}, {1, 3}}));
+    trill.split = SplitStyle::HALVES;
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 7, 2, 0, trill) == std::vector<PatternRow>({{0, 1, 2, 3}, {4, 5, 6}}));
+    trill.split = SplitStyle::INNER_OUTER;
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 4, 2, 0, trill) == std::vector<PatternRow>({{0, 3}, {1, 2}}));
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 7, 2, 0, trill) == std::vector<PatternRow>({{0, 1, 5, 6}, {2, 3, 4}}));
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 5, 2, 0, trill) == std::vector<PatternRow>({{0, 4}, {1, 2, 3}}));
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 2, 2, 0, trill) == std::vector<PatternRow>({{0}, {1}}));
+    CHECK(generate_pattern(PatternFamily::SPLIT_TRILL, 1, 2, 0, trill) == std::vector<PatternRow>({{0}, {0}}));
+
+    PatternSettings quadjack;
+    quadjack.density = 100;
+    quadjack.vary_sizes = false;
+    CHECK(generate_pattern(PatternFamily::JACKS, 4, 2, 0, quadjack) == std::vector<PatternRow>({{0, 1, 2, 3}, {0, 1, 2, 3}}));
+    PatternSettings single_lane;
+    single_lane.density = 1;
+    single_lane.vary_sizes = false;
+    std::vector<PatternRow> jack = generate_pattern(PatternFamily::JACKS, 7, 16, 4, single_lane);
+    CHECK(std::all_of(jack.begin(), jack.end(), [&](const PatternRow& row) { return row == jack.front() && row.size() == 1; }));
+    PatternSettings jumpjack;
+    jumpjack.density = 50;
+    jumpjack.vary_sizes = false;
+    std::vector<PatternRow> jumpjacks = generate_pattern(PatternFamily::JACKS, 4, 32, 4, jumpjack);
+
+    for (size_t row = 1; row < jumpjacks.size(); row++) {
+        CHECK(jumpjacks[row].size() == 2 && shared(jumpjacks[row], jumpjacks[row - 1]) == 1);
+    }
 }

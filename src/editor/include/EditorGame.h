@@ -5,6 +5,7 @@
 #include "FileDialog.h"
 #include "ImGuiBackend.h"
 #include "OsuExport.h"
+#include "PatternGenerator.h"
 #include "Playback.h"
 #include "Waveform.h"
 #include "gse/Game.h"
@@ -129,12 +130,22 @@ namespace nascent {
         bool quantize_requested = false;
         uint32_t quantize_divisor = 4;
         bool quantize_ends = true;
+        bool pattern_open = false;
+        size_t pattern_style = 0;
+        size_t pattern_variant = 0;
+        uint32_t pattern_divisor = 4;
+        int pattern_beats = 8;
+        PatternSettings pattern_settings;
+        bool pattern_replace = true;
+        uint32_t pattern_seed = 1;
+        std::vector<Hit> pattern_preview;
         bool transform_from_playhead = false;
         int rotate_columns = 1;
         std::filesystem::path dropped_audio;
         DialogPurpose osu_prompt_purpose = DialogPurpose::NONE;
         float waveform_opacity = 0.2f;
         std::optional<float> note_opacity;
+        std::optional<int> lane_width;
         double hitsound_position = 0;
         std::array<int, 2> metronome_sounds = {-1, -1};
         Waveform waveform;
@@ -194,6 +205,8 @@ namespace nascent {
         void toggle_playback();
         void change_snap(int32_t direction);
         void change_scroll_speed(int32_t notches);
+        int lane_width_percent() const;
+        void change_lane_width(int32_t steps);
         double place_time(double time) const;
         std::string snap_label() const;
         void update_preview();
@@ -230,6 +243,11 @@ namespace nascent {
         void stretch_selection(double factor, bool from_playhead);
         void draw_transform_popup();
         void draw_quantize_popup();
+        static bool snap_picker(const char* label, uint32_t& value);
+        std::vector<Hit> pattern_hits() const;
+        void draw_pattern_window();
+        void draw_pattern_settings(PatternFamily family);
+        void place_pattern();
         void select_all();
         void copy_selection();
         void cut_selection();
@@ -250,6 +268,8 @@ namespace nascent {
         static constexpr std::array<uint32_t, 11> DIVISORS = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48};
         static constexpr std::array<uint32_t, 8> COMPLEX_TUPLET_DIVISORS = {5, 7, 9, 10, 11, 13, 14, 15};
         static constexpr int MAX_DIVISOR = 96;
+        static constexpr int MAX_PATTERN_BEATS = 128;
+        static constexpr size_t MAX_PATTERN_ROWS = 4096;
         int custom_divisor = 20;
         static constexpr std::array<float, 7> RATES = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
 
