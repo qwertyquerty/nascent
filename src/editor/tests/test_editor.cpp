@@ -251,4 +251,8 @@ NASCENT_TEST(editor_stretches_by_beats) {
     std::vector<Hit> quarters = document->stretched(eighths, 2.0, 1000);
     CHECK(same_notes(quarters, {tap(0, 1000), tap(1, 1500), hold(2, 2000, 2250)}));
     CHECK(same_notes(document->stretched(quarters, 0.5, 1000), eighths));
+
+    std::vector<Hit> sloppy = {tap(0, 1010), tap(1, 1240), hold(2, 1490, 1770), hold(3, 1990, 2010)};
+    CHECK(same_notes(document->quantized(sloppy, 4, true), {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1750), hold(3, 2000, 2062)}));
+    CHECK(same_notes(document->quantized(sloppy, 4, false), {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1780), hold(3, 2000, 2020)}));
 }

@@ -92,5 +92,6 @@ namespace nascent {
         double beat_at(double time) const;
         double time_at_beat(double beat) const;
         std::vector<Hit> stretched(const std::vector<Hit>& hits, double factor, double anchor) const;
+        std::vector<Hit> quantized(const std::vector<Hit>& hits, uint32_t divisor, bool ends) const;
     };
 }

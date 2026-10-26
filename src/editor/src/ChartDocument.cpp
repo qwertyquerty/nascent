@@ -522,6 +522,30 @@ namespace nascent {
         return beat;
     }
 
+    std::vector<Hit> ChartDocument::quantized(const std::vector<Hit>& hits, uint32_t divisor, bool ends) const {
+        std::vector<Hit> result = hits;
+
+        for (Hit& hit : result) {
+            int32_t start = (int32_t)std::lround(std::max(0.0, snap(hit.time, divisor)));
+
+            if (hit.hit_type != HitType::HOLD) {
+                hit.time = hit.end_time = start;
+                continue;
+            }
+
+            int32_t end = ends ? (int32_t)std::lround(snap(hit.end_time, divisor)) : hit.end_time + (start - hit.time);
+
+            if (end <= start) {
+                end = (int32_t)std::lround(step(start, divisor, 1));
+            }
+
+            hit.time = start;
+            hit.end_time = end;
+        }
+
+        return result;
+    }
+
     std::vector<Hit> ChartDocument::stretched(const std::vector<Hit>& hits, double factor, double anchor) const {
         double anchor_beat = beat_at(anchor);
         auto scale = [&](int32_t time) {

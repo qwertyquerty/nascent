@@ -25,6 +25,7 @@
 #include <functional>
 #include <numbers>
 #include <numeric>
+#include <set>
 
 namespace nascent {
     namespace {
@@ -923,6 +924,11 @@ namespace nascent {
                 transform_requested = true;
             }
 
+            if (ImGui::MenuItem("Quantize selection...", nullptr, false, open && !selection.empty())) {
+                quantize_divisor = divisor;
+                quantize_requested = true;
+            }
+
             ImGui::EndMenu();
         }
 
@@ -1152,9 +1158,9 @@ namespace nascent {
                 }
             }
 
-            ImGui::SeparatorText("Polyrhythm");
+            ImGui::SeparatorText("Complex tuplets");
 
-            for (uint32_t option : POLYRHYTHM_DIVISORS) {
+            for (uint32_t option : COMPLEX_TUPLET_DIVISORS) {
                 if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == divisor)) {
                     divisor = option;
                 }
@@ -1823,6 +1829,7 @@ namespace nascent {
         }
 
         draw_transform_popup();
+        draw_quantize_popup();
 
         if (audio_prompt_requested) {
             ImGui::OpenPopup("Dropped audio");
@@ -2473,6 +2480,101 @@ namespace nascent {
         selection = std::move(result);
         selection_revision = document->revision();
         set_status(std::format("{} {} notes {:g}x", factor >= 1.0 ? "Stretched" : "Shrunk", selection.size(), factor >= 1.0 ? factor : 1.0 / factor));
+    }
+
+    void EditorGame::draw_quantize_popup() {
+        if (quantize_requested) {
+            ImGui::OpenPopup("Quantize selection");
+            quantize_requested = false;
+        }
+
+        if (!ImGui::BeginPopupModal("Quantize selection", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            return;
+        }
+
+        prune_selection();
+
+        if (document == nullptr || selection.empty()) {
+            ImGui::TextUnformatted("Nothing is selected anymore.");
+        }
+        else if (document->data().timing_points.empty()) {
+            ImGui::TextUnformatted("Add a timing point first, there's no beat grid to quantize to.");
+        }
+        else {
+            ImGui::SetNextItemWidth(120);
+
+            if (ImGui::BeginCombo("Snap to", std::format("1/{}", quantize_divisor).c_str(), ImGuiComboFlags_HeightLarge)) {
+                for (uint32_t option : DIVISORS) {
+                    if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == quantize_divisor)) {
+                        quantize_divisor = option;
+                    }
+                }
+
+                ImGui::SeparatorText("Complex tuplets");
+
+                for (uint32_t option : COMPLEX_TUPLET_DIVISORS) {
+                    if (ImGui::Selectable(std::format("1/{}", option).c_str(), option == quantize_divisor)) {
+                        quantize_divisor = option;
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+
+            ImGui::Checkbox("Quantize long note ends too", &quantize_ends);
+            std::vector<Hit> result = document->quantized(selection, quantize_divisor, quantize_ends);
+            size_t moved = 0;
+            int32_t largest = 0;
+            std::set<std::pair<int32_t, uint8_t>> spots;
+
+            for (size_t index = 0; index < selection.size(); index++) {
+                int32_t shift = std::max(std::abs(result[index].time - selection[index].time), std::abs(result[index].end_time - selection[index].end_time));
+                moved += shift != 0 ? 1 : 0;
+                largest = std::max(largest, shift);
+                spots.insert({result[index].time, result[index].key});
+            }
+
+            size_t merged = selection.size() - spots.size();
+            ImGui::Spacing();
+
+            if (moved == 0) {
+                ImGui::TextUnformatted(std::format("All {} selected notes are already on 1/{}.", selection.size(), quantize_divisor).c_str());
+            }
+            else {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "%s", std::format("{} of {} selected notes will move, by up to {} ms.", moved, selection.size(), largest).c_str());
+            }
+
+            if (merged > 0) {
+                ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "%s", std::format("{} notes will land on the same lane and time as another and be merged.", merged).c_str());
+            }
+
+            ImGui::Spacing();
+            ImGui::BeginDisabled(moved == 0);
+
+            if (ImGui::Button("Quantize", ImVec2(110, 0))) {
+                document->change([&](ChartData& data) { replace_hits(data, selection, result); });
+                selection.clear();
+
+                for (const Hit& hit : result) {
+                    if (document->contains(hit) && !is_selected(hit)) {
+                        selection.push_back(hit);
+                    }
+                }
+
+                selection_revision = document->revision();
+                set_status(std::format("Quantized {} notes to 1/{}", moved, quantize_divisor));
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 
     void EditorGame::draw_transform_popup() {
