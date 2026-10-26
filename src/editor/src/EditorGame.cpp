@@ -199,7 +199,7 @@ namespace nascent {
             std::cerr << "Audio: output device \"" << settings.audio_output_device << "\" isn't available, using the system default" << std::endl;
         }
 
-        audio().set_volumes(SettingsManager::volume_gain(settings.master_volume), 1.0f, 1.0f);
+        audio().set_volumes(1.0f, 1.0f, 1.0f);
         playback.set_volume(SettingsManager::volume_gain(music_volume));
         olc::Font::init();
         Updater::check();
