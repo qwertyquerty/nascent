@@ -1,3 +1,5 @@
+from typing import TypedDict
+
 CALCULATOR_NAME: str
 RATE_MIN: float
 RATE_MAX: float
@@ -9,6 +11,13 @@ HIT_SCORES: list[str]
 HIT_SCORE_ACCURACY: dict[str, float]
 RANKED_HIT_ACCURACY: int
 MAX_HIT_ACCURACY: int
+SKILLS: list[str]
+
+class DifficultyBreakdown(TypedDict):
+    difficulty: float
+    mix: dict[str, float]
+    ratings: dict[str, float]
+    sustained_seconds: float
 
 class Note:
     def __init__(self, lane: int, time: int, end_time: int | None = None) -> None: ...
@@ -102,6 +111,7 @@ class Chart:
     def intro_skip_ms_at(self, rate: float) -> int: ...
     def duration_ms_at(self, rate: float) -> int: ...
     def difficulty(self, rate: float = 1.0) -> float: ...
+    def difficulty_breakdown(self, rate: float = 1.0) -> DifficultyBreakdown: ...
     def to_json(self) -> str: ...
 
 class Replay:

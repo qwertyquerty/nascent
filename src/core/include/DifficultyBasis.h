@@ -35,9 +35,13 @@ namespace nascent {
         JACK_LONG,
         HAND_SPEED_SHORT,
         HAND_SPEED_LONG,
+        FLAM,
+        HAND_TRILL,
+        ANCHOR,
+        BURST,
     };
 
-    inline constexpr std::array<std::string_view, 22> BASIS_COMPONENT_NAMES = {
+    inline constexpr std::array<std::string_view, 26> BASIS_COMPONENT_NAMES = {
         "jack",
         "sustained_jack",
         "hand_speed",
@@ -60,6 +64,10 @@ namespace nascent {
         "jack_long",
         "hand_speed_short",
         "hand_speed_long",
+        "flam",
+        "hand_trill",
+        "anchor",
+        "burst",
     };
 
     enum class JackCurveKind : uint8_t {
@@ -83,7 +91,7 @@ namespace nascent {
         {"jack_knee_80ms", JackCurveKind::KNEE, 80.0},
     }};
 
-    inline constexpr std::array<std::string_view, 3> BASIS_JACK_CURVE_VARIANTS = {"", "short_", "long_"};
+    inline constexpr std::array<std::string_view, 5> BASIS_JACK_CURVE_VARIANTS = {"", "short_", "long_", "chord_short_", "chord_long_"};
 
     inline constexpr std::array<std::string_view, 8> BASIS_LOAD_NAMES = {"column_max", "column_max_squared", "hand_max", "column_imbalance", "hand_imbalance", "fatigue", "column_spread", "hand_spread"};
 
@@ -109,7 +117,7 @@ namespace nascent {
 
     inline constexpr size_t BASIS_COMPONENT_COUNT = BASIS_COMPONENT_NAMES.size();
     inline constexpr std::array<int, 3> BASIS_POWERS = {1, 2, 3};
-    inline constexpr std::array<double, 9> BASIS_TIMESCALES = {0.1, 0.25, 0.5, 0.75, 1.5, 2.5, 8.0, 25.0, 75.0};
+    inline constexpr std::array<double, 11> BASIS_TIMESCALES = {0.1, 0.25, 0.5, 0.75, 1.5, 2.5, 8.0, 25.0, 75.0, 150.0, 300.0};
     inline constexpr std::array<size_t, 2> BASIS_INTERACTION_TIMESCALES = {1, 5};
     inline constexpr size_t BASIS_MIX_SHORT_TIMESCALE = 2;
     inline constexpr size_t BASIS_MIX_LONG_TIMESCALE = 6;
@@ -133,6 +141,15 @@ namespace nascent {
 
     using BasisComponents = std::array<double, BASIS_COMPONENT_COUNT>;
     using JackCurveValues = std::array<double, BASIS_JACK_CURVE_COUNT>;
+    inline constexpr std::array<std::string_view, 16> BASIS_ROW_ATTRIBUTE_NAMES = {"chord_2", "chord_3", "chord_4plus", "hand_chord", "ln_head", "held_same_hand", "trill", "anchor", "grace", "jack_fast", "jack_long", "vibro_fast", "jack_vfast", "vibro_chord", "jack_band", "jack_long_chord"};
+    inline constexpr double BASIS_ROW_JACK_SLOW_MS = 150.0;
+    inline constexpr double BASIS_ROW_JACK_FAST_MS = 90.0;
+    inline constexpr double BASIS_ROW_VIBRO_SLOW_MS = 100.0;
+    inline constexpr double BASIS_ROW_VIBRO_FAST_MS = 70.0;
+    inline constexpr double BASIS_ROW_JACK_BAND_MS = 95.0;
+    inline constexpr double BASIS_ROW_JACK_BAND_WIDTH_MS = 15.0;
+    inline constexpr double BASIS_ROW_CHORD_SPREAD_MS = 10.0;
+    using RowAttributes = std::array<double, BASIS_ROW_ATTRIBUTE_NAMES.size()>;
     using JackCurveBase = std::array<double, BASIS_JACK_CURVES.size()>;
     using BasisVector = std::array<double, BASIS_SIZE>;
 
@@ -140,6 +157,7 @@ namespace nascent {
     std::string basis_name(size_t index);
     BasisComponents basis_components(const DifficultyEvent& event);
     JackCurveValues jack_curve_values(const DifficultyEvent& event);
+    RowAttributes basis_row_attributes(const DifficultyEvent& event);
     double basis_mix_shift(const BasisVector& banks);
     bool basis_same_group(const DifficultyEvent& a, const DifficultyEvent& b);
 

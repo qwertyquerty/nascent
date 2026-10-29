@@ -16,6 +16,7 @@ from ._core import (
     RATE_MAX,
     RATE_MIN,
     RATE_STEP,
+    SKILLS,
     Attempt,
     Chart,
     JudgedNote,
@@ -49,7 +50,9 @@ __all__ = [
     "RATE_MAX",
     "RATE_MIN",
     "RATE_STEP",
+    "SKILLS",
     "Attempt",
+    "Breakdown",
     "Chart",
     "JudgedNote",
     "Note",
@@ -60,6 +63,7 @@ __all__ = [
     "convert_osu",
     "convert_stepmania",
     "difficulty",
+    "difficulty_breakdown",
     "difficulty_fingerprint",
     "difficulty_rates",
     "grade",
@@ -86,6 +90,16 @@ class Rating:
     chart: Chart
     rate: float
     difficulty: float
+
+
+@dataclass(frozen=True)
+class Breakdown:
+    chart: Chart
+    rate: float
+    difficulty: float
+    mix: dict[str, float]
+    ratings: dict[str, float]
+    sustained_seconds: float
 
 
 def _read(source: Source) -> tuple[bytes, Optional[str]]:
@@ -176,6 +190,11 @@ def load(source: Source, format: Optional[str] = None) -> list[Chart]:
 def difficulty(source: Union[Source, Chart], rate: float = 1.0, format: Optional[str] = None) -> list[Rating]:
     charts = [source] if isinstance(source, Chart) else load(source, format)
     return [Rating(chart, rate, chart.difficulty(rate)) for chart in charts]
+
+
+def difficulty_breakdown(source: Union[Source, Chart], rate: float = 1.0, format: Optional[str] = None) -> list[Breakdown]:
+    charts = [source] if isinstance(source, Chart) else load(source, format)
+    return [Breakdown(chart, rate, **chart.difficulty_breakdown(rate)) for chart in charts]
 
 
 def difficulty_rates(source: Union[Source, Chart], format: Optional[str] = None) -> list[dict[float, float]]:

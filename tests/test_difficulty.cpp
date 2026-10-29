@@ -42,6 +42,29 @@ NASCENT_TEST(difficulty) {
     CHECK(DifficultyCalculator::calculate(*chart) > normal);
 }
 
+NASCENT_TEST(difficulty_breakdown) {
+    auto top = [](const DifficultyBreakdown& breakdown) {
+        return (DifficultySkill)(std::max_element(breakdown.mix.begin(), breakdown.mix.end()) - breakdown.mix.begin());
+    };
+
+    std::vector<Hit> roll = stream(125, false);
+    DifficultyBreakdown breakdown = DifficultyCalculator::breakdown(roll, 4, {}, 5);
+    CHECK(breakdown.rating == DifficultyCalculator::calculate(roll, 4, {}, 5));
+    double total = 0;
+
+    for (size_t skill = 0; skill < DIFFICULTY_SKILL_COUNT; skill++) {
+        total += breakdown.mix[skill];
+        CHECK(breakdown.mix[skill] >= 0.0);
+        CHECK(breakdown.ratings[skill] <= breakdown.rating + 1e-9);
+    }
+
+    CHECK(std::abs(total - 1.0) < 1e-9);
+    CHECK(top(breakdown) == DifficultySkill::STREAM);
+    CHECK(top(DifficultyCalculator::breakdown(stream(125, true), 4, {}, 5)) == DifficultySkill::JACKSPEED);
+    CHECK(breakdown.sustained_seconds > 0.0 && breakdown.sustained_seconds <= 31.0);
+    CHECK(DifficultyCalculator::breakdown({}, 4, {}, 5).rating == 0.0);
+}
+
 NASCENT_TEST(difficulty_model_matches_features) {
     std::set<std::string> names;
 

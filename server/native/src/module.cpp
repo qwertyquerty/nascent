@@ -334,6 +334,32 @@ namespace {
         return DifficultyCalculator::calculate(pitched);
     }
 
+    py::dict chart_breakdown_at(const LoadedChart& chart, float rate) {
+        check_rate(rate);
+        Chart pitched = chart.at_rate(rate);
+        DifficultyBreakdown breakdown;
+        {
+            py::gil_scoped_release release;
+            breakdown = DifficultyCalculator::breakdown(pitched);
+        }
+
+        py::dict mix;
+        py::dict ratings;
+
+        for (size_t skill = 0; skill < DIFFICULTY_SKILL_COUNT; skill++) {
+            py::str name{std::string(DIFFICULTY_SKILL_NAMES[skill])};
+            mix[name] = breakdown.mix[skill];
+            ratings[name] = breakdown.ratings[skill];
+        }
+
+        py::dict result;
+        result["difficulty"] = breakdown.rating;
+        result["mix"] = mix;
+        result["ratings"] = ratings;
+        result["sustained_seconds"] = breakdown.sustained_seconds;
+        return result;
+    }
+
     size_t chart_hold_count(const LoadedChart& chart) {
         size_t holds = 0;
 
@@ -364,6 +390,9 @@ NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
     m.attr("REPLAY_FORMAT_VERSION") = Replay::FORMAT_VERSION;
     m.attr("CHART_HASH_FORMAT") = std::string(Chart::CHART_HASH_FORMAT);
     m.attr("PERFORMANCE_ACCURACY_FLOOR") = PERFORMANCE_ACCURACY_FLOOR;
+
+    std::vector<std::string> skills(DIFFICULTY_SKILL_NAMES.begin(), DIFFICULTY_SKILL_NAMES.end());
+    m.attr("SKILLS") = skills;
 
     std::vector<std::string> hit_scores;
 
@@ -452,6 +481,7 @@ NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
         .def("intro_skip_ms_at", &chart_intro_skip_at, py::arg("rate"))
         .def("duration_ms_at", &chart_duration_at, py::arg("rate"))
         .def("difficulty", &chart_difficulty_at, py::arg("rate") = 1.0f)
+        .def("difficulty_breakdown", &chart_breakdown_at, py::arg("rate") = 1.0f)
         .def("to_json", [](const LoadedChart& c) { return c.chart->serialize().dump(); });
 
     py::class_<LoadedReplay>(m, "Replay")

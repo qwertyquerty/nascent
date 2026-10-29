@@ -30,6 +30,7 @@ set(NASCENT_DIFFICULTY_SOURCES
     include/DifficultyCalculator.h
     include/DifficultyEvents.h
     include/DifficultyModel.h
+    include/DifficultySkillModel.h
     src/Chart.cpp
     src/DifficultyBasis.cpp
     src/DifficultyCalculator.cpp

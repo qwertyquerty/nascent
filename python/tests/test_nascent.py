@@ -119,6 +119,26 @@ def test_archive():
     assert sorted(chart.difficulty_name for chart in charts) == ["Challenge", "Hard"]
 
 
+def test_difficulty_breakdown():
+    breakdown = nascent.difficulty_breakdown(osu_text().encode(), rate=1.2)[0]
+
+    assert breakdown.rate == 1.2
+    assert breakdown.difficulty == nascent.difficulty(osu_text().encode(), rate=1.2)[0].difficulty
+    assert list(breakdown.mix) == nascent.SKILLS and list(breakdown.ratings) == nascent.SKILLS
+    assert abs(sum(breakdown.mix.values()) - 1.0) < 1e-9
+    assert all(value >= 0 for value in breakdown.mix.values())
+    assert all(0 <= value <= breakdown.difficulty + 1e-9 for value in breakdown.ratings.values())
+    assert max(breakdown.mix, key=breakdown.mix.get) == "stream"
+    assert breakdown.sustained_seconds > 0
+
+    jacks = OSU.format(objects="\n".join(f"64,192,{index * 125},1,0,0:0:0:0:" for index in range(256)))
+    jack = nascent.difficulty_breakdown(jacks.encode())[0]
+    assert max(jack.mix, key=jack.mix.get) == "jackspeed"
+
+    with pytest.raises(ValueError):
+        made_chart().difficulty_breakdown(0.0)
+
+
 def test_every_rate():
     curves = nascent.difficulty_rates(osu_text().encode())
 
@@ -140,7 +160,7 @@ def test_errors(tmp_path):
 
 
 def test_calculator_identity():
-    assert nascent.CALCULATOR_NAME == "Nascent Calc V2"
+    assert nascent.CALCULATOR_NAME == "Nascent Calc V3"
     assert len(nascent.difficulty_fingerprint()) == 64
     assert nascent.__version__
 

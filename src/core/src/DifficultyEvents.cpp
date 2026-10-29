@@ -23,6 +23,9 @@ namespace nascent {
             std::optional<double> end;
             size_t id = 0;
             double weight = 0;
+            double flam_gap = 0;
+            double chord_spread = 0;
+            size_t group = 0;
         };
 
         struct BuiltEvent {
@@ -93,8 +96,9 @@ namespace nascent {
                         continue;
                     }
 
-                    total += 1;
-                    same_hand += difficulty_hand(holds[index].column, key_count) == hand ? 1 : 0;
+                    double busy = std::clamp((*holds[index].end - holds[index].time - HOLD_BUSY_MIN_MS) / (HOLD_BUSY_FULL_MS - HOLD_BUSY_MIN_MS), 0.0, 1.0);
+                    total += busy;
+                    same_hand += difficulty_hand(holds[index].column, key_count) == hand ? busy : 0;
                 }
 
                 return {same_hand, total};
@@ -267,6 +271,7 @@ namespace nascent {
 
         size_t group_start = 0;
         double group_time = 0;
+        double previous_time = 0;
         uint32_t group_columns = 0;
 
         for (size_t index = 0; tolerance > 0 && index < presses.size(); index++) {
@@ -275,15 +280,25 @@ namespace nascent {
 
             if (group_columns != 0 && press.time - group_time <= tolerance && (group_columns & bit) == 0) {
                 press.weight = chord_weight(press.time - group_time);
+                press.group = group_start;
+                presses[group_start].chord_spread = std::max(presses[group_start].chord_spread, press.time - group_time);
+                press.flam_gap = press.time - previous_time;
                 presses[group_start].weight = std::max(presses[group_start].weight, press.weight);
+                previous_time = press.time;
                 press.time = group_time;
                 group_columns |= bit;
             }
             else {
                 group_start = index;
+                press.group = index;
                 group_time = press.time;
+                previous_time = press.time;
                 group_columns = bit;
             }
+        }
+
+        for (Press& press : presses) {
+            press.chord_spread = presses[press.group].chord_spread;
         }
 
         std::stable_sort(presses.begin(), presses.end(), [](const Press& a, const Press& b) {
@@ -292,10 +307,11 @@ namespace nascent {
 
         std::vector<double> jack_runs(presses.size(), 1.0);
         std::vector<std::vector<size_t>> column_presses(key_count);
-        std::vector<double> onsets;
+        std::array<std::vector<double>, MAX_HANDS> hand_onsets;
 
         for (size_t index = 0; index < presses.size(); index++) {
             column_presses[presses[index].column].push_back(index);
+            std::vector<double>& onsets = hand_onsets[difficulty_hand(presses[index].column, key_count)];
 
             if (onsets.empty() || presses[index].time != onsets.back()) {
                 onsets.push_back(presses[index].time);
@@ -304,6 +320,12 @@ namespace nascent {
 
         for (const std::vector<size_t>& order : column_presses) {
             std::optional<size_t> first;
+
+            if (order.empty()) {
+                continue;
+            }
+
+            const std::vector<double>& onsets = hand_onsets[difficulty_hand(presses[order.front()].column, key_count)];
 
             auto close = [&](size_t end) {
                 if (first) {
@@ -368,6 +390,7 @@ namespace nascent {
         double onset_last_gap = NO_PREVIOUS_GAP;
         uint32_t previous_columns = 0;
         uint32_t previous_hands = 0;
+        uint32_t earlier_hands = 0;
         std::array<std::vector<std::pair<uint8_t, double>>, MAX_HANDS> roll_windows;
         std::array<double, MAX_HANDS> hand_evenness = {};
         std::vector<uint32_t> onset_masks;
@@ -377,6 +400,40 @@ namespace nascent {
             return press.end.has_value();
         });
         HoldSweep press_sweep(holds, key_count);
+        std::vector<double> burst(presses.size(), 1.0);
+        double active = 0;
+
+        for (size_t index = 1; index < presses.size(); index++) {
+            double gap = presses[index].time - presses[index - 1].time;
+            active += gap * std::clamp((ACTIVE_REST_GAP_MS - gap) / (ACTIVE_REST_GAP_MS - ACTIVE_FULL_GAP_MS), 0.0, 1.0);
+        }
+
+        double mean_rate = (double)presses.size() / std::max(active, BURST_WINDOW_MS);
+
+        for (size_t index = 0, low = 0, high = 0; index < presses.size(); index++) {
+            while (low < presses.size() && presses[low].time < presses[index].time - BURST_WINDOW_MS / 2) {
+                low++;
+            }
+
+            while (high < presses.size() && presses[high].time <= presses[index].time + BURST_WINDOW_MS / 2) {
+                high++;
+            }
+
+            burst[index] = (double)(high - low) / BURST_WINDOW_MS / mean_rate;
+        }
+
+        std::array<std::array<int, 2>, MAX_HANDS> hand_columns;
+        std::array<std::array<double, 2>, MAX_HANDS> hand_column_times = {};
+        std::array<std::vector<uint8_t>, MAX_HANDS> anchor_windows;
+        std::array<double, MAX_HANDS> columns_per_hand = {};
+
+        for (auto& recent : hand_columns) {
+            recent = {-1, -1};
+        }
+
+        for (uint8_t column = 0; column < key_count; column++) {
+            columns_per_hand[difficulty_hand(column, key_count)] += 1;
+        }
 
         for (size_t first = 0; first < presses.size();) {
             double time = presses[first].time;
@@ -455,6 +512,17 @@ namespace nascent {
                 }
 
                 auto [held_same_hand, held_total] = press_sweep.held_at(time, press.column);
+                const std::array<int, 2>& recent = hand_columns[hand];
+                uint32_t only_this_hand = 1u << hand;
+                bool trill = hand_counts[hand] == 1 && previous_hands == only_this_hand && earlier_hands == only_this_hand && recent[0] >= 0 && recent[1] == press.column && recent[0] != press.column && time - hand_column_times[hand][0] <= TRILL_MAX_GAP_MS && hand_column_times[hand][0] - hand_column_times[hand][1] <= TRILL_MAX_GAP_MS;
+                const std::vector<uint8_t>& window = anchor_windows[hand];
+                double anchor = 0;
+
+                if (columns_per_hand[hand] > 1 && window.size() >= ANCHOR_WINDOW / 2) {
+                    double share = (double)(std::count(window.begin(), window.end(), press.column) + 1) / (double)(window.size() + 1);
+                    anchor = std::clamp((share * columns_per_hand[hand] - 1.0) / (columns_per_hand[hand] - 1.0), 0.0, 1.0);
+                }
+
                 DifficultyEvent event = {};
                 event[(size_t)EventChannel::TIME] = time;
                 event[(size_t)EventChannel::COLUMN] = press.column;
@@ -481,13 +549,32 @@ namespace nascent {
                 event[(size_t)EventChannel::ROLL_EVENNESS] = roll;
                 event[(size_t)EventChannel::PATTERN_VARIETY] = variety;
                 event[(size_t)EventChannel::JACK_RUN] = jack_runs[index];
+                event[(size_t)EventChannel::FLAM_GAP] = press.flam_gap;
+                event[(size_t)EventChannel::TRILL] = trill ? 1.0 : 0.0;
+                event[(size_t)EventChannel::ANCHOR] = anchor;
+                event[(size_t)EventChannel::BURST] = burst[index];
+                event[(size_t)EventChannel::CHORD_SPREAD] = press.chord_spread;
                 events.push_back({press.id, press.weight, event});
             }
 
             for (size_t index = first; index < last; index++) {
                 uint8_t column = presses[index].column;
+                uint8_t hand = difficulty_hand(column, key_count);
                 column_last_gap[column] = gap_since(column_last[column], time);
                 column_last[column] = time;
+                anchor_windows[hand].push_back(column);
+
+                if (anchor_windows[hand].size() > ANCHOR_WINDOW) {
+                    anchor_windows[hand].erase(anchor_windows[hand].begin());
+                }
+
+                if (hand_counts[hand] == 1) {
+                    hand_columns[hand] = {column, hand_columns[hand][0]};
+                    hand_column_times[hand] = {time, hand_column_times[hand][0]};
+                }
+                else {
+                    hand_columns[hand] = {-1, -1};
+                }
             }
 
             for (size_t hand = 0; hand < MAX_HANDS; hand++) {
@@ -500,6 +587,7 @@ namespace nascent {
             onset_last_gap = onset_gap;
             onset_last = time;
             previous_columns = columns;
+            earlier_hands = previous_hands;
             previous_hands = hands;
             first = last;
         }

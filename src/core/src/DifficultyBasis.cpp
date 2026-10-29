@@ -123,14 +123,20 @@ namespace nascent {
             return values;
         }
 
-        JackCurveValues split_jack_curves(const JackCurveBase& base, double long_run) {
+        double solo_share(const DifficultyEvent& event) {
+            return channel(event, EventChannel::HAND_CHORD_SIZE) > 1.0 ? 0.0 : 1.0;
+        }
+
+        JackCurveValues split_jack_curves(const JackCurveBase& base, double long_run, double solo) {
             JackCurveValues values = {};
             size_t count = BASIS_JACK_CURVES.size();
 
             for (size_t curve = 0; curve < count; curve++) {
                 values[curve] = base[curve];
-                values[count + curve] = (1.0 - long_run) * base[curve];
-                values[2 * count + curve] = long_run * base[curve];
+                values[count + curve] = solo * (1.0 - long_run) * base[curve];
+                values[2 * count + curve] = solo * long_run * base[curve];
+                values[3 * count + curve] = (1.0 - solo) * (1.0 - long_run) * base[curve];
+                values[4 * count + curve] = (1.0 - solo) * long_run * base[curve];
             }
 
             return values;
@@ -249,7 +255,12 @@ namespace nascent {
         double long_run = long_run_share(event);
         values[(size_t)BasisComponent::JACK_SHORT] = (1.0 - long_run) * speed(column_gap);
         values[(size_t)BasisComponent::JACK_LONG] = long_run * speed(column_gap);
-        values[(size_t)BasisComponent::HAND_SPEED] = (1.0 - roll) * hand / hand_chord;
+        double trill = channel(event, EventChannel::TRILL);
+        values[(size_t)BasisComponent::HAND_SPEED] = (1.0 - roll) * (1.0 - trill) * hand / hand_chord;
+        values[(size_t)BasisComponent::HAND_TRILL] = (1.0 - roll) * trill * hand / hand_chord;
+        values[(size_t)BasisComponent::ANCHOR] = channel(event, EventChannel::ANCHOR) * hand / hand_chord;
+        values[(size_t)BasisComponent::FLAM] = std::clamp(channel(event, EventChannel::FLAM_GAP) / CHORD_SEPARATE_MS, 0.0, 1.0) * onset / chord;
+        values[(size_t)BasisComponent::BURST] = std::max(0.0, channel(event, EventChannel::BURST) - 1.0) * onset / chord;
         values[(size_t)BasisComponent::HAND_SPEED_SHORT] = (1.0 - long_run) * values[(size_t)BasisComponent::HAND_SPEED];
         values[(size_t)BasisComponent::HAND_SPEED_LONG] = long_run * values[(size_t)BasisComponent::HAND_SPEED];
         values[(size_t)BasisComponent::ROLL_SPEED] = roll * hand / hand_chord;
@@ -270,9 +281,37 @@ namespace nascent {
         return values;
     }
 
+    RowAttributes basis_row_attributes(const DifficultyEvent& event) {
+        RowAttributes values = {};
+
+        if (channel(event, EventChannel::RELEASE) > 0.5) {
+            return values;
+        }
+
+        double chord = channel(event, EventChannel::CHORD_SIZE);
+        values[0] = chord >= 1.5 && chord < 2.5 ? 1.0 : 0.0;
+        values[1] = chord >= 2.5 && chord < 3.5 ? 1.0 : 0.0;
+        values[2] = chord >= 3.5 ? 1.0 : 0.0;
+        values[3] = channel(event, EventChannel::HAND_CHORD_SIZE) >= 1.5 ? 1.0 : 0.0;
+        values[4] = channel(event, EventChannel::HOLD) > 0.5 ? 1.0 : 0.0;
+        values[5] = std::clamp(channel(event, EventChannel::HELD_SAME_HAND), 0.0, 1.0);
+        values[6] = std::clamp(channel(event, EventChannel::TRILL), 0.0, 1.0);
+        values[7] = std::clamp(channel(event, EventChannel::ANCHOR), 0.0, 1.0);
+        values[8] = channel(event, EventChannel::FLAM_GAP) > 0.0 ? std::clamp(channel(event, EventChannel::FLAM_GAP) / CHORD_SEPARATE_MS, 0.0, 1.0) : 0.0;
+        values[9] = std::clamp((BASIS_ROW_JACK_SLOW_MS - channel(event, EventChannel::COLUMN_GAP)) / (BASIS_ROW_JACK_SLOW_MS - BASIS_ROW_JACK_FAST_MS), 0.0, 1.0);
+        values[10] = long_run_share(event);
+        values[12] = std::clamp((BASIS_ROW_VIBRO_SLOW_MS - channel(event, EventChannel::COLUMN_GAP)) / (BASIS_ROW_VIBRO_SLOW_MS - BASIS_ROW_VIBRO_FAST_MS), 0.0, 1.0);
+        values[11] = values[12] * values[10];
+        double chorded = chord >= 1.5 ? std::clamp(1.0 - channel(event, EventChannel::CHORD_SPREAD) / BASIS_ROW_CHORD_SPREAD_MS, 0.0, 1.0) : 0.0;
+        values[13] = values[11] * chorded;
+        values[14] = std::clamp(1.0 - std::abs(channel(event, EventChannel::COLUMN_GAP) - BASIS_ROW_JACK_BAND_MS) / BASIS_ROW_JACK_BAND_WIDTH_MS, 0.0, 1.0);
+        values[15] = values[9] * values[10] * chorded;
+        return values;
+    }
+
     JackCurveValues jack_curve_values(const DifficultyEvent& event) {
         double jack = event_jack_speed(event);
-        return jack > 0 ? split_jack_curves(jack_curve_base(jack), long_run_share(event)) : JackCurveValues{};
+        return jack > 0 ? split_jack_curves(jack_curve_base(jack), long_run_share(event), solo_share(event)) : JackCurveValues{};
     }
 
     double basis_mix_shift(const BasisVector& banks) {
@@ -321,7 +360,7 @@ namespace nascent {
                 found->second = jack_curve_base(jack);
             }
 
-            curves = split_jack_curves(found->second, long_run_share(event));
+            curves = split_jack_curves(found->second, long_run_share(event), solo_share(event));
         }
 
         if (fresh) {

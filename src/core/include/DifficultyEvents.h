@@ -37,9 +37,14 @@ namespace nascent {
         ROLL_EVENNESS,
         PATTERN_VARIETY,
         JACK_RUN,
+        FLAM_GAP,
+        TRILL,
+        ANCHOR,
+        BURST,
+        CHORD_SPREAD,
     };
 
-    inline constexpr std::array<std::string_view, 25> EVENT_CHANNEL_NAMES = {
+    inline constexpr std::array<std::string_view, 30> EVENT_CHANNEL_NAMES = {
         "time",
         "column",
         "hand",
@@ -65,6 +70,11 @@ namespace nascent {
         "roll_evenness",
         "pattern_variety",
         "jack_run",
+        "flam_gap",
+        "trill",
+        "anchor",
+        "burst",
+        "chord_spread",
     };
 
     inline constexpr size_t EVENT_CHANNEL_COUNT = EVENT_CHANNEL_NAMES.size();
@@ -75,8 +85,8 @@ namespace nascent {
     inline constexpr double ROLL_BREAK_RATIO = 1.5;
     inline constexpr size_t VARIETY_WINDOW = 16;
     inline constexpr size_t VARIETY_MIN_ONSETS = 5;
-    inline constexpr double CHORD_MERGED_MS = 5.0;
-    inline constexpr double CHORD_SEPARATE_MS = 20.0;
+    inline constexpr double CHORD_MERGED_MS = 15.0;
+    inline constexpr double CHORD_SEPARATE_MS = 30.0;
     inline constexpr double ACTIVE_FULL_GAP_MS = 500.0;
     inline constexpr double ACTIVE_REST_GAP_MS = 2000.0;
     inline constexpr size_t ALIGN_MIN_NOTES = 16;
@@ -84,6 +94,11 @@ namespace nascent {
     inline constexpr double ALIGN_MIN_GAIN = 0.25;
     inline constexpr double UNTIMED_SNAP = 0.85;
     inline constexpr double JACK_RUN_RATIO = 1.5;
+    inline constexpr double TRILL_MAX_GAP_MS = 300.0;
+    inline constexpr size_t ANCHOR_WINDOW = 8;
+    inline constexpr double BURST_WINDOW_MS = 2500.0;
+    inline constexpr double HOLD_BUSY_MIN_MS = 30.0;
+    inline constexpr double HOLD_BUSY_FULL_MS = 150.0;
 
     using DifficultyEvent = std::array<double, EVENT_CHANNEL_COUNT>;
 

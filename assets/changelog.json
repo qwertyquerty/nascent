@@ -1,6 +1,17 @@
 {
     "releases": [
         {
+            "version": "0.8.0.beta18",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "Difficulty ratings now use Nascent Calc V3"
+                    ]
+                }
+            ]
+        },
+        {
             "version": "0.7.0.beta14",
             "sections": [
                 {
