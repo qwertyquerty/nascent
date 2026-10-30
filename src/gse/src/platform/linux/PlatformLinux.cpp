@@ -132,6 +132,18 @@ namespace nascent::platform_detail {
         return commands;
     }
 
+    std::vector<const char*> clipboard_read_commands() {
+        std::vector<const char*> commands;
+
+        if (std::getenv("WAYLAND_DISPLAY") != nullptr) {
+            commands.push_back("command -v wl-paste >/dev/null 2>&1 && wl-paste --no-newline");
+        }
+
+        commands.push_back("command -v xclip >/dev/null 2>&1 && xclip -selection clipboard -o");
+        commands.push_back("command -v xsel >/dev/null 2>&1 && xsel --clipboard --output");
+        return commands;
+    }
+
     const char* url_opener() {
         return "xdg-open";
     }

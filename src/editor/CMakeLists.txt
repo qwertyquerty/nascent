@@ -22,16 +22,22 @@ target_link_libraries(imgui PUBLIC olcPixelGameEngine)
 
 add_executable(NascentEditor
     src/ArchiveExport.cpp
+    src/ChartChecker.cpp
     src/ChartDocument.cpp
+    src/DecalDrawList.cpp
+    src/EditorBindings.cpp
     src/EditorField.cpp
     src/EditorGame.cpp
     src/EditorMain.cpp
+    src/EditorSettings.cpp
     src/FileDialog.cpp
     src/ImGuiBackend.cpp
     src/OsuExport.cpp
     src/PatternGenerator.cpp
+    src/PatternLibrary.cpp
     src/Playback.cpp
     src/StepManiaExport.cpp
+    src/Timestamps.cpp
     src/Waveform.cpp
 )
 
@@ -63,14 +69,19 @@ if(NASCENT_BUILD_TESTS)
         tests/test_editor.cpp
         ${CMAKE_SOURCE_DIR}/tests/test_main.cpp
         src/ArchiveExport.cpp
+        src/ChartChecker.cpp
         src/ChartDocument.cpp
+        src/EditorBindings.cpp
+        src/EditorSettings.cpp
         src/OsuExport.cpp
         src/PatternGenerator.cpp
+        src/PatternLibrary.cpp
         src/StepManiaExport.cpp
+        src/Timestamps.cpp
     )
 
     target_include_directories(editor_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/tests)
-    target_link_libraries(editor_tests PRIVATE core miniz)
+    target_link_libraries(editor_tests PRIVATE core gse miniz)
     nascent_target_warnings(editor_tests)
     nascent_target_runtime(editor_tests)
     add_test(NAME editor_tests COMMAND editor_tests)

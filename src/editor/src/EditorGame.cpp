@@ -1,7 +1,9 @@
 #include "EditorGame.h"
 
 #include "ArchiveExport.h"
+#include "DecalDrawList.h"
 #include "DifficultyCalculator.h"
+#include "GameNascent.h"
 #include "OsuExport.h"
 #include "PatternGenerator.h"
 #include "SettingsManager.h"
@@ -36,14 +38,9 @@ namespace nascent {
         constexpr double HITSOUND_JUMP_MS = 250.0;
         constexpr size_t HITSOUNDS_PER_FRAME = 8;
         constexpr size_t GRID_LIMIT = 4000;
-        constexpr uint32_t MIN_SCROLL_SPEED = 25;
-        constexpr uint32_t MAX_SCROLL_SPEED = 500;
         constexpr int32_t SCROLL_SPEED_STEP = 10;
-        constexpr int MIN_LANE_WIDTH = 3;
-        constexpr int MAX_LANE_WIDTH = 30;
         constexpr size_t METRONOME_PER_FRAME = 4;
         constexpr float WAVEFORM_ROW_PX = 3.0f;
-        constexpr double WAVEFORM_VISUAL_OFFSET_MS = 20.0;
         constexpr float DENSITY_BAR_WIDTH = 44.0f;
         constexpr float DENSITY_BAR_MARGIN = 12.0f;
         constexpr float DENSITY_ROW_PX = 2.0f;
@@ -58,6 +55,13 @@ namespace nascent {
         constexpr double AUTO_SCROLL_MAX_DEPTH = 2.0;
         constexpr double ON_GRID_MS = 0.5;
         constexpr const char* RECENT_FILE = "editor_recent.json";
+        constexpr double AUTOPLAY_TAP_MS = 60.0;
+        constexpr const char* SETTINGS_FILE = "editor_settings.json";
+        constexpr double SETTINGS_SAVE_DELAY_MS = 1000.0;
+        constexpr ImVec2 GAMEPLAY_PANEL_SIZE = {360.0f, 560.0f};
+        constexpr const char* LIBRARY_FILE = "editor_patterns.json";
+        constexpr float CHECKER_WIDTH = 620.0f;
+        constexpr size_t CHECKER_TIMES = 60;
         constexpr uint32_t TICK_SAMPLE_RATE = 44100;
         constexpr double TICK_SECONDS = 0.06;
         constexpr float FONT_SIZE = 18.0f;
@@ -187,9 +191,14 @@ namespace nascent {
     EditorGame::EditorGame(olc::PixelGameEngine* window) : Game(window), imgui(window), playback(audio()) {}
 
     EditorGame::~EditorGame() {
+        if (EditorSettings now = current_settings(); now != saved_settings) {
+            save_editor_settings(settings_file(), now);
+        }
+
         playback.unload();
         waveform.clear();
         field.reset();
+        gameplay_field.reset();
         preview.reset();
         skin.reset();
     }
@@ -213,12 +222,22 @@ namespace nascent {
         use_blank_canvas();
         window->GetLayers()[EDITOR_LAYER].pDrawTarget.Create(1, 1);
         window->EnableLayer(EDITOR_LAYER, true);
+        gameplay_layer = (uint8_t)window->CreateLayer();
+        window->GetLayers()[gameplay_layer].pDrawTarget.Create(1, 1);
+        window->EnableLayer(gameplay_layer, false);
+        blank_sprite = std::make_unique<olc::Sprite>(1, 1);
+        blank_sprite->SetPixel(0, 0, olc::WHITE);
+        blank_decal = std::make_unique<olc::Decal>(blank_sprite.get());
         Ui::set_screen(window->GetScreenSize());
         load_skin(Settings().skin);
         imgui.init(settings_directory / "editor_layout.ini", std::filesystem::path("assets") / "fonts" / "MPLUS1-Regular.ttf", FONT_SIZE);
+        apply_settings(load_editor_settings(settings_file()));
+        saved_settings = current_settings();
+        pending_settings = saved_settings;
         allow_window_maximize();
         load_metronome();
         load_recent();
+        load_library();
     }
 
     void EditorGame::load_metronome() {
@@ -246,6 +265,7 @@ namespace nascent {
 
     void EditorGame::load_skin(const std::string& id) {
         field.reset();
+        gameplay_field.reset();
         skin = std::make_unique<Skin>(this, id);
         skin->set_font_scale(Ui::scale());
         Ui::set_layout_theme(skin.get());
@@ -259,17 +279,157 @@ namespace nascent {
     }
 
     void EditorGame::replace_document(std::unique_ptr<ChartDocument> next) {
-        document = std::move(next);
+        open_tabs(std::move(next), {});
+    }
+
+    void EditorGame::reset_document_state() {
         selection.clear();
         selection_revision = ~0ull;
         gesture = {};
-        position = 0;
-        hitsound_position = 0;
         preview_revision = ~0ull;
         difficulty.reset();
         difficulty_revision = ~0ull;
         changed_revision = ~0ull;
+        document_serial++;
+        hands.reset();
+        findings.clear();
+        findings_key = {~0ull, ~0ull, ~0ull, -1.0};
+        density_revision = ~0ull;
+        shown_timing_point.reset();
+    }
+
+    void EditorGame::open_tabs(std::unique_ptr<ChartDocument> main, std::vector<std::unique_ptr<ChartDocument>> others) {
+        document = std::move(main);
+        tabs.clear();
+        active_tab = 0;
+
+        if (document != nullptr) {
+            tabs.push_back({nullptr, {}, next_tab_id++});
+
+            for (std::unique_ptr<ChartDocument>& other : others) {
+                tabs.push_back({std::move(other), {}, next_tab_id++});
+            }
+        }
+
+        select_active_tab = true;
+        reset_document_state();
+        position = 0;
+        hitsound_position = 0;
         reload_audio();
+    }
+
+    const ChartDocument* EditorGame::tab_document(size_t index) const {
+        return index == active_tab ? document.get() : tabs[index].document.get();
+    }
+
+    bool EditorGame::any_dirty() const {
+        return dirty_count() > 0;
+    }
+
+    size_t EditorGame::dirty_count() const {
+        size_t count = 0;
+
+        for (size_t index = 0; index < tabs.size(); index++) {
+            const ChartDocument* chart = tab_document(index);
+            count += chart != nullptr && chart->dirty() ? 1 : 0;
+        }
+
+        return count;
+    }
+
+    void EditorGame::switch_tab(size_t index) {
+        if (document == nullptr || index >= tabs.size() || index == active_tab) {
+            return;
+        }
+
+        std::filesystem::path audio = document->audio_path();
+        tabs[active_tab].document = std::move(document);
+        tabs[active_tab].selection = std::move(selection);
+        document = std::move(tabs[index].document);
+        std::vector<Hit> restored = std::move(tabs[index].selection);
+        active_tab = index;
+        select_active_tab = true;
+        reset_document_state();
+        selection = std::move(restored);
+
+        if (document->audio_path() != audio) {
+            reload_audio();
+        }
+    }
+
+    void EditorGame::step_tab(int32_t direction) {
+        if (tabs.size() > 1) {
+            switch_tab((size_t)(((int64_t)active_tab + direction + (int64_t)tabs.size()) % (int64_t)tabs.size()));
+        }
+    }
+
+    void EditorGame::close_tab() {
+        if (tabs.empty()) {
+            return;
+        }
+
+        std::filesystem::path audio = document != nullptr ? document->audio_path() : std::filesystem::path();
+        tabs.erase(tabs.begin() + (ptrdiff_t)active_tab);
+        document.reset();
+
+        if (tabs.empty()) {
+            open_tabs(nullptr, {});
+            return;
+        }
+
+        active_tab = std::min(active_tab, tabs.size() - 1);
+        document = std::move(tabs[active_tab].document);
+        std::vector<Hit> restored = std::move(tabs[active_tab].selection);
+        select_active_tab = true;
+        reset_document_state();
+        selection = std::move(restored);
+
+        if (document->audio_path() != audio) {
+            reload_audio();
+        }
+    }
+
+    void EditorGame::save_all() {
+        for (size_t index = 0; index < tabs.size(); index++) {
+            ChartDocument* chart = index == active_tab ? document.get() : tabs[index].document.get();
+            std::string error;
+
+            if (chart != nullptr && chart->dirty() && !chart->path().empty()) {
+                if (chart->save(error)) {
+                    remember(chart->path());
+                }
+                else {
+                    set_status(error, true);
+                }
+            }
+        }
+    }
+
+    void EditorGame::add_difficulty() {
+        std::unique_ptr<ChartDocument> next = ChartDocument::copy_of(*document, new_difficulty_keep_notes);
+        std::string name = new_difficulty_name;
+        uint8_t keys = (uint8_t)std::clamp(new_difficulty_keys, 1, 10);
+        next->change_without_snapshot([&](ChartData& data) {
+            data.info.difficulty_name = name;
+            data.info.key_count = keys;
+        });
+        tabs.push_back({std::move(next), {}, next_tab_id++});
+        switch_tab(tabs.size() - 1);
+        set_status(std::format("Added {}, saving asks where to put it", name));
+    }
+
+    void EditorGame::copy_timing_to_difficulties() {
+        std::vector<ChartTimingPoint> points = document->data().timing_points;
+        size_t copied = 0;
+
+        for (size_t index = 0; index < tabs.size(); index++) {
+            if (index != active_tab && tabs[index].document != nullptr) {
+                tabs[index].document->change([&](ChartData& data) { data.timing_points = points; });
+                copied++;
+            }
+        }
+
+        set_status(std::format("Copied {} timing points to {} other difficulties", points.size(), copied));
     }
 
     void EditorGame::reload_audio() {
@@ -325,9 +485,12 @@ namespace nascent {
             return;
         }
 
-        replace_document(std::move(next));
+        std::vector<std::unique_ptr<ChartDocument>> siblings = ChartDocument::open_siblings(path, *next);
+        size_t others = siblings.size();
+        open_tabs(std::move(next), std::move(siblings));
         remember(path);
-        set_status(document->path().empty() ? std::format("Opened {}, saving makes a Nascent .json copy next to it", path_utf8(path.filename())) : std::format("Opened {}", path_utf8(path.filename())));
+        std::string also = others > 0 ? std::format(" with {} more {} of the song", others, others == 1 ? "difficulty" : "difficulties") : std::string();
+        set_status(document->path().empty() ? std::format("Opened {}{}, saving makes a Nascent .json copy next to it", path_utf8(path.filename()), also) : std::format("Opened {}{}", path_utf8(path.filename()), also));
     }
 
     void EditorGame::load_recent() {
@@ -430,7 +593,19 @@ namespace nascent {
             return;
         }
 
-        replace_document(std::move(next));
+        std::vector<std::unique_ptr<ChartDocument>> others;
+
+        for (size_t other = 0; other < chart_choices.size(); other++) {
+            std::string ignored;
+
+            if (other != index && chart_choices[other].error.empty()) {
+                if (std::unique_ptr<ChartDocument> sibling = ChartDocument::from_json(chart_choices[other].chart, choice_source, ignored)) {
+                    others.push_back(std::move(sibling));
+                }
+            }
+        }
+
+        open_tabs(std::move(next), std::move(others));
         remember(choice_source);
         std::string note = choice.modified ? ", some notes it can't play (like mines or rolls) were changed" : "";
         set_status(std::format("Opened {} from {}{}. Saving makes a Nascent .json copy next to it", choice.label, path_utf8(choice_source.filename()), note));
@@ -474,7 +649,9 @@ namespace nascent {
     }
 
     void EditorGame::request(Pending action) {
-        if (document != nullptr && document->dirty()) {
+        bool dirty = action == Pending::CLOSE_TAB ? document != nullptr && document->dirty() : any_dirty();
+
+        if (dirty) {
             pending = action;
             confirm_requested = true;
             return;
@@ -511,13 +688,16 @@ namespace nascent {
                 quit_confirmed = true;
                 quit();
                 return;
+            case Pending::CLOSE_TAB:
+                close_tab();
+                return;
             case Pending::NONE:
                 return;
         }
     }
 
     bool EditorGame::can_close() {
-        if (quit_confirmed || document == nullptr || !document->dirty()) {
+        if (quit_confirmed || !any_dirty()) {
             return true;
         }
 
@@ -606,6 +786,7 @@ namespace nascent {
     void EditorGame::update_preview() {
         if (document == nullptr) {
             field.reset();
+            gameplay_field.reset();
             preview.reset();
             preview_revision = ~0ull;
             return;
@@ -616,6 +797,7 @@ namespace nascent {
         }
 
         field.reset();
+        gameplay_field.reset();
         preview = document->preview();
 
         if (preview == nullptr) {
@@ -634,7 +816,11 @@ namespace nascent {
         }
 
         if (difficulty_job.valid() && difficulty_job.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            difficulty = difficulty_job.get();
+            DifficultyResult result = difficulty_job.get();
+
+            if (difficulty_serial == document_serial) {
+                difficulty = std::move(result);
+            }
         }
 
         uint64_t revision = document->revision();
@@ -649,6 +835,7 @@ namespace nascent {
         }
 
         difficulty_revision = revision;
+        difficulty_serial = document_serial;
         difficulty_job = std::async(std::launch::async, [data = document->data()] {
             DifficultyResult result;
             std::unique_ptr<Chart> chart = Chart::create(data.info, data.hits, data.timing_points, result.error);
@@ -731,6 +918,12 @@ namespace nascent {
     void EditorGame::update(float elapsed_time) {
         limit_frame_rate(FRAME_RATE_LIMIT);
         begin_frame(elapsed_time);
+
+        if (applied_ui_scale != ui_scale) {
+            imgui.set_scale(ui_scale);
+            applied_ui_scale = ui_scale;
+        }
+
         imgui.begin_frame(input(), elapsed_time);
         handle_dropped_files();
         update_updater();
@@ -760,12 +953,13 @@ namespace nascent {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGuiID dockspace = ImGui::GetID("editor_dockspace");
 
-        if (!layout_ready) {
-            if (ImGui::DockBuilderGetNode(dockspace) == nullptr) {
+        if (!layout_ready || layout_reset) {
+            if (layout_reset || ImGui::DockBuilderGetNode(dockspace) == nullptr) {
                 build_layout(dockspace);
             }
 
             layout_ready = true;
+            layout_reset = false;
         }
 
         ImGui::DockSpaceOverViewport(dockspace, viewport, ImGuiDockNodeFlags_PassthruCentralNode);
@@ -777,21 +971,694 @@ namespace nascent {
             view = {viewport->WorkPos.x, viewport->WorkPos.y, viewport->WorkSize.x, viewport->WorkSize.y};
         }
 
+        draw_difficulty_tabs();
         draw_transport();
         draw_chart_panel();
         draw_timing_panel();
         draw_help_panel();
+        draw_timestamps_panel();
+        draw_settings_window();
         draw_dialogs();
 
         update_preview();
+        draw_gameplay_panel();
         layout_field();
         handle_field_input();
         handle_shortcuts();
         collect_grid();
         draw_density_bar();
         update_difficulty();
+        update_checker();
+        update_settings_file();
 
         imgui.end_frame();
+    }
+
+    std::filesystem::path EditorGame::settings_file() const {
+        return settings_directory / SETTINGS_FILE;
+    }
+
+    EditorSettings EditorGame::current_settings() const {
+        EditorSettings settings;
+        settings.scroll_speed = scroll_speed;
+        settings.lane_width = lane_width;
+        settings.judge_offset = judge_offset;
+        settings.divisor = divisor;
+        settings.snap_enabled = snap_enabled;
+        settings.hitsounds = hitsounds;
+        settings.metronome = metronome;
+        settings.snap_colors = snap_colors;
+        settings.music_volume = music_volume;
+        settings.hitsound_volume = hitsound_volume;
+        settings.metronome_volume = metronome_volume;
+        settings.waveform_opacity = waveform_opacity;
+        settings.note_opacity = note_opacity;
+        settings.playback_rate = playback.rate();
+        settings.skin = skin != nullptr ? skin->get_id() : std::string();
+        settings.gameplay_preview = gameplay_open;
+        settings.timestamps_panel = timestamps_open;
+        settings.ui_scale = ui_scale;
+        settings.bindings = bindings;
+        return settings;
+    }
+
+    void EditorGame::apply_settings(const EditorSettings& settings) {
+        scroll_speed = settings.scroll_speed;
+        lane_width = settings.lane_width;
+        judge_offset = settings.judge_offset;
+        divisor = settings.divisor;
+        snap_enabled = settings.snap_enabled;
+        hitsounds = settings.hitsounds;
+        metronome = settings.metronome;
+        snap_colors = settings.snap_colors;
+        music_volume = settings.music_volume;
+        hitsound_volume = settings.hitsound_volume;
+        metronome_volume = settings.metronome_volume;
+        waveform_opacity = settings.waveform_opacity;
+        note_opacity = settings.note_opacity;
+        gameplay_open = settings.gameplay_preview;
+        timestamps_open = settings.timestamps_panel;
+        ui_scale = std::clamp(settings.ui_scale, MIN_UI_SCALE, MAX_UI_SCALE);
+        bindings = settings.bindings;
+        playback.set_rate(settings.playback_rate);
+        playback.set_volume(SettingsManager::volume_gain(music_volume));
+        preview_revision = ~0ull;
+
+        if (!settings.skin.empty() && (skin == nullptr || skin->get_id() != settings.skin)) {
+            for (const SkinInfo& info : Skin::available_skins()) {
+                if (info.id == settings.skin) {
+                    load_skin(info.id);
+                    break;
+                }
+            }
+        }
+    }
+
+    void EditorGame::update_settings_file() {
+        EditorSettings now = current_settings();
+
+        if (now != pending_settings) {
+            pending_settings = std::move(now);
+            settings_changed_at = now_ms();
+            return;
+        }
+
+        if (pending_settings != saved_settings && now_ms() - settings_changed_at >= SETTINGS_SAVE_DELAY_MS) {
+            if (save_editor_settings(settings_file(), pending_settings)) {
+                saved_settings = pending_settings;
+            }
+            else {
+                settings_changed_at = now_ms();
+            }
+        }
+    }
+
+    std::string EditorGame::shortcut(EditorAction action) const {
+        return bindings.label(action);
+    }
+
+    void EditorGame::draw_settings_window() {
+        if (!settings_open) {
+            capturing.reset();
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(ui_px(640), ui_px(620)), ImGuiCond_FirstUseEver);
+
+        if (!ImGui::Begin("Settings", &settings_open, ImGuiWindowFlags_NoDocking)) {
+            ImGui::End();
+            return;
+        }
+
+        if (ImGui::BeginTabBar("##settings_tabs")) {
+            if (ImGui::BeginTabItem("Key bindings")) {
+                ImGui::TextWrapped("Click a binding, then press the key for it. Hold Ctrl, Shift or Alt with it for a combination. Esc cancels and right-click clears a binding. A key that's already used moves to the new action.");
+
+                if (ImGui::Button("Reset all bindings")) {
+                    bindings.reset();
+                    capturing.reset();
+                }
+
+                ImGui::Spacing();
+
+                if (ImGui::BeginTable("##bindings", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY)) {
+                    ImGui::TableSetupScrollFreeze(0, 1);
+                    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+                    ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch, 1.2f);
+                    ImGui::TableSetupColumn("Other key", ImGuiTableColumnFlags_WidthStretch, 1.2f);
+                    ImGui::TableSetupColumn("##reset", ImGuiTableColumnFlags_WidthFixed);
+                    ImGui::TableHeadersRow();
+                    std::string_view group;
+
+                    for (size_t index = 0; index < EDITOR_ACTION_COUNT; index++) {
+                        EditorAction action = (EditorAction)index;
+                        const ActionInfo& info = action_info(action);
+                        ImGui::PushID((int)index);
+
+                        if (group != info.group) {
+                            group = info.group;
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0);
+                            ImGui::TextDisabled("%s", info.group);
+                        }
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(info.label);
+
+                        for (size_t slot = 0; slot < CHORDS_PER_ACTION; slot++) {
+                            ImGui::TableNextColumn();
+                            bool waiting = capturing == std::optional<std::pair<EditorAction, size_t>>({action, slot});
+                            std::string text = waiting ? "Press a key..." : chord_text(bindings.get(action, slot));
+                            ImGui::PushID((int)slot);
+
+                            if (ImGui::Button(text.empty() ? "-" : text.c_str(), ImVec2(-1, 0))) {
+                                capturing = std::pair<EditorAction, size_t>{action, slot};
+                            }
+
+                            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                                bindings.set(action, slot, KeyChord{});
+                                capturing.reset();
+                            }
+
+                            ImGui::PopID();
+                        }
+
+                        ImGui::TableNextColumn();
+                        ImGui::BeginDisabled(bindings.is_default(action));
+
+                        if (ImGui::SmallButton("Reset")) {
+                            bindings.reset(action);
+                        }
+
+                        ImGui::EndDisabled();
+                        ImGui::PopID();
+                    }
+
+                    ImGui::EndTable();
+                }
+
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Editor")) {
+                int percent = (int)std::lround(ui_scale * 100.0f);
+                ImGui::SetNextItemWidth(ui_px(260));
+                ImGui::SliderInt("Interface size", &percent, (int)std::lround(MIN_UI_SCALE * 100.0f), (int)std::lround(MAX_UI_SCALE * 100.0f), "%d%%");
+
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    ui_scale = std::round(percent / 5.0f) * 5.0f / 100.0f;
+                }
+
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Size of the menus, panels and text. Also under View > Interface size.");
+                }
+
+                ImGui::Spacing();
+                ImGui::TextWrapped("The scroll speed, lane width, snap, judge line, volumes, opacities, playback rate, skin, interface size and which panels are open are remembered between sessions, along with your key bindings.");
+                ImGui::Spacing();
+
+                if (ImGui::Button("Reset editor options")) {
+                    EditorSettings defaults;
+                    defaults.bindings = bindings;
+                    defaults.skin = Settings().skin;
+                    apply_settings(defaults);
+                }
+
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Puts every option back to its default, the key bindings stay as they are");
+                }
+
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
+        }
+
+        ImGui::End();
+        capture_binding();
+    }
+
+    void EditorGame::capture_binding() {
+        if (!capturing) {
+            return;
+        }
+
+        Input& keys = input();
+
+        for (size_t value = 1; value < (size_t)olc::Key::ENUM_END; value++) {
+            olc::Key key = (olc::Key)value;
+
+            if (key == olc::Key::CTRL || key == olc::Key::SHIFT || !keys.key_pressed(key)) {
+                continue;
+            }
+
+            if (key == olc::Key::ESCAPE) {
+                capturing.reset();
+                return;
+            }
+
+            KeyChord chord{key, keys.key_held(olc::Key::CTRL), keys.key_held(olc::Key::SHIFT), alt_held()};
+            auto [action, slot] = *capturing;
+
+            if (std::optional<EditorAction> owner = bindings.owner(chord, action)) {
+                for (size_t other = 0; other < CHORDS_PER_ACTION; other++) {
+                    if (bindings.get(*owner, other) == chord) {
+                        bindings.set(*owner, other, KeyChord{});
+                    }
+                }
+
+                set_status(std::format("{} no longer does \"{}\"", chord_text(chord), action_info(*owner).label));
+            }
+
+            bindings.set(action, slot, chord);
+            capturing.reset();
+            return;
+        }
+    }
+
+    void EditorGame::draw_difficulty_tabs() {
+        if (document == nullptr) {
+            return;
+        }
+
+        float height = ImGui::GetFrameHeight() + 8.0f;
+        ImGui::SetNextWindowPos(ImVec2(view.x, view.y));
+        ImGui::SetNextWindowSize(ImVec2(view.w, height));
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ui_px(6.0f), ui_px(4.0f)));
+
+        if (ImGui::Begin("##difficulties", nullptr, flags)) {
+            std::optional<size_t> clicked;
+            std::optional<size_t> closing;
+
+            if (ImGui::BeginTabBar("##difficulty_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+                for (size_t index = 0; index < tabs.size(); index++) {
+                    const ChartDocument* chart = tab_document(index);
+                    const ChartInfo& info = chart->data().info;
+                    std::string label = std::format("{}###difficulty{}", info.difficulty_name.empty() ? "Unnamed" : info.difficulty_name, tabs[index].id);
+                    ImGuiTabItemFlags item_flags = chart->dirty() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None;
+                    bool open = true;
+
+                    if (index == active_tab && select_active_tab) {
+                        item_flags |= ImGuiTabItemFlags_SetSelected;
+                    }
+
+                    if (ImGui::BeginTabItem(label.c_str(), &open, item_flags)) {
+                        if (index != active_tab && !select_active_tab) {
+                            clicked = index;
+                        }
+
+                        ImGui::EndTabItem();
+                    }
+
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("%s", std::format("{}K, {} notes{}", info.key_count, chart->data().hits.size(), chart->path().empty() ? ", not saved yet" : "").c_str());
+                    }
+
+                    if (!open) {
+                        closing = index;
+                    }
+                }
+
+                if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) {
+                    new_difficulty_requested = true;
+                }
+
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("New difficulty for this song");
+                }
+
+                ImGui::EndTabBar();
+            }
+
+            select_active_tab = false;
+
+            if (closing) {
+                switch_tab(*closing);
+                request(Pending::CLOSE_TAB);
+            }
+            else if (clicked) {
+                switch_tab(*clicked);
+            }
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar();
+        view.y += height;
+        view.h = std::max(0.0f, view.h - height);
+    }
+
+    void EditorGame::draw_new_difficulty_popup() {
+        if (new_difficulty_requested && document != nullptr) {
+            ImGui::OpenPopup("New difficulty");
+            new_difficulty_name.clear();
+            new_difficulty_keys = document->data().info.key_count;
+            new_difficulty_keep_notes = false;
+        }
+
+        new_difficulty_requested = false;
+
+        if (!ImGui::BeginPopupModal("New difficulty", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            return;
+        }
+
+        if (document == nullptr) {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        ImGui::TextDisabled("It starts with this difficulty's song, metadata and timing.");
+        ImGui::Spacing();
+
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+
+        ImGui::SetNextItemWidth(ui_px(260));
+        bool entered = ImGui::InputText("Name", &new_difficulty_name, ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SetNextItemWidth(ui_px(260));
+        ImGui::SliderInt("Keys", &new_difficulty_keys, 1, 10);
+        ImGui::Checkbox("Copy the notes from this difficulty", &new_difficulty_keep_notes);
+
+        if (new_difficulty_keep_notes && new_difficulty_keys < document->data().info.key_count) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Notes past lane %d are left out.", new_difficulty_keys);
+        }
+
+        ImGui::Spacing();
+        bool named = !new_difficulty_name.empty();
+        ImGui::BeginDisabled(!named);
+
+        if (ImGui::Button("Create", ImVec2(ui_px(110), 0)) || (entered && named)) {
+            ImGui::CloseCurrentPopup();
+            add_difficulty();
+        }
+
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    void EditorGame::draw_inverse_popup() {
+        if (inverse_requested) {
+            ImGui::OpenPopup("Inverse selection");
+            inverse_requested = false;
+        }
+
+        if (!ImGui::BeginPopupModal("Inverse selection", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            return;
+        }
+
+        prune_selection();
+
+        if (document == nullptr || selection.empty()) {
+            ImGui::TextUnformatted("Nothing is selected anymore.");
+        }
+        else {
+            ImGui::TextUnformatted("Each selected note becomes a long note that lasts until the next note in its lane,");
+            ImGui::TextUnformatted("leaving a gap before it.");
+            ImGui::Spacing();
+            ImGui::SetNextItemWidth(ui_px(120));
+            snap_picker("Gap", inverse_divisor);
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("How much space is left before the next note, as a part of a beat. Notes closer together than twice the gap get long notes half as long as the space.");
+            }
+
+            std::vector<Hit> result = document->inverted(selection, inverse_divisor);
+            size_t changed = 0;
+
+            for (size_t index = 0; index < selection.size(); index++) {
+                changed += !same_hit(result[index], selection[index]) ? 1 : 0;
+            }
+
+            ImGui::Spacing();
+            ImGui::TextUnformatted(std::format("{} of {} selected notes change.", changed, selection.size()).c_str());
+
+            if (changed < selection.size()) {
+                ImGui::TextDisabled("The rest are the last note in their lane, or already exactly right.");
+            }
+
+            ImGui::Spacing();
+            ImGui::BeginDisabled(changed == 0);
+
+            if (ImGui::Button("Inverse", ImVec2(ui_px(110), 0))) {
+                document->change([&](ChartData& data) { replace_hits(data, selection, result); });
+                selection.clear();
+
+                for (const Hit& hit : result) {
+                    if (document->contains(hit) && !is_selected(hit)) {
+                        selection.push_back(hit);
+                    }
+                }
+
+                selection_revision = document->revision();
+                set_status(std::format("Turned {} notes into long notes with a 1/{} gap", changed, inverse_divisor));
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    void EditorGame::copy_timestamp() {
+        std::string text = format_timestamp((int32_t)std::lround(position), selection);
+
+        if (copy_to_clipboard(text)) {
+            set_status(std::format("Copied {}", text));
+        }
+        else {
+            set_status("Couldn't copy to the clipboard", true);
+        }
+    }
+
+    void EditorGame::go_to_timestamp(const Timestamp& timestamp) {
+        if (document == nullptr) {
+            return;
+        }
+
+        seek(timestamp.time);
+        selection.clear();
+
+        for (const auto& [time, lane] : timestamp.notes) {
+            auto found = std::find_if(document->data().hits.begin(), document->data().hits.end(), [&](const Hit& hit) { return hit.time == time && hit.key == lane; });
+
+            if (found != document->data().hits.end() && !is_selected(*found)) {
+                selection.push_back(*found);
+            }
+        }
+
+        selection_revision = document->revision();
+
+        if (timestamp.notes.empty()) {
+            set_status(std::format("Went to {}", format_clock(timestamp.time)));
+        }
+        else {
+            set_status(std::format("Went to {} and selected {} of its {} notes", format_clock(timestamp.time), selection.size(), timestamp.notes.size()), selection.size() < timestamp.notes.size());
+        }
+    }
+
+    void EditorGame::go_to_clipboard_timestamp() {
+        std::vector<Timestamp> found = find_timestamps(read_clipboard().value_or(std::string()));
+
+        if (!found.empty()) {
+            go_to_timestamp(found.front());
+            return;
+        }
+
+        goto_text.clear();
+        goto_requested = true;
+    }
+
+    void EditorGame::draw_goto_popup() {
+        if (goto_requested) {
+            ImGui::OpenPopup("Go to timestamp");
+            goto_requested = false;
+        }
+
+        if (!ImGui::BeginPopupModal("Go to timestamp", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            return;
+        }
+
+        if (ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+
+        ImGui::SetNextItemWidth(ui_px(360));
+        bool entered = ImGui::InputTextWithHint("##timestamp", "00:12:345 (12345|0,12400|1)", &goto_text, ImGuiInputTextFlags_EnterReturnsTrue);
+        std::vector<Timestamp> found = find_timestamps(goto_text);
+
+        if (found.empty()) {
+            ImGui::TextDisabled("Type or paste a timestamp, like ones copied with %s", shortcut(EditorAction::COPY_TIMESTAMP).c_str());
+        }
+        else {
+            ImGui::TextDisabled("%s", std::format("{}{}", format_clock(found.front().time), found.front().notes.empty() ? std::string() : std::format(", {} notes", found.front().notes.size())).c_str());
+        }
+
+        ImGui::BeginDisabled(found.empty());
+
+        if (ImGui::Button("Go", ImVec2(ui_px(110), 0)) || (entered && !found.empty())) {
+            ImGui::CloseCurrentPopup();
+            go_to_timestamp(found.front());
+        }
+
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    void EditorGame::draw_timestamps_panel() {
+        if (!timestamps_open) {
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(ui_px(420), ui_px(420)), ImGuiCond_FirstUseEver);
+
+        if (!ImGui::Begin("Timestamps", &timestamps_open)) {
+            ImGui::End();
+            return;
+        }
+
+        ImGui::TextWrapped("Paste feedback or mod notes with timestamps in them, then click a timestamp to jump there with its notes selected.");
+
+        if (ImGui::Button("Paste")) {
+            if (std::optional<std::string> text = read_clipboard()) {
+                timestamp_notes += (timestamp_notes.empty() || timestamp_notes.ends_with('\n') ? "" : "\n") + *text;
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Clear")) {
+            timestamp_notes.clear();
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(document == nullptr);
+
+        if (ImGui::Button("Copy a timestamp")) {
+            copy_timestamp();
+        }
+
+        ImGui::EndDisabled();
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("Copies the playhead and the selected notes (%s)", shortcut(EditorAction::COPY_TIMESTAMP).c_str());
+        }
+
+        ImGui::InputTextMultiline("##notes", &timestamp_notes, ImVec2(-1, ImGui::GetTextLineHeight() * 6));
+        ImGui::Separator();
+        size_t line_start = 0;
+        int id = 0;
+
+        while (line_start <= timestamp_notes.size()) {
+            size_t line_end = timestamp_notes.find('\n', line_start);
+            std::string_view line = std::string_view(timestamp_notes).substr(line_start, line_end == std::string::npos ? std::string::npos : line_end - line_start);
+            std::vector<Timestamp> found = find_timestamps(line);
+
+            if (!found.empty()) {
+                std::string rest;
+                size_t cursor = 0;
+
+                for (const Timestamp& timestamp : found) {
+                    ImGui::PushID(id++);
+                    ImGui::BeginDisabled(document == nullptr);
+
+                    if (ImGui::SmallButton(std::string(line.substr(timestamp.start, timestamp.length)).c_str())) {
+                        go_to_timestamp(timestamp);
+                    }
+
+                    ImGui::EndDisabled();
+                    ImGui::PopID();
+                    ImGui::SameLine();
+                    rest += line.substr(cursor, timestamp.start - cursor);
+                    cursor = timestamp.start + timestamp.length;
+                }
+
+                rest += line.substr(std::min(cursor, line.size()));
+                size_t text_start = rest.find_first_not_of(" -\t");
+                ImGui::TextWrapped("%s", text_start == std::string::npos ? "" : rest.c_str() + text_start);
+            }
+
+            if (line_end == std::string::npos) {
+                break;
+            }
+
+            line_start = line_end + 1;
+        }
+
+        ImGui::End();
+    }
+
+    void EditorGame::start_test_play() {
+        if (document == nullptr) {
+            return;
+        }
+
+        int32_t from = (int32_t)std::lround(position);
+        ChartData data = document->data();
+        data.info.audio_file = path_utf8(document->audio_path());
+
+        if (!data.info.image_file.empty()) {
+            std::filesystem::path image = utf8_path(data.info.image_file);
+            data.info.image_file = path_utf8(image.is_absolute() ? image : document->directory() / image);
+        }
+
+        std::erase_if(data.hits, [&](const Hit& hit) { return hit.time < from; });
+        std::string error;
+
+        if (data.hits.empty()) {
+            set_status("There are no notes after the playhead to play", true);
+            return;
+        }
+
+        if (Chart::create(data.info, data.hits, data.timing_points, error) == nullptr) {
+            set_status(std::format("Can't test play yet: {}", error), true);
+            return;
+        }
+
+        std::filesystem::path request = GameNascent::test_play_file();
+        std::error_code ec;
+        std::filesystem::create_directories(request.parent_path(), ec);
+
+        {
+            std::ofstream out(request, std::ios::binary | std::ios::trunc);
+            out << nlohmann::json{{"chart", nlohmann::json::parse(chart_to_json(data))}, {"start", from}, {"rate", playback.rate()}}.dump();
+
+            if (!out) {
+                set_status("Couldn't write the test play file", true);
+                return;
+            }
+        }
+
+        if (playback.is_playing()) {
+            toggle_playback();
+        }
+
+        if (!spawn_detached(executable_path(), {std::string(GameNascent::TEST_PLAY_ARGUMENT)})) {
+            set_status("Couldn't start the test play", true);
+            return;
+        }
+
+        set_status(std::format("Test playing from {}{}, Esc closes it", format_clock(from), playback.rate() != 1.0f ? std::format(" at {:g}x", playback.rate()) : std::string()));
     }
 
     void EditorGame::build_layout(unsigned int dockspace) {
@@ -803,13 +1670,15 @@ namespace nascent {
         ImGuiID center = dockspace;
         ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.24f, nullptr, &center);
         ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.30f, nullptr, &center);
-        ImGuiID left_bottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.42f, nullptr, &left);
-        ImGuiID right_bottom = ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.55f, nullptr, &right);
+        ImGuiID gameplay = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.40f, nullptr, &center);
+        ImGuiID left_bottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.40f, nullptr, &left);
+        ImGuiID right_bottom = ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.40f, nullptr, &right);
 
         ImGui::DockBuilderDockWindow("Chart", left);
         ImGui::DockBuilderDockWindow("Timing", left_bottom);
         ImGui::DockBuilderDockWindow("Transport", right);
         ImGui::DockBuilderDockWindow("Help", right_bottom);
+        ImGui::DockBuilderDockWindow("Gameplay preview", gameplay);
         ImGui::DockBuilderFinish(dockspace);
     }
 
@@ -821,11 +1690,11 @@ namespace nascent {
         bool open = document != nullptr;
 
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New from audio...", "Ctrl+N")) {
+            if (ImGui::MenuItem("New from audio...", shortcut(EditorAction::NEW_FROM_AUDIO).c_str())) {
                 request(Pending::NEW_FROM_AUDIO);
             }
 
-            if (ImGui::MenuItem("Open...", "Ctrl+O")) {
+            if (ImGui::MenuItem("Open...", shortcut(EditorAction::OPEN_CHART).c_str())) {
                 request(Pending::OPEN_CHART);
             }
 
@@ -847,12 +1716,30 @@ namespace nascent {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Save", "Ctrl+S", false, open)) {
+            if (ImGui::MenuItem("New difficulty...", nullptr, false, open)) {
+                new_difficulty_requested = true;
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Save", shortcut(EditorAction::SAVE).c_str(), false, open)) {
                 save();
             }
 
-            if (ImGui::MenuItem("Save as...", "Ctrl+Shift+S", false, open)) {
+            if (ImGui::MenuItem("Save as...", shortcut(EditorAction::SAVE_AS).c_str(), false, open)) {
                 save_as();
+            }
+
+            if (tabs.size() > 1 && ImGui::MenuItem("Save all difficulties", nullptr, false, any_dirty())) {
+                save_all();
+
+                for (size_t index = 0; index < tabs.size(); index++) {
+                    if (const ChartDocument* chart = tab_document(index); chart != nullptr && chart->dirty()) {
+                        switch_tab(index);
+                        save_as();
+                        break;
+                    }
+                }
             }
 
             if (ImGui::BeginMenu("Export", open)) {
@@ -889,7 +1776,23 @@ namespace nascent {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Quit", "Ctrl+Q")) {
+            if (ImGui::MenuItem("Test play from the playhead", shortcut(EditorAction::TEST_PLAY).c_str(), false, open)) {
+                start_test_play();
+            }
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Plays the chart in the game from the playhead, with your game settings. Nothing is saved or submitted.");
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Settings...", shortcut(EditorAction::SETTINGS).c_str())) {
+                settings_open = true;
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Quit", shortcut(EditorAction::QUIT).c_str())) {
                 request(Pending::QUIT);
             }
 
@@ -897,11 +1800,11 @@ namespace nascent {
         }
 
         if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, open && document->can_undo())) {
+            if (ImGui::MenuItem("Undo", shortcut(EditorAction::UNDO).c_str(), false, open && document->can_undo())) {
                 document->undo();
             }
 
-            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, open && document->can_redo())) {
+            if (ImGui::MenuItem("Redo", shortcut(EditorAction::REDO).c_str(), false, open && document->can_redo())) {
                 document->redo();
             }
 
@@ -909,41 +1812,80 @@ namespace nascent {
 
             bool any = open && !selection.empty();
 
-            if (ImGui::MenuItem("Select all", "Ctrl+A", false, open)) {
+            if (ImGui::MenuItem("Select all", shortcut(EditorAction::SELECT_ALL).c_str(), false, open)) {
                 select_all();
             }
 
-            if (ImGui::MenuItem("Cut", "Ctrl+X", false, any)) {
+            if (ImGui::MenuItem("Cut", shortcut(EditorAction::CUT).c_str(), false, any)) {
                 cut_selection();
             }
 
-            if (ImGui::MenuItem("Copy", "Ctrl+C", false, any)) {
+            if (ImGui::MenuItem("Copy", shortcut(EditorAction::COPY).c_str(), false, any)) {
                 copy_selection();
             }
 
-            if (ImGui::MenuItem("Paste at playhead", "Ctrl+V", false, open && !clipboard.empty())) {
+            if (ImGui::MenuItem("Paste at playhead", shortcut(EditorAction::PASTE).c_str(), false, open && !clipboard.empty())) {
                 paste_clipboard();
             }
 
-            if (ImGui::MenuItem("Mirror selected notes", "M", false, any)) {
+            if (ImGui::MenuItem("Mirror selected notes", shortcut(EditorAction::MIRROR).c_str(), false, any)) {
                 mirror_selection();
             }
 
-            if (ImGui::MenuItem("Delete selected notes", "Del", false, any)) {
+            if (ImGui::MenuItem("Delete selected notes", shortcut(EditorAction::DELETE_SELECTION).c_str(), false, any)) {
                 delete_selection();
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Copy timestamp", shortcut(EditorAction::COPY_TIMESTAMP).c_str(), false, open)) {
+                copy_timestamp();
+            }
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Copies the playhead and the selected notes as an osu!-style timestamp, like 00:12:345 (12345|0,12400|1)");
+            }
+
+            if (ImGui::MenuItem("Go to timestamp...", shortcut(EditorAction::GO_TO_TIMESTAMP).c_str(), false, open)) {
+                go_to_clipboard_timestamp();
+            }
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Jumps to a timestamp on the clipboard and selects its notes, or asks for one");
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Save selection to pattern library...", nullptr, false, any)) {
+                open_library(true);
             }
 
             ImGui::EndMenu();
         }
 
         if (ImGui::BeginMenu("Tools")) {
-            if (ImGui::MenuItem("Transform selection...", "Ctrl+T", false, open && !selection.empty())) {
+            if (ImGui::MenuItem("Transform selection...", shortcut(EditorAction::TRANSFORM).c_str(), false, open && !selection.empty())) {
                 transform_requested = true;
+            }
+
+            if (ImGui::MenuItem("Inverse selection...", shortcut(EditorAction::INVERSE).c_str(), false, open && !selection.empty())) {
+                inverse_requested = true;
             }
 
             if (ImGui::MenuItem("Generate pattern...", nullptr, false, open)) {
                 pattern_divisor = divisor;
                 pattern_open = true;
+            }
+
+            if (ImGui::MenuItem("Pattern library...")) {
+                open_library(false);
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("Check chart...", nullptr, false, open)) {
+                checker_open = true;
+                ImGui::SetWindowFocus("Check chart");
             }
 
             if (ImGui::MenuItem("Quantize selection...", nullptr, false, open && !selection.empty())) {
@@ -965,6 +1907,24 @@ namespace nascent {
                 ImGui::EndMenu();
             }
 
+            if (ImGui::BeginMenu("Interface size")) {
+                for (int percent : {75, 100, 125, 150, 175, 200, 250}) {
+                    if (ImGui::MenuItem(std::format("{}%", percent).c_str(), nullptr, std::lround(ui_scale * 100.0f) == percent)) {
+                        ui_scale = percent / 100.0f;
+                    }
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Other...")) {
+                    settings_open = true;
+                }
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::MenuItem("Gameplay preview", nullptr, &gameplay_open);
+            ImGui::MenuItem("Timestamps", nullptr, &timestamps_open);
             ImGui::MenuItem("Hitsounds", nullptr, &hitsounds);
             ImGui::MenuItem("Metronome", nullptr, &metronome);
 
@@ -973,7 +1933,7 @@ namespace nascent {
             }
 
             if (ImGui::MenuItem("Reset panel layout")) {
-                build_layout(ImGui::GetID("editor_dockspace"));
+                layout_reset = true;
             }
 
             ImGui::EndMenu();
@@ -1089,7 +2049,7 @@ namespace nascent {
         }
 
         if (playback.loaded()) {
-            if (ImGui::Button(playback.is_playing() ? "Pause" : "Play", ImVec2(90, 0))) {
+            if (ImGui::Button(playback.is_playing() ? "Pause" : "Play", ImVec2(ui_px(90), 0))) {
                 toggle_playback();
             }
 
@@ -1189,7 +2149,7 @@ namespace nascent {
             }
 
             ImGui::SeparatorText("Other");
-            ImGui::SetNextItemWidth(90);
+            ImGui::SetNextItemWidth(ui_px(90));
             ImGui::InputInt("##custom_snap", &custom_divisor, 1, 0);
             custom_divisor = std::clamp(custom_divisor, 1, MAX_DIVISOR);
             ImGui::SameLine();
@@ -1308,13 +2268,14 @@ namespace nascent {
             }
         };
 
-        ImGui::SeparatorText("Metadata");
-        text_field("Title", &ChartInfo::title);
-        text_field("Title (unicode)", &ChartInfo::title_unicode);
-        text_field("Artist", &ChartInfo::artist);
-        text_field("Artist (unicode)", &ChartInfo::artist_unicode);
-        text_field("Mapper", &ChartInfo::mapper);
-        text_field("Difficulty", &ChartInfo::difficulty_name);
+        if (ImGui::CollapsingHeader("Metadata", ImGuiTreeNodeFlags_DefaultOpen)) {
+            text_field("Title", &ChartInfo::title);
+            text_field("Title (unicode)", &ChartInfo::title_unicode);
+            text_field("Artist", &ChartInfo::artist);
+            text_field("Artist (unicode)", &ChartInfo::artist_unicode);
+            text_field("Mapper", &ChartInfo::mapper);
+            text_field("Difficulty", &ChartInfo::difficulty_name);
+        }
 
         ImGui::SeparatorText("Gameplay");
         int_field("Keys", info.key_count, 1, 10, [](ChartInfo& edited, int value) { edited.key_count = (uint8_t)value; });
@@ -1395,11 +2356,25 @@ namespace nascent {
             return;
         }
 
-        if (ImGui::Button("Add at playhead")) {
+        bool show_points = ImGui::CollapsingHeader("Timing points", ImGuiTreeNodeFlags_DefaultOpen);
+
+        if (show_points && ImGui::Button("Add at playhead")) {
             const ChartTimingPoint* current = document->timing_point_at(position);
             ChartTimingPoint point = current != nullptr ? *current : ChartTimingPoint{0, 60000.0f / ChartDocument::DEFAULT_BPM, 4};
             point.time = (int32_t)std::lround(position);
             document->change([&](ChartData& edited) { edited.timing_points.push_back(point); });
+        }
+
+        if (show_points && tabs.size() > 1) {
+            ImGui::SameLine();
+
+            if (ImGui::Button("Copy to other difficulties")) {
+                copy_timing_to_difficulties();
+            }
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Gives every other open difficulty of this song the same timing points (undo works in each)");
+            }
         }
 
         const std::vector<ChartTimingPoint>& points = document->data().timing_points;
@@ -1418,7 +2393,7 @@ namespace nascent {
             };
         };
 
-        if (ImGui::BeginTable("##timing", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
+        if (show_points && ImGui::BeginTable("##timing", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("Time (ms)", ImGuiTableColumnFlags_WidthStretch, 1.6f);
             ImGui::TableSetupColumn("BPM", ImGuiTableColumnFlags_WidthStretch, 1.0f);
             ImGui::TableSetupColumn("Meter", ImGuiTableColumnFlags_WidthStretch, 0.6f);
@@ -1532,7 +2507,7 @@ namespace nascent {
             document->change(edit);
         }
 
-        if (points.empty()) {
+        if (show_points && points.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.4f, 1.0f), "Add a timing point to snap notes to beats");
         }
 
@@ -1561,7 +2536,7 @@ namespace nascent {
     void EditorGame::draw_tap_tempo() {
         ImGui::SeparatorText("Tap tempo");
 
-        if (ImGui::Button("Tap", ImVec2(110, 36))) {
+        if (ImGui::Button("Tap", ImVec2(ui_px(110), ui_px(36)))) {
             tap_tempo();
         }
 
@@ -1633,52 +2608,137 @@ namespace nascent {
         }
     }
 
+    uint32_t EditorGame::autoplay_keys() const {
+        uint32_t keys = 0;
+
+        for (const Hit& hit : document->data().hits) {
+            double end = hit.time + AUTOPLAY_TAP_MS;
+
+            if (hit.hit_type == HitType::HOLD) {
+                end = std::max(end, (double)hit.end_time);
+            }
+
+            if (position >= hit.time && position < end) {
+                keys |= 1u << hit.key;
+            }
+        }
+
+        return keys;
+    }
+
+    void EditorGame::draw_gameplay_panel() {
+        if (!gameplay_open) {
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(ui_px(GAMEPLAY_PANEL_SIZE.x), ui_px(GAMEPLAY_PANEL_SIZE.y)), ImGuiCond_FirstUseEver);
+
+        if (!ImGui::Begin("Gameplay preview", &gameplay_open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+            ImGui::End();
+            return;
+        }
+
+        if (document == nullptr || preview == nullptr || skin == nullptr) {
+            ImGui::TextDisabled("Open a chart to see it as it plays in game");
+            ImGui::End();
+            return;
+        }
+
+        ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImVec2 area = ImGui::GetContentRegionAvail();
+
+        if (area.x < 1.0f || area.y < 1.0f) {
+            ImGui::End();
+            return;
+        }
+
+        ImGui::Dummy(area);
+
+        const Settings& settings = SettingsManager::settings;
+        olc::vi2d screen = window->GetScreenSize();
+        double scale = area.y / std::max(1, screen.y);
+        uint8_t keys = std::max<uint8_t>(preview->info.key_count, 1);
+        SkinLayoutScope layout_scope(skin.get(), keys);
+        Ui::set_screen({std::max(1, (int32_t)std::lround(screen.x * scale)), std::max(1, (int32_t)std::lround(area.y))});
+
+        std::array<olc::vd2d, 2> bounds = EntityField::gameplay_bounds(*skin, keys, {origin.x, origin.y}, {area.x, area.y});
+
+        if (gameplay_field == nullptr) {
+            gameplay_field = std::make_unique<EntityField>(preview.get(), skin.get(), bounds[0], bounds[1]);
+        }
+
+        EntityField& shown = *gameplay_field;
+        shown.pos = bounds[0];
+        shown.size = bounds[1];
+        shown.apply_gameplay_settings(area.y);
+        shown.draw_hit_score = false;
+        shown.draw_combo = false;
+        shown.draw_notes_past_judge = false;
+        shown.scroll_speed = (uint32_t)std::max(1L, std::lround(settings.field_scroll_speed * area.y / std::max(1, screen.y)));
+        shown.position = position;
+        shown.set_keys(autoplay_keys());
+
+        olc::Pixel background = skin->color(SkinColor::SCREEN_BACKGROUND);
+        background.a = 255;
+        window->SetDrawTarget(gameplay_layer);
+        window->FillRectDecal({origin.x, origin.y}, {area.x, area.y}, background);
+        shown.draw(window);
+        window->SetDrawTarget(EDITOR_LAYER);
+        Ui::set_screen(screen);
+
+        std::vector<olc::DecalInstance>& decals = window->GetLayers()[gameplay_layer].vecDecalInstance;
+        ImDrawList* list = ImGui::GetWindowDrawList();
+        list->PushClipRect(origin, {origin.x + area.x, origin.y + area.y}, true);
+        draw_decals(list, decals, screen, blank_decal.get());
+        list->PopClipRect();
+        decals.clear();
+        ImGui::End();
+    }
+
     void EditorGame::draw_help_panel() {
         if (!ImGui::Begin("Help")) {
             ImGui::End();
             return;
         }
 
-        constexpr std::pair<const char*, const char*> SHORTCUTS[] = {
+        constexpr std::pair<const char*, const char*> MOUSE[] = {
             {"Left click", "place a note, drag up or down for a hold"},
             {"Drag a note", "move it (or the whole selection)"},
             {"Shift + drag", "select notes in a box (Ctrl too: add to it)"},
             {"Ctrl + click", "add or remove a note from the selection"},
-            {"Ctrl + A", "select all"},
-            {"Ctrl + C / X / V", "copy / cut / paste at the playhead"},
-            {"Ctrl + Up / Down", "move the selection by one snap"},
-            {"Ctrl + Left / Right", "move the selection by one lane"},
-            {"M", "mirror the selection (swap left and right)"},
-            {"Ctrl + T", "transform the selection (stretch, shrink, mirror)"},
-            {"N", "snap notes on or off"},
             {"Right click", "delete a note"},
             {"Wheel", "move by one snap"},
             {"Alt + wheel", "move by one millisecond"},
-            {"Alt + arrows", "move by one millisecond"},
             {"Shift + wheel", "change snap"},
-            {"Shift + arrows", "change snap"},
             {"Ctrl + wheel", "change scroll speed"},
-            {"Ctrl + = / -", "change scroll speed"},
-            {"Ctrl + Shift + wheel / arrows", "change lane width"},
-            {"Space", "play or pause"},
-            {"Left / Right", "move by one snap"},
-            {"Up / Down", "move by one beat"},
-            {"Home", "go to the start"},
-            {"End", "go to the last note"},
-            {"1 - 0", "toggle a note in that lane at the playhead"},
-            {"Delete", "delete the selected notes"},
-            {"Ctrl + Z / Y", "undo / redo"},
-            {"T", "tap tempo (Timing panel)"},
-            {"Ctrl + S", "save"},
+            {"Ctrl + Shift + wheel", "change lane width"},
         };
 
+        if (ImGui::Button("Change key bindings...")) {
+            settings_open = true;
+        }
+
         if (ImGui::BeginTable("##help", 2, ImGuiTableFlags_SizingStretchProp)) {
-            for (const auto& [keys, action] : SHORTCUTS) {
+            for (const auto& [keys, action] : MOUSE) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(keys);
                 ImGui::TableNextColumn();
                 ImGui::TextDisabled("%s", action);
+            }
+
+            for (size_t index = 0; index < EDITOR_ACTION_COUNT; index++) {
+                std::string keys = shortcut((EditorAction)index);
+
+                if (keys.empty()) {
+                    continue;
+                }
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(keys.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", action_info((EditorAction)index).label);
             }
 
             ImGui::EndTable();
@@ -1696,11 +2756,11 @@ namespace nascent {
                 ImGui::TextUnformatted("Nascent chart editor");
                 ImGui::Spacing();
 
-                if (ImGui::Button("New chart from audio...", ImVec2(260, 0))) {
+                if (ImGui::Button("New chart from audio...", ImVec2(ui_px(260), 0))) {
                     request(Pending::NEW_FROM_AUDIO);
                 }
 
-                if (ImGui::Button("Open chart...", ImVec2(260, 0))) {
+                if (ImGui::Button("Open chart...", ImVec2(ui_px(260), 0))) {
                     request(Pending::OPEN_CHART);
                 }
 
@@ -1751,7 +2811,7 @@ namespace nascent {
                         set_status(std::format("Saved {}", path_utf8(chosen->filename())));
 
                         if (pending != Pending::NONE) {
-                            perform(pending);
+                            request(pending);
                         }
                     }
                     else {
@@ -1783,14 +2843,14 @@ namespace nascent {
             choice_requested = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(560, 0), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(ImVec2(ui_px(560), 0), ImGuiCond_Appearing);
 
         if (ImGui::BeginPopupModal("Choose a chart", nullptr)) {
             ImGui::TextUnformatted(std::format("{} has {} charts:", path_utf8(choice_source.filename()), chart_choices.size()).c_str());
             ImGui::Spacing();
             std::optional<size_t> picked;
 
-            if (ImGui::BeginChild("##choices", ImVec2(0, std::min(360.0f, ImGui::GetFrameHeightWithSpacing() * (float)chart_choices.size() + 8.0f)), ImGuiChildFlags_Borders)) {
+            if (ImGui::BeginChild("##choices", ImVec2(0, std::min(ui_px(360.0f), ImGui::GetFrameHeightWithSpacing() * (float)chart_choices.size() + 8.0f)), ImGuiChildFlags_Borders)) {
                 for (size_t index = 0; index < chart_choices.size(); index++) {
                     const ChartDocument::ChartChoice& choice = chart_choices[index];
                     ImGui::PushID((int)index);
@@ -1818,7 +2878,7 @@ namespace nascent {
                 open_choice(*picked);
             }
 
-            if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
                 ImGui::CloseCurrentPopup();
                 chart_choices.clear();
             }
@@ -1835,15 +2895,15 @@ namespace nascent {
             ImGui::TextUnformatted("osu! stores its own judgement and HP drain in the chart.");
             ImGui::TextDisabled("These only go into the exported file, the chart itself doesn't change.");
             ImGui::Spacing();
-            ImGui::SetNextItemWidth(260);
+            ImGui::SetNextItemWidth(ui_px(260));
             ImGui::SliderFloat("Overall difficulty (OD)", &osu_difficulty.overall_difficulty, 0.0f, 10.0f, "%.1f");
-            ImGui::SetNextItemWidth(260);
+            ImGui::SetNextItemWidth(ui_px(260));
             ImGui::SliderFloat("HP drain", &osu_difficulty.hp_drain, 0.0f, 10.0f, "%.1f");
             osu_difficulty.overall_difficulty = std::round(osu_difficulty.overall_difficulty * 10.0f) / 10.0f;
             osu_difficulty.hp_drain = std::round(osu_difficulty.hp_drain * 10.0f) / 10.0f;
             ImGui::Spacing();
 
-            if (ImGui::Button("Continue", ImVec2(110, 0))) {
+            if (ImGui::Button("Continue", ImVec2(ui_px(110), 0))) {
                 ImGui::CloseCurrentPopup();
 
                 if (document != nullptr) {
@@ -1854,7 +2914,7 @@ namespace nascent {
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
                 ImGui::CloseCurrentPopup();
             }
 
@@ -1863,7 +2923,12 @@ namespace nascent {
 
         draw_transform_popup();
         draw_quantize_popup();
+        draw_inverse_popup();
+        draw_new_difficulty_popup();
+        draw_goto_popup();
         draw_pattern_window();
+        draw_library_window();
+        draw_checker_window();
 
         if (audio_prompt_requested) {
             ImGui::OpenPopup("Dropped audio");
@@ -1874,7 +2939,7 @@ namespace nascent {
             ImGui::TextUnformatted(std::format("What should {} be used for?", path_utf8(dropped_audio.filename())).c_str());
             ImGui::Spacing();
 
-            if (ImGui::Button("Change this chart's music", ImVec2(220, 0))) {
+            if (ImGui::Button("Change this chart's music", ImVec2(ui_px(220), 0))) {
                 ImGui::CloseCurrentPopup();
 
                 if (document != nullptr) {
@@ -1890,7 +2955,7 @@ namespace nascent {
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Start a new chart", ImVec2(160, 0))) {
+            if (ImGui::Button("Start a new chart", ImVec2(ui_px(160), 0))) {
                 ImGui::CloseCurrentPopup();
                 pending_file = dropped_audio;
                 request(Pending::NEW_FROM_AUDIO);
@@ -1898,7 +2963,7 @@ namespace nascent {
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
                 ImGui::CloseCurrentPopup();
             }
 
@@ -1911,19 +2976,42 @@ namespace nascent {
         }
 
         if (ImGui::BeginPopupModal("Unsaved changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextUnformatted("This chart has changes that aren't saved.");
+            bool closing = pending == Pending::CLOSE_TAB;
+            size_t count = closing ? 1 : dirty_count();
+            ImGui::TextUnformatted(count > 1 ? std::format("{} difficulties have changes that aren't saved.", count).c_str() : closing ? "This difficulty has changes that aren't saved."
+                                                                                                                                       : "This chart has changes that aren't saved.");
             ImGui::Spacing();
 
-            if (ImGui::Button("Save", ImVec2(110, 0))) {
+            if (ImGui::Button(count > 1 ? "Save all" : "Save", ImVec2(ui_px(110), 0))) {
                 ImGui::CloseCurrentPopup();
 
-                if (document != nullptr && document->path().empty()) {
-                    save_as();
+                if (closing) {
+                    if (document != nullptr && document->path().empty()) {
+                        save_as();
+                    }
+                    else {
+                        save();
+
+                        if (document == nullptr || !document->dirty()) {
+                            perform(pending);
+                        }
+                    }
                 }
                 else {
-                    save();
+                    save_all();
+                    std::optional<size_t> unsaved;
 
-                    if (document == nullptr || !document->dirty()) {
+                    for (size_t index = 0; index < tabs.size() && !unsaved; index++) {
+                        if (const ChartDocument* chart = tab_document(index); chart != nullptr && chart->dirty()) {
+                            unsaved = index;
+                        }
+                    }
+
+                    if (unsaved) {
+                        switch_tab(*unsaved);
+                        save_as();
+                    }
+                    else {
                         perform(pending);
                     }
                 }
@@ -1931,14 +3019,14 @@ namespace nascent {
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Discard", ImVec2(110, 0))) {
+            if (ImGui::Button("Discard", ImVec2(ui_px(110), 0))) {
                 ImGui::CloseCurrentPopup();
                 perform(pending);
             }
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
                 ImGui::CloseCurrentPopup();
                 pending = Pending::NONE;
                 pending_file.clear();
@@ -2018,53 +3106,58 @@ namespace nascent {
     void EditorGame::handle_shortcuts() {
         ImGuiIO& io = ImGui::GetIO();
 
-        if (io.WantTextInput || dialog.is_open() || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+        if (io.WantTextInput || dialog.is_open() || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) || capturing) {
             return;
         }
 
         Input& keys = input();
-        bool ctrl = keys.key_held(olc::Key::CTRL);
-        bool shift = keys.key_held(olc::Key::SHIFT);
+        bool alt = alt_held();
+        auto pressed = [&](EditorAction action) {
+            return bindings.pressed(action, keys, alt);
+        };
 
-        if (ctrl && keys.key_pressed(olc::Key::N)) {
+        if (pressed(EditorAction::NEW_FROM_AUDIO)) {
             request(Pending::NEW_FROM_AUDIO);
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::O)) {
+        if (pressed(EditorAction::OPEN_CHART)) {
             request(Pending::OPEN_CHART);
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::Q)) {
+        if (pressed(EditorAction::QUIT)) {
             request(Pending::QUIT);
+        }
+
+        if (pressed(EditorAction::SETTINGS)) {
+            settings_open = true;
+            ImGui::SetWindowFocus("Settings");
         }
 
         if (document == nullptr) {
             return;
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::S)) {
-            if (shift) {
-                save_as();
-            }
-            else {
-                save();
-            }
+        if (pressed(EditorAction::SAVE)) {
+            save();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::Z)) {
-            if (shift) {
-                document->redo();
-            }
-            else {
-                document->undo();
-            }
+        if (pressed(EditorAction::SAVE_AS)) {
+            save_as();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::Y)) {
+        if (pressed(EditorAction::TEST_PLAY)) {
+            start_test_play();
+        }
+
+        if (pressed(EditorAction::UNDO)) {
+            document->undo();
+        }
+
+        if (pressed(EditorAction::REDO)) {
             document->redo();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::T)) {
+        if (pressed(EditorAction::TRANSFORM)) {
             if (selection.empty()) {
                 set_status("Select some notes first (Shift + drag, or Ctrl + A)", true);
             }
@@ -2073,138 +3166,152 @@ namespace nascent {
             }
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::A)) {
+        if (pressed(EditorAction::INVERSE)) {
+            if (selection.empty()) {
+                set_status("Select some notes first (Shift + drag, or Ctrl + A)", true);
+            }
+            else {
+                inverse_requested = true;
+            }
+        }
+
+        if (pressed(EditorAction::SELECT_ALL)) {
             select_all();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::C)) {
+        if (pressed(EditorAction::COPY)) {
             copy_selection();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::X)) {
+        if (pressed(EditorAction::CUT)) {
             cut_selection();
         }
 
-        if (ctrl && keys.key_pressed(olc::Key::V)) {
+        if (pressed(EditorAction::PASTE)) {
             paste_clipboard();
         }
 
-        if (ctrl && shift) {
-            if (keys.key_pressed(olc::Key::UP) || keys.key_pressed(olc::Key::RIGHT)) {
-                change_lane_width(1);
-            }
-
-            if (keys.key_pressed(olc::Key::DOWN) || keys.key_pressed(olc::Key::LEFT)) {
-                change_lane_width(-1);
-            }
-        }
-        else if (ctrl) {
-            if (keys.key_pressed(olc::Key::UP)) {
-                nudge_selection(1, 0);
-            }
-
-            if (keys.key_pressed(olc::Key::DOWN)) {
-                nudge_selection(-1, 0);
-            }
-
-            if (keys.key_pressed(olc::Key::LEFT)) {
-                nudge_selection(0, -1);
-            }
-
-            if (keys.key_pressed(olc::Key::RIGHT)) {
-                nudge_selection(0, 1);
-            }
+        if (pressed(EditorAction::LANE_WIDER)) {
+            change_lane_width(1);
         }
 
-        if (ctrl && (keys.key_pressed(olc::Key::EQUALS) || keys.key_pressed(olc::Key::NP_ADD))) {
+        if (pressed(EditorAction::LANE_NARROWER)) {
+            change_lane_width(-1);
+        }
+
+        if (pressed(EditorAction::NUDGE_LATER)) {
+            nudge_selection(1, 0);
+        }
+
+        if (pressed(EditorAction::NUDGE_EARLIER)) {
+            nudge_selection(-1, 0);
+        }
+
+        if (pressed(EditorAction::NUDGE_LEFT)) {
+            nudge_selection(0, -1);
+        }
+
+        if (pressed(EditorAction::NUDGE_RIGHT)) {
+            nudge_selection(0, 1);
+        }
+
+        if (pressed(EditorAction::SCROLL_FASTER)) {
             change_scroll_speed(1);
         }
 
-        if (ctrl && (keys.key_pressed(olc::Key::MINUS) || keys.key_pressed(olc::Key::NP_SUB))) {
+        if (pressed(EditorAction::SCROLL_SLOWER)) {
             change_scroll_speed(-1);
         }
 
-        if (ctrl) {
-            return;
-        }
-
-        if (keys.key_pressed(olc::Key::SPACE) && playback.loaded()) {
+        if (pressed(EditorAction::PLAY_PAUSE) && playback.loaded()) {
             toggle_playback();
         }
 
-        bool later = keys.key_pressed(olc::Key::UP) || keys.key_pressed(olc::Key::RIGHT);
-        bool earlier = keys.key_pressed(olc::Key::DOWN) || keys.key_pressed(olc::Key::LEFT);
-
-        if (alt_held()) {
-            if (later) {
-                seek(position + 1);
-            }
-
-            if (earlier) {
-                seek(position - 1);
-            }
-        }
-        else if (shift && gesture.kind == Gesture::Kind::NONE) {
-            if (later) {
-                change_snap(1);
-            }
-
-            if (earlier) {
-                change_snap(-1);
-            }
-        }
-        else {
-            if (keys.key_pressed(olc::Key::LEFT)) {
-                step(-1);
-            }
-
-            if (keys.key_pressed(olc::Key::RIGHT)) {
-                step(1);
-            }
-
-            if (keys.key_pressed(olc::Key::DOWN)) {
-                step(-(int32_t)divisor);
-            }
-
-            if (keys.key_pressed(olc::Key::UP)) {
-                step((int32_t)divisor);
-            }
+        if (pressed(EditorAction::MS_FORWARD)) {
+            seek(position + 1);
         }
 
-        if (keys.key_pressed(olc::Key::HOME)) {
+        if (pressed(EditorAction::MS_BACK)) {
+            seek(position - 1);
+        }
+
+        if (gesture.kind == Gesture::Kind::NONE && pressed(EditorAction::FINER_SNAP)) {
+            change_snap(1);
+        }
+
+        if (gesture.kind == Gesture::Kind::NONE && pressed(EditorAction::COARSER_SNAP)) {
+            change_snap(-1);
+        }
+
+        if (pressed(EditorAction::STEP_BACK)) {
+            step(-1);
+        }
+
+        if (pressed(EditorAction::STEP_FORWARD)) {
+            step(1);
+        }
+
+        if (pressed(EditorAction::BEAT_BACK)) {
+            step(-(int32_t)divisor);
+        }
+
+        if (pressed(EditorAction::BEAT_FORWARD)) {
+            step((int32_t)divisor);
+        }
+
+        if (pressed(EditorAction::GO_TO_START)) {
             seek(0);
         }
 
-        if (keys.key_pressed(olc::Key::END) && !document->data().hits.empty()) {
+        if (pressed(EditorAction::GO_TO_END) && !document->data().hits.empty()) {
             seek(document->data().hits.back().time);
         }
 
-        if (keys.key_pressed(olc::Key::T)) {
+        if (pressed(EditorAction::TAP_TEMPO)) {
             tap_tempo();
         }
 
-        if (keys.key_pressed(olc::Key::M)) {
+        if (pressed(EditorAction::MIRROR)) {
             mirror_selection();
         }
 
-        if (keys.key_pressed(olc::Key::N)) {
+        if (pressed(EditorAction::TOGGLE_SNAP)) {
             snap_enabled = !snap_enabled;
             set_status(snap_enabled ? "Snapping notes to the grid" : "Not snapping, notes go to the exact millisecond");
         }
 
-        if (keys.key_pressed(olc::Key::ESCAPE)) {
+        if (pressed(EditorAction::CLEAR_SELECTION)) {
             selection.clear();
         }
 
-        if (keys.key_pressed(olc::Key::DEL) || keys.key_pressed(olc::Key::BACK)) {
+        if (pressed(EditorAction::DELETE_SELECTION)) {
             delete_selection();
         }
 
-        constexpr olc::Key LANE_KEYS[] = {olc::Key::K1, olc::Key::K2, olc::Key::K3, olc::Key::K4, olc::Key::K5, olc::Key::K6, olc::Key::K7, olc::Key::K8, olc::Key::K9, olc::Key::K0};
+        if (pressed(EditorAction::COPY_TIMESTAMP)) {
+            copy_timestamp();
+        }
+
+        if (pressed(EditorAction::GO_TO_TIMESTAMP)) {
+            go_to_clipboard_timestamp();
+        }
+
+        if (pressed(EditorAction::NEXT_DIFFICULTY)) {
+            step_tab(1);
+        }
+
+        if (pressed(EditorAction::PREVIOUS_DIFFICULTY)) {
+            step_tab(-1);
+        }
+
+        if (document == nullptr) {
+            return;
+        }
+
         uint8_t key_count = document->data().info.key_count;
 
-        for (uint8_t lane = 0; lane < key_count && lane < std::size(LANE_KEYS); lane++) {
-            if (!keys.key_pressed(LANE_KEYS[lane])) {
+        for (uint8_t lane = 0; lane < key_count && lane < 10; lane++) {
+            if (!pressed((EditorAction)((size_t)EditorAction::LANE_1 + lane))) {
                 continue;
             }
 
@@ -2608,6 +3715,369 @@ namespace nascent {
         set_status(std::format("Placed {} notes of {} at {}", generated.size(), pattern_styles()[pattern_style].variants[pattern_variant].name, clock_text(first)));
     }
 
+    void EditorGame::load_library() {
+        std::filesystem::path path = settings_directory / LIBRARY_FILE;
+        std::string error;
+        library = load_pattern_library(path, error);
+
+        if (!error.empty()) {
+            std::filesystem::path backup = settings_directory / "editor_patterns.damaged.json";
+            std::error_code ec;
+            std::filesystem::copy_file(path, backup, std::filesystem::copy_options::overwrite_existing, ec);
+            set_status(std::format("Couldn't read the pattern library ({}), kept a copy as {}", error, path_utf8(backup.filename())), true);
+        }
+    }
+
+    void EditorGame::save_library() {
+        std::string error;
+
+        if (!save_pattern_library(settings_directory / LIBRARY_FILE, library, error)) {
+            set_status(std::format("Couldn't save the pattern library: {}", error), true);
+        }
+    }
+
+    void EditorGame::open_library(bool saving) {
+        library_open = true;
+        library_focus_name = saving;
+        ImGui::SetWindowFocus("Pattern library");
+    }
+
+    void EditorGame::add_to_library() {
+        prune_selection();
+
+        if (document == nullptr || selection.empty()) {
+            set_status("Select some notes first (Shift + drag, or Ctrl + A)", true);
+            return;
+        }
+
+        std::string name = library_name;
+        name.erase(0, name.find_first_not_of(" \t"));
+        name.erase(name.find_last_not_of(" \t") + 1);
+
+        if (name.empty()) {
+            name = std::format("Pattern {}", library.size() + 1);
+        }
+
+        library.push_back(capture_pattern(*document, selection, name));
+        library_selected = library.size() - 1;
+        library_lane_offset = 0;
+        library_name.clear();
+        save_library();
+        set_status(std::format("Saved {} notes to the pattern library as \"{}\"", library.back().notes.size(), name));
+    }
+
+    std::vector<Hit> EditorGame::library_hits() const {
+        if (document == nullptr || !library_selected.has_value() || *library_selected >= library.size()) {
+            return {};
+        }
+
+        return library_pattern_hits(*document, library[*library_selected], std::max(0.0, place_time(position)), library_lane_offset);
+    }
+
+    void EditorGame::place_from_library() {
+        std::vector<Hit> placed = library_hits();
+
+        if (placed.empty()) {
+            return;
+        }
+
+        std::vector<Hit> replaced;
+
+        if (library_replace) {
+            auto [low, high] = std::minmax_element(placed.begin(), placed.end(), [](const Hit& a, const Hit& b) { return a.key < b.key; });
+            int32_t last = 0;
+
+            for (const Hit& hit : placed) {
+                last = std::max(last, hit.hit_type == HitType::HOLD ? hit.end_time : hit.time);
+            }
+
+            replaced = document->notes_in(low->key, high->key, placed.front().time, last);
+        }
+
+        document->change([&](ChartData& data) { replace_hits(data, replaced, placed); });
+        selection = placed;
+        selection_revision = document->revision();
+        set_status(std::format("Placed {} ({} notes) at {}", library[*library_selected].name, placed.size(), clock_text(placed.front().time)));
+    }
+
+    void EditorGame::draw_library_window() {
+        if (!library_open) {
+            return;
+        }
+
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.35f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+
+        if (!ImGui::Begin("Pattern library", &library_open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking)) {
+            ImGui::End();
+            return;
+        }
+
+        prune_selection();
+        bool open = document != nullptr;
+        bool can_save = open && !selection.empty();
+        uint8_t keys = open ? document->data().info.key_count : 0;
+
+        ImGui::SeparatorText("Save selection");
+
+        if (library_focus_name) {
+            ImGui::SetKeyboardFocusHere();
+            library_focus_name = false;
+        }
+
+        ImGui::SetNextItemWidth(ui_px(260));
+        bool entered = ImGui::InputTextWithHint("##library_name", std::format("Pattern {}", library.size() + 1).c_str(), &library_name, ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!can_save);
+
+        if (ImGui::Button("Save", ImVec2(ui_px(110), 0)) || (entered && can_save)) {
+            add_to_library();
+        }
+
+        ImGui::EndDisabled();
+        ImGui::TextDisabled("%s", can_save ? std::format("Saves the {} selected notes", selection.size()).c_str() : "Select some notes to save them here");
+
+        ImGui::SeparatorText("Saved patterns");
+        ImGui::SetNextItemWidth(ui_px(260));
+        ImGui::InputTextWithHint("##library_filter", "Search", &library_filter);
+
+        if (open) {
+            ImGui::SameLine();
+            ImGui::Checkbox("All key counts", &library_all_keys);
+        }
+
+        std::string filter = lowercase(library_filter);
+        size_t shown = 0;
+
+        if (ImGui::BeginChild("##library_list", ImVec2(ui_px(460), ui_px(220)), ImGuiChildFlags_Borders)) {
+            for (size_t index = 0; index < library.size(); index++) {
+                const LibraryPattern& pattern = library[index];
+
+                if ((open && !library_all_keys && pattern.key_count != keys) || lowercase(pattern.name).find(filter) == std::string::npos) {
+                    continue;
+                }
+
+                shown++;
+
+                if (ImGui::Selectable(std::format("{}##library{}", pattern.name.empty() ? "Untitled" : pattern.name, index).c_str(), library_selected == index, ImGuiSelectableFlags_AllowDoubleClick)) {
+                    if (library_selected != index) {
+                        library_lane_offset = 0;
+                    }
+
+                    library_selected = index;
+
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && open) {
+                        place_from_library();
+                    }
+                }
+
+                ImGui::SameLine(270);
+                ImGui::TextDisabled("%s", std::format("{}K, {} notes, {:.4g} beats", pattern.key_count, pattern.notes.size(), pattern_length_beats(pattern)).c_str());
+            }
+
+            if (shown == 0) {
+                ImGui::TextDisabled("%s", library.empty() ? "Nothing saved yet" : "No saved patterns match");
+            }
+        }
+
+        ImGui::EndChild();
+
+        if (library_selected.has_value() && *library_selected < library.size()) {
+            LibraryPattern& pattern = library[*library_selected];
+            ImGui::SetNextItemWidth(ui_px(260));
+            ImGui::InputText("Name##library_rename", &pattern.name);
+
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                save_library();
+            }
+
+            if (open) {
+                auto [low, high] = pattern_lanes(pattern);
+                int lowest = std::min(-(int)low, (int)keys - 1 - (int)high);
+                int highest = std::max(-(int)low, (int)keys - 1 - (int)high);
+                library_lane_offset = std::clamp(library_lane_offset, lowest, highest);
+
+                if (lowest != highest) {
+                    ImGui::SetNextItemWidth(ui_px(260));
+                    ImGui::SliderInt("Lane offset", &library_lane_offset, lowest, highest);
+                    library_lane_offset = std::clamp(library_lane_offset, lowest, highest);
+                }
+
+                ImGui::Checkbox("Replace notes already there", &library_replace);
+                std::vector<Hit> hits = library_hits();
+                pattern_preview.insert(pattern_preview.end(), hits.begin(), hits.end());
+
+                if (!hits.empty()) {
+                    ImGui::TextUnformatted(std::format("{} notes from {} at the playhead", hits.size(), clock_text(hits.front().time)).c_str());
+                }
+
+                if (hits.size() < pattern.notes.size()) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "%s", std::format("{} notes don't fit in this {}K chart and are left out", pattern.notes.size() - hits.size(), keys).c_str());
+                }
+
+                ImGui::BeginDisabled(hits.empty());
+
+                if (ImGui::Button("Place at playhead", ImVec2(ui_px(160), 0))) {
+                    place_from_library();
+                }
+
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+            }
+
+            if (ImGui::Button("Delete", ImVec2(ui_px(110), 0))) {
+                library_delete_requested = true;
+            }
+        }
+
+        if (library_delete_requested) {
+            ImGui::OpenPopup("Delete pattern");
+            library_delete_requested = false;
+        }
+
+        if (ImGui::BeginPopupModal("Delete pattern", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            bool valid = library_selected.has_value() && *library_selected < library.size();
+
+            if (valid) {
+                ImGui::TextUnformatted(std::format("Delete \"{}\" from the pattern library? This can't be undone.", library[*library_selected].name).c_str());
+            }
+
+            if (ImGui::Button("Delete", ImVec2(ui_px(110), 0)) && valid) {
+                std::string name = library[*library_selected].name;
+                library.erase(library.begin() + (std::ptrdiff_t)*library_selected);
+                library_selected.reset();
+                save_library();
+                set_status(std::format("Deleted \"{}\" from the pattern library", name));
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape) || !valid) {
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        ImGui::End();
+    }
+
+    void EditorGame::update_checker() {
+        if (!checker_open || document == nullptr) {
+            return;
+        }
+
+        if (hands_job.valid() && hands_job.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            HandRatings rated = hands_job.get();
+
+            if (hands_job_key.first == document_serial) {
+                hands = rated;
+                hands_key = hands_job_key;
+            }
+        }
+
+        std::pair<uint64_t, uint64_t> key = {document_serial, document->revision()};
+
+        if (!hands_job.valid() && hands_key != key && hands_job_key != key && now_ms() - changed_at >= DIFFICULTY_DELAY_MS) {
+            hands_job_key = key;
+            hands_job = std::async(std::launch::async, [data = document->data()] { return rate_hands(data); });
+        }
+
+        std::tuple<uint64_t, uint64_t, uint64_t, double> wanted = {key.first, key.second, hands.has_value() ? hands_key.second : ~0ull, playback.length()};
+
+        if (wanted != findings_key) {
+            findings = check_chart(document->data(), {playback.length(), document->directory(), hands, document->merged_on_open()});
+            findings_key = wanted;
+        }
+    }
+
+    void EditorGame::draw_checker_window() {
+        if (!checker_open) {
+            return;
+        }
+
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, viewport->WorkPos.y + viewport->WorkSize.y * 0.4f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(CHECKER_WIDTH, 0), ImVec2(CHECKER_WIDTH, viewport->WorkSize.y * 0.8f));
+
+        if (!ImGui::Begin("Check chart", &checker_open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking)) {
+            ImGui::End();
+            return;
+        }
+
+        if (document == nullptr) {
+            ImGui::TextDisabled("No chart open");
+            ImGui::End();
+            return;
+        }
+
+        static constexpr std::array<const char*, 4> TAGS = {"Problem", "Warning", "Info", "OK"};
+        static const std::array<ImVec4, 4> COLORS = {ImVec4(1.0f, 0.45f, 0.45f, 1.0f), ImVec4(1.0f, 0.8f, 0.4f, 1.0f), ImVec4(0.6f, 0.75f, 1.0f, 1.0f), ImVec4(0.5f, 0.85f, 0.55f, 1.0f)};
+        size_t problems = (size_t)std::count_if(findings.begin(), findings.end(), [](const CheckFinding& finding) { return finding.level == CheckLevel::PROBLEM; });
+        size_t warnings = (size_t)std::count_if(findings.begin(), findings.end(), [](const CheckFinding& finding) { return finding.level == CheckLevel::WARNING; });
+        std::string summary = problems + warnings == 0 ? std::string("Nothing to fix") : std::format("{} {}, {} {}", problems, problems == 1 ? "problem" : "problems", warnings, warnings == 1 ? "warning" : "warnings");
+        ImGui::TextUnformatted(summary.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("(updates as you edit, click a time to go there)");
+        ImGui::Separator();
+        ImGui::PushTextWrapPos(CHECKER_WIDTH - 24);
+
+        for (size_t index = 0; index < findings.size(); index++) {
+            const CheckFinding& finding = findings[index];
+            size_t level = (size_t)finding.level;
+            ImGui::PushID((int)index);
+            ImGui::TextColored(COLORS[level], "%s", TAGS[level]);
+            ImGui::SameLine(80);
+
+            if (finding.detail.empty() && finding.times.empty()) {
+                ImGui::TextUnformatted(finding.title.c_str());
+                ImGui::PopID();
+                continue;
+            }
+
+            if (ImGui::TreeNodeEx("##finding", ImGuiTreeNodeFlags_SpanAvailWidth | (finding.level == CheckLevel::PROBLEM ? ImGuiTreeNodeFlags_DefaultOpen : 0), "%s", finding.title.c_str())) {
+                if (!finding.detail.empty()) {
+                    ImGui::TextDisabled("%s", finding.detail.c_str());
+                }
+
+                float right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+                size_t listed = std::min(finding.times.size(), CHECKER_TIMES);
+
+                for (size_t time = 0; time < listed; time++) {
+                    std::string label = clock_text(finding.times[time]);
+
+                    if (time > 0 && ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize(label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2 < right) {
+                        ImGui::SameLine();
+                    }
+
+                    ImGui::PushID((int)time);
+
+                    if (ImGui::SmallButton(label.c_str())) {
+                        int32_t at = finding.times[time];
+                        seek(at);
+                        selection.clear();
+                        std::copy_if(document->data().hits.begin(), document->data().hits.end(), std::back_inserter(selection), [&](const Hit& hit) { return hit.time == at; });
+                        selection_revision = document->revision();
+                    }
+
+                    ImGui::PopID();
+                }
+
+                if (finding.times.size() > listed) {
+                    ImGui::TextDisabled("%s", std::format("and {} more", finding.times.size() - listed).c_str());
+                }
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
+        }
+
+        ImGui::PopTextWrapPos();
+        ImGui::End();
+    }
+
     void EditorGame::draw_pattern_settings(PatternFamily family) {
         PatternSettings& settings = pattern_settings;
         int keys = std::max<int>(document->data().info.key_count, 1);
@@ -2757,7 +4227,7 @@ namespace nascent {
 
         const std::vector<PatternStyle>& styles = pattern_styles();
         pattern_style = std::min(pattern_style, styles.size() - 1);
-        ImGui::SetNextItemWidth(200);
+        ImGui::SetNextItemWidth(ui_px(200));
 
         if (ImGui::BeginCombo("Style", styles[pattern_style].name)) {
             for (size_t index = 0; index < styles.size(); index++) {
@@ -2774,7 +4244,7 @@ namespace nascent {
         pattern_variant = std::min(pattern_variant, variants.size() - 1);
 
         if (variants.size() > 1) {
-            ImGui::SetNextItemWidth(200);
+            ImGui::SetNextItemWidth(ui_px(200));
 
             if (ImGui::BeginCombo("Pattern", variants[pattern_variant].name)) {
                 for (size_t index = 0; index < variants.size(); index++) {
@@ -2790,9 +4260,9 @@ namespace nascent {
         ImGui::SeparatorText("Pattern");
         draw_pattern_settings(variants[pattern_variant].family);
         ImGui::SeparatorText("Placement");
-        ImGui::SetNextItemWidth(200);
+        ImGui::SetNextItemWidth(ui_px(200));
         snap_picker("Snap", pattern_divisor);
-        ImGui::SetNextItemWidth(200);
+        ImGui::SetNextItemWidth(ui_px(200));
         ImGui::InputInt("Beats", &pattern_beats);
         pattern_beats = std::clamp(pattern_beats, 1, MAX_PATTERN_BEATS);
         ImGui::Checkbox("Replace notes already there", &pattern_replace);
@@ -2822,7 +4292,7 @@ namespace nascent {
             }
         }
 
-        if (ImGui::Button("Place pattern", ImVec2(140, 0))) {
+        if (ImGui::Button("Place pattern", ImVec2(ui_px(140), 0))) {
             place_pattern();
         }
 
@@ -2848,7 +4318,7 @@ namespace nascent {
             ImGui::TextUnformatted("Add a timing point first, there's no beat grid to quantize to.");
         }
         else {
-            ImGui::SetNextItemWidth(120);
+            ImGui::SetNextItemWidth(ui_px(120));
             snap_picker("Snap to", quantize_divisor);
 
             ImGui::Checkbox("Quantize long note ends too", &quantize_ends);
@@ -2881,7 +4351,7 @@ namespace nascent {
             ImGui::Spacing();
             ImGui::BeginDisabled(moved == 0);
 
-            if (ImGui::Button("Quantize", ImVec2(110, 0))) {
+            if (ImGui::Button("Quantize", ImVec2(ui_px(110), 0))) {
                 document->change([&](ChartData& data) { replace_hits(data, selection, result); });
                 selection.clear();
 
@@ -2900,7 +4370,7 @@ namespace nascent {
             ImGui::SameLine();
         }
 
-        if (ImGui::Button("Cancel", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (ImGui::Button("Cancel", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             ImGui::CloseCurrentPopup();
         }
 
@@ -2953,7 +4423,7 @@ namespace nascent {
                         ImGui::SameLine();
                     }
 
-                    if (ImGui::Button(std::format("{}##{}", factor, title).c_str(), ImVec2(70, 0))) {
+                    if (ImGui::Button(std::format("{}##{}", factor, title).c_str(), ImVec2(ui_px(70), 0))) {
                         stretch_selection((double)change.from / (double)change.to, transform_from_playhead);
                     }
 
@@ -2978,30 +4448,30 @@ namespace nascent {
 
             ImGui::SeparatorText("Lanes");
 
-            if (ImGui::Button("Mirror (M)", ImVec2(110, 0))) {
+            if (ImGui::Button("Mirror (M)", ImVec2(ui_px(110), 0))) {
                 mirror_selection();
             }
 
             int key_count = std::max<int>(document->data().info.key_count, 2);
-            ImGui::SetNextItemWidth(110);
+            ImGui::SetNextItemWidth(ui_px(110));
             ImGui::InputInt("Columns", &rotate_columns);
             rotate_columns = std::clamp(rotate_columns, 1, key_count - 1);
             ImGui::SameLine();
 
-            if (ImGui::Button("Rotate left", ImVec2(110, 0))) {
+            if (ImGui::Button("Rotate left", ImVec2(ui_px(110), 0))) {
                 rotate_selection(-rotate_columns);
             }
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Rotate right", ImVec2(110, 0))) {
+            if (ImGui::Button("Rotate right", ImVec2(ui_px(110), 0))) {
                 rotate_selection(rotate_columns);
             }
         }
 
         ImGui::Spacing();
 
-        if (ImGui::Button("Close", ImVec2(110, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (ImGui::Button("Close", ImVec2(ui_px(110), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             ImGui::CloseCurrentPopup();
         }
 
@@ -3149,7 +4619,7 @@ namespace nascent {
                 if (line.measure >= 0) {
                     std::string label = std::to_string(line.measure);
                     ImVec2 size = ImGui::CalcTextSize(label.c_str());
-                    labels->AddText(ImVec2((float)field->pos.x - size.x - 8.0f, y - size.y / 2), IM_COL32(255, 255, 255, 170), label.c_str());
+                    labels->AddText(ImVec2((float)field->pos.x - size.x - ui_px(8.0f), y - size.y / 2), IM_COL32(255, 255, 255, 170), label.c_str());
                 }
             }
 
@@ -3170,7 +4640,7 @@ namespace nascent {
             float y = std::floor((float)field->note_top(point.time, window) + half);
             std::string label = std::format("{:.2f} BPM  {}/4", 60000.0 / point.beat_length, point.meter);
             ImVec2 size = ImGui::CalcTextSize(label.c_str());
-            ImVec2 corner(right + 10.0f, y - size.y / 2);
+            ImVec2 corner(right + ui_px(10.0f), y - size.y / 2);
             labels->AddRectFilled(ImVec2(corner.x - 4.0f, corner.y - 2.0f), ImVec2(corner.x + size.x + 4.0f, corner.y + size.y + 2.0f), IM_COL32(40, 22, 12, 200), 3.0f);
             labels->AddText(corner, IM_COL32(255, 170, 90, 255), label.c_str());
             markers.push_back({y, std::move(label)});
@@ -3232,20 +4702,22 @@ namespace nascent {
             return;
         }
 
-        float height = view.h - DENSITY_BAR_MARGIN * 2;
-        ImVec2 corner(view.x + view.w - DENSITY_BAR_WIDTH - DENSITY_BAR_MARGIN, view.y + DENSITY_BAR_MARGIN);
+        float bar_width = ui_px(DENSITY_BAR_WIDTH);
+        float margin = ui_px(DENSITY_BAR_MARGIN);
+        float height = view.h - margin * 2;
+        ImVec2 corner(view.x + view.w - bar_width - margin, view.y + margin);
         size_t rows = (size_t)std::max(1.0f, height / DENSITY_ROW_PX);
         double length = timeline_length();
         update_density(rows, length);
 
         ImGui::SetNextWindowPos(corner);
-        ImGui::SetNextWindowSize(ImVec2(DENSITY_BAR_WIDTH, height));
+        ImGui::SetNextWindowSize(ImVec2(bar_width, height));
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse;
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
         if (ImGui::Begin("##density_bar", nullptr, flags)) {
-            ImGui::InvisibleButton("##density_seek", ImVec2(DENSITY_BAR_WIDTH, height));
+            ImGui::InvisibleButton("##density_seek", ImVec2(bar_width, height));
             bool hovered = ImGui::IsItemHovered();
             bool active = ImGui::IsItemActive();
             ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -3257,7 +4729,7 @@ namespace nascent {
                 return std::clamp((double)(bottom - y) / height, 0.0, 1.0) * length;
             };
 
-            draw->AddRectFilled(corner, ImVec2(corner.x + DENSITY_BAR_WIDTH, bottom), IM_COL32(12, 12, 18, 200), 4.0f);
+            draw->AddRectFilled(corner, ImVec2(corner.x + bar_width, bottom), IM_COL32(12, 12, 18, 200), 4.0f);
 
             for (size_t row = 0; row < rows; row++) {
                 float level = density[row] / density_peak;
@@ -3273,26 +4745,26 @@ namespace nascent {
                 ImVec4 color = t < 0.5f
                     ? ImVec4(low.x + (mid.x - low.x) * t * 2, low.y + (mid.y - low.y) * t * 2, low.z + (mid.z - low.z) * t * 2, low.w)
                     : ImVec4(mid.x + (high.x - mid.x) * (t - 0.5f) * 2, mid.y + (high.y - mid.y) * (t - 0.5f) * 2, mid.z + (high.z - mid.z) * (t - 0.5f) * 2, high.w);
-                float width = (DENSITY_BAR_WIDTH - 6.0f) * t;
+                float width = (bar_width - 6.0f) * t;
                 float y = bottom - (float)(row + 1) * DENSITY_ROW_PX;
                 draw->AddRectFilled(ImVec2(corner.x + 3.0f, y), ImVec2(corner.x + 3.0f + width, y + DENSITY_ROW_PX), ImGui::ColorConvertFloat4ToU32(color));
             }
 
             for (const ChartTimingPoint& point : document->data().timing_points) {
                 float y = y_of(point.time);
-                draw->AddLine(ImVec2(corner.x + DENSITY_BAR_WIDTH - 8.0f, y), ImVec2(corner.x + DENSITY_BAR_WIDTH, y), IM_COL32(255, 140, 60, 230), 2.0f);
+                draw->AddLine(ImVec2(corner.x + bar_width - 8.0f, y), ImVec2(corner.x + bar_width, y), IM_COL32(255, 140, 60, 230), 2.0f);
             }
 
             if (field != nullptr) {
                 float top = y_of(field->time_at(view.y, window));
                 float low = y_of(std::max(0.0, field->time_at(view.y + view.h, window)));
-                draw->AddRectFilled(ImVec2(corner.x, top), ImVec2(corner.x + DENSITY_BAR_WIDTH, low), IM_COL32(255, 255, 255, 28));
-                draw->AddRect(ImVec2(corner.x, top), ImVec2(corner.x + DENSITY_BAR_WIDTH, low), IM_COL32(255, 255, 255, 70));
+                draw->AddRectFilled(ImVec2(corner.x, top), ImVec2(corner.x + bar_width, low), IM_COL32(255, 255, 255, 28));
+                draw->AddRect(ImVec2(corner.x, top), ImVec2(corner.x + bar_width, low), IM_COL32(255, 255, 255, 70));
             }
 
             float playhead = y_of(position);
-            draw->AddLine(ImVec2(corner.x - 3.0f, playhead), ImVec2(corner.x + DENSITY_BAR_WIDTH + 3.0f, playhead), IM_COL32(255, 255, 255, 255), 2.0f);
-            draw->AddRect(corner, ImVec2(corner.x + DENSITY_BAR_WIDTH, bottom), IM_COL32(255, 255, 255, hovered || active ? 120 : 50), 4.0f);
+            draw->AddLine(ImVec2(corner.x - 3.0f, playhead), ImVec2(corner.x + bar_width + 3.0f, playhead), IM_COL32(255, 255, 255, 255), 2.0f);
+            draw->AddRect(corner, ImVec2(corner.x + bar_width, bottom), IM_COL32(255, 255, 255, hovered || active ? 120 : 50), 4.0f);
 
             float mouse_y = ImGui::GetIO().MousePos.y;
 
@@ -3331,7 +4803,7 @@ namespace nascent {
         for (float y = top; y < bottom; y += WAVEFORM_ROW_PX) {
             double newer = field->time_at(y, target);
             double older = field->time_at(y + WAVEFORM_ROW_PX, target);
-            std::array<float, WaveformBands::BAND_COUNT> levels = waveform.peak(older + WAVEFORM_VISUAL_OFFSET_MS, newer + WAVEFORM_VISUAL_OFFSET_MS);
+            std::array<float, WaveformBands::BAND_COUNT> levels = waveform.peak(older, newer);
 
             for (size_t band = 0; band < WaveformBands::BAND_COUNT; band++) {
                 float bar = std::min(1.0f, levels[band]) * width;
@@ -3373,12 +4845,21 @@ namespace nascent {
 
         for (const Hit& hit : pattern_preview) {
             float top = (float)field->note_top(hit.time, target);
+            float tail = hit.hit_type == HitType::HOLD ? (float)field->note_top(hit.end_time, target) : top;
 
-            if (hit.key >= keys || top + height < view.y || top > view.y + view.h) {
+            if (hit.key >= keys || top + height < view.y || tail > view.y + view.h) {
                 continue;
             }
 
-            field->draw_note(target, field->sized_image(SkinImage::NOTE, hit.key, keys), field->lane_left(hit.key), top, olc::Pixel(255, 255, 255, 115));
+            float x = (float)field->lane_left(hit.key);
+            olc::Decal* decal = field->sized_image(SkinImage::NOTE, hit.key, keys);
+
+            if (hit.hit_type == HitType::HOLD) {
+                target->FillRectDecal({x + width * 0.2f, tail + height / 2}, {width * 0.6f, top - tail}, olc::Pixel(255, 255, 255, 60));
+                field->draw_note(target, decal, x, tail, olc::Pixel(255, 255, 255, 90));
+            }
+
+            field->draw_note(target, decal, x, top, olc::Pixel(255, 255, 255, 115));
         }
 
         if (show_ghost && hover_column.has_value()) {

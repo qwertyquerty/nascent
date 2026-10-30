@@ -34,6 +34,7 @@ namespace nascent {
         bool mirror = false;
 
         int chart_audio_id = -1;
+        double chart_source_offset = 0;
         int handed_audio_id = -1;
         std::shared_future<ApiResult<PlayTicket>> ticket;
         double ticket_requested_at = 0;
@@ -99,6 +100,10 @@ namespace nascent {
         std::string now_playing_text;
         bool finished = false;
         bool audio_finished = false;
+        std::optional<double> test_start;
+
+        double start_position() const;
+        double first_audio_position() const;
 
         void pause(double now);
         void resume(double now);
@@ -161,6 +166,7 @@ namespace nascent {
         void use_background(const MipDecal* background);
         void use_audio(int audio_id);
         void set_replay_play_id(int64_t play_id);
+        void set_test_start(double position);
         ~ScenePlay();
         void on_create() override;
         void on_exit() override;

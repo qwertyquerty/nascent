@@ -36,7 +36,7 @@ NASCENT_TEST(replays) {
     attempt.update(6000);
 
     AttemptSummary summary = summarize_attempt(attempt, 42.0);
-    Replay replay = make_replay(attempt, summary, {"Pack/chart.json", chart->gameplay_hash(), "Title", "Artist", "Hard", 4}, 1.0f, {10, -5, 210, true}, "2026-10-09T07:40:00Z");
+    Replay replay = make_replay(attempt, summary, {"Pack/chart.json", chart->gameplay_hash(), "Title", "Artist", "Hard", 4}, 1.0f, {10, -5, 210, true, -7}, "2026-10-09T07:40:00Z");
 
     std::filesystem::path directory = std::filesystem::temp_directory_path() / "nascent_replay_tests";
     std::filesystem::remove_all(directory);
@@ -51,6 +51,7 @@ NASCENT_TEST(replays) {
     if (loaded) {
         CHECK(loaded->chart.gameplay_hash == chart->gameplay_hash());
         CHECK(loaded->settings.mirror);
+        CHECK(loaded->settings.chart_offset == -7);
         Attempt replayed = simulate_replay(*chart, *loaded);
         CHECK(replayed.get_accuracy() == attempt.get_accuracy());
         CHECK(replayed.max_combo == attempt.max_combo);
@@ -109,6 +110,10 @@ NASCENT_TEST(replay_precise_times_and_clock_samples) {
     CHECK(loaded.clock_samples.size() == 3 && std::abs(loaded.clock_samples[1][0] - 1000.0) < 1e-9);
     CHECK(loaded.pauses.size() == 1 && std::abs(loaded.pauses[0][1] - 4200.0) < 1e-9 && std::abs(loaded.pauses[0][2] - 1250.0) < 1e-9);
 
+    nlohmann::json older = nlohmann::json(replay);
+    older["settings"].erase("chart_offset");
+    CHECK(older.get<Replay>().settings.chart_offset == 0);
+
     nlohmann::json mismatched = nlohmann::json(replay);
     mismatched["input_times"] = {1.0, 2.0};
     CHECK(mismatched.get<Replay>().input_times.empty());
@@ -118,4 +123,13 @@ NASCENT_TEST(replay_precise_times_and_clock_samples) {
     replay.pauses.clear();
     nlohmann::json plain = nlohmann::json(replay);
     CHECK(!plain.contains("input_times") && !plain.contains("clock_samples") && !plain.contains("pauses"));
+
+    PlaySession shifted(chart.get(), 20.0);
+    shifted.audio_input_offset = 10;
+    shifted.audio_visual_offset = 20;
+    shifted.chart_offset = 7.5;
+    shifted.reset_clock(0.0, 0.0);
+    CHECK(std::abs(shifted.visual_position(1000.0) - 987.5) < 1e-9);
+    shifted.press(0, 982.5);
+    CHECK(shifted.get_attempt().inputs[0].time == 1000);
 }

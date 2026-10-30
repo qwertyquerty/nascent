@@ -33,7 +33,7 @@ namespace nascent {
         return sample_rate > 0 ? (double)samples * 1000.0 / sample_rate : 0.0;
     }
 
-    std::optional<Mp3Padding> parse_mp3_padding(std::span<const unsigned char> data) {
+    std::optional<Mp3Padding> parse_mp3_padding(std::span<const unsigned char> data, Mp3Trim trim) {
         size_t offset = 0;
 
         for (size_t tag = id3_size(data, offset); tag > 0; tag = id3_size(data, offset)) {
@@ -63,6 +63,11 @@ namespace nascent {
                 return padding;
             }
 
+            if (trim == Mp3Trim::STEPMANIA) {
+                padding.samples = matches(data, tag, "Xing") ? frame_samples : 0;
+                return padding;
+            }
+
             if (tag + 8 > data.size()) {
                 return padding;
             }
@@ -82,7 +87,7 @@ namespace nascent {
         return std::nullopt;
     }
 
-    std::optional<Mp3Padding> read_mp3_padding(const std::filesystem::path& path) {
+    std::optional<Mp3Padding> read_mp3_padding(const std::filesystem::path& path, Mp3Trim trim) {
         std::ifstream file(path, std::ios::binary);
 
         if (!file) {
@@ -115,6 +120,6 @@ namespace nascent {
         std::vector<unsigned char> frames(MP3_HEADER_SEARCH_BYTES);
         file.read((char*)frames.data(), (std::streamsize)frames.size());
         frames.resize((size_t)std::max<std::streamsize>(file.gcount(), 0));
-        return parse_mp3_padding(frames);
+        return parse_mp3_padding(frames, trim);
     }
 }

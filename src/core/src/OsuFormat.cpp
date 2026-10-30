@@ -19,6 +19,11 @@ namespace nascent {
     static constexpr int32_t OSU_HOLD_TYPE = 1 << 7;
     static constexpr int32_t OSU_PLAYFIELD_WIDTH = 512;
     static constexpr int32_t OSU_OD_OFFSET = 4;
+    static constexpr int32_t OSU_LATEST_VERSION = 14;
+    static constexpr int32_t OSU_EARLY_VERSION = 5;
+    static constexpr int32_t OSU_EARLY_VERSION_OFFSET_MS = 24;
+    static constexpr int32_t OSU_NO_PREVIEW = -1;
+    static constexpr std::string_view OSU_HEADER = "osu file format v";
     static constexpr std::string_view UTF8_BOM = "\xEF\xBB\xBF";
 
     using Section = std::vector<std::string_view>;
@@ -116,6 +121,19 @@ namespace nascent {
         return value;
     }
 
+    static int32_t format_version(std::string_view text) {
+        text = trim(text);
+
+        if (!text.starts_with(OSU_HEADER)) {
+            return OSU_LATEST_VERSION;
+        }
+
+        text.remove_prefix(OSU_HEADER.size());
+        int32_t version = 0;
+        auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), version);
+        return ec == std::errc() && end != text.data() ? version : OSU_LATEST_VERSION;
+    }
+
     static std::string value_or(const std::map<std::string, std::string, std::less<>>& values, std::string_view key, std::string_view fallback = "") {
         auto it = values.find(key);
         return it != values.end() ? it->second : std::string(fallback);
@@ -139,6 +157,7 @@ namespace nascent {
         }
 
         try {
+            int32_t shift = format_version(text) < OSU_EARLY_VERSION ? OSU_EARLY_VERSION_OFFSET_MS : 0;
             auto sections = read_sections(text);
             auto general = key_values(sections["General"]);
             auto metadata = key_values(sections["Metadata"]);
@@ -181,7 +200,7 @@ namespace nascent {
                 modified = modified || lane < 0 || lane >= key_count;
                 Hit hit;
                 hit.key = (uint8_t)std::clamp(lane, 0, key_count - 1);
-                hit.time = (int32_t)number(row[2], "hit object time");
+                hit.time = (int32_t)number(row[2], "hit object time") + shift;
                 hit.hit_type = hold ? HitType::HOLD : HitType::HIT;
 
                 if (hold) {
@@ -189,7 +208,7 @@ namespace nascent {
                         throw std::runtime_error(std::format("hold '{}' has no end time", line));
                     }
 
-                    hit.end_time = (int32_t)number(std::string_view(row[5]).substr(0, row[5].find(':')), "hold end time");
+                    hit.end_time = (int32_t)number(std::string_view(row[5]).substr(0, row[5].find(':')), "hold end time") + shift;
 
                     if (hit.end_time <= hit.time) {
                         hit.hit_type = HitType::HIT;
@@ -227,7 +246,7 @@ namespace nascent {
                 }
 
                 timing_points.push_back({
-                    {"time", (int32_t)number(row[0], "timing point time")},
+                    {"time", (int32_t)number(row[0], "timing point time") + shift},
                     {"beat_length", beat_length},
                     {"meter", (int32_t)number(row[2], "meter")},
                 });
@@ -236,6 +255,7 @@ namespace nascent {
             std::string title = value_or(metadata, "Title");
             std::string artist = value_or(metadata, "Artist");
             int32_t overall_difficulty = (int32_t)std::lround(number(value_or(difficulty, "OverallDifficulty", "0"), "OverallDifficulty"));
+            int32_t preview_time = (int32_t)number(value_or(general, "PreviewTime", "0"), "PreviewTime");
 
             return nlohmann::json{
                 {"info",
@@ -249,7 +269,7 @@ namespace nascent {
                      {"audio_file", value_or(general, "AudioFilename")},
                      {"image_file", background},
                      {"audio_lead_in", (int32_t)number(value_or(general, "AudioLeadIn", "0"), "AudioLeadIn")},
-                     {"preview_time", (int32_t)number(value_or(general, "PreviewTime", "0"), "PreviewTime")},
+                     {"preview_time", preview_time == OSU_NO_PREVIEW ? preview_time : preview_time + shift},
                      {"hit_accuracy", std::max(overall_difficulty - OSU_OD_OFFSET, 0)},
                      {"key_count", key_count},
                      {"damage", (int32_t)std::lround(number(value_or(difficulty, "HPDrainRate", "0"), "HPDrainRate"))},

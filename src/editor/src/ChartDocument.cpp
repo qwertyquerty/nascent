@@ -1,6 +1,7 @@
 #include "ChartDocument.h"
 
 #include "Accuracy.h"
+#include "ChartSource.h"
 #include "StepManiaFormat.h"
 #include "Utf8Path.h"
 
@@ -33,6 +34,12 @@ namespace nascent {
         std::string generic_utf8(const std::filesystem::path& path) {
             std::u8string text = path.generic_u8string();
             return std::string(text.begin(), text.end());
+        }
+
+        bool same_file(const std::filesystem::path& a, const std::filesystem::path& b) {
+            std::error_code ec;
+            bool equivalent = std::filesystem::equivalent(a, b, ec);
+            return ec ? a.lexically_normal() == b.lexically_normal() : equivalent;
         }
 
         std::string sanitized(std::string text) {
@@ -151,9 +158,27 @@ namespace nascent {
         document->current.hits = chart->unpitched_hit_objects();
         document->current.timing_points = chart->unpitched_timing();
         document->folder = source.parent_path();
-        document->normalize();
+        document->shift_to_native_timing(source);
+        document->merged = document->normalize();
         document->saved_revision = ~0ull;
         return document;
+    }
+
+    void ChartDocument::shift_to_native_timing(const std::filesystem::path& source) {
+        int32_t shift = (int32_t)std::lround(source_offset_ms(chart_source(source), audio_path()));
+
+        if (shift == 0) {
+            return;
+        }
+
+        for (Hit& hit : current.hits) {
+            hit.time -= shift;
+            hit.end_time -= shift;
+        }
+
+        for (ChartTimingPoint& point : current.timing_points) {
+            point.time -= shift;
+        }
     }
 
     std::unique_ptr<ChartDocument> ChartDocument::open(const std::filesystem::path& path, std::string& error) {
@@ -189,7 +214,8 @@ namespace nascent {
         document->current.timing_points = chart->unpitched_timing();
         document->folder = path.parent_path();
         document->file = path.extension() == ".json" ? path : std::filesystem::path();
-        document->normalize();
+        document->shift_to_native_timing(path);
+        document->merged = document->normalize();
         document->saved_revision = document->file.empty() ? ~0ull : document->revision_count;
         return document;
     }
@@ -207,6 +233,70 @@ namespace nascent {
         document->folder = audio.parent_path();
         document->saved_revision = ~0ull;
         return document;
+    }
+
+    std::unique_ptr<ChartDocument> ChartDocument::copy_of(const ChartDocument& source, bool keep_notes) {
+        std::unique_ptr<ChartDocument> document(new ChartDocument());
+        document->current = source.current;
+        document->folder = source.folder;
+        document->saved_revision = ~0ull;
+
+        if (!keep_notes) {
+            document->current.hits.clear();
+        }
+
+        return document;
+    }
+
+    std::vector<std::unique_ptr<ChartDocument>> ChartDocument::open_siblings(const std::filesystem::path& opened, const ChartDocument& main) {
+        std::vector<std::unique_ptr<ChartDocument>> found;
+        std::filesystem::path audio = main.audio_path();
+        std::error_code ec;
+
+        if (audio.empty()) {
+            return found;
+        }
+
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(opened.parent_path(), ec)) {
+            std::filesystem::path path = entry.path();
+            std::string extension = path_utf8(path.extension());
+            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+            if (!entry.is_regular_file(ec) || (extension != ".json" && extension != ".osu") || same_file(path, opened)) {
+                continue;
+            }
+
+            std::string error;
+            std::unique_ptr<ChartDocument> sibling = open(path, error);
+
+            if (sibling != nullptr && same_file(sibling->audio_path(), audio)) {
+                found.push_back(std::move(sibling));
+            }
+        }
+
+        auto difficulty = [](const ChartDocument& document) {
+            return document.current.info.difficulty_name;
+        };
+
+        std::erase_if(found, [&](const std::unique_ptr<ChartDocument>& candidate) {
+            if (!candidate->file.empty()) {
+                return false;
+            }
+
+            if (difficulty(*candidate) == difficulty(main)) {
+                return true;
+            }
+
+            return std::any_of(found.begin(), found.end(), [&](const std::unique_ptr<ChartDocument>& other) {
+                return !other->file.empty() && difficulty(*other) == difficulty(*candidate);
+            });
+        });
+
+        std::sort(found.begin(), found.end(), [](const std::unique_ptr<ChartDocument>& a, const std::unique_ptr<ChartDocument>& b) {
+            return std::make_pair(a->current.info.key_count, a->current.hits.size()) < std::make_pair(b->current.info.key_count, b->current.hits.size());
+        });
+
+        return found;
     }
 
     const ChartData& ChartDocument::data() const {
@@ -244,7 +334,7 @@ namespace nascent {
         return revision_count != saved_revision;
     }
 
-    void ChartDocument::normalize() {
+    size_t ChartDocument::normalize() {
         uint8_t keys = std::max<uint8_t>(current.info.key_count, 1);
         std::vector<Hit>& hits = current.hits;
 
@@ -263,12 +353,19 @@ namespace nascent {
         std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
             return std::tie(a.time, a.key) < std::tie(b.time, b.key);
         });
+        size_t before = hits.size();
         hits.erase(std::unique(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) { return a.time == b.time && a.key == b.key; }), hits.end());
+        size_t removed = before - hits.size();
 
         std::vector<ChartTimingPoint>& points = current.timing_points;
         points.erase(std::remove_if(points.begin(), points.end(), [](const ChartTimingPoint& point) { return !(point.beat_length > 0) || point.meter == 0; }), points.end());
         std::stable_sort(points.begin(), points.end(), [](const ChartTimingPoint& a, const ChartTimingPoint& b) { return a.time < b.time; });
         current.info.hit_accuracy = std::min(current.info.hit_accuracy, MAX_HIT_ACC_DIFFICULTY);
+        return removed;
+    }
+
+    size_t ChartDocument::merged_on_open() const {
+        return merged;
     }
 
     void ChartDocument::snapshot() {
@@ -541,6 +638,30 @@ namespace nascent {
 
             hit.time = start;
             hit.end_time = end;
+        }
+
+        return result;
+    }
+
+    std::vector<Hit> ChartDocument::inverted(const std::vector<Hit>& hits, uint32_t gap_divisor) const {
+        std::vector<Hit> result = hits;
+
+        for (Hit& hit : result) {
+            auto next = std::find_if(current.hits.begin(), current.hits.end(), [&](const Hit& other) {
+                return other.key == hit.key && other.time > hit.time;
+            });
+
+            if (next == current.hits.end()) {
+                continue;
+            }
+
+            double space = next->time - hit.time;
+            int32_t length = (int32_t)std::lround(std::max(space / 2.0, space - snap_length(next->time, gap_divisor)));
+
+            if (length > 0) {
+                hit.hit_type = HitType::HOLD;
+                hit.end_time = hit.time + length;
+            }
         }
 
         return result;

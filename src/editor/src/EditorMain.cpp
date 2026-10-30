@@ -1,6 +1,8 @@
 #include "olcPixelGameEngine.h"
 
 #include "EditorGame.h"
+#include "GameNascent.h"
+#include "GameWindow.h"
 #include "SettingsManager.h"
 #include "Updater.h"
 #include "gse/Platform.h"
@@ -15,6 +17,7 @@ using namespace nascent;
 static constexpr int32_t DEFAULT_WINDOW_WIDTH = 1600;
 static constexpr int32_t DEFAULT_WINDOW_HEIGHT = 900;
 static constexpr const char* LOG_FILE = "editor.log";
+static constexpr const char* TEST_PLAY_LOG_FILE = "editor_test_play.log";
 
 class EditorMain : public olc::PixelGameEngine {
     EditorGame editor;
@@ -70,13 +73,22 @@ static void find_assets() {
     }
 }
 
-int main() {
+int main(int argc, char** argv) {
+    bool test_play = argc > 1 && GameNascent::TEST_PLAY_ARGUMENT == argv[1];
+
     if (!attach_parent_console()) {
-        redirect_output_to_log(user_config_directory(SettingsManager::APP_NAME) / LOG_FILE);
+        redirect_output_to_log(user_config_directory(SettingsManager::APP_NAME) / (test_play ? TEST_PLAY_LOG_FILE : LOG_FILE));
     }
 
     install_crash_handler();
     find_assets();
+
+    if (test_play) {
+        SettingsManager::load();
+        run_game_window(GameNascent::test_play_file());
+        return 0;
+    }
+
     Updater::recover();
     SettingsManager::load();
 

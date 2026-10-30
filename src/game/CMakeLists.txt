@@ -16,11 +16,13 @@ add_library(game
     src/SkinArchive.cpp
     src/EntityStarfield.cpp
     src/GameNascent.cpp
+    src/GameWindow.cpp
     src/InputManager.cpp
     src/KeyBindField.cpp
     src/LibraryCache.cpp
     src/LeaderboardPanel.cpp
     src/Favorites.cpp
+    src/ChartOffsets.cpp
     src/LocalBests.cpp
     src/LocalReplays.cpp
     src/PauseOverlay.cpp

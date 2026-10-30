@@ -12,7 +12,7 @@ namespace nascent {
     }
 
     double PlaySession::precise_input_time(double now) const {
-        return clock.position_at(now) + audio_input_offset;
+        return clock.position_at(now) + audio_input_offset + chart_offset + source_offset;
     }
 
     void PlaySession::record_input_times(double time) {
@@ -69,7 +69,7 @@ namespace nascent {
     }
 
     double PlaySession::visual_position(double now) const {
-        return clock.position_at(now) - audio_visual_offset;
+        return clock.position_at(now) - audio_visual_offset + chart_offset + source_offset;
     }
 
     const Attempt& PlaySession::get_attempt() const {

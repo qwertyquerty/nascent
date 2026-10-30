@@ -103,6 +103,9 @@ namespace nascent {
         EntityField(const Chart*, Skin*, olc::vd2d, olc::vd2d);
         void draw(olc::PixelGameEngine*);
 
+        static std::array<olc::vd2d, 2> gameplay_bounds(const Skin& skin, uint8_t key_count, olc::vd2d origin, olc::vd2d area);
+        void apply_gameplay_settings(double area_height);
+
         void set_position(double position);
         void set_lane_gap(std::optional<double> gap);
         double get_judge_bottom() const;

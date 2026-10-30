@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -96,6 +97,19 @@ NASCENT_TEST(osu_conversion) {
     CHECK(chart->timing_points.size() == 1);
     CHECK(chart->hits[0].key == 0 && chart->hits[0].hit_type == HitType::HOLD && chart->hits[0].end_time == 1500);
     CHECK(chart->hits[1].key == 3 && chart->hits[1].time == 2000);
+
+    auto early = [&](std::string_view version, std::string_view preview) {
+        std::string early_error;
+        std::string early_text = std::format("osu file format v{}\n[General]\nMode: 3\nPreviewTime: {}\n[Difficulty]\nCircleSize:4\n[TimingPoints]\n0,500,4,1,0,100,1,0\n[HitObjects]\n64,192,1000,128,0,1500:0\n448,192,2000,1,0\n", version, preview);
+        return osu_to_chart_json(early_text, early_error);
+    };
+
+    std::optional<nlohmann::json> old = early("4", "3000");
+    CHECK(old && (*old)["hit_objects"][0]["time"] == 1024 && (*old)["hit_objects"][0]["end_time"] == 1524 && (*old)["hit_objects"][1]["time"] == 2024);
+    CHECK(old && (*old)["timing_points"][0]["time"] == 24 && (*old)["info"]["preview_time"] == 3024);
+    CHECK(early("4", "-1") && (*early("4", "-1"))["info"]["preview_time"] == -1);
+    CHECK(early("5", "3000") && (*early("5", "3000"))["hit_objects"][0]["time"] == 1000 && (*early("5", "3000"))["timing_points"][0]["time"] == 0);
+    CHECK(early("x", "3000") && (*early("x", "3000"))["hit_objects"][0]["time"] == 1000);
 
     std::string mode_error;
     CHECK(!osu_to_chart_json("osu file format v14\n[General]\nMode: 0\n", mode_error).has_value());

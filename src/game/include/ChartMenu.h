@@ -17,6 +17,7 @@ namespace nascent {
     enum class ChartAction : uint8_t {
         WATCH_REPLAY,
         TOGGLE_FAVORITE,
+        CHART_OFFSET,
         OPEN_WEBSITE,
         OPEN_FOLDER,
         DELETE_CHART,
@@ -35,7 +36,9 @@ namespace nascent {
         size_t song_count;
         size_t pack_count;
         bool favorite;
+        int32_t chart_offset;
         std::function<void(ChartAction)> on_action;
+        std::function<int32_t(int32_t)> on_offset;
         size_t selected = 0;
         bool confirming = false;
         Hotspots spots;
@@ -43,17 +46,19 @@ namespace nascent {
         olc::vi2d last_mouse = {-1, -1};
 
         void activate();
+        void adjust_offset(int32_t change);
         bool enabled(ChartAction action) const;
         void step_selection(bool down);
 
         std::string label(ChartAction action, bool confirming_action) const;
 
         public:
-        static constexpr std::array<ChartAction, 7> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::OPEN_WEBSITE, ChartAction::OPEN_FOLDER, ChartAction::DELETE_CHART, ChartAction::DELETE_SONG, ChartAction::DELETE_PACK};
+        static constexpr int32_t OFFSET_COARSE_STEP_MS = 10;
+        static constexpr std::array<ChartAction, 8> ACTIONS = {ChartAction::WATCH_REPLAY, ChartAction::TOGGLE_FAVORITE, ChartAction::CHART_OFFSET, ChartAction::OPEN_WEBSITE, ChartAction::OPEN_FOLDER, ChartAction::DELETE_CHART, ChartAction::DELETE_SONG, ChartAction::DELETE_PACK};
 
         static bool is_destructive(ChartAction action);
 
-        ChartMenu(Skin* skin, const Chart& chart, size_t song_count, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action);
+        ChartMenu(Skin* skin, const Chart& chart, size_t song_count, size_t pack_count, bool favorite, int32_t chart_offset, std::function<void(ChartAction)> on_action, std::function<int32_t(int32_t)> on_offset);
 
         void on_open() override;
         void update(float elapsed_time) override;

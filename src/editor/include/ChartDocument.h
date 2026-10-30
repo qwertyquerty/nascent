@@ -36,8 +36,10 @@ namespace nascent {
         std::vector<ChartData> redo_stack;
         uint64_t revision_count = 0;
         uint64_t saved_revision = 0;
+        size_t merged = 0;
 
-        void normalize();
+        size_t normalize();
+        void shift_to_native_timing(const std::filesystem::path& source);
 
         public:
         static constexpr size_t UNDO_LIMIT = 300;
@@ -57,6 +59,8 @@ namespace nascent {
         static std::unique_ptr<ChartDocument> from_json(const nlohmann::json& chart, const std::filesystem::path& source, std::string& error);
         static std::unique_ptr<ChartDocument> open(const std::filesystem::path& path, std::string& error);
         static std::unique_ptr<ChartDocument> from_audio(const std::filesystem::path& audio);
+        static std::unique_ptr<ChartDocument> copy_of(const ChartDocument& source, bool keep_notes);
+        static std::vector<std::unique_ptr<ChartDocument>> open_siblings(const std::filesystem::path& opened, const ChartDocument& main);
 
         const ChartData& data() const;
         const std::filesystem::path& path() const;
@@ -65,6 +69,7 @@ namespace nascent {
         std::filesystem::path suggested_file_name() const;
         uint64_t revision() const;
         bool dirty() const;
+        size_t merged_on_open() const;
 
         void snapshot();
         void change(const std::function<void(ChartData&)>& edit);
@@ -93,5 +98,6 @@ namespace nascent {
         double time_at_beat(double beat) const;
         std::vector<Hit> stretched(const std::vector<Hit>& hits, double factor, double anchor) const;
         std::vector<Hit> quantized(const std::vector<Hit>& hits, uint32_t divisor, bool ends) const;
+        std::vector<Hit> inverted(const std::vector<Hit>& hits, uint32_t gap_divisor) const;
     };
 }

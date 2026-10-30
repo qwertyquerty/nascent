@@ -1,3 +1,4 @@
+#include "ChartSource.h"
 #include "Mp3Padding.h"
 #include "SongClock.h"
 #include "TestSupport.h"
@@ -103,4 +104,37 @@ NASCENT_TEST(mp3_padding) {
 
     CHECK(std::abs(lame->milliseconds() - 2257.0 * 1000.0 / 44100.0) < 1e-9);
     CHECK(!parse_mp3_padding(std::vector<unsigned char>(64, 0)));
+}
+
+NASCENT_TEST(mp3_padding_stepmania) {
+    std::optional<Mp3Padding> info = parse_mp3_padding(mp3_with_tag("Info", "LAME", 576), Mp3Trim::STEPMANIA);
+    CHECK(info && info->samples == 0);
+
+    std::optional<Mp3Padding> xing = parse_mp3_padding(mp3_with_tag("Xing", "LAME", 576), Mp3Trim::STEPMANIA);
+    CHECK(xing && xing->samples == 1152);
+
+    std::optional<Mp3Padding> untagged = parse_mp3_padding(mp3_with_tag(nullptr, nullptr, 0), Mp3Trim::STEPMANIA);
+    CHECK(untagged && untagged->samples == 0);
+}
+
+NASCENT_TEST(chart_source_offsets) {
+    CHECK(chart_source("song/map.osu") == ChartSource::OSU);
+    CHECK(chart_source("song/chart.SM") == ChartSource::STEPMANIA && chart_source("song/chart.ssc") == ChartSource::STEPMANIA && chart_source("song/chart.dwi") == ChartSource::STEPMANIA);
+    CHECK(chart_source("song/chart.json") == ChartSource::NASCENT);
+    CHECK(source_offset_ms(ChartSource::OSU, "missing.mp3") == OSU_SOURCE_OFFSET_MS);
+    CHECK(source_offset_ms(ChartSource::NASCENT, "missing.mp3") == 0.0);
+
+    std::filesystem::path directory = std::filesystem::temp_directory_path() / "nascent_source_offset_tests";
+    std::filesystem::create_directories(directory);
+    std::vector<unsigned char> cbr = mp3_with_tag("Info", "LAME", 576);
+    std::vector<unsigned char> vbr = mp3_with_tag("Xing", "LAME", 576);
+    std::ofstream(directory / "cbr.mp3", std::ios::binary).write((const char*)cbr.data(), (std::streamsize)cbr.size());
+    std::ofstream(directory / "vbr.mp3", std::ios::binary).write((const char*)vbr.data(), (std::streamsize)vbr.size());
+    std::ofstream(directory / "song.ogg", std::ios::binary).write((const char*)cbr.data(), (std::streamsize)cbr.size());
+
+    CHECK(std::abs(source_offset_ms(ChartSource::STEPMANIA, directory / "cbr.mp3") - (1152.0 + 576.0 + MP3_DECODER_DELAY_SAMPLES) * 1000.0 / 44100.0) < 1e-9);
+    CHECK(std::abs(source_offset_ms(ChartSource::STEPMANIA, directory / "vbr.mp3") - (576.0 + MP3_DECODER_DELAY_SAMPLES) * 1000.0 / 44100.0) < 1e-9);
+    CHECK(source_offset_ms(ChartSource::STEPMANIA, directory / "song.ogg") == 0.0);
+    CHECK(source_offset_ms(ChartSource::STEPMANIA, directory / "missing.mp3") == 0.0);
+    std::filesystem::remove_all(directory);
 }

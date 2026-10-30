@@ -28,6 +28,7 @@ namespace nascent {
         int32_t audio_visual_offset = 0;
         uint32_t scroll_speed = 0;
         bool mirror = false;
+        int32_t chart_offset = 0;
     };
 
     struct ReplayResult {

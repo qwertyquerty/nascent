@@ -9,6 +9,8 @@
 namespace nascent {
     class Input;
 
+    float ui_px(float size);
+
     class ImGuiBackend {
         protected:
         olc::PixelGameEngine* window;
@@ -24,6 +26,7 @@ namespace nascent {
         ImGuiBackend& operator=(const ImGuiBackend&) = delete;
 
         void init(const std::filesystem::path& settings_file, const std::filesystem::path& font_file, float font_size);
+        void set_scale(float scale);
         void begin_frame(const Input& input, float elapsed_time);
         void end_frame();
         void render();

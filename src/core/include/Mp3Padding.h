@@ -14,9 +14,14 @@ namespace nascent {
         double milliseconds() const;
     };
 
+    enum class Mp3Trim : uint8_t {
+        GAPLESS,
+        STEPMANIA,
+    };
+
     inline constexpr uint64_t MP3_DECODER_DELAY_SAMPLES = 529;
     inline constexpr size_t MP3_HEADER_SEARCH_BYTES = 64 * 1024;
 
-    std::optional<Mp3Padding> parse_mp3_padding(std::span<const unsigned char> data);
-    std::optional<Mp3Padding> read_mp3_padding(const std::filesystem::path& path);
+    std::optional<Mp3Padding> parse_mp3_padding(std::span<const unsigned char> data, Mp3Trim trim = Mp3Trim::GAPLESS);
+    std::optional<Mp3Padding> read_mp3_padding(const std::filesystem::path& path, Mp3Trim trim = Mp3Trim::GAPLESS);
 }

@@ -10,6 +10,7 @@ add_library(gse
     src/audio/AudioMixer.cpp
     src/fx/ParticleEmitter.cpp
     src/input/Input.cpp
+    src/input/KeyNames.cpp
     src/input/KeyEvents.cpp
     src/input/TextInput.cpp
     src/platform/Platform.cpp

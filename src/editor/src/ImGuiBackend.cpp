@@ -5,8 +5,11 @@
 
 #include "imgui.h"
 #include "imgui_impl_opengl2.h"
+#include "imgui_internal.h"
 
 #include <algorithm>
+#include <optional>
+#include <string>
 #include <utility>
 
 namespace nascent {
@@ -114,6 +117,33 @@ namespace nascent {
         };
     }
 
+    namespace {
+        std::string clipboard_text;
+
+        const char* get_clipboard(ImGuiContext*) {
+            clipboard_text = read_clipboard().value_or(std::string());
+            return clipboard_text.c_str();
+        }
+
+        void set_clipboard(ImGuiContext*, const char* text) {
+            copy_to_clipboard(text != nullptr ? text : "");
+        }
+
+        void base_style() {
+            ImGuiStyle& style = ImGui::GetStyle();
+            style = ImGuiStyle();
+            ImGui::StyleColorsDark();
+            style.WindowRounding = 4.0f;
+            style.FrameRounding = 3.0f;
+            style.GrabRounding = 3.0f;
+            style.TabRounding = 3.0f;
+        }
+    }
+
+    float ui_px(float size) {
+        return size * ImGui::GetStyle().FontScaleMain;
+    }
+
     ImGuiBackend::ImGuiBackend(olc::PixelGameEngine* window) : window(window) {}
 
     ImGuiBackend::~ImGuiBackend() {
@@ -131,6 +161,12 @@ namespace nascent {
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.BackendPlatformName = "nascent_pge";
+        ImGuiContext& context = *ImGui::GetCurrentContext();
+        context.ConfigNavWindowingKeyNext = 0;
+        context.ConfigNavWindowingKeyPrev = 0;
+        ImGuiPlatformIO& platform = ImGui::GetPlatformIO();
+        platform.Platform_GetClipboardTextFn = get_clipboard;
+        platform.Platform_SetClipboardTextFn = set_clipboard;
         ini_path = settings_file.string();
         io.IniFilename = ini_path.c_str();
 
@@ -143,15 +179,16 @@ namespace nascent {
             io.Fonts->AddFontDefault();
         }
 
-        ImGui::StyleColorsDark();
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 4.0f;
-        style.FrameRounding = 3.0f;
-        style.GrabRounding = 3.0f;
-        style.TabRounding = 3.0f;
-
+        base_style();
         ImGui_ImplOpenGL2_Init();
         ready = true;
+    }
+
+    void ImGuiBackend::set_scale(float scale) {
+        base_style();
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.ScaleAllSizes(scale);
+        style.FontScaleMain = scale;
     }
 
     void ImGuiBackend::begin_frame(const Input& input, float elapsed_time) {

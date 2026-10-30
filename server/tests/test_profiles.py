@@ -4,6 +4,7 @@ from nascent_server.cli import nascent_cli
 from nascent_server.config import Config
 from nascent_server.extensions import db
 from nascent_server.services import charts as chart_service
+from nascent_server.services.plays import storable_replay
 from nascent_server.services.ranking import profile_weights
 
 from .helpers import CHART, HASH, make_chart, make_replay, rank_chart, submit
@@ -118,6 +119,16 @@ def test_timeline_includes_the_players_scroll_speed(api, clock):
     alice = api.token("alice")
     play = submit(api, clock, alice, make_replay(CHART)).get_json()["play"]
     assert api.get(f"/api/v1/plays/{play['id']}/timeline").get_json()["scroll_speed"] == 200
+
+
+def test_replays_keep_the_chart_offset(app):
+    replay = make_replay(CHART)
+    replay["settings"]["chart_offset"] = -6
+
+    with app.app_context():
+        assert storable_replay(replay)["settings"]["chart_offset"] == -6
+        del replay["settings"]["chart_offset"]
+        assert "chart_offset" not in storable_replay(replay)["settings"]
 
 
 def test_global_activity_stats(api, clock):

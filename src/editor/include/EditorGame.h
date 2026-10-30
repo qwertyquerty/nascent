@@ -1,12 +1,16 @@
 #pragma once
 
+#include "ChartChecker.h"
 #include "ChartDocument.h"
 #include "EditorField.h"
+#include "EditorSettings.h"
 #include "FileDialog.h"
 #include "ImGuiBackend.h"
 #include "OsuExport.h"
 #include "PatternGenerator.h"
+#include "PatternLibrary.h"
 #include "Playback.h"
+#include "Timestamps.h"
 #include "Waveform.h"
 #include "gse/Game.h"
 
@@ -17,7 +21,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace nascent {
@@ -48,6 +54,13 @@ namespace nascent {
             NEW_FROM_AUDIO,
             OPEN_CHART,
             QUIT,
+            CLOSE_TAB,
+        };
+
+        struct DifficultyTab {
+            std::unique_ptr<ChartDocument> document;
+            std::vector<Hit> selection;
+            uint64_t id = 0;
         };
 
         struct Gesture {
@@ -97,6 +110,33 @@ namespace nascent {
         std::unique_ptr<ChartDocument> document;
         std::unique_ptr<Chart> preview;
         std::unique_ptr<EditorField> field;
+        std::unique_ptr<EntityField> gameplay_field;
+        std::unique_ptr<olc::Sprite> blank_sprite;
+        std::unique_ptr<olc::Decal> blank_decal;
+        uint8_t gameplay_layer = 0;
+        bool gameplay_open = false;
+        std::vector<DifficultyTab> tabs;
+        size_t active_tab = 0;
+        uint64_t next_tab_id = 1;
+        bool select_active_tab = false;
+        bool new_difficulty_requested = false;
+        std::string new_difficulty_name;
+        int new_difficulty_keys = 4;
+        bool new_difficulty_keep_notes = false;
+        EditorBindings bindings;
+        EditorSettings saved_settings;
+        EditorSettings pending_settings;
+        double settings_changed_at = 0;
+        bool settings_open = false;
+        std::optional<std::pair<EditorAction, size_t>> capturing;
+        bool inverse_requested = false;
+        uint32_t inverse_divisor = 4;
+        bool timestamps_open = false;
+        float ui_scale = 1.0f;
+        float applied_ui_scale = 0.0f;
+        std::string timestamp_notes;
+        bool goto_requested = false;
+        std::string goto_text;
         uint64_t preview_revision = ~0ull;
         Playback playback;
         FileDialog dialog;
@@ -139,6 +179,24 @@ namespace nascent {
         bool pattern_replace = true;
         uint32_t pattern_seed = 1;
         std::vector<Hit> pattern_preview;
+        bool library_open = false;
+        bool library_focus_name = false;
+        bool library_delete_requested = false;
+        bool library_all_keys = false;
+        bool library_replace = false;
+        std::vector<LibraryPattern> library;
+        std::optional<size_t> library_selected;
+        std::string library_name;
+        std::string library_filter;
+        int library_lane_offset = 0;
+        bool checker_open = false;
+        uint64_t document_serial = 0;
+        std::future<HandRatings> hands_job;
+        std::pair<uint64_t, uint64_t> hands_job_key = {~0ull, ~0ull};
+        std::optional<HandRatings> hands;
+        std::pair<uint64_t, uint64_t> hands_key = {~0ull, ~0ull};
+        std::vector<CheckFinding> findings;
+        std::tuple<uint64_t, uint64_t, uint64_t, double> findings_key = {~0ull, ~0ull, ~0ull, -1.0};
         bool transform_from_playhead = false;
         int rotate_columns = 1;
         std::filesystem::path dropped_audio;
@@ -150,6 +208,7 @@ namespace nascent {
         std::array<int, 2> metronome_sounds = {-1, -1};
         Waveform waveform;
         bool layout_ready = false;
+        bool layout_reset = false;
 
         Gesture gesture;
         std::vector<GridLine> grid;
@@ -167,6 +226,7 @@ namespace nascent {
 
         std::future<DifficultyResult> difficulty_job;
         uint64_t difficulty_revision = ~0ull;
+        uint64_t difficulty_serial = ~0ull;
         uint64_t changed_revision = ~0ull;
         double changed_at = 0;
         std::optional<DifficultyResult> difficulty;
@@ -226,6 +286,35 @@ namespace nascent {
         void tap_tempo();
         void draw_tap_tempo();
         void draw_help_panel();
+        void draw_gameplay_panel();
+        uint32_t autoplay_keys() const;
+        EditorSettings current_settings() const;
+        void apply_settings(const EditorSettings& settings);
+        void update_settings_file();
+        std::filesystem::path settings_file() const;
+        std::string shortcut(EditorAction action) const;
+        void draw_settings_window();
+        void capture_binding();
+        void reset_document_state();
+        void open_tabs(std::unique_ptr<ChartDocument> main, std::vector<std::unique_ptr<ChartDocument>> others);
+        bool any_dirty() const;
+        size_t dirty_count() const;
+        const ChartDocument* tab_document(size_t index) const;
+        void switch_tab(size_t index);
+        void step_tab(int32_t direction);
+        void close_tab();
+        void save_all();
+        void draw_difficulty_tabs();
+        void draw_new_difficulty_popup();
+        void add_difficulty();
+        void copy_timing_to_difficulties();
+        void draw_inverse_popup();
+        void copy_timestamp();
+        void go_to_timestamp(const Timestamp& timestamp);
+        void go_to_clipboard_timestamp();
+        void draw_goto_popup();
+        void draw_timestamps_panel();
+        void start_test_play();
         void draw_update_menu();
         void update_updater();
         void draw_status_bar();
@@ -248,6 +337,15 @@ namespace nascent {
         void draw_pattern_window();
         void draw_pattern_settings(PatternFamily family);
         void place_pattern();
+        void load_library();
+        void save_library();
+        void open_library(bool saving);
+        void add_to_library();
+        std::vector<Hit> library_hits() const;
+        void place_from_library();
+        void draw_library_window();
+        void update_checker();
+        void draw_checker_window();
         void select_all();
         void copy_selection();
         void cut_selection();
@@ -267,7 +365,7 @@ namespace nascent {
         static constexpr uint8_t EDITOR_LAYER = 1;
         static constexpr std::array<uint32_t, 11> DIVISORS = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48};
         static constexpr std::array<uint32_t, 8> COMPLEX_TUPLET_DIVISORS = {5, 7, 9, 10, 11, 13, 14, 15};
-        static constexpr int MAX_DIVISOR = 96;
+        static constexpr int MAX_DIVISOR = MAX_SNAP_DIVISOR;
         static constexpr int MAX_PATTERN_BEATS = 128;
         static constexpr size_t MAX_PATTERN_ROWS = 4096;
         int custom_divisor = 20;

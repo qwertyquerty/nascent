@@ -37,6 +37,7 @@ namespace nascent {
                              {"audio_visual_offset", replay.settings.audio_visual_offset},
                              {"scroll_speed", replay.settings.scroll_speed},
                              {"mirror", replay.settings.mirror},
+                             {"chart_offset", replay.settings.chart_offset},
                          }},
             {"end_time", replay.end_time},
             {"result", {
@@ -105,6 +106,7 @@ namespace nascent {
         settings.at("audio_visual_offset").get_to(replay.settings.audio_visual_offset);
         settings.at("scroll_speed").get_to(replay.settings.scroll_speed);
         replay.settings.mirror = settings.value("mirror", false);
+        replay.settings.chart_offset = settings.value("chart_offset", 0);
 
         j.at("end_time").get_to(replay.end_time);
 

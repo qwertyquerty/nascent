@@ -497,6 +497,7 @@ NASCENT_DEFINE_MODULE(NASCENT_PYTHON_MODULE, m) {
             settings["audio_visual_offset"] = r.replay.settings.audio_visual_offset;
             settings["scroll_speed"] = r.replay.settings.scroll_speed;
             settings["mirror"] = r.replay.settings.mirror;
+            settings["chart_offset"] = r.replay.settings.chart_offset;
             return settings;
         })
         .def_property_readonly("claimed_result", [](const LoadedReplay& r) { return claimed_result(r.replay); })

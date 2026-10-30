@@ -9,13 +9,16 @@
 #include "gse/ui/KeyRepeat.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <future>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace nascent {
+    class Chart;
     class EntityStarfield;
     class SceneList;
     class Skin;
@@ -37,6 +40,8 @@ namespace nascent {
         std::future<ScreenshotResult> screenshot_save;
         std::future<ApiResult<ServerInfo>> server_info;
         std::vector<ChangelogRelease> pending_changelog;
+        std::optional<std::filesystem::path> test_play;
+        std::unique_ptr<Chart> test_chart;
         KeyRepeat volume_up_repeat;
         KeyRepeat volume_down_repeat;
         float volume_save_delay = 0;
@@ -52,6 +57,7 @@ namespace nascent {
         void on_screen_resize() override;
         void on_back() override;
         void show_toast(std::string message, bool is_error, float duration, std::function<void()> action = {});
+        bool start_test_play();
 
         public:
         static constexpr float ACCESS_DENIED_TOAST_TIME = 12.0f;
@@ -60,9 +66,12 @@ namespace nascent {
         static constexpr float VOLUME_TOAST_TIME = 1.5f;
         static constexpr float VOLUME_SAVE_DELAY = 1.0f;
 
-        static int32_t fps_counter_width();
+        static constexpr std::string_view TEST_PLAY_ARGUMENT = "--test-play";
 
-        GameNascent(olc::PixelGameEngine* window);
+        static int32_t fps_counter_width();
+        static std::filesystem::path test_play_file();
+
+        GameNascent(olc::PixelGameEngine* window, std::optional<std::filesystem::path> test_play = std::nullopt);
         ~GameNascent();
         void init() override;
         void update(float) override;

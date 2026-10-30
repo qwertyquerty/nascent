@@ -36,6 +36,7 @@ namespace nascent {
     bool move_into_place(const std::filesystem::path& from, const std::filesystem::path& to, std::error_code& ec);
     void precise_sleep(double seconds);
     bool copy_to_clipboard(const std::string& text);
+    std::optional<std::string> read_clipboard();
     bool open_url(const std::string& url);
     bool open_folder(const std::filesystem::path& folder);
     bool open_file(const std::filesystem::path& file);

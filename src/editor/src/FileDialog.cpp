@@ -1,4 +1,5 @@
 #include "FileDialog.h"
+#include "ImGuiBackend.h"
 
 #include "SettingsManager.h"
 #include "Utf8Path.h"
@@ -157,7 +158,7 @@ namespace nascent {
             requested = false;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(760, 520), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(ImVec2(ui_px(760), ui_px(520)), ImGuiCond_Appearing);
         std::optional<std::filesystem::path> result;
         bool keep_open = true;
 
@@ -246,13 +247,13 @@ namespace nascent {
             ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "%s", error.c_str());
         }
 
-        if (ImGui::Button(mode == Mode::SAVE ? "Save" : "Open", ImVec2(120, 0))) {
+        if (ImGui::Button(mode == Mode::SAVE ? "Save" : "Open", ImVec2(ui_px(120), 0))) {
             result = finish();
         }
 
         ImGui::SameLine();
 
-        if (ImGui::Button("Cancel", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (ImGui::Button("Cancel", ImVec2(ui_px(120), 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             active = false;
             ImGui::CloseCurrentPopup();
         }

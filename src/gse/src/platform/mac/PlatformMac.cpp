@@ -58,6 +58,10 @@ namespace nascent::platform_detail {
         return {"pbcopy"};
     }
 
+    std::vector<const char*> clipboard_read_commands() {
+        return {"pbpaste"};
+    }
+
     const char* url_opener() {
         return "open";
     }

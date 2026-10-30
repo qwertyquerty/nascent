@@ -3,6 +3,7 @@
 #include "Account.h"
 #include "BeatmapDownloads.h"
 #include "ChartFolders.h"
+#include "ChartOffsets.h"
 #include "Chart.h"
 #include "ChartSearch.h"
 #include "Const.h"
@@ -1520,9 +1521,7 @@ namespace nascent {
 
     void SceneList::open_chart_menu() {
         game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
-        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, song_chart_count(), pack_chart_count(), Favorites::contains(selected_hash()), [this](ChartAction action) {
-            handle_chart_action(action);
-        }));
+        overlays.open(std::make_unique<ChartMenu>(skin, *selected_chart, song_chart_count(), pack_chart_count(), Favorites::contains(selected_hash()), ChartOffsets::get(selected_hash()), [this](ChartAction action) { handle_chart_action(action); }, [hash = selected_hash()](int32_t offset) { return ChartOffsets::set(hash, offset); }));
     }
 
     void SceneList::handle_chart_action(ChartAction action) {

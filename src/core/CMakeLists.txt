@@ -5,6 +5,7 @@ add_library(core
     src/Attempt.cpp
     src/Chart.cpp
     src/ChartSearch.cpp
+    src/ChartSource.cpp
     src/DifficultyCache.cpp
     src/DifficultyBasis.cpp
     src/DifficultyCalculator.cpp

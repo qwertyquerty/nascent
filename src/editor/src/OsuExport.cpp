@@ -1,9 +1,11 @@
 #include "OsuExport.h"
 
 #include "ChartDocument.h"
+#include "ChartSource.h"
 #include "Utf8Path.h"
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <fstream>
 
@@ -18,6 +20,7 @@ namespace nascent {
     std::string chart_to_osu(const ChartData& data, const OsuDifficulty& difficulty) {
         const ChartInfo& info = data.info;
         uint8_t keys = std::max<uint8_t>(info.key_count, 1);
+        int32_t shift = (int32_t)std::lround(OSU_SOURCE_OFFSET_MS);
         std::string out;
 
         out += "osu file format v14\n\n";
@@ -26,7 +29,8 @@ namespace nascent {
         out += std::format("AudioLeadIn: {}\n", info.audio_lead_in);
         out += std::format("PreviewTime: {}\n", info.preview_time);
         out += "Countdown: 0\nSampleSet: Soft\nStackLeniency: 0.7\nMode: 3\nLetterboxInBreaks: 0\nSpecialStyle: 0\nWidescreenStoryboard: 0\n\n";
-        out += "[Editor]\nDistanceSpacing: 1\nBeatDivisor: 4\nGridSize: 4\nTimelineZoom: 1\n\n";
+        out += "[Editor]\n";
+        out += "DistanceSpacing: 1\nBeatDivisor: 4\nGridSize: 4\nTimelineZoom: 1\n\n";
         out += "[Metadata]\n";
         out += std::format("Title:{}\n", single_line(info.title));
         out += std::format("TitleUnicode:{}\n", single_line(info.title_unicode.empty() ? info.title : info.title_unicode));
@@ -49,7 +53,7 @@ namespace nascent {
         out += "\n[TimingPoints]\n";
 
         for (const ChartTimingPoint& point : data.timing_points) {
-            out += std::format("{},{:.12g},{},2,0,60,1,0\n", point.time, point.beat_length, point.meter);
+            out += std::format("{},{:.12g},{},2,0,60,1,0\n", point.time + shift, point.beat_length, point.meter);
         }
 
         out += "\n[HitObjects]\n";
@@ -58,10 +62,10 @@ namespace nascent {
             int x = (int)((2 * hit.key + 1) * 256 / keys);
 
             if (hit.hit_type == HitType::HOLD) {
-                out += std::format("{},192,{},128,0,{}:0:0:0:0:\n", x, hit.time, hit.end_time);
+                out += std::format("{},192,{},128,0,{}:0:0:0:0:\n", x, hit.time + shift, hit.end_time + shift);
             }
             else {
-                out += std::format("{},192,{},1,0,0:0:0:0:\n", x, hit.time);
+                out += std::format("{},192,{},1,0,0:0:0:0:\n", x, hit.time + shift);
             }
         }
 

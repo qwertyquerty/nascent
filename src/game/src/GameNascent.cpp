@@ -2,7 +2,9 @@
 
 #include "Account.h"
 #include "ChangelogOverlay.h"
+#include "Chart.h"
 #include "ChartFolders.h"
+#include "ChartOffsets.h"
 #include "EntityStarfield.h"
 #include "Favorites.h"
 #include "InputManager.h"
@@ -10,6 +12,7 @@
 #include "olcPixelGameEngine.h"
 #include "SceneAccount.h"
 #include "SceneList.h"
+#include "ScenePlay.h"
 #include "RichPresence.h"
 #include "SceneTitle.h"
 #include "SettingsManager.h"
@@ -34,6 +37,7 @@
 #include <ctime>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <string_view>
 #include <limits>
@@ -54,9 +58,9 @@ namespace nascent {
         FpsReadout fps_readout;
     }
 
-    GameNascent::GameNascent(olc::PixelGameEngine* window) : Game(window) {
+    GameNascent::GameNascent(olc::PixelGameEngine* window, std::optional<std::filesystem::path> test_play) : Game(window), test_play(std::move(test_play)) {
 
-                                                             };
+                                                                                                             };
 
     GameNascent::~GameNascent() {
         SubmissionQueue::stop();
@@ -71,19 +75,28 @@ namespace nascent {
         text_cache_clear();
     };
 
+    std::filesystem::path GameNascent::test_play_file() {
+        return std::filesystem::temp_directory_path() / "nascent_editor" / "test_play.json";
+    }
+
     void GameNascent::init() {
         install_thread_crash_handler();
         std::string_view commit = NASCENT_BUILD_COMMIT;
-        std::cerr << std::format("Nascent {} ({}) on {}", NASCENT_VERSION_STRING, commit.empty() ? "local build" : commit.substr(0, 12), platform_description()) << std::endl;
+        std::cerr << std::format("Nascent {} ({}) on {}{}", NASCENT_VERSION_STRING, commit.empty() ? "local build" : commit.substr(0, 12), platform_description(), test_play ? ", test play from the editor" : "") << std::endl;
         Account::load();
         std::error_code skins_ec;
         std::filesystem::create_directories(Skin::user_skins_directory(), skins_ec);
-        SubmissionQueue::start();
-        Updater::check();
-        server_info = ServerApi::info();
-        pending_changelog = Changelog::since_last_run();
+
+        if (!test_play) {
+            SubmissionQueue::start();
+            Updater::check();
+            server_info = ServerApi::info();
+            pending_changelog = Changelog::since_last_run();
+        }
+
         LocalBests::load();
         Favorites::load();
+        ChartOffsets::load();
         set_transition(std::make_unique<FadeTransition>(SettingsManager::settings.scene_transition_time));
 
         if (const std::string& device = SettingsManager::settings.audio_output_device; !device.empty() && !audio().engine().SetPlaybackDevice(device)) {
@@ -119,9 +132,42 @@ namespace nascent {
         scene_list = std::make_unique<SceneList>(skin.get(), logo_skin.get(), sky.get());
 
         toasts = &overlays().open(std::make_unique<ToastOverlay>(skin.get()));
+
+        if (test_play) {
+            if (!start_test_play()) {
+                quit();
+            }
+
+            return;
+        }
+
         scenes().reset(std::make_unique<SceneTitle>(skin.get(), logo_skin.get(), scene_list.get(), sky.get()));
 
         RichPresence::set_enabled(SettingsManager::settings.discord_rich_presence);
+    }
+
+    bool GameNascent::start_test_play() {
+        std::ifstream in(*test_play, std::ios::binary);
+        nlohmann::json request = in ? nlohmann::json::parse(in, nullptr, false) : nlohmann::json();
+
+        if (!request.is_object() || !request.contains("chart")) {
+            std::cerr << "Test play: couldn't read " << path_utf8(*test_play) << std::endl;
+            return false;
+        }
+
+        std::string error;
+        float rate = std::clamp(request.value("rate", 1.0f), 0.25f, 4.0f);
+        test_chart = Chart::load_text(request["chart"].dump(), *test_play, rate, error);
+
+        if (test_chart == nullptr) {
+            std::cerr << "Test play: the chart can't be played: " << error << std::endl;
+            return false;
+        }
+
+        auto play = std::make_unique<ScenePlay>(test_chart.get(), skin.get());
+        play->set_test_start(request.value("start", 0.0));
+        scenes().reset(std::move(play));
+        return true;
     }
 
     void GameNascent::on_screen_resize() {
@@ -186,6 +232,12 @@ namespace nascent {
 
         this->elapsed_time = elapsed_time;
         update_scene(elapsed_time);
+
+        if (test_play && (scenes().depth() == 0 || input().take(actions::BACK))) {
+            quit();
+            return;
+        }
+
         RichPresence::update(elapsed_time);
     }
 

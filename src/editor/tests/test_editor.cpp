@@ -1,11 +1,16 @@
 #include "TestSupport.h"
 
 #include "ArchiveExport.h"
+#include "ChartChecker.h"
 #include "ChartDocument.h"
+#include "ChartSource.h"
+#include "EditorSettings.h"
 #include "OsuExport.h"
 #include "PatternGenerator.h"
+#include "PatternLibrary.h"
 #include "StepManiaExport.h"
 #include "StepManiaFormat.h"
+#include "Timestamps.h"
 
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include <miniz.h>
@@ -14,6 +19,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <set>
 
 using namespace nascent;
 using namespace nascent::test;
@@ -35,6 +41,15 @@ namespace {
         return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const Hit& x, const Hit& y) {
                    return x.key == y.key && x.hit_type == y.hit_type && std::abs(x.time - y.time) <= 1 && (x.hit_type != HitType::HOLD || std::abs(x.end_time - y.end_time) <= 1);
                });
+    }
+
+    std::vector<Hit> shifted(std::vector<Hit> hits, int32_t shift) {
+        for (Hit& hit : hits) {
+            hit.time += shift;
+            hit.end_time += shift;
+        }
+
+        return hits;
     }
 
     std::vector<Hit> imported(std::string_view text) {
@@ -135,7 +150,9 @@ NASCENT_TEST(editor_exports_round_trip) {
         CHECK(std::string(chart_to_osu(data, {7.0f, 6.5f})).find("HPDrainRate:6.5") != std::string::npos);
         std::unique_ptr<Chart> chart = Chart::load(folder / "export.osu", 1.0f, error);
         CHECK(chart != nullptr && chart->info.key_count == keys && chart->info.hit_accuracy == 3 && chart->info.artist == "Artist");
-        CHECK(chart != nullptr && same_notes(chart->unpitched_hit_objects(), data.hits));
+        CHECK(chart != nullptr && same_notes(chart->unpitched_hit_objects(), shifted(data.hits, (int32_t)OSU_SOURCE_OFFSET_MS)));
+        std::unique_ptr<ChartDocument> reopened = ChartDocument::open(folder / "export.osu", error);
+        CHECK(reopened != nullptr && same_notes(reopened->data().hits, data.hits));
     }
 
     for (uint8_t keys : {4, 6, 7, 8}) {
@@ -256,6 +273,92 @@ NASCENT_TEST(editor_stretches_by_beats) {
     std::vector<Hit> sloppy = {tap(0, 1010), tap(1, 1240), hold(2, 1490, 1770), hold(3, 1990, 2010)};
     CHECK(same_notes(document->quantized(sloppy, 4, true), {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1750), hold(3, 2000, 2062)}));
     CHECK(same_notes(document->quantized(sloppy, 4, false), {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1780), hold(3, 2000, 2020)}));
+}
+
+NASCENT_TEST(editor_checks_charts) {
+    std::filesystem::path folder = scratch_folder("checker");
+    auto found = [](const std::vector<CheckFinding>& findings, CheckLevel level, std::string_view text) {
+        return std::any_of(findings.begin(), findings.end(), [&](const CheckFinding& finding) { return finding.level == level && finding.title.find(text) != std::string::npos; });
+    };
+    auto count = [](const std::vector<CheckFinding>& findings, CheckLevel level) {
+        return std::count_if(findings.begin(), findings.end(), [&](const CheckFinding& finding) { return finding.level == level; });
+    };
+
+    std::unique_ptr<ChartDocument> document = blank(folder);
+    document->change([](ChartData& data) {
+        data.info.title = "Pokémon";
+        data.info.artist = "Artist";
+        data.info.key_count = 4;
+        data.timing_points = {{0, 500.0f, 4}};
+        data.hits = {tap(0, 1000), tap(0, 1030), hold(1, 2000, 2020), tap(1, 2010), tap(2, 3003), tap(3, 4000), tap(2, 4003)};
+    });
+
+    std::vector<CheckFinding> findings = check_chart(document->data(), {5000, folder, HandRatings{3.0, 2.0, 2, 4}});
+    CHECK(found(findings, CheckLevel::WARNING, "3 notes are not on a snap") && found(findings, CheckLevel::WARNING, "1 jack under 50 ms"));
+    CHECK(found(findings, CheckLevel::PROBLEM, "1 note starts inside a long note") && found(findings, CheckLevel::WARNING, "shorter than 40 ms"));
+    CHECK(found(findings, CheckLevel::WARNING, "almost a chord") && found(findings, CheckLevel::WARNING, "romanised title") && !found(findings, CheckLevel::WARNING, "romanised artist"));
+    CHECK(found(findings, CheckLevel::WARNING, "No preview point") && found(findings, CheckLevel::WARNING, "Mapper is empty"));
+    CHECK(found(findings, CheckLevel::WARNING, "left hand is 50% harder") && found(findings, CheckLevel::PROBLEM, "audio file song.mp3 is missing"));
+    CHECK(found(findings, CheckLevel::INFO, "Length 0:03") && findings.front().level == CheckLevel::PROBLEM);
+
+    std::ofstream(folder / "song.mp3") << "audio";
+    document->change([](ChartData& data) {
+        data.info.title = "Pokemon";
+        data.info.mapper = "Mapper";
+        data.info.difficulty_name = "Hard";
+        data.info.preview_time = 1000;
+        data.hits = {tap(0, 1000), tap(1, 1250), hold(2, 1500, 1750), tap(3, 1833), tap(0, 2000)};
+    });
+
+    findings = check_chart(document->data(), {5000, folder, HandRatings{2.0, 1.9, 2, 3}});
+    CHECK(count(findings, CheckLevel::PROBLEM) == 0 && count(findings, CheckLevel::WARNING) == 0);
+    CHECK(found(findings, CheckLevel::PASSED, "Every note is on a snap") && found(findings, CheckLevel::PASSED, "Both hands") && found(findings, CheckLevel::INFO, "No background image"));
+    CHECK(found(check_chart(document->data(), {1500, folder, std::nullopt}), CheckLevel::PROBLEM, "past the end of the audio"));
+    CHECK(found(check_chart(document->data(), {5000, folder, std::nullopt, 2}), CheckLevel::WARNING, "2 notes were stacked"));
+    std::ofstream(folder / "stacked.json") << chart_json({tap(0, 1000), tap(0, 1000), tap(1, 1000)}).dump();
+    std::string error;
+    std::unique_ptr<ChartDocument> stacked = ChartDocument::open(folder / "stacked.json", error);
+    CHECK(stacked != nullptr && stacked->merged_on_open() == 1 && stacked->data().hits.size() == 2);
+
+    CHECK(hand_of(0, 4) == 0 && hand_of(2, 4) == 1 && hand_of(3, 7) == -1 && hand_of(4, 7) == 1 && hand_of(0, 1) == -1);
+    document->change([](ChartData& data) {
+        data.hits.clear();
+
+        for (int32_t index = 0; index < 64; index++) {
+            data.hits.push_back(tap((uint8_t)(index % 2), 1000 + index * 125));
+        }
+
+        data.hits.push_back(tap(3, 1000));
+    });
+    HandRatings rated = rate_hands(document->data());
+    CHECK(rated.left_notes == 64 && rated.right_notes == 1 && rated.left > rated.right);
+}
+
+NASCENT_TEST(editor_pattern_library) {
+    std::filesystem::path folder = scratch_folder("library");
+    std::unique_ptr<ChartDocument> source = blank(folder);
+    source->change([](ChartData& data) { data.timing_points = {{0, 500.0f, 4}}; });
+    LibraryPattern pattern = capture_pattern(*source, {tap(1, 1250), tap(0, 1000), hold(2, 1500, 2000), tap(3, 1500)}, "Roll");
+    CHECK(pattern.notes.size() == 4 && pattern.notes.front().beat == 0 && pattern_length_beats(pattern) == 2.0 && (pattern_lanes(pattern) == std::pair<uint8_t, uint8_t>(0, 3)));
+
+    std::string error;
+    CHECK(save_pattern_library(folder / "patterns.json", {pattern, pattern}, error));
+    std::vector<LibraryPattern> loaded = load_pattern_library(folder / "patterns.json", error);
+    CHECK(error.empty() && loaded.size() == 2 && loaded[1].name == "Roll" && loaded[1].key_count == 4 && loaded[1].notes.size() == 4);
+
+    std::unique_ptr<ChartDocument> faster = blank(folder);
+    faster->change([](ChartData& data) { data.timing_points = {{0, 250.0f, 4}}; });
+    CHECK(same_notes(library_pattern_hits(*faster, loaded[1], 500, 0), {tap(0, 500), tap(1, 625), hold(2, 750, 1000), tap(3, 750)}));
+
+    faster->change([](ChartData& data) { data.info.key_count = 7; });
+    CHECK(same_notes(library_pattern_hits(*faster, loaded[1], 0, 3), {tap(3, 0), tap(4, 125), hold(5, 250, 500), tap(6, 250)}));
+    faster->change([](ChartData& data) { data.info.key_count = 3; });
+    CHECK(library_pattern_hits(*faster, loaded[1], 0, 0).size() == 3);
+
+    std::ofstream(folder / "damaged.json") << "{\"patterns\": [";
+    CHECK(load_pattern_library(folder / "damaged.json", error).empty() && !error.empty());
+    error.clear();
+    CHECK(load_pattern_library(folder / "missing.json", error).empty() && error.empty());
 }
 
 NASCENT_TEST(editor_generates_patterns) {
@@ -422,4 +525,125 @@ NASCENT_TEST(editor_generates_patterns) {
     for (size_t row = 1; row < jumpjacks.size(); row++) {
         CHECK(jumpjacks[row].size() == 2 && shared(jumpjacks[row], jumpjacks[row - 1]) == 1);
     }
+}
+
+NASCENT_TEST(editor_opens_sibling_difficulties) {
+    std::filesystem::path folder = scratch_folder("siblings");
+    std::string error;
+    std::unique_ptr<ChartDocument> easy = blank(folder);
+    easy->change([](ChartData& data) {
+        data.info.title = "Song";
+        data.info.difficulty_name = "Easy";
+        data.hits = {tap(0, 0)};
+    });
+    CHECK(easy->save_as(folder / "easy.json", error));
+
+    std::unique_ptr<ChartDocument> hard = ChartDocument::copy_of(*easy, false);
+    CHECK(hard->path().empty() && hard->dirty() && hard->data().hits.empty() && hard->data().info.title == "Song");
+    hard->change([](ChartData& data) {
+        data.info.difficulty_name = "Hard";
+        data.hits = {tap(0, 0), tap(1, 250), tap(2, 500)};
+    });
+    CHECK(hard->save_as(folder / "hard.json", error));
+    CHECK(export_osu(hard->data(), {}, folder / "hard.osu", error));
+    CHECK(ChartDocument::copy_of(*hard, true)->data().hits.size() == 3);
+
+    std::unique_ptr<ChartDocument> other = ChartDocument::from_audio(folder / "other.mp3");
+    other->change([](ChartData& data) { data.hits = {tap(0, 0)}; });
+    CHECK(other->save_as(folder / "other.json", error));
+
+    std::unique_ptr<ChartDocument> opened = ChartDocument::open(folder / "easy.json", error);
+    std::vector<std::unique_ptr<ChartDocument>> siblings = opened ? ChartDocument::open_siblings(folder / "easy.json", *opened) : std::vector<std::unique_ptr<ChartDocument>>();
+    CHECK(siblings.size() == 1 && siblings.front()->data().info.difficulty_name == "Hard" && siblings.front()->path() == folder / "hard.json");
+}
+
+NASCENT_TEST(editor_inverts_notes) {
+    std::unique_ptr<ChartDocument> document = blank(scratch_folder("inverse"));
+    document->change([](ChartData& data) { data.hits = {tap(0, 0), tap(0, 500), tap(0, 1000), tap(1, 0), tap(1, 125), tap(2, 0), tap(3, 0), tap(3, 2000)}; });
+    CHECK(same_notes(document->inverted({tap(0, 0), tap(0, 500), tap(0, 1000)}, 4), {hold(0, 0, 375), hold(0, 500, 875), tap(0, 1000)}));
+    CHECK(same_notes(document->inverted({tap(0, 0), tap(0, 500)}, 2), {hold(0, 0, 250), hold(0, 500, 750)}));
+    CHECK(same_notes(document->inverted({tap(1, 0)}, 4), {hold(1, 0, 63)}));
+    CHECK(same_notes(document->inverted({tap(2, 0)}, 4), {tap(2, 0)}));
+    CHECK(same_notes(document->inverted({tap(3, 0)}, 8), {hold(3, 0, 1938)}));
+}
+
+NASCENT_TEST(editor_timestamps) {
+    CHECK(format_timestamp(83456, {}) == "01:23:456 - ");
+    CHECK(format_timestamp(0, {tap(1, 12400), tap(0, 12345)}) == "00:12:345 (12345|0,12400|1) - ");
+
+    std::vector<Timestamp> found = find_timestamps("fix 00:12:345 (12345|0,12400|1) - and 01:02:003 - not 1:2:3, osu 00:05:000 (1,2,3) -");
+    CHECK(found.size() == 3);
+
+    if (found.size() == 3) {
+        CHECK(found[0].time == 12345 && found[0].start == 4 && found[0].notes.size() == 2 && found[0].notes[1] == std::make_pair(12400, (uint8_t)1));
+        CHECK(found[1].time == 62003 && found[1].notes.empty());
+        CHECK(found[2].time == 5000 && found[2].notes.empty());
+    }
+
+    CHECK(find_timestamps("00:61:000 nothing").empty());
+}
+
+NASCENT_TEST(editor_key_bindings) {
+    std::set<std::string> ids;
+
+    for (size_t index = 0; index < EDITOR_ACTION_COUNT; index++) {
+        const ActionInfo& info = action_info((EditorAction)index);
+        CHECK(info.id != nullptr && info.label != nullptr && info.group != nullptr && ids.insert(info.id).second);
+    }
+
+    EditorBindings bindings;
+    CHECK(bindings.label(EditorAction::REDO) == "Ctrl+Y / Ctrl+Shift+Z");
+    CHECK(bindings.label(EditorAction::LANE_10) == "0");
+
+    for (size_t index = 0; index < EDITOR_ACTION_COUNT; index++) {
+        for (size_t slot = 0; slot < CHORDS_PER_ACTION; slot++) {
+            const KeyChord& chord = bindings.get((EditorAction)index, slot);
+            CHECK(!bindings.owner(chord, (EditorAction)index).has_value());
+        }
+    }
+
+    CHECK(parse_chord("CTRL+SHIFT+S") == std::optional<KeyChord>(KeyChord{olc::Key::S, true, true, false}));
+    CHECK(parse_chord("") == std::optional<KeyChord>(KeyChord{}));
+    CHECK(!parse_chord("CTRL+NOPE").has_value() && !parse_chord("CTRL").has_value() && !parse_chord("META+A").has_value());
+    CHECK(chord_name(KeyChord{olc::Key::UP, false, false, true}) == "ALT+UP" && chord_text(KeyChord{olc::Key::OEM_4, true, false, false}) == "Ctrl+[");
+
+    bindings.set(EditorAction::SAVE, 0, KeyChord{olc::Key::F2});
+    bindings.set(EditorAction::SAVE, 1, KeyChord{olc::Key::S, true, false, false});
+    CHECK(bindings.owner(KeyChord{olc::Key::F2}, EditorAction::UNDO) == std::optional<EditorAction>(EditorAction::SAVE));
+    CHECK(!bindings.owner(KeyChord{olc::Key::F2}, EditorAction::SAVE).has_value() && !bindings.is_default(EditorAction::SAVE));
+
+    nlohmann::json data = bindings.to_json();
+    CHECK(data.size() == 1 && data.contains("save"));
+    EditorBindings loaded;
+    loaded.load(data);
+    CHECK(loaded == bindings);
+    loaded.reset(EditorAction::SAVE);
+    CHECK(loaded == EditorBindings());
+}
+
+NASCENT_TEST(editor_settings_round_trip) {
+    std::filesystem::path folder = scratch_folder("settings");
+    EditorSettings settings;
+    settings.scroll_speed = 230;
+    settings.lane_width = 14;
+    settings.divisor = 12;
+    settings.music_volume = 35;
+    settings.note_opacity = 0.5f;
+    settings.playback_rate = 0.75f;
+    settings.skin = "arrow";
+    settings.gameplay_preview = true;
+    settings.ui_scale = 1.5f;
+    settings.bindings.set(EditorAction::TEST_PLAY, 0, KeyChord{olc::Key::F6});
+    CHECK(save_editor_settings(folder / "editor_settings.json", settings));
+    CHECK(load_editor_settings(folder / "editor_settings.json") == settings);
+    CHECK(load_editor_settings(folder / "missing.json") == EditorSettings());
+
+    {
+        std::ofstream out(folder / "odd.json", std::ios::binary);
+        out << R"({"scroll_speed": 99999, "music_volume": -5, "divisor": 0, "snap_enabled": "yes", "ui_scale": 9, "bindings": {"save": ["CTRL+NOPE", "F9"]}})";
+    }
+
+    EditorSettings odd = load_editor_settings(folder / "odd.json");
+    CHECK(odd.scroll_speed == MAX_SCROLL_SPEED && odd.music_volume == 0 && odd.divisor == 1 && odd.snap_enabled && odd.ui_scale == MAX_UI_SCALE);
+    CHECK((odd.bindings.get(EditorAction::SAVE, 0) == KeyChord{olc::Key::S, true, false, false} && odd.bindings.get(EditorAction::SAVE, 1) == KeyChord{olc::Key::F9}));
 }

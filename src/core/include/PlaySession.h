@@ -23,6 +23,8 @@ namespace nascent {
         public:
         int32_t audio_visual_offset = 0;
         int32_t audio_input_offset = 0;
+        double chart_offset = 0;
+        double source_offset = 0;
 
         PlaySession(const Chart* chart, double max_sync_error);
 

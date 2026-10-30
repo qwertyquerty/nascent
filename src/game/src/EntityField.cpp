@@ -35,6 +35,30 @@ namespace nascent {
         active_keys = 0;
     };
 
+    std::array<olc::vd2d, 2> EntityField::gameplay_bounds(const Skin& skin, uint8_t key_count, olc::vd2d origin, olc::vd2d area) {
+        double keys = std::max<uint8_t>(key_count, 1);
+        double lane_width = std::min(area.y * skin_setting(skin, skin_settings::LANE_WIDTH) / 100.0, area.x / keys);
+        double field_width = lane_width * keys;
+        return {olc::vd2d{origin.x + (area.x - field_width) / 2, origin.y}, olc::vd2d{field_width, area.y}};
+    }
+
+    void EntityField::apply_gameplay_settings(double area_height) {
+        draw_judge_colors = true;
+        judge_alpha = 64;
+        judge_height = area_height * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
+        upscroll = skin_toggle(*skin, skin_toggles::UPSCROLL);
+        note_gradient = skin_toggle(*skin, skin_toggles::NOTE_GRADIENT);
+        draw_judge = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_LINE);
+        set_lane_gap(lane_gap_setting());
+        draw_hit_score = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT);
+        draw_combo = skin_toggle(*skin, skin_toggles::SHOW_COMBO);
+        lane_cover = SettingsManager::settings.field_lane_cover / 100.0;
+        judgement_height = skin_setting(*skin, skin_settings::JUDGEMENT_HEIGHT) / 100.0;
+        combo_height = skin_setting(*skin, skin_settings::COMBO_HEIGHT) / 100.0;
+        note_opacity = (float)(skin_setting(*skin, skin_settings::NOTE_OPACITY) / 100.0);
+        receptor_opacity = (float)(skin_setting(*skin, skin_settings::RECEPTOR_OPACITY) / 100.0);
+    }
+
     void EntityField::set_lane_gap(std::optional<double> gap) {
         double keys = chart->info.key_count;
 

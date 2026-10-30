@@ -164,6 +164,31 @@ namespace nascent {
         return copied;
     }
 
+    std::optional<std::string> read_clipboard() {
+        if (!OpenClipboard(nullptr)) {
+            return std::nullopt;
+        }
+
+        std::optional<std::string> text;
+        HANDLE data = GetClipboardData(CF_UNICODETEXT);
+        const wchar_t* wide = data != nullptr ? (const wchar_t*)GlobalLock(data) : nullptr;
+
+        if (wide != nullptr) {
+            int length = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+            std::string narrow(length > 0 ? length - 1 : 0, '\0');
+
+            if (length > 1) {
+                WideCharToMultiByte(CP_UTF8, 0, wide, -1, narrow.data(), length, nullptr, nullptr);
+            }
+
+            text = std::move(narrow);
+            GlobalUnlock(data);
+        }
+
+        CloseClipboard();
+        return text;
+    }
+
     bool open_url(const std::string& url) {
         if (!url.starts_with("https://")) {
             return false;

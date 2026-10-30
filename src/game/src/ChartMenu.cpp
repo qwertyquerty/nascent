@@ -57,7 +57,7 @@ namespace nascent {
         return action == ChartAction::DELETE_CHART || action == ChartAction::DELETE_SONG || action == ChartAction::DELETE_PACK;
     }
 
-    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t song_count, size_t pack_count, bool favorite, std::function<void(ChartAction)> on_action)
+    ChartMenu::ChartMenu(Skin* skin, const Chart& chart, size_t song_count, size_t pack_count, bool favorite, int32_t chart_offset, std::function<void(ChartAction)> on_action, std::function<int32_t(int32_t)> on_offset)
         : skin(skin),
           title(std::format("{} - {}", chart.info.artist, chart.info.title)),
           subtitle(std::format("[{}]  in  {}", chart.info.difficulty_name, path_utf8(chart.file_path.parent_path().filename()))),
@@ -67,7 +67,9 @@ namespace nascent {
           song_count(song_count),
           pack_count(pack_count),
           favorite(favorite),
-          on_action(std::move(on_action)) {}
+          chart_offset(chart_offset),
+          on_action(std::move(on_action)),
+          on_offset(std::move(on_offset)) {}
 
     olc::Pixel ChartMenu::backdrop() const {
         return skin->color(SkinColor::MENU_DIM);
@@ -82,6 +84,8 @@ namespace nascent {
                 return "Watch a replay";
             case ChartAction::TOGGLE_FAVORITE:
                 return favorite ? "Remove from favorites" : "Add to favorites";
+            case ChartAction::CHART_OFFSET:
+                return confirming_action ? std::format("Chart offset  < {:+} ms >   Left/Right, Shift for 10, Enter resets", chart_offset) : std::format("Chart offset  {:+} ms", chart_offset);
             case ChartAction::OPEN_WEBSITE:
                 return "Open on website";
             case ChartAction::OPEN_FOLDER:
@@ -115,6 +119,13 @@ namespace nascent {
             return;
         }
 
+        bool coarse = input.key_held(InputManager::keybind_mod1);
+        int32_t step = coarse ? OFFSET_COARSE_STEP_MS : 1;
+
+        if (int32_t wheel = input.take_wheel(); wheel != 0 && ACTIONS[selected] == ChartAction::CHART_OFFSET) {
+            adjust_offset(wheel > 0 ? step : -step);
+        }
+
         if (std::optional<int32_t> hovered = spots.at(mouse); hovered && mouse_moved && (size_t)*hovered != selected && enabled(ACTIONS[(size_t)*hovered])) {
             selected = (size_t)*hovered;
             confirming = false;
@@ -131,8 +142,25 @@ namespace nascent {
                 confirming = false;
             }
 
+            if (ACTIONS[selected] == ChartAction::CHART_OFFSET) {
+                game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+                return;
+            }
+
             activate();
             return;
+        }
+
+        if (ACTIONS[selected] == ChartAction::CHART_OFFSET) {
+            if (input.take(actions::LEFT)) {
+                adjust_offset(-step);
+                return;
+            }
+
+            if (input.take(actions::RIGHT)) {
+                adjust_offset(step);
+                return;
+            }
         }
 
         bool down = input.take(actions::DOWN);
@@ -149,10 +177,24 @@ namespace nascent {
         }
     }
 
+    void ChartMenu::adjust_offset(int32_t change) {
+        int32_t next = on_offset(chart_offset + change);
+
+        if (next != chart_offset) {
+            chart_offset = next;
+            game->audio().play_effect(skin->sound(SkinSound::HITSOUND));
+        }
+    }
+
     void ChartMenu::activate() {
         ChartAction action = ACTIONS[selected];
 
         if (!enabled(action)) {
+            return;
+        }
+
+        if (action == ChartAction::CHART_OFFSET) {
+            adjust_offset(-chart_offset);
             return;
         }
 
@@ -207,7 +249,7 @@ namespace nascent {
         for (size_t index = 0; index < ACTIONS.size(); index++) {
             ChartAction action = ACTIONS[index];
             bool is_selected = index == selected;
-            bool is_confirming = is_selected && confirming;
+            bool is_confirming = is_selected && (confirming || action == ChartAction::CHART_OFFSET);
             bool danger = is_destructive(action);
             spots.add({{(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}}, (int32_t)index);
 
@@ -215,10 +257,10 @@ namespace nascent {
                 window->FillRectDecal({(float)x, (float)y}, {(float)(width - padding * 2), (float)row_height}, skin->color(SkinColor::SELECTION_HIGHLIGHT));
             }
 
-            SkinColor role = !enabled(action) ? SkinColor::TEXT_FAINT : is_confirming ? SkinColor::NEGATIVE
-                : is_selected                                                         ? SkinColor::TEXT
-                : danger                                                              ? SkinColor::MENU_DANGER_IDLE
-                                                                                      : SkinColor::TEXT_MUTED;
+            SkinColor role = !enabled(action) ? SkinColor::TEXT_FAINT : is_confirming && danger ? SkinColor::NEGATIVE
+                : is_selected                                                                   ? SkinColor::TEXT
+                : danger                                                                        ? SkinColor::MENU_DANGER_IDLE
+                                                                                                : SkinColor::TEXT_MUTED;
             olc::Pixel color = skin->color(role);
             int32_t baseline = y + (row_height - row_metrics.size.y) / 2 - row_metrics.offset.y;
             draw_text(row_font, label(action, is_confirming), {x + row_inset, baseline}, color);

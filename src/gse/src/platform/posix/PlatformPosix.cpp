@@ -90,6 +90,29 @@ namespace nascent {
         return copied;
     }
 
+    std::optional<std::string> read_clipboard() {
+        for (const char* command : platform_detail::clipboard_read_commands()) {
+            FILE* pipe = popen(command, "r");
+
+            if (pipe == nullptr) {
+                continue;
+            }
+
+            std::string text;
+            char buffer[4096];
+
+            while (size_t read = std::fread(buffer, 1, sizeof(buffer), pipe)) {
+                text.append(buffer, read);
+            }
+
+            if (pclose(pipe) == 0) {
+                return text;
+            }
+        }
+
+        return std::nullopt;
+    }
+
     static bool run_opener(std::string argument) {
         std::string program = platform_detail::url_opener();
         char* arguments[] = {program.data(), argument.data(), nullptr};

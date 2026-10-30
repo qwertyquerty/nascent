@@ -3,6 +3,8 @@
 #include "Account.h"
 #include "Accuracy.h"
 #include "Chart.h"
+#include "ChartOffsets.h"
+#include "ChartSource.h"
 #include "Const.h"
 #include "EntityField.h"
 #include "gse/Game.h"
@@ -46,8 +48,12 @@ namespace nascent {
     static constexpr int32_t RESULTS_DELAY_MS = 2000;
     static constexpr uint8_t HIT_LOG_ROWS = 35;
 
-    static double start_position_ms() {
-        return -SettingsManager::settings.play_start_delay * 1000.0;
+    double ScenePlay::start_position() const {
+        return test_start.value_or(0.0) - SettingsManager::settings.play_start_delay * 1000.0;
+    }
+
+    double ScenePlay::first_audio_position() const {
+        return std::max(0.0, test_start ? start_position() : 0.0);
     }
 
     ScenePlay::ScenePlay(Chart* chart, Skin* skin) {
@@ -58,6 +64,10 @@ namespace nascent {
     ScenePlay::ScenePlay(Chart* chart, Skin* skin, Replay replay, std::string replay_label) : ScenePlay(chart, skin) {
         this->replay = std::move(replay);
         this->replay_label = std::move(replay_label);
+    }
+
+    void ScenePlay::set_test_start(double position) {
+        test_start = position;
     }
 
     double ScenePlay::chart_difficulty() {
@@ -75,7 +85,7 @@ namespace nascent {
         AttemptSummary summary = summarize_attempt(attempt, chart_difficulty());
         summary.pause_count = (uint32_t)(replay ? replay->pauses.size() : pauses.size());
 
-        if (replay) {
+        if (replay || test_start) {
             int continuing_audio_id = -1;
 
             if (chart_audio_id != -1 && game->audio().engine().IsPlaying(chart_audio_id)) {
@@ -83,6 +93,12 @@ namespace nascent {
             }
 
             auto results = std::make_unique<SceneResults>(skin, chart, std::move(summary), std::future<ApiResult<Submission>>(), continuing_audio_id, false, replay_label);
+
+            if (!replay) {
+                game->scenes().replace(std::move(results));
+                return;
+            }
+
             results->enable_replay(chart, *replay, replay_label, borrowed_background);
 
             if (replay_play_id) {
@@ -109,6 +125,7 @@ namespace nascent {
         replay_settings.audio_visual_offset = session->audio_visual_offset;
         replay_settings.scroll_speed = field->scroll_speed;
         replay_settings.mirror = mirror;
+        replay_settings.chart_offset = replay ? replay->settings.chart_offset : ChartOffsets::get(chart->gameplay_hash());
 
         Replay replay = make_replay(attempt, summary, replay_chart, chart->pitch, replay_settings, current_utc_timestamp());
         replay.diagnostics = timing_diagnostics();
@@ -150,6 +167,7 @@ namespace nascent {
         request_ticket();
 
         lane_keys = InputManager::get_lane_keys(chart->info.key_count);
+        chart_source_offset = source_offset_ms(chart_source(chart->file_path), chart->audio_path);
         start_attempt();
 
         if (skin_toggle(*skin, skin_toggles::SHOW_PERFORMANCE)) {
@@ -180,8 +198,7 @@ namespace nascent {
         SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d window_size = game->window->GetScreenSize();
         const Settings& settings = SettingsManager::settings;
-        double lane_width = std::min(window_size.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)window_size.x / chart->info.key_count);
-        double field_width = lane_width * chart->info.key_count;
+        std::array<olc::vd2d, 2> bounds = EntityField::gameplay_bounds(*skin, chart->info.key_count, {0, 0}, {(double)window_size.x, (double)window_size.y});
 
         session = std::make_unique<PlaySession>(chart, SettingsManager::settings.field_audio_sync_max_error);
         clock_samples.clear();
@@ -190,7 +207,8 @@ namespace nascent {
         clock_origin.reset();
         session->audio_visual_offset = SettingsManager::settings.field_audio_visual_offset;
         session->audio_input_offset = SettingsManager::settings.field_audio_input_offset;
-        session->reset_clock(start_position_ms(), now_ms());
+        session->source_offset = chart_source_offset / (double)chart->pitch;
+        session->reset_clock(start_position(), now_ms());
         session->set_clock_speed(replay_speed(), now_ms());
         mirror = replay ? replay->settings.mirror : settings.field_mirror;
         replay_cursor = 0;
@@ -198,24 +216,14 @@ namespace nascent {
         if (replay) {
             session->audio_input_offset = 0;
         }
+        else {
+            session->chart_offset = ChartOffsets::get(chart->gameplay_hash()) / (double)chart->pitch;
+        }
 
-        field = std::make_unique<EntityField>(chart, skin, olc::vd2d{((double)window_size.x - field_width) / 2, 0}, olc::vd2d{field_width, (double)window_size.y});
+        field = std::make_unique<EntityField>(chart, skin, bounds[0], bounds[1]);
         field->set_attempt(&session->get_attempt());
-        field->draw_judge_colors = true;
-        field->judge_alpha = 64;
-        field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
-        field->upscroll = skin_toggle(*skin, skin_toggles::UPSCROLL);
+        field->apply_gameplay_settings(window_size.y);
         field->mirror = mirror;
-        field->note_gradient = skin_toggle(*skin, skin_toggles::NOTE_GRADIENT);
-        field->draw_judge = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT_LINE);
-        field->set_lane_gap(lane_gap_setting());
-        field->draw_hit_score = skin_toggle(*skin, skin_toggles::SHOW_JUDGEMENT);
-        field->draw_combo = skin_toggle(*skin, skin_toggles::SHOW_COMBO);
-        field->lane_cover = settings.field_lane_cover / 100.0;
-        field->judgement_height = skin_setting(*skin, skin_settings::JUDGEMENT_HEIGHT) / 100.0;
-        field->combo_height = skin_setting(*skin, skin_settings::COMBO_HEIGHT) / 100.0;
-        field->note_opacity = (float)(skin_setting(*skin, skin_settings::NOTE_OPACITY) / 100.0);
-        field->receptor_opacity = (float)(skin_setting(*skin, skin_settings::RECEPTOR_OPACITY) / 100.0);
         last_judged = nullptr;
         last_judged_release = false;
         last_combo = 0;
@@ -247,7 +255,7 @@ namespace nascent {
     }
 
     void ScenePlay::request_ticket() {
-        if (replay) {
+        if (replay || test_start) {
             ticket = std::shared_future<ApiResult<PlayTicket>>();
             waiting_for_ticket = false;
             return;
@@ -295,11 +303,10 @@ namespace nascent {
     void ScenePlay::on_resize() {
         SkinLayoutScope layout_scope(skin, chart->info.key_count);
         olc::vi2d window_size = game->window->GetScreenSize();
-        double lane_width = std::min(window_size.y * skin_setting(*skin, skin_settings::LANE_WIDTH) / 100.0, (double)window_size.x / chart->info.key_count);
-        double field_width = lane_width * chart->info.key_count;
+        std::array<olc::vd2d, 2> bounds = EntityField::gameplay_bounds(*skin, chart->info.key_count, {0, 0}, {(double)window_size.x, (double)window_size.y});
 
-        field->pos = {((double)window_size.x - field_width) / 2, 0};
-        field->size = {field_width, (double)window_size.y};
+        field->pos = bounds[0];
+        field->size = bounds[1];
         field->judge_height = window_size.y * skin_setting(*skin, skin_settings::JUDGEMENT_LINE_HEIGHT) / 100.0;
         field->set_lane_gap(lane_gap_setting());
     }
@@ -409,7 +416,7 @@ namespace nascent {
                                       std::format("input {}", input_mode_name(game->input().mode())),
                                       std::format("input delay {:.2f} ms avg of {}", delay.average_ms(), delay.count),
                                       std::format("closest press gap {} same {}", press_gap, simultaneous_presses),
-                                      std::format("offset input {:+} visual {:+} ms", session->audio_input_offset, session->audio_visual_offset),
+                                      std::format("offset input {:+} visual {:+} chart {:+.1f} source {:+.1f} ms", session->audio_input_offset, session->audio_visual_offset, session->chart_offset, session->source_offset),
                                       std::format("scroll speed {}", field->scroll_speed),
                                       std::format("audio {} {} Hz", audio.GetBackendName(), audio.GetDeviceSampleRate()),
                                       std::format("device {}", audio.GetDeviceName()),
@@ -583,11 +590,11 @@ namespace nascent {
 
     void ScenePlay::seek_replay(double target, double now) {
         double kept_timer = timer;
-        target = std::clamp(target, start_position_ms(), (double)chart->get_chart_end_ms());
+        target = std::clamp(target, start_position(), (double)chart->get_chart_end_ms());
         start_attempt();
         timer = kept_timer;
         session->reset_clock(target, now);
-        feed_replay(target, false);
+        feed_replay(target + session->source_offset, false);
         session->update(now);
         last_combo = session->get_attempt().get_combo();
         audio_finished = false;
@@ -891,7 +898,7 @@ namespace nascent {
 
             if (InputManager::reset_pressed(input) || spot == REPLAY_RESTART) {
                 replay_paused = false;
-                seek_replay(start_position_ms(), now);
+                seek_replay(start_position(), now);
             }
 
             bool back = input.take(actions::LEFT) || spot == REPLAY_BACK;
@@ -913,7 +920,7 @@ namespace nascent {
             session->reset_clock(paused_position, now);
         }
         else if (waiting_for_ticket) {
-            session->reset_clock(start_position_ms(), now);
+            session->reset_clock(start_position(), now);
 
             if (!ticket_pending(now)) {
                 waiting_for_ticket = false;
@@ -925,8 +932,15 @@ namespace nascent {
                 skip_intro(now);
             }
 
-            if (!chart_started && session->song_position(now) >= -game->audio().engine().GetOutputLatencyMilliseconds()) {
+            double latency = game->audio().engine().GetOutputLatencyMilliseconds();
+
+            if (!chart_started && session->song_position(now) >= first_audio_position() - latency) {
                 chart_started = true;
+
+                if (first_audio_position() > 0) {
+                    game->audio().engine().Seek(chart_audio_id, (ma_uint64)std::lround((session->song_position(now) + latency) * chart->pitch));
+                }
+
                 game->audio().engine().Play(chart_audio_id);
             }
 
@@ -943,7 +957,7 @@ namespace nascent {
             }
 
             if (replay) {
-                feed_replay(session->song_position(now), true);
+                feed_replay(session->song_position(now) + session->source_offset, true);
             }
 
             for (const KeyEvent& event : game->input().events()) {

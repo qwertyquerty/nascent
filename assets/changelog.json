@@ -1,6 +1,33 @@
 {
     "releases": [
         {
+            "version": "0.9.0.beta19",
+            "sections": [
+                {
+                    "title": "New",
+                    "notes": [
+                        "Set an offset for a single chart in the chart menu (F7). Use Left and Right to change it, hold Shift for 10 ms steps, and press Enter to reset it. It moves the notes against the music and works at every rate.",
+                        "Nascent Editor has a gameplay preview panel (View > Gameplay preview) that shows the chart as it looks in the game with your skin and gameplay settings, following the playhead as you play or scrub. It opens docked between the note field and the Transport panel, and can be moved anywhere.",
+                        "Nascent Editor can test play a chart from the playhead (F5): the game opens in its own window and plays it with your settings, without saving or submitting anything.",
+                        "Nascent Editor shows every difficulty of a song in tabs. Opening a chart opens the song's other difficulties too, and the + tab makes a new one.",
+                        "Nascent Editor has an inverse tool that turns notes into long notes with a gap you choose (Ctrl + I), and osu!-style timestamps you can copy, paste and click to jump to notes.",
+                        "Every Nascent Editor shortcut can be changed in File > Settings, and the editor now remembers its scroll speed, lane width, snap, volumes and other options between sessions.",
+                        "Nascent Editor has an interface size option (View > Interface size) that scales the menus, panels and text from 50% to 300%."
+                    ]
+                },
+                {
+                    "title": "Fixed",
+                    "notes": [
+                        "View > Reset panel layout in Nascent Editor puts the panels back in their docked places instead of leaving them floating.",
+                        "Very old osu! beatmaps (file format v4 and older) are timed 24 ms later, as osu! plays them.",
+                        "StepMania and Etterna charts with MP3 audio now play in sync with the song, as they do in StepMania. Before, many played late by up to 55 ms, by a different amount on each song.",
+                        "osu! charts are now played 24 ms later against the song, so they line up with the music the same way StepMania and Etterna charts do and one offset suits both. If you set your offsets while playing osu! charts, check them again in Options.",
+                        "Nascent Editor no longer draws the waveform 20 ms early. Charts opened from osu! or StepMania files are moved to line up with the song instead, and the osu! export moves them back."
+                    ]
+                }
+            ]
+        },
+        {
             "version": "0.8.0.beta18",
             "sections": [
                 {
