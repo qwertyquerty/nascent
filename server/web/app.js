@@ -57,14 +57,11 @@ const OCTAGON_RADIUS = 110;
 const OCTAGON_RINGS = [0.25, 0.5, 0.75, 1];
 const OCTAGON_UNUSED = 1;
 const SKILLS = {
-    stream: ["Stream", "Single notes rolling across the columns"],
-    chordstream: ["Chordstream", "Streams packed with jumps, hands and quads"],
-    jack: ["Jack", "The same column hit again and again"],
-    chordjack: ["Chordjack", "Repeated chords"],
-    vibro: ["Vibro", "Very fast jacks that have to be vibrated"],
-    long_notes: ["Long notes", "Holding and releasing long notes"],
-    stamina: ["Stamina", "Keeping the pace up over many notes"],
-    technical: ["Technical", "Patterns, rhythms and snaps that keep changing"],
+    chordstream: "Chord Stream",
+    chordjack: "Chord Jack",
+    jumpstream: "Jump Stream",
+    handstream: "Hand Stream",
+    jackspeed: "Jack Speed",
 };
 const GRADE_COLORS = Object.fromEntries([..."XSABCDEF"].map((grade) => [grade, PALETTE.colors[`grade_${grade.toLowerCase()}`]]));
 const LEADERBOARD_SORT = {sort: "performance", order: "desc"};
@@ -1708,14 +1705,12 @@ app.component("skill-octagon", {
                 const at = (radius) => [center[0] + cos * radius, center[1] + sin * radius];
                 const [labelX, labelY] = at(OCTAGON_RADIUS + 16);
                 const lines = sin < -0.3 ? [-16, -2] : sin > 0.3 ? [10, 24] : [-3, 12];
-                const [name, description] = SKILLS[entry.skill] ?? [entry.skill, ""];
-                return {...entry, name, description, at, value: used ? format.performance(entry.rating) : "–", point: at(share * OCTAGON_RADIUS), labelX, labelY, nameY: labelY + lines[0], valueY: labelY + lines[1], anchor: cos > 0.3 ? "start" : cos < -0.3 ? "end" : "middle"};
+                return {...entry, name: SKILLS[entry.skill] ?? entry.skill.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()), at, value: used ? format.performance(entry.rating) : "–", point: at(share * OCTAGON_RADIUS), labelX, labelY, nameY: labelY + lines[0], valueY: labelY + lines[1], anchor: cos > 0.3 ? "start" : cos < -0.3 ? "end" : "middle"};
             });
         },
         rings: (self) => OCTAGON_RINGS.map((ring) => self.corners.map((corner) => corner.at(ring * OCTAGON_RADIUS).join(",")).join(" ")),
         shape: (self) => self.corners.map((corner) => corner.point.join(",")).join(" "),
         top: (self) => self.corners.reduce((best, corner) => (corner.rating > best.rating ? corner : best)),
-        shown: (self) => (self.active === null ? null : self.corners[self.active]),
     },
     watch: {
         hash: {handler: "load", immediate: true},
@@ -1751,10 +1746,6 @@ app.component("skill-octagon", {
                 <text :x="corner.labelX" :y="corner.valueY" :text-anchor="corner.anchor" class="octagon-value">{{ corner.value }}</text>
             </g>
         </svg>
-        <figcaption class="skill-detail is-size-7">
-            <template v-if="shown"><strong>{{ shown.name }} {{ shown.value }}</strong> &middot; {{ shown.description }} &middot; {{ Math.round(shown.share * 100) }}% of the chart</template>
-            <span v-else class="has-text-grey">Hardest skill: {{ top.name }}. Each corner is that skill's rating, and the outer edge is the overall difficulty of {{ $f.performance(difficulty) }}.</span>
-        </figcaption>
         <table class="is-sr-only">
             <caption>Skill ratings at {{ $f.rate(rate) }}</caption>
             <tbody><tr v-for="corner in corners" :key="corner.skill"><th scope="row">{{ corner.name }}</th><td>{{ corner.value }}</td><td>{{ Math.round(corner.share * 100) }}% of the chart</td></tr></tbody>

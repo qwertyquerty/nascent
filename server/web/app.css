@@ -888,12 +888,6 @@ th:has(.reveal-button) {
     fill: var(--bulma-text-strong);
 }
 
-.skill-octagon .skill-detail {
-    min-height: 3.75em;
-    margin-top: 0.25rem;
-    text-align: center;
-}
-
 .daily-bars {
     margin: 0;
 }
