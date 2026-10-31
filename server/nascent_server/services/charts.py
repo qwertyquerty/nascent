@@ -26,6 +26,7 @@ MAX_TIMING_POINTS = MAX_NOTES
 CHART_TEXT_LIMIT = 1024
 HASH_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 NATIVE_CACHE_SIZE = 64
+SKILLS_CACHE_SIZE = 512
 OSU_SOURCE = "osu"
 DOWNLOADABLE_SOURCES = ("osu", "etterna")
 OSU_ID_PATTERNS = {
@@ -50,6 +51,7 @@ class Removal:
 
 _native_cache: OrderedDict[str, nc.Chart] = OrderedDict()
 _native_lock = Lock()
+_skills_cache: OrderedDict[tuple[str, int], dict] = OrderedDict()
 
 
 def _bounded_chart(data: dict) -> dict:
@@ -100,6 +102,32 @@ def native_chart(chart: Chart) -> nc.Chart:
 def clear_native_cache() -> None:
     with _native_lock:
         _native_cache.clear()
+        _skills_cache.clear()
+
+
+def chart_skills(chart: Chart, rate_key: int) -> dict:
+    key = (chart.hash, rate_key)
+
+    with _native_lock:
+        cached = _skills_cache.get(key)
+
+        if cached is not None:
+            _skills_cache.move_to_end(key)
+            return cached
+
+    breakdown = native_chart(chart).difficulty_breakdown(rate_for_key(rate_key))
+    skills = {
+        "difficulty": breakdown["difficulty"],
+        "skills": [{"skill": skill, "rating": breakdown["ratings"][skill], "share": breakdown["mix"][skill]} for skill in nc.SKILLS],
+    }
+
+    with _native_lock:
+        _skills_cache[key] = skills
+
+        while len(_skills_cache) > SKILLS_CACHE_SIZE:
+            _skills_cache.popitem(last=False)
+
+    return skills
 
 
 def get_chart(chart_hash: str) -> Chart | None:

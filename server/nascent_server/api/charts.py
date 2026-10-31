@@ -11,7 +11,7 @@ from ..schemas import json_body, pagination, query_float, query_int
 from ..security import authenticate, current_user, require_not_banned
 from ..serializers import chart_detail, chart_summary, play_out
 from ..services.calculator import DEFAULT_RATE_KEY, require_rate_key
-from ..services.charts import get_chart_or_404, parse_chart, register_chart
+from ..services.charts import chart_skills, get_chart_or_404, parse_chart, register_chart
 from ..services.plays import chart_performance_rank, chart_rank
 from ..services.previews import density_preview
 from ..storage import json_gz_response, storage
@@ -197,3 +197,12 @@ def rates(chart_hash: str):
         "chart_hash": chart.hash,
         "rates": [{"rate": entry.rate_key / 100, "difficulty": entry.difficulty, "players": counts.get(entry.rate_key, 0)} for entry in chart.difficulties],
     }
+
+
+@blueprint.get("/<chart_hash>/skills")
+def skills(chart_hash: str):
+    chart = get_chart_or_404(chart_hash)
+    rate = query_float("rate")
+    rate_key = DEFAULT_RATE_KEY if rate is None else require_rate_key(rate)
+    body = {"chart_hash": chart.hash, "rate": rate_key / 100, **chart_skills(chart, rate_key)}
+    return body, 200, {"Cache-Control": "public, max-age=3600"}

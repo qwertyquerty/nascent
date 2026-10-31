@@ -51,6 +51,21 @@ const SCATTER_HEIGHT = 280;
 const SCATTER_PAD = {left: 46, right: 12, top: 12, bottom: 30};
 const SCATTER_PLAYS = 100;
 const DAILY_HEIGHT = 120;
+const OCTAGON_WIDTH = 440;
+const OCTAGON_HEIGHT = 340;
+const OCTAGON_RADIUS = 110;
+const OCTAGON_RINGS = [0.25, 0.5, 0.75, 1];
+const OCTAGON_UNUSED = 1;
+const SKILLS = {
+    stream: ["Stream", "Single notes rolling across the columns"],
+    chordstream: ["Chordstream", "Streams packed with jumps, hands and quads"],
+    jack: ["Jack", "The same column hit again and again"],
+    chordjack: ["Chordjack", "Repeated chords"],
+    vibro: ["Vibro", "Very fast jacks that have to be vibrated"],
+    long_notes: ["Long notes", "Holding and releasing long notes"],
+    stamina: ["Stamina", "Keeping the pace up over many notes"],
+    technical: ["Technical", "Patterns, rhythms and snaps that keep changing"],
+};
 const GRADE_COLORS = Object.fromEntries([..."XSABCDEF"].map((grade) => [grade, PALETTE.colors[`grade_${grade.toLowerCase()}`]]));
 const LEADERBOARD_SORT = {sort: "performance", order: "desc"};
 const CHART_SORT = {sort: "play_count", order: "desc"};
@@ -1677,6 +1692,74 @@ app.component("skill-scatter", {
             </template>
         </div>
     </div>`,
+});
+
+app.component("skill-octagon", {
+    props: {hash: String, rate: {type: Number, default: 1}},
+    data: () => ({skills: null, difficulty: 0, active: null}),
+    computed: {
+        corners() {
+            const center = [OCTAGON_WIDTH / 2, OCTAGON_HEIGHT / 2];
+            return this.skills.map((entry, index) => {
+                const angle = -Math.PI / 2 + (index * 2 * Math.PI) / this.skills.length;
+                const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
+                const used = entry.rating > OCTAGON_UNUSED;
+                const share = used ? Math.min(1, entry.rating / Math.max(1e-9, this.difficulty)) : 0;
+                const at = (radius) => [center[0] + cos * radius, center[1] + sin * radius];
+                const [labelX, labelY] = at(OCTAGON_RADIUS + 16);
+                const lines = sin < -0.3 ? [-16, -2] : sin > 0.3 ? [10, 24] : [-3, 12];
+                const [name, description] = SKILLS[entry.skill] ?? [entry.skill, ""];
+                return {...entry, name, description, at, value: used ? format.performance(entry.rating) : "–", point: at(share * OCTAGON_RADIUS), labelX, labelY, nameY: labelY + lines[0], valueY: labelY + lines[1], anchor: cos > 0.3 ? "start" : cos < -0.3 ? "end" : "middle"};
+            });
+        },
+        rings: (self) => OCTAGON_RINGS.map((ring) => self.corners.map((corner) => corner.at(ring * OCTAGON_RADIUS).join(",")).join(" ")),
+        shape: (self) => self.corners.map((corner) => corner.point.join(",")).join(" "),
+        top: (self) => self.corners.reduce((best, corner) => (corner.rating > best.rating ? corner : best)),
+        shown: (self) => (self.active === null ? null : self.corners[self.active]),
+    },
+    watch: {
+        hash: {handler: "load", immediate: true},
+        rate: "load",
+    },
+    methods: {
+        async load() {
+            const [hash, rate] = [this.hash, this.rate];
+
+            try {
+                const body = await api(`/charts/${encodeURIComponent(hash)}/skills`, {rate});
+
+                if (hash === this.hash && rate === this.rate) {
+                    [this.skills, this.difficulty, this.active] = [body.skills, body.difficulty, null];
+                }
+            }
+            catch {
+                this.skills = null;
+            }
+        },
+    },
+    template: `<figure v-if="skills?.length && difficulty > 0" class="skill-octagon">
+        <svg :viewBox="'0 0 ${OCTAGON_WIDTH} ${OCTAGON_HEIGHT}'" role="img" :aria-label="'Skill ratings, hardest is ' + top.name + ' at ' + $f.performance(top.rating)" @pointerleave="active = null">
+            <defs><linearGradient id="octagon-fill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00b1e1"></stop><stop offset="1" stop-color="#00f59a"></stop></linearGradient></defs>
+            <polygon v-for="(ring, index) in rings" :key="'ring' + index" :points="ring" class="octagon-ring" :class="{'is-edge': index === rings.length - 1}"></polygon>
+            <line v-for="corner in corners" :key="'axis' + corner.skill" x1="${OCTAGON_WIDTH / 2}" y1="${OCTAGON_HEIGHT / 2}" :x2="corner.at(${OCTAGON_RADIUS})[0]" :y2="corner.at(${OCTAGON_RADIUS})[1]" class="octagon-ring"></line>
+            <polygon :points="shape" class="octagon-shape" fill="url(#octagon-fill)" stroke="url(#octagon-fill)"></polygon>
+            <g v-for="(corner, index) in corners" :key="corner.skill" class="octagon-corner" :class="{'is-active': active === index, 'is-top': corner === top}" tabindex="0"
+                :aria-label="corner.name + ' ' + corner.value" @pointerenter="active = index" @focus="active = index" @blur="active = null">
+                <circle :cx="corner.labelX" :cy="corner.labelY" r="34" fill="transparent"></circle>
+                <circle :cx="corner.point[0]" :cy="corner.point[1]" :r="active === index || corner === top ? 5 : 4" class="octagon-point"></circle>
+                <text :x="corner.labelX" :y="corner.nameY" :text-anchor="corner.anchor" class="octagon-name">{{ corner.name }}</text>
+                <text :x="corner.labelX" :y="corner.valueY" :text-anchor="corner.anchor" class="octagon-value">{{ corner.value }}</text>
+            </g>
+        </svg>
+        <figcaption class="skill-detail is-size-7">
+            <template v-if="shown"><strong>{{ shown.name }} {{ shown.value }}</strong> &middot; {{ shown.description }} &middot; {{ Math.round(shown.share * 100) }}% of the chart</template>
+            <span v-else class="has-text-grey">Hardest skill: {{ top.name }}. Each corner is that skill's rating, and the outer edge is the overall difficulty of {{ $f.performance(difficulty) }}.</span>
+        </figcaption>
+        <table class="is-sr-only">
+            <caption>Skill ratings at {{ $f.rate(rate) }}</caption>
+            <tbody><tr v-for="corner in corners" :key="corner.skill"><th scope="row">{{ corner.name }}</th><td>{{ corner.value }}</td><td>{{ Math.round(corner.share * 100) }}% of the chart</td></tr></tbody>
+        </table>
+    </figure>`,
 });
 
 app.component("activity-heatmap", {

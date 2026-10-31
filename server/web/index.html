@@ -723,6 +723,7 @@
                     ]" class="play-stat">
                         <p class="stat-label">{{ label }}</p><p class="stat-value">{{ value }}</p>
                     </div>
+                    <skill-octagon :hash="view.chart.hash" :rate="view.rate"></skill-octagon>
                 </div>
 
                 <chart-preview :hash="view.chart.hash" :rate="view.rate"></chart-preview>

@@ -1,7 +1,9 @@
+import nascent_core as nc
+
 from nascent_server.extensions import db
 from nascent_server.services import charts as chart_service
 
-from .helpers import CHART, chart_hash, make_chart, rank_chart
+from .helpers import CHART, HASH, chart_hash, make_chart, rank_chart
 
 
 def test_chart_list_filters_and_sorts(api):
@@ -60,3 +62,25 @@ def test_downloadable_follows_chart_sources(api, app):
 
     change(lambda first, second: chart_service.replace_chart(second, first))
     assert downloadable() == [chart_hash(CHART)]
+
+
+def test_chart_skills_rate_every_skill_against_the_difficulty(api):
+    rank_chart(api)
+    normal = api.get(f"/api/v1/charts/{HASH}/skills")
+    assert normal.status_code == 200
+    assert normal.headers["Cache-Control"] == "public, max-age=3600"
+    body = normal.get_json()
+    assert body["rate"] == 1.0
+    assert [entry["skill"] for entry in body["skills"]] == nc.SKILLS
+    assert max(entry["rating"] for entry in body["skills"]) == body["difficulty"]
+    assert abs(sum(entry["share"] for entry in body["skills"]) - 1) < 1e-9
+
+    detail = api.get(f"/api/v1/charts/{HASH}").get_json()["chart"]
+    assert body["difficulty"] == detail["difficulty"]
+
+    faster = api.get(f"/api/v1/charts/{HASH}/skills?rate=1.5").get_json()
+    assert faster["rate"] == 1.5
+    assert faster["difficulty"] > body["difficulty"]
+
+    assert api.get(f"/api/v1/charts/{HASH}/skills?rate=1.37").status_code == 400
+    assert api.get(f"/api/v1/charts/{'0' * 64}/skills").status_code == 404

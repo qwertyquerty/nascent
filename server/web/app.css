@@ -828,6 +828,72 @@ th:has(.reveal-button) {
     margin-top: 0.5rem;
 }
 
+.skill-octagon {
+    flex: 0 1 26rem;
+    margin: 0 0 0 auto;
+}
+
+.skill-octagon svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.octagon-ring {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 1;
+}
+
+.octagon-ring.is-edge {
+    stroke: rgba(255, 255, 255, 0.2);
+}
+
+.octagon-shape {
+    fill-opacity: 0.22;
+    stroke-width: 2;
+    stroke-linejoin: round;
+}
+
+.octagon-corner {
+    outline: none;
+}
+
+.octagon-point {
+    fill: #00d3c0;
+    stroke: var(--bulma-scheme-main);
+    stroke-width: 2;
+    transition: r 0.1s;
+}
+
+.octagon-corner.is-active .octagon-point,
+.octagon-corner:focus-visible .octagon-point {
+    fill: #ffffff;
+}
+
+.octagon-name {
+    fill: var(--bulma-text-weak);
+    font-size: 12px;
+}
+
+.octagon-value {
+    fill: var(--bulma-text-strong);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.octagon-corner.is-top .octagon-name,
+.octagon-corner.is-active .octagon-name {
+    fill: var(--bulma-text-strong);
+}
+
+.skill-octagon .skill-detail {
+    min-height: 3.75em;
+    margin-top: 0.25rem;
+    text-align: center;
+}
+
 .daily-bars {
     margin: 0;
 }
@@ -886,6 +952,11 @@ th:has(.reveal-button) {
 }
 
 @media screen and (max-width: 768px) {
+    .skill-octagon {
+        flex-basis: 100%;
+        margin: 0;
+    }
+
     .podium {
         gap: 0.5rem;
     }
