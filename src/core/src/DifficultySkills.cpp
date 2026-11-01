@@ -37,9 +37,9 @@ namespace nascent {
         constexpr double TECH_START = 0.3;
         constexpr double TECH_FULL = 0.7;
         constexpr double SUSTAIN_BIN_MS = 5000.0;
-        constexpr double STAMINA_START_NOTES = 700.0;
+        constexpr double STAMINA_START_NOTES = 300.0;
         constexpr double STAMINA_FULL_NOTES = 3500.0;
-        constexpr double STAMINA_SPAN = 3.0;
+        constexpr double STAMINA_SPAN = 2.0;
         constexpr double STAMINA_MAX_SHARE = 0.5;
 
         using Labels = std::array<double, DIFFICULTY_SKILL_COUNT>;
