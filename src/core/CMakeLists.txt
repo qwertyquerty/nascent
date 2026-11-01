@@ -10,6 +10,7 @@ add_library(core
     src/DifficultyBasis.cpp
     src/DifficultyCalculator.cpp
     src/DifficultyEvents.cpp
+    src/DifficultySkills.cpp
     src/Hit.cpp
     src/OsuFormat.cpp
     src/PlaySession.cpp
@@ -31,7 +32,6 @@ set(NASCENT_DIFFICULTY_SOURCES
     include/DifficultyCalculator.h
     include/DifficultyEvents.h
     include/DifficultyModel.h
-    include/DifficultySkillModel.h
     src/Chart.cpp
     src/DifficultyBasis.cpp
     src/DifficultyCalculator.cpp

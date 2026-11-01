@@ -18,6 +18,7 @@ class DifficultyBreakdown(TypedDict):
     mix: dict[str, float]
     ratings: dict[str, float]
     sustained_seconds: float
+    sustained_notes: float
 
 class Note:
     def __init__(self, lane: int, time: int, end_time: int | None = None) -> None: ...

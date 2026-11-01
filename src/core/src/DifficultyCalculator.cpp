@@ -3,12 +3,10 @@
 #include "DifficultyBasis.h"
 #include "DifficultyEvents.h"
 #include "DifficultyModel.h"
-#include "DifficultySkillModel.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <map>
 #include <span>
 #include <string>
 #include <string_view>
@@ -24,23 +22,6 @@ namespace nascent {
         constexpr size_t START_POINT = 32;
         constexpr size_t MAX_WALK_STEPS = 6;
         constexpr double WALK_FALLBACK = 4.0;
-        constexpr std::array<double, 4> JACK_NONE_RATIOS = {1.25, 1.5, 1.75, 2.0};
-        constexpr double NO_JACK_RATIO = 100.0;
-        constexpr double JUMP_MIN_CHORD = 1.5;
-        constexpr double HAND_MIN_CHORD = 2.5;
-        constexpr double CHORDJACK_MIN_CHORD = 3.0;
-        constexpr double RHYTHM_ACTIVE_GAP_MS = 500.0;
-        constexpr double SNAP_PLAIN = 0.1;
-        constexpr double FEATURE_GAP_CAP_MS = 2000.0;
-        constexpr double FEATURE_LOG_SCALE = 7.0;
-        constexpr double GATE_LIMIT = 40.0;
-        constexpr double SUSTAIN_BIN_MS = 5000.0;
-        constexpr double STAMINA_START_S = 100.0;
-        constexpr double STAMINA_FULL_S = 250.0;
-        constexpr double STAMINA_MAX_SHARE = 0.6;
-
-        using SkillParts = std::array<double, DIFFICULTY_SKILL_COUNT>;
-        using SkillFeatures = std::array<double, difficulty_skill_model::FEATURE_COUNT>;
 
         struct Model {
             std::vector<size_t> features;
@@ -65,8 +46,6 @@ namespace nascent {
         struct Prepared {
             std::vector<Group> groups;
             std::vector<Row> rows;
-            std::vector<SkillParts> labels;
-            std::vector<double> times;
             double shift = 0;
             double total_weight = 0;
         };
@@ -173,115 +152,7 @@ namespace nascent {
             return event[(size_t)name];
         }
 
-        double jack_ratio(double column_gap, double gap) {
-            return column_gap < NO_PREVIOUS_GAP && gap < NO_PREVIOUS_GAP ? column_gap / std::max(gap, 1.0) : NO_JACK_RATIO;
-        }
-
-        double gate(const std::array<double, difficulty_skill_model::FEATURE_COUNT>& weights, const SkillFeatures& features) {
-            double sum = 0;
-
-            for (size_t index = 0; index < features.size(); index++) {
-                sum += weights[index] * features[index];
-            }
-
-            return 1.0 / (1.0 + std::exp(-std::clamp(sum, -GATE_LIMIT, GATE_LIMIT)));
-        }
-
-        SkillParts group_label(const std::vector<DifficultyEvent>& events, size_t first, size_t last) {
-            SkillParts label = {};
-
-            if (channel(events[first], EventChannel::RELEASE) > 0.5) {
-                label[(size_t)DifficultySkill::LONG_NOTES] = 1.0;
-                return label;
-            }
-
-            double count = (double)(last - first);
-            double held = 0, rhythm = 0, snap = 0, variety = 0, roll = 0, jack_run = 0, chord = 0, hand_chord = 0, onset_gap = 0, column_gap = 0, hand_gap = 0, hand_switch = 0;
-            std::array<double, JACK_NONE_RATIOS.size()> hand_jack = {}, onset_jack = {};
-
-            for (size_t index = first; index < last; index++) {
-                const DifficultyEvent& event = events[index];
-                double column = channel(event, EventChannel::COLUMN_GAP);
-                double hand = channel(event, EventChannel::HAND_GAP);
-                double onset = channel(event, EventChannel::ONSET_GAP);
-                double previous = channel(event, EventChannel::PREVIOUS_ONSET_GAP);
-                double hand_ratio = jack_ratio(column, hand);
-                double onset_ratio = jack_ratio(column, onset);
-
-                for (size_t cut = 0; cut < JACK_NONE_RATIOS.size(); cut++) {
-                    hand_jack[cut] += std::clamp((JACK_NONE_RATIOS[cut] - hand_ratio) / (JACK_NONE_RATIOS[cut] - 1.0), 0.0, 1.0) / count;
-                    onset_jack[cut] += std::clamp((JACK_NONE_RATIOS[cut] - onset_ratio) / (JACK_NONE_RATIOS[cut] - 1.0), 0.0, 1.0) / count;
-                }
-
-                held += (channel(event, EventChannel::HOLD) > 0.5 || channel(event, EventChannel::HELD_SAME_HAND) > 0 ? 1.0 : 0.0) / count;
-                rhythm += (onset < RHYTHM_ACTIVE_GAP_MS && previous < RHYTHM_ACTIVE_GAP_MS ? std::min(1.0, std::abs(std::log2(std::max(onset, 1.0) / std::max(previous, 1.0)))) : 0.0) / count;
-                snap += channel(event, EventChannel::SNAP) / count;
-                variety += channel(event, EventChannel::PATTERN_VARIETY) / count;
-                roll += channel(event, EventChannel::ROLL_EVENNESS) / count;
-                jack_run += channel(event, EventChannel::JACK_RUN) / count;
-                chord += channel(event, EventChannel::CHORD_SIZE) / count;
-                hand_chord += channel(event, EventChannel::HAND_CHORD_SIZE) / count;
-                onset_gap += std::min(onset, FEATURE_GAP_CAP_MS) / count;
-                column_gap += std::min(column, FEATURE_GAP_CAP_MS) / count;
-                hand_gap += std::min(hand, FEATURE_GAP_CAP_MS) / count;
-                hand_switch += channel(event, EventChannel::HAND_SWITCH) / count;
-            }
-
-            double jumps = chord >= JUMP_MIN_CHORD && chord < HAND_MIN_CHORD ? 1.0 : 0.0;
-            double hands = chord >= HAND_MIN_CHORD ? 1.0 : 0.0;
-            auto log_gap = [](double gap) {
-                return std::log(std::max(gap, 1.0)) / FEATURE_LOG_SCALE;
-            };
-
-            SkillFeatures features = {
-                1.0,
-                held,
-                rhythm,
-                std::clamp((snap - SNAP_PLAIN) / (1.0 - SNAP_PLAIN), 0.0, 1.0),
-                variety,
-                roll,
-                std::log1p(jack_run),
-                hand_jack[0],
-                hand_jack[1],
-                hand_jack[2],
-                hand_jack[3],
-                onset_jack[0],
-                onset_jack[1],
-                onset_jack[2],
-                onset_jack[3],
-                jumps,
-                hands,
-                std::log1p(hand_chord),
-                log_gap(onset_gap),
-                log_gap(column_gap),
-                log_gap(hand_gap),
-                hand_switch,
-                hand_jack[1] * jumps,
-                hand_jack[1] * hands,
-                onset_jack[1] * jumps,
-                onset_jack[1] * hands,
-            };
-
-            double technical = gate(difficulty_skill_model::TECH_GATE, features);
-            double jack = gate(difficulty_skill_model::JACK_GATE, features);
-            double rest = (1.0 - held) * (1.0 - technical);
-            label[(size_t)DifficultySkill::LONG_NOTES] = held;
-            label[(size_t)DifficultySkill::TECHNICAL] = technical * (1.0 - held);
-            label[(size_t)(chord >= CHORDJACK_MIN_CHORD ? DifficultySkill::CHORDJACK : DifficultySkill::JACKSPEED)] += rest * jack;
-            DifficultySkill speed = DifficultySkill::STREAM;
-
-            if (hands > 0) {
-                speed = DifficultySkill::HANDSTREAM;
-            }
-            else if (jumps > 0) {
-                speed = DifficultySkill::JUMPSTREAM;
-            }
-
-            label[(size_t)speed] += rest * (1.0 - jack);
-            return label;
-        }
-
-        bool prepare(const std::vector<Hit>& sorted_hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points, bool with_labels, Prepared& prepared) {
+        bool prepare(const std::vector<Hit>& sorted_hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points, Prepared& prepared, DifficultyAnalysis* analysis = nullptr) {
             std::vector<DifficultyEvent> events = extract_difficulty_events(sorted_hits, key_count, timing_points);
 
             if (events.empty()) {
@@ -319,9 +190,8 @@ namespace nascent {
                     prepared.total_weight += weight;
                 }
 
-                if (with_labels) {
-                    prepared.labels.push_back(group_label(events, first, last));
-                    prepared.times.push_back(channel(events[first], EventChannel::TIME));
+                if (analysis != nullptr) {
+                    analysis->groups.push_back({first, last, kind == 1});
                 }
 
                 first = last;
@@ -335,6 +205,11 @@ namespace nascent {
             prepared.shift = difficulty_model::SLOPE_NOTES * std::log(std::clamp(presses, difficulty_model::MIN_COVARIATE_NOTES, difficulty_model::MAX_COVARIATE_NOTES) / 1000.0) +
                 difficulty_model::SLOPE_LENGTH * std::log(std::clamp(length, difficulty_model::MIN_COVARIATE_LENGTH_MS, difficulty_model::MAX_COVARIATE_LENGTH_MS) / 120000.0) +
                 difficulty_model::SLOPE_HOLDS * holds / std::max(presses, 1.0);
+
+            if (analysis != nullptr) {
+                analysis->events = std::move(events);
+            }
+
             return true;
         }
 
@@ -442,7 +317,7 @@ namespace nascent {
 
         double skill_rating(const std::vector<Hit>& sorted_hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points) {
             Prepared prepared;
-            return prepare(sorted_hits, key_count, timing_points, false, prepared) ? overall_skill(prepared) : GRID_LOW;
+            return prepare(sorted_hits, key_count, timing_points, prepared) ? overall_skill(prepared) : GRID_LOW;
         }
 
         std::vector<double> importance(const Prepared& prepared, double skill) {
@@ -464,29 +339,6 @@ namespace nascent {
             }
 
             return weights;
-        }
-
-        double sustained_seconds(const Prepared& prepared, const std::vector<double>& weights) {
-            std::map<int64_t, double> bins;
-            double total = 0;
-
-            for (size_t index = 0; index < weights.size(); index++) {
-                bins[(int64_t)std::floor(prepared.times[index] / SUSTAIN_BIN_MS)] += weights[index];
-                total += weights[index];
-            }
-
-            if (total <= 0) {
-                return 0.0;
-            }
-
-            double entropy = 0;
-
-            for (const auto& [bin, weight] : bins) {
-                double share = weight / total;
-                entropy -= share > 0 ? share * std::log(share) : 0.0;
-            }
-
-            return std::exp(entropy) * SUSTAIN_BIN_MS / 1000.0;
         }
 
         double small_chart_adjusted(double rating, size_t presses) {
@@ -514,6 +366,10 @@ namespace nascent {
             });
         }
     }
+
+    struct PreparedDifficulty {
+        Prepared data;
+    };
 
     double DifficultyCalculator::calculate(const Chart& chart) {
         return calculate(chart.hits, chart.info.key_count, chart.timing_points, RANKED_HIT_ACC_DIFFICULTY);
@@ -543,75 +399,45 @@ namespace nascent {
         return displayed(small_chart_adjusted(skill_rating(sorted_hits, key_count, sorted_points), sorted_hits.size())) * strictness_factor(hit_accuracy);
     }
 
-    DifficultyBreakdown DifficultyCalculator::breakdown(const Chart& chart) {
-        return breakdown(chart.hits, chart.info.key_count, chart.timing_points, RANKED_HIT_ACC_DIFFICULTY);
-    }
-
-    DifficultyBreakdown DifficultyCalculator::breakdown_at_pitch(const Chart& chart, float pitch) {
-        std::vector<Hit> hits;
-        std::vector<ChartTimingPoint> timing_points;
-        chart.pitched_timing(pitch, hits, timing_points);
-        return breakdown(hits, chart.unpitched_key_count(), timing_points, RANKED_HIT_ACC_DIFFICULTY);
-    }
-
-    DifficultyBreakdown DifficultyCalculator::breakdown(const std::vector<Hit>& hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points, uint8_t hit_accuracy) {
-        DifficultyBreakdown result;
-
+    std::optional<DifficultyAnalysis> DifficultyCalculator::analyse(const std::vector<Hit>& hits, uint8_t key_count, const std::vector<ChartTimingPoint>& timing_points, uint8_t hit_accuracy) {
         if (hits.empty() || key_count == 0) {
-            return result;
+            return std::nullopt;
         }
 
         std::vector<Hit> sorted_hits;
         std::vector<ChartTimingPoint> sorted_points;
         sort_input(hits, timing_points, sorted_hits, sorted_points);
-        double strictness = strictness_factor(hit_accuracy);
-        Prepared prepared;
+        auto prepared = std::make_shared<PreparedDifficulty>();
+        DifficultyAnalysis analysis;
 
-        size_t presses = sorted_hits.size();
-
-        if (!prepare(sorted_hits, key_count, sorted_points, true, prepared)) {
-            result.rating = displayed(small_chart_adjusted(GRID_LOW, presses)) * strictness;
-            return result;
+        if (!prepare(sorted_hits, key_count, sorted_points, prepared->data, &analysis)) {
+            return std::nullopt;
         }
 
-        double skill = overall_skill(prepared);
-        result.rating = displayed(small_chart_adjusted(skill, presses)) * strictness;
-        std::vector<double> weights = importance(prepared, skill);
-        double total = 0;
+        analysis.presses = sorted_hits.size();
+        analysis.strictness = strictness_factor(hit_accuracy);
+        analysis.skill = overall_skill(prepared->data);
+        analysis.rating = analysis.displayed(analysis.skill);
+        analysis.importance = importance(prepared->data, analysis.skill);
+        analysis.prepared = std::move(prepared);
+        return analysis;
+    }
 
-        for (size_t index = 0; index < weights.size(); index++) {
-            for (size_t part = 0; part < DIFFICULTY_SKILL_COUNT; part++) {
-                result.mix[part] += weights[index] * prepared.labels[index][part];
-            }
+    double DifficultyCalculator::empty_rating(size_t presses, uint8_t hit_accuracy) {
+        return displayed(small_chart_adjusted(GRID_LOW, presses)) * strictness_factor(hit_accuracy);
+    }
 
-            total += weights[index];
-        }
-
-        result.sustained_seconds = sustained_seconds(prepared, weights);
-        double stamina = std::clamp((result.sustained_seconds - STAMINA_START_S) / (STAMINA_FULL_S - STAMINA_START_S), 0.0, 1.0);
-
-        for (size_t part = 0; part < DIFFICULTY_SKILL_COUNT; part++) {
-            result.mix[part] = total > 0 ? result.mix[part] / total * (1.0 - stamina * STAMINA_MAX_SHARE) : 0.0;
-        }
-
-        result.mix[(size_t)DifficultySkill::STAMINA] += stamina * STAMINA_MAX_SHARE;
-
-        for (size_t part = 0; part < DIFFICULTY_SKILL_COUNT; part++) {
-            if (part == (size_t)DifficultySkill::STAMINA) {
-                result.ratings[part] = result.rating * stamina;
-                continue;
-            }
-
-            double alone = solve([&](double level) {
-                return curve_at(prepared, level, [&](size_t index, double weight, double loss) {
-                    const difficulty_model::NoteCurve& c = difficulty_model::CURVES[prepared.groups[index].kind];
-                    double label = prepared.labels[index][part];
-                    return label * loss + (1.0 - label) * weight * std::pow(c.floor, difficulty_model::POWER);
-                });
+    double DifficultyAnalysis::part_skill(const std::vector<double>& shares) const {
+        const Prepared& data = prepared->data;
+        return solve([&](double level) {
+            return curve_at(data, level, [&](size_t index, double weight, double loss) {
+                const difficulty_model::NoteCurve& c = difficulty_model::CURVES[data.groups[index].kind];
+                return shares[index] * loss + (1.0 - shares[index]) * weight * std::pow(c.floor, difficulty_model::POWER);
             });
-            result.ratings[part] = displayed(small_chart_adjusted(alone, presses)) * strictness;
-        }
+        });
+    }
 
-        return result;
+    double DifficultyAnalysis::displayed(double part) const {
+        return nascent::displayed(small_chart_adjusted(part, presses)) * strictness;
     }
 }

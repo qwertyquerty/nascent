@@ -5,6 +5,7 @@
 #include "DifficultyCache.h"
 #include "DifficultyCalculator.h"
 #include "DifficultyModel.h"
+#include "DifficultySkills.h"
 #include "OsuFormat.h"
 #include "Replay.h"
 #include "Results.h"
@@ -340,7 +341,7 @@ namespace {
         DifficultyBreakdown breakdown;
         {
             py::gil_scoped_release release;
-            breakdown = DifficultyCalculator::breakdown(pitched);
+            breakdown = DifficultySkills::breakdown(pitched);
         }
 
         py::dict mix;
@@ -357,6 +358,7 @@ namespace {
         result["mix"] = mix;
         result["ratings"] = ratings;
         result["sustained_seconds"] = breakdown.sustained_seconds;
+        result["sustained_notes"] = breakdown.sustained_notes;
         return result;
     }
 

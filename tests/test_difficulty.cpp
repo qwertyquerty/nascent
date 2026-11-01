@@ -3,6 +3,7 @@
 #include "DifficultyBasis.h"
 #include "DifficultyCalculator.h"
 #include "DifficultyModel.h"
+#include "DifficultySkills.h"
 #include "TestSupport.h"
 
 #include <algorithm>
@@ -48,7 +49,7 @@ NASCENT_TEST(difficulty_breakdown) {
     };
 
     std::vector<Hit> roll = stream(125, false);
-    DifficultyBreakdown breakdown = DifficultyCalculator::breakdown(roll, 4, {}, 5);
+    DifficultyBreakdown breakdown = DifficultySkills::breakdown(roll, 4, {}, 5);
     CHECK(breakdown.rating == DifficultyCalculator::calculate(roll, 4, {}, 5));
     double total = 0;
 
@@ -59,10 +60,14 @@ NASCENT_TEST(difficulty_breakdown) {
     }
 
     CHECK(std::abs(total - 1.0) < 1e-9);
+    CHECK(*std::max_element(breakdown.ratings.begin(), breakdown.ratings.end()) == breakdown.rating);
     CHECK(top(breakdown) == DifficultySkill::STREAM);
-    CHECK(top(DifficultyCalculator::breakdown(stream(125, true), 4, {}, 5)) == DifficultySkill::JACKSPEED);
+    CHECK(top(DifficultySkills::breakdown(stream(125, true), 4, {}, 5)) == DifficultySkill::JACK);
+    CHECK(top(DifficultySkills::breakdown(stream(70, true), 4, {}, 5)) == DifficultySkill::VIBRO);
+    CHECK(breakdown.ratings[(size_t)DifficultySkill::LONG_NOTES] == 0.0);
     CHECK(breakdown.sustained_seconds > 0.0 && breakdown.sustained_seconds <= 31.0);
-    CHECK(DifficultyCalculator::breakdown({}, 4, {}, 5).rating == 0.0);
+    CHECK(breakdown.sustained_notes > 0.0 && breakdown.sustained_notes <= (double)roll.size());
+    CHECK(DifficultySkills::breakdown({}, 4, {}, 5).rating == 0.0);
 }
 
 NASCENT_TEST(difficulty_model_matches_features) {

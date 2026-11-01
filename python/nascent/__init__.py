@@ -100,6 +100,7 @@ class Breakdown:
     mix: dict[str, float]
     ratings: dict[str, float]
     sustained_seconds: float
+    sustained_notes: float
 
 
 def _read(source: Source) -> tuple[bytes, Optional[str]]:

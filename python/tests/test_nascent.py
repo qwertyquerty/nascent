@@ -129,11 +129,13 @@ def test_difficulty_breakdown():
     assert all(value >= 0 for value in breakdown.mix.values())
     assert all(0 <= value <= breakdown.difficulty + 1e-9 for value in breakdown.ratings.values())
     assert max(breakdown.mix, key=breakdown.mix.get) == "stream"
-    assert breakdown.sustained_seconds > 0
+    assert breakdown.sustained_seconds > 0 and breakdown.sustained_notes > 0
+    assert max(breakdown.ratings.values()) == breakdown.difficulty
 
     jacks = OSU.format(objects="\n".join(f"64,192,{index * 125},1,0,0:0:0:0:" for index in range(256)))
     jack = nascent.difficulty_breakdown(jacks.encode())[0]
-    assert max(jack.mix, key=jack.mix.get) == "jackspeed"
+    assert max(jack.mix, key=jack.mix.get) == "jack"
+    assert max(jack.ratings, key=jack.ratings.get) == "jack" and jack.ratings["jack"] == jack.difficulty
 
     with pytest.raises(ValueError):
         made_chart().difficulty_breakdown(0.0)

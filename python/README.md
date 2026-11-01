@@ -14,7 +14,7 @@ for curve in nascent.difficulty_rates("chart.osu"):
     print(curve[0.75], curve[1.0], curve[1.5])
 
 for breakdown in nascent.difficulty_breakdown("song.sm"):
-    print(breakdown.difficulty, max(breakdown.mix, key=breakdown.mix.get), breakdown.ratings["jackspeed"])
+    print(breakdown.difficulty, max(breakdown.mix, key=breakdown.mix.get), breakdown.ratings["jack"])
 ```
 
 ```python
